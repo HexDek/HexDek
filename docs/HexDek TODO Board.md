@@ -6,27 +6,11 @@ kanban-plugin: board
 
 ## High Priority — Engine
 
-- [ ] Rivalry tracker: Heimdall tracks per-deck matchup W/L history, surfaces top 10 rival decks to user. Yiggi stays clean (no cross-game grudge bias on ELO). #analytics #ui
-- [ ] Killer-victim elimination tracking in Heimdall (threat graph: who kills whom, kingmaker detection) #analytics
-- [ ] Bayesian prior inheritance for deck versioning (v(n+1) inherits μ from v(n), inflate σ by card delta) #rating
-- [ ] Deck versioning DAG (git-for-decks: version nodes, lineage tracking, HEAD = leaderboard) #schema
-
 
 ## High Priority — Platform
 
-- [ ] Matchmaking scheduler (replace round-robin with rating-aware pod assembly, information gain) #matchmaking
 - [ ] Web leaderboard page (show deck ratings, confidence intervals, matchup data) #ui
-- [ ] Deck import from Moxfield URL → auto-register, auto-hash, auto-rate #ui
 - [ ] Deck drilldown UI: Freya curve/ratio analysis + Heimdall game analytics (ELO, card performance, matchups) — APIs already wired #ui
-- [ ] Bug/Suggestion report: red footer button → form (page, context, symptom, expected behavior, email/discord for followup) → stores text blobs to DB #ui #platform
-- [ ] Footer component (site-wide, includes bug report link) #ui
-
-
-## Medium Priority
-
-- [ ] About page: project overview, philosophy, no-ads donation-only stance #ui #platform
-- [ ] Donations page: monthly COGs vs needs, current donation tracker #ui #platform
-- [ ] User profile page: custom display name, personalization settings #ui #platform
 - [ ] Operator platform page/tab (operator profile, deck management, analytics dashboard — non-engine, UI + platform) #ui #platform
 - [ ] BOINC-style distributed compute (desktop client → contribute games → earn credits) #distributed
 - [ ] Deterministic replay anti-cheat (cryptographic seed, spot-check 2-5%, auto-cauterize bad actors) #anticheat
@@ -61,6 +45,19 @@ kanban-plugin: board
 - [x] Giga Quorum v4 (30,595 games, TrueSkill enabled) — Yuriko #1, Coram #2, Oloro drops to #5 #tournament
 - [x] YggdrasilHat political AI — unified hat with 8-dim evaluator, threat scoring, grudge tracking, budget system #hat
 - [x] Giga Quorum v5 (30,598 games, Yggdrasil budget=50) — Shalai #1 win, Varina #1 TS, Soraya #2→#16, politics reshuffles meta #tournament
+- [x] Rivalry tracker (per-deck matchup W/L, canonical key pairing, cross-run merging) #analytics
+- [x] Killer-victim elimination tracking (threat graph, backward event log scan, kingmaker detection) #analytics
+- [x] Bayesian prior inheritance for deck versioning (μ carries, σ inflates by card delta) #rating
+- [x] Deck versioning DAG (content-addressable SHA256, lineage, HEAD leaderboard) #schema
+- [x] Matchmaking scheduler (rating-aware pod assembly, info gain scoring) #matchmaking
+- [x] Deck import from Moxfield URL (auto-register, auto-hash, auto-rate) #ui
+- [x] Bug/Suggestion report (red footer button → form → JSON flat-file persistence) #ui #platform
+- [x] Footer statusbar (bug report link, donate link, user status) #ui
+- [x] About page (project overview, philosophy, tech stack, no-ads stance) #ui #platform
+- [x] Donations page (monthly COGs breakdown, donation tracker bar, philosophy) #ui #platform
+- [x] User profile page (display name, owner name for deck filtering) #ui #platform
+- [x] Splash page GitHub + docs links #ui
+- [x] W/L color fix (wins green, losses red across DeckList, DeckArchive, gauntlet) #ui
 
 
 

@@ -225,7 +225,7 @@ func TestMCTSDiagnostic_4Player_TokenTrace(t *testing.T) {
 
 	for turn := 1; turn <= 20 && !gs.CheckEnd(); turn++ {
 		gs.Turn = turn
-		takeTurn(gs)
+		TakeTurn(gs)
 		gameengine.StateBasedActions(gs)
 
 		active := gs.Active
