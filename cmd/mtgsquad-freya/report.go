@@ -623,6 +623,90 @@ func printDeckProfileText(w io.Writer, r *FreyaReport) {
 		}
 	}
 	fmt.Fprintf(w, "\n")
+
+	if dp.PersonalityBlurb != "" {
+		fmt.Fprintf(w, "  %s\n\n", dp.PersonalityBlurb)
+	}
+
+	if dp.ManaBaseGrade != "" {
+		fmt.Fprintf(w, "  Mana Base:  Grade %s", dp.ManaBaseGrade)
+		if dp.FetchCount > 0 || dp.TaplandCount > 0 {
+			fmt.Fprintf(w, " (%d fetch, %d tapland, %d utility)", dp.FetchCount, dp.TaplandCount, dp.UtilityLandCount)
+		}
+		fmt.Fprintf(w, "\n")
+		for _, note := range dp.ManaBaseNotes {
+			fmt.Fprintf(w, "    %s\n", note)
+		}
+	}
+
+	if dp.KeepableHandPct > 0 {
+		fmt.Fprintf(w, "  Opening Hands: %.0f%% keepable, avg turn to 4 mana: %.1f\n", dp.KeepableHandPct, dp.AvgTurnToFourMana)
+	}
+
+	if dp.PowerPercentile > 0 {
+		fmt.Fprintf(w, "  Power: ~%dth percentile within %s\n", dp.PowerPercentile, dp.PrimaryArchetype)
+	}
+
+	if dp.CommanderSynergy > 0 {
+		fmt.Fprintf(w, "  Commander Synergy: %.0f%% (%d/%d cards match themes: %s)\n",
+			dp.CommanderSynergy*100, dp.SynergyCount,
+			dp.CardCount-dp.LandCount, strings.Join(dp.CommanderThemes, ", "))
+	}
+
+	if dp.InteractionQuality > 0 {
+		fmt.Fprintf(w, "  Interaction Speed: avg CMC %.1f (%d cheap, %d expensive)\n",
+			dp.InteractionQuality, dp.CheapInteraction, dp.ExpensiveInteraction)
+	}
+
+	if len(dp.StarCards) > 0 {
+		fmt.Fprintf(w, "\n  Star Cards:\n")
+		for _, c := range dp.StarCards {
+			fmt.Fprintf(w, "    ★ %s — %s\n", c.Name, c.Reason)
+		}
+	}
+
+	if len(dp.CuttableCards) > 0 {
+		fmt.Fprintf(w, "  Consider Cutting:\n")
+		for _, c := range dp.CuttableCards {
+			fmt.Fprintf(w, "    ✂ %s — %s\n", c.Name, c.Reason)
+		}
+	}
+
+	if len(dp.LandSwapSuggestions) > 0 {
+		fmt.Fprintf(w, "\n  Land Swaps:\n")
+		for _, s := range dp.LandSwapSuggestions {
+			fmt.Fprintf(w, "    → %s\n", s)
+		}
+	}
+
+	if len(dp.VulnerableTo) > 0 {
+		fmt.Fprintf(w, "\n  Vulnerable To:\n")
+		for _, v := range dp.VulnerableTo {
+			fmt.Fprintf(w, "    ⚡ %s\n", v)
+		}
+	}
+
+	if len(dp.MetaMatchups) > 0 {
+		fmt.Fprintf(w, "\n  Meta Positioning:\n")
+		for _, m := range dp.MetaMatchups {
+			icon := "≈"
+			if m.Rating == "favored" {
+				icon = "▲"
+			} else if m.Rating == "unfavored" {
+				icon = "▼"
+			}
+			fmt.Fprintf(w, "    %s vs %s: %s — %s\n", icon, m.Archetype, m.Rating, m.Reason)
+		}
+	}
+
+	if len(dp.SynergyClusters) > 0 {
+		fmt.Fprintf(w, "\n  Synergy Clusters:\n")
+		for _, sc := range dp.SynergyClusters {
+			fmt.Fprintf(w, "    [%s] %s (%d pairwise synergies)\n", sc.Name, strings.Join(sc.Cards, ", "), sc.Score)
+		}
+	}
+
+	fmt.Fprintf(w, "\n")
 }
 
 // ---------------------------------------------------------------------------
@@ -1088,6 +1172,44 @@ type jsonDeckProfile struct {
 	Strengths          []string          `json:"strengths,omitempty"`
 	Weaknesses         []string          `json:"weaknesses,omitempty"`
 	GameplanSummary    string            `json:"gameplan_summary"`
+	PersonalityBlurb   string            `json:"personality_blurb,omitempty"`
+	ManaBaseGrade      string            `json:"mana_base_grade,omitempty"`
+	ManaBaseNotes      []string          `json:"mana_base_notes,omitempty"`
+	TaplandCount       int               `json:"tapland_count,omitempty"`
+	FetchCount         int               `json:"fetch_count,omitempty"`
+	UtilityLandCount   int               `json:"utility_land_count,omitempty"`
+	VulnerableTo       []string          `json:"vulnerable_to,omitempty"`
+	KeepableHandPct    float64           `json:"keepable_hand_pct,omitempty"`
+	AvgTurnToFourMana  float64           `json:"avg_turn_to_four_mana,omitempty"`
+	SynergyClusters    []jsonCluster     `json:"synergy_clusters,omitempty"`
+	MetaMatchups       []jsonMatchup     `json:"meta_matchups,omitempty"`
+	StarCards          []jsonCardQuality `json:"star_cards,omitempty"`
+	CuttableCards      []jsonCardQuality `json:"cuttable_cards,omitempty"`
+	LandSwapSuggestions []string         `json:"land_swap_suggestions,omitempty"`
+	CommanderSynergy   float64           `json:"commander_synergy,omitempty"`
+	CommanderThemes    []string          `json:"commander_themes,omitempty"`
+	InteractionQuality float64           `json:"interaction_quality,omitempty"`
+	PowerPercentile    int               `json:"power_percentile,omitempty"`
+	PowerFactors       []string          `json:"power_factors,omitempty"`
+}
+
+type jsonCluster struct {
+	Name  string   `json:"name"`
+	Cards []string `json:"cards"`
+	Theme string   `json:"theme"`
+	Score int      `json:"synergy_count"`
+}
+
+type jsonMatchup struct {
+	Archetype string `json:"vs_archetype"`
+	Rating    string `json:"rating"`
+	Reason    string `json:"reason"`
+}
+
+type jsonCardQuality struct {
+	Name   string `json:"name"`
+	Tier   string `json:"tier"`
+	Reason string `json:"reason"`
 }
 
 type jsonRoleCount struct {
@@ -1245,6 +1367,26 @@ func buildJSONDeckProfile(dp *DeckProfile) *jsonDeckProfile {
 	for _, rc := range dp.TopRoles {
 		roles = append(roles, jsonRoleCount{Role: string(rc.Role), Count: rc.Count})
 	}
+	var clusters []jsonCluster
+	for _, sc := range dp.SynergyClusters {
+		clusters = append(clusters, jsonCluster{
+			Name: sc.Name, Cards: sc.Cards, Theme: sc.Theme, Score: sc.Score,
+		})
+	}
+	var matchups []jsonMatchup
+	for _, m := range dp.MetaMatchups {
+		matchups = append(matchups, jsonMatchup{
+			Archetype: m.Archetype, Rating: m.Rating, Reason: m.Reason,
+		})
+	}
+	var stars, cuttable []jsonCardQuality
+	for _, c := range dp.StarCards {
+		stars = append(stars, jsonCardQuality{Name: c.Name, Tier: c.Tier, Reason: c.Reason})
+	}
+	for _, c := range dp.CuttableCards {
+		cuttable = append(cuttable, jsonCardQuality{Name: c.Name, Tier: c.Tier, Reason: c.Reason})
+	}
+
 	return &jsonDeckProfile{
 		DeckName:           dp.DeckName,
 		Commander:          dp.Commander,
@@ -1271,6 +1413,25 @@ func buildJSONDeckProfile(dp *DeckProfile) *jsonDeckProfile {
 		Strengths:          dp.Strengths,
 		Weaknesses:         dp.Weaknesses,
 		GameplanSummary:    dp.GameplanSummary,
+		PersonalityBlurb:   dp.PersonalityBlurb,
+		ManaBaseGrade:      dp.ManaBaseGrade,
+		ManaBaseNotes:      dp.ManaBaseNotes,
+		TaplandCount:       dp.TaplandCount,
+		FetchCount:         dp.FetchCount,
+		UtilityLandCount:   dp.UtilityLandCount,
+		VulnerableTo:       dp.VulnerableTo,
+		KeepableHandPct:    dp.KeepableHandPct,
+		AvgTurnToFourMana:  dp.AvgTurnToFourMana,
+		SynergyClusters:    clusters,
+		MetaMatchups:       matchups,
+		StarCards:           stars,
+		CuttableCards:       cuttable,
+		LandSwapSuggestions: dp.LandSwapSuggestions,
+		CommanderSynergy:   dp.CommanderSynergy,
+		CommanderThemes:    dp.CommanderThemes,
+		InteractionQuality: dp.InteractionQuality,
+		PowerPercentile:    dp.PowerPercentile,
+		PowerFactors:       dp.PowerFactors,
 	}
 }
 

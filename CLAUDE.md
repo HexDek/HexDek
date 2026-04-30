@@ -143,6 +143,13 @@ Fetch oracle data: `scripts/fetch-oracle.sh`
 - [x] Fix bracket estimation to exclude banned cards from scoring
 - [x] Track colorless `{C}` mana production in land analysis
 - [x] Refine card role multi-tag priority ordering (strategic importance sort)
+- [x] Eval weight profiles for all 22 archetypes (up from 5 generic profiles)
+- [x] Mana curve shape analysis (bimodal detection, top-heavy/bottom-light warnings)
+- [x] Expand KnownCombos database (58 entries, +16: Worldgorger, Nim Deathmantle, Breach, Tooth&Nail, Karmic/Reveillark, persist combos)
+- [x] Commander synergy scoring (theme extraction from oracle text, 14 theme patterns, synergy % in deck profile)
+- [x] Interaction quality scoring (avg CMC of interaction, cheap vs expensive breakdown)
+- [x] Recursion depth scoring for value chains (infinite/deep/shallow/none loop-back detection)
+- [x] Protection density analysis (built-in protection tracking for combo/threat pieces)
 
 ### Backlog
 - [ ] 4-card+ combo detection (currently capped at triples)

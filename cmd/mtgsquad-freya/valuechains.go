@@ -27,12 +27,13 @@ type ValueChainStep struct {
 }
 
 type ValueChain struct {
-	Name        string
-	Steps       []ValueChainStep
-	BridgeCards []string
-	Depth       int
-	WeakestLink int
-	Redundancy  string // "HIGH", "MEDIUM", "LOW"
+	Name           string
+	Steps          []ValueChainStep
+	BridgeCards    []string
+	Depth          int
+	WeakestLink    int
+	Redundancy     string // "HIGH", "MEDIUM", "LOW"
+	RecursionDepth string // "infinite" (has loop-back), "deep" (3+ recursion pieces), "shallow" (1-2), "none"
 }
 
 // ---------------------------------------------------------------------------
@@ -370,13 +371,26 @@ func matchChainTemplate(tmpl chainTemplate, profiles []CardProfile) *ValueChain 
 		steps[i].Cards = uniqueStrings(steps[i].Cards)
 	}
 
+	// Recursion depth: check if the chain forms a loop (last step's To == first step's From).
+	recursionDepth := "none"
+	lastStep := tmpl.Steps[len(tmpl.Steps)-1]
+	firstStep := tmpl.Steps[0]
+	if lastStep.To == firstStep.From {
+		recursionDepth = "infinite"
+	} else if len(bridges) >= 3 {
+		recursionDepth = "deep"
+	} else if len(bridges) >= 1 {
+		recursionDepth = "shallow"
+	}
+
 	return &ValueChain{
-		Name:        tmpl.Name,
-		Steps:       steps,
-		BridgeCards: bridges,
-		Depth:       len(steps),
-		WeakestLink: weakest,
-		Redundancy:  redundancy,
+		Name:           tmpl.Name,
+		Steps:          steps,
+		BridgeCards:    bridges,
+		Depth:          len(steps),
+		WeakestLink:    weakest,
+		Redundancy:     redundancy,
+		RecursionDepth: recursionDepth,
 	}
 }
 
@@ -430,8 +444,8 @@ func renderValueChainsText(chains []ValueChain) string {
 		sb.WriteString(fmt.Sprintf("%s (%d steps, %d pieces)\n", chain.Name, chain.Depth, totalPieces))
 		weakLabel := chain.Steps[chain.WeakestLink].Label
 		weakCount := len(chain.Steps[chain.WeakestLink].Cards)
-		sb.WriteString(fmt.Sprintf("  Depth: %d | Weakest link: Step %d - %s (%d pieces) | Redundancy: %s\n\n",
-			chain.Depth, chain.WeakestLink+1, weakLabel, weakCount, chain.Redundancy))
+		sb.WriteString(fmt.Sprintf("  Depth: %d | Weakest link: Step %d - %s (%d pieces) | Redundancy: %s | Recursion: %s\n\n",
+			chain.Depth, chain.WeakestLink+1, weakLabel, weakCount, chain.Redundancy, chain.RecursionDepth))
 
 		for _, step := range chain.Steps {
 			flow := fmt.Sprintf("%s→%s", capitalize(step.Flow.From), capitalize(step.Flow.To))
@@ -470,8 +484,8 @@ func renderValueChainsMarkdown(chains []ValueChain) string {
 		sb.WriteString(fmt.Sprintf("### %s (%d steps, %d pieces)\n\n", chain.Name, chain.Depth, totalPieces))
 		weakLabel := chain.Steps[chain.WeakestLink].Label
 		weakCount := len(chain.Steps[chain.WeakestLink].Cards)
-		sb.WriteString(fmt.Sprintf("**Depth:** %d | **Weakest link:** Step %d - %s (%d pieces) | **Redundancy:** %s\n\n",
-			chain.Depth, chain.WeakestLink+1, weakLabel, weakCount, chain.Redundancy))
+		sb.WriteString(fmt.Sprintf("**Depth:** %d | **Weakest link:** Step %d - %s (%d pieces) | **Redundancy:** %s | **Recursion:** %s\n\n",
+			chain.Depth, chain.WeakestLink+1, weakLabel, weakCount, chain.Redundancy, chain.RecursionDepth))
 
 		for _, step := range chain.Steps {
 			flow := fmt.Sprintf("%s→%s", capitalize(step.Flow.From), capitalize(step.Flow.To))
@@ -496,12 +510,13 @@ func renderValueChainsMarkdown(chains []ValueChain) string {
 // ---------------------------------------------------------------------------
 
 type jsonValueChain struct {
-	Name        string               `json:"name"`
-	Steps       []jsonValueChainStep `json:"steps"`
-	BridgeCards []string             `json:"bridge_cards,omitempty"`
-	Depth       int                  `json:"depth"`
-	WeakestLink int                  `json:"weakest_link"`
-	Redundancy  string               `json:"redundancy"`
+	Name           string               `json:"name"`
+	Steps          []jsonValueChainStep `json:"steps"`
+	BridgeCards    []string             `json:"bridge_cards,omitempty"`
+	Depth          int                  `json:"depth"`
+	WeakestLink    int                  `json:"weakest_link"`
+	Redundancy     string               `json:"redundancy"`
+	RecursionDepth string               `json:"recursion_depth"`
 }
 
 type jsonValueChainStep struct {
@@ -529,12 +544,13 @@ func buildJSONValueChains(chains []ValueChain) []jsonValueChain {
 			}
 		}
 		out[i] = jsonValueChain{
-			Name:        c.Name,
-			Steps:       steps,
-			BridgeCards: c.BridgeCards,
-			Depth:       c.Depth,
-			WeakestLink: c.WeakestLink,
-			Redundancy:  c.Redundancy,
+			Name:           c.Name,
+			Steps:          steps,
+			BridgeCards:    c.BridgeCards,
+			Depth:          c.Depth,
+			WeakestLink:    c.WeakestLink,
+			Redundancy:     c.Redundancy,
+			RecursionDepth: c.RecursionDepth,
 		}
 	}
 	return out

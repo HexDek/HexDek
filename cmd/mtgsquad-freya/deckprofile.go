@@ -38,11 +38,74 @@ type DeckProfile struct {
 	Strengths       []string
 	Weaknesses      []string
 	GameplanSummary string
+
+	CommanderSynergy    float64  // 0.0-1.0 ratio of cards synergizing with commander
+	CommanderThemes     []string // detected themes from commander oracle text
+	SynergyCount        int      // cards in 99 that match commander themes
+
+	InteractionQuality  float64 // avg CMC of interaction spells (lower = faster)
+	CheapInteraction    int     // interaction at CMC 0-2
+	ExpensiveInteraction int    // interaction at CMC 4+
+	ProtectedKeyPieces  int     // key pieces with built-in protection
+	UnprotectedKeyPieces int    // key pieces without built-in protection
+
+	// Mana base grading
+	ManaBaseGrade    string // A/B/C/D/F
+	ManaBaseNotes    []string
+	TaplandCount     int
+	FetchCount       int
+	UtilityLandCount int
+
+	// Threat assessment
+	VulnerableTo []string // specific hosers this deck fears
+
+	// Opening hand simulation
+	KeepableHandPct  float64 // % of hands with 2-5 lands + action
+	AvgTurnToFourMana float64
+
+	// Synergy clusters
+	SynergyClusters []SynergyCluster
+
+	// Meta positioning
+	MetaMatchups []MetaMatchup
+
+	// Card quality tiers
+	CuttableCards []CardQuality
+	StarCards     []CardQuality
+
+	// Color weight suggestions
+	LandSwapSuggestions []string
+
+	// Deck personality
+	PersonalityBlurb string
+
+	// Power ranking
+	PowerPercentile int    // 0-100 estimated percentile within archetype
+	PowerFactors    []string
 }
 
 type RoleCount struct {
 	Role  RoleTag
 	Count int
+}
+
+type SynergyCluster struct {
+	Name  string
+	Cards []string
+	Theme string
+	Score int // number of pairwise synergies within the cluster
+}
+
+type MetaMatchup struct {
+	Archetype string
+	Rating    string // "favored", "neutral", "unfavored"
+	Reason    string
+}
+
+type CardQuality struct {
+	Name   string
+	Tier   string // "star", "good", "filler", "cuttable"
+	Reason string
 }
 
 func BuildDeckProfile(report *FreyaReport, oracle *oracleDB) *DeckProfile {
@@ -93,11 +156,214 @@ func BuildDeckProfile(report *FreyaReport, oracle *oracleDB) *DeckProfile {
 		}
 	}
 
+	if oracle != nil && report.Commander != "" {
+		computeCommanderSynergy(dp, report, oracle)
+	}
+
+	computeInteractionQuality(dp, report, oracle)
+	computeProtectionDensity(dp, report, oracle)
+	computeManaBaseGrade(dp, report, oracle)
+	computeThreatAssessment(dp, report)
+	computeOpeningHandSim(dp, report)
+	computeSynergyClusters(dp, report, oracle)
+	computeMetaPositioning(dp)
+	computeCardQualityTiers(dp, report, oracle)
+	computeLandSwapSuggestions(dp, report)
+	dp.PersonalityBlurb = buildPersonalityBlurb(dp, report)
+	dp.PowerPercentile, dp.PowerFactors = estimatePowerPercentile(dp, report)
+
 	dp.Strengths = deriveStrengths(report, dp)
 	dp.Weaknesses = deriveWeaknesses(report, dp)
 	dp.GameplanSummary = buildGameplanSummary(dp, report)
 
 	return dp
+}
+
+func computeInteractionQuality(dp *DeckProfile, report *FreyaReport, oracle *oracleDB) {
+	if report.Roles == nil {
+		return
+	}
+
+	totalCMC := 0
+	count := 0
+	for _, a := range report.Roles.Assignments {
+		isInteraction := false
+		for _, r := range a.Roles {
+			if r == RoleRemoval || r == RoleCounterspell || r == RoleBoardWipe {
+				isInteraction = true
+				break
+			}
+		}
+		if !isInteraction {
+			continue
+		}
+
+		var cmc int
+		for _, p := range report.Profiles {
+			if p.Name == a.Name {
+				cmc = p.CMC
+				break
+			}
+		}
+
+		count++
+		totalCMC += cmc
+		if cmc <= 2 {
+			dp.CheapInteraction++
+		} else if cmc >= 4 {
+			dp.ExpensiveInteraction++
+		}
+	}
+
+	if count > 0 {
+		dp.InteractionQuality = float64(totalCMC) / float64(count)
+	}
+}
+
+func computeProtectionDensity(dp *DeckProfile, report *FreyaReport, oracle *oracleDB) {
+	if report.Roles == nil || oracle == nil {
+		return
+	}
+
+	keyRoles := map[RoleTag]bool{RoleCombo: true, RoleThreat: true}
+	protectionWords := []string{
+		"hexproof", "shroud", "indestructible", "ward",
+		"protection from", "can't be the target",
+		"can't be countered", "can't be destroyed",
+		"phase out", "phases out",
+	}
+
+	for _, a := range report.Roles.Assignments {
+		isKey := false
+		for _, r := range a.Roles {
+			if keyRoles[r] {
+				isKey = true
+				break
+			}
+		}
+		if !isKey {
+			continue
+		}
+
+		entry := oracle.lookup(a.Name)
+		if entry == nil {
+			dp.UnprotectedKeyPieces++
+			continue
+		}
+
+		ot := strings.ToLower(entry.OracleText)
+		if ot == "" && len(entry.CardFaces) > 0 {
+			ot = strings.ToLower(entry.CardFaces[0].OracleText)
+		}
+
+		hasProtection := false
+		for _, word := range protectionWords {
+			if strings.Contains(ot, word) {
+				hasProtection = true
+				break
+			}
+		}
+
+		if hasProtection {
+			dp.ProtectedKeyPieces++
+		} else {
+			dp.UnprotectedKeyPieces++
+		}
+	}
+}
+
+var commanderThemePatterns = []struct {
+	Theme    string
+	Patterns []string
+}{
+	{"sacrifice", []string{"sacrifice", "sacrificed", "sac a"}},
+	{"tokens", []string{"create", "token", "populate", "embalm", "encore"}},
+	{"counters", []string{"+1/+1 counter", "proliferate", "counter on"}},
+	{"graveyard", []string{"graveyard", "mill", "dredge", "surveil", "reanimate", "return from your graveyard"}},
+	{"lifegain", []string{"gain life", "lifelink", "whenever you gain life"}},
+	{"spellcasting", []string{"instant", "sorcery", "whenever you cast", "magecraft", "prowess", "storm"}},
+	{"combat", []string{"attacks", "combat damage", "combat phase", "first strike", "double strike"}},
+	{"artifacts", []string{"artifact", "treasure", "equipment", "equip"}},
+	{"enchantments", []string{"enchantment", "aura", "constellation", "enchanted"}},
+	{"lands", []string{"landfall", "land enters", "search your library for a land"}},
+	{"blink", []string{"exile", "return", "flicker", "exile target creature you control"}},
+	{"discard", []string{"discard", "each opponent discards", "madness"}},
+	{"tribal", []string{"creature type", "all creatures of the chosen type", "creatures you control get"}},
+	{"drawing", []string{"draw", "draws a card", "whenever you draw"}},
+}
+
+func computeCommanderSynergy(dp *DeckProfile, report *FreyaReport, oracle *oracleDB) {
+	cmdrEntry := oracle.lookup(report.Commander)
+	if cmdrEntry == nil {
+		return
+	}
+
+	cmdrOT := strings.ToLower(cmdrEntry.OracleText)
+	if cmdrOT == "" && len(cmdrEntry.CardFaces) > 0 {
+		cmdrOT = strings.ToLower(cmdrEntry.CardFaces[0].OracleText)
+		if len(cmdrEntry.CardFaces) > 1 {
+			cmdrOT += " " + strings.ToLower(cmdrEntry.CardFaces[1].OracleText)
+		}
+	}
+
+	var themes []string
+	for _, tp := range commanderThemePatterns {
+		for _, pat := range tp.Patterns {
+			if strings.Contains(cmdrOT, pat) {
+				themes = append(themes, tp.Theme)
+				break
+			}
+		}
+	}
+	dp.CommanderThemes = themes
+
+	if len(themes) == 0 {
+		return
+	}
+
+	synergyCount := 0
+	nonlandCount := 0
+	for _, p := range report.Profiles {
+		if p.IsLand || p.Name == report.Commander {
+			continue
+		}
+		nonlandCount++
+
+		entry := oracle.lookup(p.Name)
+		if entry == nil {
+			continue
+		}
+		ot := strings.ToLower(entry.OracleText)
+		if ot == "" && len(entry.CardFaces) > 0 {
+			ot = strings.ToLower(entry.CardFaces[0].OracleText)
+		}
+		tl := strings.ToLower(p.TypeLine)
+
+		for _, theme := range themes {
+			matched := false
+			for _, tp := range commanderThemePatterns {
+				if tp.Theme != theme {
+					continue
+				}
+				for _, pat := range tp.Patterns {
+					if strings.Contains(ot, pat) || strings.Contains(tl, pat) {
+						matched = true
+						break
+					}
+				}
+				break
+			}
+			if matched {
+				synergyCount++
+				break
+			}
+		}
+	}
+
+	dp.SynergyCount = synergyCount
+	if nonlandCount > 0 {
+		dp.CommanderSynergy = float64(synergyCount) / float64(nonlandCount)
+	}
 }
 
 func topNRoles(counts map[RoleTag]int, n int) []RoleCount {
@@ -153,6 +419,23 @@ func deriveStrengths(report *FreyaReport, dp *DeckProfile) []string {
 
 	if report.Stats != nil && len(report.Stats.ColorGaps) == 0 {
 		s = append(s, "balanced mana base")
+	}
+
+	if dp.CommanderSynergy >= 0.60 {
+		s = append(s, fmt.Sprintf("strong commander synergy (%.0f%% of cards match themes)", dp.CommanderSynergy*100))
+	} else if dp.CommanderSynergy >= 0.40 {
+		s = append(s, fmt.Sprintf("good commander synergy (%.0f%%)", dp.CommanderSynergy*100))
+	}
+
+	if dp.InteractionQuality > 0 && dp.InteractionQuality <= 2.0 {
+		s = append(s, fmt.Sprintf("fast interaction (avg CMC %.1f, %d pieces at CMC ≤2)", dp.InteractionQuality, dp.CheapInteraction))
+	}
+
+	if dp.ProtectedKeyPieces > 0 {
+		total := dp.ProtectedKeyPieces + dp.UnprotectedKeyPieces
+		if total > 0 && float64(dp.ProtectedKeyPieces)/float64(total) >= 0.40 {
+			s = append(s, fmt.Sprintf("well-protected key pieces (%d/%d have built-in protection)", dp.ProtectedKeyPieces, total))
+		}
 	}
 
 	interaction := report.RemovalCount
@@ -215,6 +498,21 @@ func deriveWeaknesses(report *FreyaReport, dp *DeckProfile) []string {
 
 	if report.Roles != nil && report.Roles.RoleCounts[RoleBoardWipe] == 0 {
 		w = append(w, "no board wipes")
+	}
+
+	if dp.CommanderSynergy > 0 && dp.CommanderSynergy < 0.25 {
+		w = append(w, fmt.Sprintf("low commander synergy (%.0f%%) — many cards don't align with commander themes", dp.CommanderSynergy*100))
+	}
+
+	if dp.InteractionQuality > 3.5 {
+		w = append(w, fmt.Sprintf("slow interaction (avg CMC %.1f) — may not answer fast threats in time", dp.InteractionQuality))
+	}
+
+	if dp.UnprotectedKeyPieces > 0 {
+		total := dp.ProtectedKeyPieces + dp.UnprotectedKeyPieces
+		if total >= 3 && float64(dp.UnprotectedKeyPieces)/float64(total) >= 0.80 {
+			w = append(w, fmt.Sprintf("key pieces exposed (%d/%d combo/threat pieces lack built-in protection)", dp.UnprotectedKeyPieces, total))
+		}
 	}
 
 	return w

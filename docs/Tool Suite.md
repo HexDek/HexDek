@@ -1,7 +1,7 @@
 # HexDek Tool Suite — Norse Pantheon
 
 > Last updated: 2026-04-29
-> Location: `sandbox/mtgsquad/`
+> Location: `cmd/`
 
 Norse-named tool suite around the [HexDek engine](Engine%20Architecture.md). Each tool is a single-binary entry point under `cmd/`; shared engine logic lives in `internal/`. Tools split testing, simulation, analysis, and serving into separate processes so each can be parallelized independently and run overnight on DARKSTAR.
 
@@ -37,9 +37,9 @@ flowchart TD
     Strategy --> Tournament
     Tournament --> Outcomes[Outcomes + event logs]
     Outcomes --> Heimdall
-    Loki --> Invariants20 invariants]
+    Loki --> Invariants[20 invariants]
     Odin --> Invariants
-    Tournament -.--audit.-> StackTrace[Stack Trace]
+    Tournament -. audit flag .-> StackTrace[Stack Trace]
     Judge --> Engine[Engine REPL]
     Server --> Engine
     Parity --> Engine
