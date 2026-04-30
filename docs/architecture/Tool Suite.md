@@ -1,6 +1,6 @@
 # HexDek Tool Suite — Norse Pantheon
 
-> Last updated: 2026-04-29
+> Last updated: 2026-04-30
 > Location: `cmd/`
 
 Norse-named tool suite around the [HexDek engine](Engine%20Architecture.md). Each tool is a single-binary entry point under `cmd/`; shared engine logic lives in `internal/`. Tools split testing, simulation, analysis, and serving into separate processes so each can be parallelized independently and run overnight on DARKSTAR.
@@ -19,6 +19,8 @@ Norse-named tool suite around the [HexDek engine](Engine%20Architecture.md). Eac
 | Tournament | Parallel tournament runner (workhorse) | `cmd/hexdek-tournament/` |
 | Server | WebSocket game server for `hexdek.bluefroganalytics.com` | `cmd/hexdek-server/` |
 | Import | Single Moxfield/Archidekt URL → `.txt` deck | `cmd/hexdek-import/` |
+| Huginn | Emergent interaction discovery (co-trigger → pattern → tier graduation) | `cmd/hexdek-huginn/` |
+| Muninn | Persistent crash/gap/dead-trigger memory (append-only telemetry) | `cmd/hexdek-muninn/` |
 | Parity | Go ↔ Python engine parity verifier | `cmd/hexdek-parity/` |
 | Stack Trace | CR-compliance audit logger (in-engine, not a binary) | `internal/gameengine/stack_trace.go` |
 
@@ -37,6 +39,11 @@ flowchart TD
     Strategy --> Tournament
     Tournament --> Outcomes[Outcomes + event logs]
     Outcomes --> Heimdall
+    Outcomes --> Huginn[Huginn<br/>Interaction Discovery]
+    Outcomes --> Muninn[Muninn<br/>Persistent Memory]
+    Huginn --> Learned[learned_interactions.json]
+    Learned --> Freya
+    Muninn --> Gaps[parser_gaps / crashes / dead_triggers]
     Loki --> Invariants[20 invariants]
     Odin --> Invariants
     Tournament -. audit flag .-> StackTrace[Stack Trace]
@@ -54,6 +61,8 @@ flowchart TD
 - [Judge](Tool%20-%20Judge.md) reproduces bugs Thor/Loki/Valkyrie surface
 - [Server](Tool%20-%20Server.md) hosts the live web frontend
 - [Import](Tool%20-%20Import.md) feeds `data/decks/`; [Moxfield Import Pipeline](Moxfield%20Import%20Pipeline.md) handles bulk corpus pulls
+- [Huginn](Tool%20-%20Huginn.md) discovers emergent card interactions from Heimdall's co-trigger data, graduates them through 3 confidence tiers, feeds confirmed patterns to Freya
+- [Muninn](Tool%20-%20Muninn.md) accumulates parser gaps, crash logs, and dead triggers across tournament runs as append-only persistent memory
 - [Parity](Tool%20-%20Parity.md) keeps the Go engine pinned to the Python reference
 
 ## Verification Status
