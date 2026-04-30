@@ -24,39 +24,11 @@ The engine powers a live tournament forge that simulates tens of thousands of ga
 
 ---
 
-## Quick start
+## Use it
 
-```bash
-# Clone
-git clone https://github.com/hexdek-labs/HexDek.git
-cd HexDek
+**[hexdek.dev](https://hexdek.dev)** — import your decks, watch live simulations, and dig into the analytics. No install required.
 
-# Build everything
-go build ./...
-
-# Run the server (API + WebSocket on :8090)
-./hexdek-server
-
-# Run a tournament (1000 games across all decks in data/decks/)
-./hexdek-tournament --games 1000
-
-# Analyze a single deck
-./hexdek-freya --deck data/decks/josh/tinybones.json
-
-# Import from Moxfield
-curl -X POST http://localhost:8090/api/import/moxfield \
-  -H 'Content-Type: application/json' \
-  -d '{"url": "https://moxfield.com/decks/YOUR_DECK_ID", "owner": "yourname"}'
-```
-
-### Frontend
-
-```bash
-cd hexdek/
-npm install
-npm run dev    # Vite dev server on :5173
-npm run build  # Production build
-```
+The source is open for reading, learning, and auditing. You *can* build and run it locally — it's standard Go and Node — but we ship features daily and the engine moves fast. If you're forking to tinker, expect to rebase often.
 
 ---
 
@@ -164,12 +136,17 @@ HexDek/
 
 ---
 
-## How to contribute
+## Get involved
 
-- **File bug reports** at [hexdek.dev/feedback](https://hexdek.dev/feedback) or open a GitHub issue
-- **Add card handlers** — the engine has per-card handler slots for cards that need custom resolution logic beyond the generic AST executor. See `scripts/extensions/per_card.py`
-- **Import your decks** — more replays = better AI. Import from Moxfield and let the forge chew through games
-- **Donate** — no ads, no paywalls. Infrastructure costs are listed at [hexdek.dev/donations](https://hexdek.dev/donations)
+HexDek is open source but opinionated. We handle the development — the engine is deeply Go-native and moves at high velocity with AI-assisted tooling. Outside PRs aren't the bottleneck; good feedback is.
+
+**What helps most:**
+- **Bug reports** — [hexdek.dev/feedback](https://hexdek.dev/feedback) or open a GitHub issue
+- **Feature requests** — tell us what analysis you want to see for your decks
+- **Import your decks** — more replays = better AI. The forge gets smarter with volume
+- **Donate** — no ads, no paywalls. Costs are transparent at [hexdek.dev/donations](https://hexdek.dev/donations)
+
+**Want to write code?** If you're a strong Go developer and this system speaks to you, reach out. We'll add you to the Discord, walk through the architecture, and get you set up with our dev process. We don't do drive-by PRs, but we're happy to onboard people who want to go deep.
 
 ---
 
