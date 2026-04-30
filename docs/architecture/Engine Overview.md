@@ -90,7 +90,7 @@ If you're new to HexDek, the recommended reading order:
 2. **Pick one engine subsystem** that interests you ([Stack and Priority](Stack%20and%20Priority.md) is a good entry point) and follow its links.
 3. **Understand the AI seam:** [Hat AI System](Hat%20AI%20System.md) explains the boundary, [YggdrasilHat](YggdrasilHat.md) explains the production brain.
 4. **Learn the tool suite:** [Tool Suite](Tool%20Suite.md) is the MOC. Tools are independent binaries — pick one and read its doc.
-5. **Run something:** `go run ./cmd/mtgsquad-tournament --pool --decks data/decks/lyon --games 100 --seats 4`. Watch a 100-game pod tournament finish in seconds.
+5. **Run something:** `go run ./cmd/hexdek-tournament --pool --decks data/decks/lyon --games 100 --seats 4`. Watch a 100-game pod tournament finish in seconds.
 
 Conventions across these docs:
 

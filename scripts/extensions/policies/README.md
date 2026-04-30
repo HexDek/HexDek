@@ -3,7 +3,7 @@
 > *"D shouldn't be anything more than a hat that gets swapped out as we
 > change AI pilot policy."* — 7174n1c
 
-All AI decision-making in the mtgsquad engine lives behind the
+All AI decision-making in the HexDek engine lives behind the
 `Hat` Protocol. The engine calls `seat.policy.method(...)` at
 every decision site and never inspects which concrete class is attached.
 Swapping AI pilots is a **one-line change**:

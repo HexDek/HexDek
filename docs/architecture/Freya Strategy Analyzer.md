@@ -1,6 +1,6 @@
 # Freya Strategy Analyzer
 
-> Source: `cmd/mtgsquad-freya/`
+> Source: `cmd/hexdek-freya/`
 > Output: `<deck>.strategy.json` + `<deck>_freya.md`
 > Status: Production. ~13K lines of Go across 13 files. Drives [YggdrasilHat](YggdrasilHat.md) strategy.
 
@@ -564,7 +564,7 @@ flowchart LR
     YH --> Lookups[Pre-computed lookup sets<br/>comboPieceSet,<br/>valueEngineSet,<br/>tutorTargetSet,<br/>finisherSet]
 
     YH --> Tournament[Tournament Runner<br/>per-deck factories]
-    Tournament --> Tour[mtgsquad-tournament<br/>--report]
+    Tournament --> Tour[hexdek-tournament<br/>--report]
 
     Tour --> Heimdall[Heimdall analytics<br/>missed-combo detection]
 
@@ -581,13 +581,13 @@ flowchart LR
 
 ```bash
 # Single deck, text output (default).
-go run ./cmd/mtgsquad-freya --deck data/decks/benched/ragost.txt
+go run ./cmd/hexdek-freya --deck data/decks/benched/ragost.txt
 
 # Single deck, machine-readable JSON.
-go run ./cmd/mtgsquad-freya --deck my_deck.txt --format json > strategy.json
+go run ./cmd/hexdek-freya --deck my_deck.txt --format json > strategy.json
 
 # Whole directory of decks, markdown report.
-go run ./cmd/mtgsquad-freya --all-decks data/decks/lyon/ --format markdown
+go run ./cmd/hexdek-freya --all-decks data/decks/lyon/ --format markdown
 ```
 
 `saveFreyaData` always writes a `<deckname>.strategy.json` next to the deck file (in a `freya/` subfolder), regardless of the `--format` flag. Tournament runners pick up these files automatically.

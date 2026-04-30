@@ -1,6 +1,6 @@
 # Tool - Parity
 
-> Source: `cmd/mtgsquad-parity/`
+> Source: `cmd/hexdek-parity/`
 
 Go ↔ Python engine parity verifier. Runs N games in the Go engine, optionally re-runs them in the Python reference, diffs outcomes.
 
@@ -37,7 +37,7 @@ If `--python-harness` is omitted, the tool runs but skips diffing. Records Go ou
 
 ```bash
 # Standard parity run
-mtgsquad-parity \
+hexdek-parity \
   --decks deck1.txt,deck2.txt,deck3.txt,deck4.txt \
   --games 10 \
   --seed 42 \
@@ -45,7 +45,7 @@ mtgsquad-parity \
   --report data/rules/GO_PYTHON_PARITY_REPORT.md
 
 # Go-only run (Python skipped)
-mtgsquad-parity \
+hexdek-parity \
   --decks deck1.txt,deck2.txt,deck3.txt,deck4.txt \
   --games 10 \
   --seed 42

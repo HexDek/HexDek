@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # game_smoke.sh — end-to-end smoke test of Ship 4 game initialization.
 #
-# Requires the server running:  go run ./cmd/mtgsquad-server -addr :8765
+# Requires the server running:  go run ./cmd/hexdek-server -addr :8765
 # Requires:                     curl, jq
 
 set -euo pipefail

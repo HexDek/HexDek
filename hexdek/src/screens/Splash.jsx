@@ -49,7 +49,7 @@ export default function Splash() {
 
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
             <Btn solid arrow="▶" onClick={() => navigate(user ? '/dash' : '/login')}>ENTER THE FORGE</Btn>
-            <a href="https://github.com/hexdek-labs/HexDek/tree/main/docs" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}><Btn ghost arrow="↗">DOCS / / HX-001.PDF</Btn></a>
+            <a href="https://github.com/hexdek-labs/HexDek#readme" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}><Btn ghost arrow="↗">DOCS / / README</Btn></a>
             <a href="https://github.com/hexdek-labs/HexDek" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}><Btn ghost arrow="↗">GITHUB / / SRC</Btn></a>
           </div>
         </div>
@@ -63,13 +63,13 @@ export default function Splash() {
             </div>
             <div style={{ padding: '18px 16px', textAlign: 'center' }}>
               <div style={{ fontSize: 11, letterSpacing: '0.06em', lineHeight: 1.6 }}>
-                MTGSQUAD COMBAT CORE<br />
+                HEXDEK COMBAT CORE<br />
                 ENGINE: HEXDEK V0.10D<br />
                 FORMAT: COMMANDER / 1V1 / ARCHENEMY<br />
                 RUNTIME: {runtimeText}
               </div>
               <div style={{ borderTop: '1px solid rgba(0,0,0,0.15)', marginTop: 14, paddingTop: 10, fontSize: 10, letterSpacing: '0.1em' }}>
-                MTGSQUAD__©2026
+                HEXDEK__©2026
               </div>
             </div>
           </div>
@@ -89,7 +89,7 @@ export default function Splash() {
             <div className="t-md muted" style={{ lineHeight: 1.6 }}>
               &gt; OPEN SOURCE.<br />
               &gt; DONATIONS-POWERED.<br />
-              &gt; NO ADS. NO TRACKING.<br />
+              &gt; NO ADS. NO PAYWALLS.<br />
               &gt; LOGIN OPTIONAL — GUEST = FULL ANALYSIS.
             </div>
           </Panel>

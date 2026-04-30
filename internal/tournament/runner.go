@@ -959,10 +959,10 @@ func runLazyPool(cfg TournamentConfig, workers, maxTurns int, gameTimeout time.D
 		// After the first game completes, dump a heap profile for leak diagnosis.
 		if totalGames == 1 && cfg.PprofEnabled {
 			runtime.GC()
-			if f, err := os.Create("/tmp/mtgsquad_heap_post1.prof"); err == nil {
+			if f, err := os.Create("/tmp/hexdek_heap_post1.prof"); err == nil {
 				rpprof.WriteHeapProfile(f)
 				f.Close()
-				fmt.Fprintf(os.Stderr, "  heap profile written to /tmp/mtgsquad_heap_post1.prof\n")
+				fmt.Fprintf(os.Stderr, "  heap profile written to /tmp/hexdek_heap_post1.prof\n")
 			}
 		}
 	}

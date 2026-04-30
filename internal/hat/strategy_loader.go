@@ -8,7 +8,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Freya JSON mirror types (hat-local, cannot import cmd/mtgsquad-freya)
+// Freya JSON mirror types (hat-local, cannot import cmd/hexdek-freya)
 // ---------------------------------------------------------------------------
 
 type freyaJSON struct {

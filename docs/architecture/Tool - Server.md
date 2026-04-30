@@ -1,6 +1,6 @@
 # Tool - Server
 
-> Source: `cmd/mtgsquad-server/`, `internal/ws/`, `internal/hub/`, `internal/hexapi/`
+> Source: `cmd/hexdek-server/`, `internal/ws/`, `internal/hub/`, `internal/hexapi/`
 
 WebSocket game server. Runs on `localhost:8099` for the HexDek frontend (`web/`). Production deployment target: MISTY for `hexdek.bluefroganalytics.com`.
 
@@ -8,7 +8,7 @@ WebSocket game server. Runs on `localhost:8099` for the HexDek frontend (`web/`)
 
 ```mermaid
 flowchart LR
-    Client[hexdek.bluefroganalytics.com<br/>frontend] -- WS --> Server[mtgsquad-server]
+    Client[hexdek.bluefroganalytics.com<br/>frontend] -- WS --> Server[hexdek-server]
     Server --> WS[ws package]
     Server --> Hub[hub package<br/>game registry]
     Server --> HexAPI[hexapi package<br/>HTTP routes]
@@ -86,12 +86,12 @@ OLLAMA_HOST=http://localhost:11434
 
 ```bash
 # Local dev
-go run ./cmd/mtgsquad-server --port 8099
+go run ./cmd/hexdek-server --port 8099
 
 # Production
-GOOS=linux GOARCH=amd64 go build -o mtgsquad-server ./cmd/mtgsquad-server/
-scp mtgsquad-server josh@192.168.1.200:~/
-ssh josh@192.168.1.200 "./mtgsquad-server --port 8099 &"
+GOOS=linux GOARCH=amd64 go build -o hexdek-server ./cmd/hexdek-server/
+scp hexdek-server josh@192.168.1.200:~/
+ssh josh@192.168.1.200 "./hexdek-server --port 8099 &"
 ```
 
 ## Related

@@ -1,4 +1,4 @@
-// mtgsquad web client — vanilla JS, single-page
+// hexdek web client — vanilla JS, single-page
 
 (function () {
   'use strict';
@@ -21,8 +21,8 @@
   // a cookie. localStorage is the primary (same-origin, persists across
   // sessions); the cookie is a hedge in case localStorage is cleared or
   // disabled (e.g. private browsing). Same-site cookie so no CSRF risk.
-  const IDENTITY_KEY = 'mtgsquad.identity';
-  const COOKIE_KEY = 'mtgsquad_identity';
+  const IDENTITY_KEY = 'hexdek.identity';
+  const COOKIE_KEY = 'hexdek_identity';
   const COOKIE_TTL_DAYS = 30;
 
   function saveIdentity(deviceId, sessionToken, displayName, deckId) {
@@ -683,7 +683,7 @@
   });
 
   // ---------- bootstrap ----------
-  logEvent('mtgsquad client loaded');
+  logEvent('hexdek client loaded');
   loadPremades();
 
   // Restore saved identity if present. We validate the device still exists

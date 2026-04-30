@@ -1,6 +1,6 @@
 # Tool - Heimdall
 
-> Source: `cmd/mtgsquad-heimdall/main.go` (819 lines), `internal/analytics/` (~2,100 lines: `analyzer.go`, `analytics.go`, `card_rankings.go`, `combos.go`, `matchup_detail.go`, `report.go`, `weakness.go`)
+> Source: `cmd/hexdek-heimdall/main.go` (819 lines), `internal/analytics/` (~2,100 lines: `analyzer.go`, `analytics.go`, `card_rankings.go`, `combos.go`, `matchup_detail.go`, `report.go`, `weakness.go`)
 
 Heimdall is HexDek's analytics engine — the post-game forensic that answers "why did this deck win?" After every tournament, Heimdall walks the structured event logs from each game and produces three classes of artifact: per-card performance stats, per-matchup win-rate matrices, and the missed-combo report that flags every game where a hat had a winning line on the table and didn't take it.
 
@@ -10,7 +10,7 @@ The tool runs in two modes from a single binary. **Spectator mode** is the live 
 
 ```mermaid
 flowchart TD
-    Heim[mtgsquad-heimdall] --> Mode{--analyze flag?}
+    Heim[hexdek-heimdall] --> Mode{--analyze flag?}
     Mode -- false<br/>spectator --> S1[Load corpus + 4 decks]
     S1 --> S2[Run ONE game with GreedyHat]
     S2 --> Stream[Print every gs.EventLog entry<br/>with color-coded type prefix]
@@ -296,17 +296,17 @@ Consumers of the markdown: deck authors reading `MVP CARDS`, hat developers read
 
 ```bash
 # Spectator: live single-game stream
-go run ./cmd/mtgsquad-heimdall \
+go run ./cmd/hexdek-heimdall \
   --decks data/decks/cage_match \
   --seed 42 --pause-on-anomaly
 
 # Spectator with full event verbosity
-go run ./cmd/mtgsquad-heimdall \
+go run ./cmd/hexdek-heimdall \
   --decks data/decks/cage_match \
   --seed 42 --verbose
 
 # Analytics: 50-game report
-go run ./cmd/mtgsquad-heimdall \
+go run ./cmd/hexdek-heimdall \
   --analyze --games 50 \
   --decks data/decks/cage_match \
   --hat poker \
@@ -314,7 +314,7 @@ go run ./cmd/mtgsquad-heimdall \
   --top-cards 20
 
 # Analytics with Yggdrasil + 1000 games
-go run ./cmd/mtgsquad-heimdall \
+go run ./cmd/hexdek-heimdall \
   --analyze --games 1000 \
   --decks data/decks/all \
   --hat octo \

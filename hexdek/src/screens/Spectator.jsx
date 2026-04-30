@@ -4,7 +4,7 @@ import { Panel, KV, Bar, Tag, Btn, Tape } from '../components/chrome'
 import { cardArtUrl, API_BASE } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 
-const SPEED_MARKS = [0.2, 0.5, 1, 2, 5, 10, 20, 40, 100, 200]
+const SPEED_MARKS = [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2]
 
 const EVAL_GRID = [
   ['board_presence',  'card_advantage',      'mana_advantage'],

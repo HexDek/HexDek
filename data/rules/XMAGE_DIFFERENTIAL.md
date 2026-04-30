@@ -148,7 +148,7 @@ These XMage bugs touch areas our parser/resolver can't fully model:
 ## Reproducing / running
 
 ```bash
-cd sandbox/mtgsquad
+cd HexDek
 python3 scripts/test_xmage_differential.py
 ```
 

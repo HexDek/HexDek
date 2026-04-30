@@ -9,17 +9,17 @@ Norse-named tool suite around the [HexDek engine](Engine%20Architecture.md). Eac
 
 | Tool | Purpose | Binary |
 |---|---|---|
-| Thor | Per-card stress tester (oracle-text-aware effect verification) | `cmd/mtgsquad-thor/` |
-| Odin | 20-invariant property fuzzer | `cmd/mtgsquad-odin/` |
-| Loki | Random-deck chaos gauntlet + nightmare boards | `cmd/mtgsquad-loki/` |
-| Heimdall | Spectator + post-game analytics, missed-combo detection | `cmd/mtgsquad-heimdall/` |
-| Freya | Static deck analyzer, archetype + win lines, drives StrategyProfile | `cmd/mtgsquad-freya/` |
-| Valkyrie | Deck regression runner over `data/decks/` | `cmd/mtgsquad-valkyrie/` |
-| Judge | Interactive REPL for adversarial rules testing | `cmd/mtgsquad-judge/` |
-| Tournament | Parallel tournament runner (workhorse) | `cmd/mtgsquad-tournament/` |
-| Server | WebSocket game server for `hexdek.bluefroganalytics.com` | `cmd/mtgsquad-server/` |
-| Import | Single Moxfield/Archidekt URL → `.txt` deck | `cmd/mtgsquad-import/` |
-| Parity | Go ↔ Python engine parity verifier | `cmd/mtgsquad-parity/` |
+| Thor | Per-card stress tester (oracle-text-aware effect verification) | `cmd/hexdek-thor/` |
+| Odin | 20-invariant property fuzzer | `cmd/hexdek-odin/` |
+| Loki | Random-deck chaos gauntlet + nightmare boards | `cmd/hexdek-loki/` |
+| Heimdall | Spectator + post-game analytics, missed-combo detection | `cmd/hexdek-heimdall/` |
+| Freya | Static deck analyzer, archetype + win lines, drives StrategyProfile | `cmd/hexdek-freya/` |
+| Valkyrie | Deck regression runner over `data/decks/` | `cmd/hexdek-valkyrie/` |
+| Judge | Interactive REPL for adversarial rules testing | `cmd/hexdek-judge/` |
+| Tournament | Parallel tournament runner (workhorse) | `cmd/hexdek-tournament/` |
+| Server | WebSocket game server for `hexdek.bluefroganalytics.com` | `cmd/hexdek-server/` |
+| Import | Single Moxfield/Archidekt URL → `.txt` deck | `cmd/hexdek-import/` |
+| Parity | Go ↔ Python engine parity verifier | `cmd/hexdek-parity/` |
 | Stack Trace | CR-compliance audit logger (in-engine, not a binary) | `internal/gameengine/stack_trace.go` |
 
 ## How They Fit Together

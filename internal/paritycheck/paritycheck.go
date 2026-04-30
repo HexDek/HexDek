@@ -24,7 +24,7 @@
 //   - Diff           — walk paired streams, emit Divergence list
 //   - Run            — end-to-end: match N games, diff, write report
 //
-// CLI driver lives at cmd/mtgsquad-parity.
+// CLI driver lives at cmd/hexdek-parity.
 package paritycheck
 
 import (
@@ -352,7 +352,7 @@ func RunPython(cfg Config, gameIdx int, seed int64) (*ReplayData, error) {
 	if cfg.PythonHarnessPath == "" {
 		return nil, fmt.Errorf("paritycheck: no python harness configured")
 	}
-	tmp, err := os.CreateTemp("", "mtgsquad-parity-*.jsonl")
+	tmp, err := os.CreateTemp("", "hexdek-parity-*.jsonl")
 	if err != nil {
 		return nil, fmt.Errorf("paritycheck: tempfile: %w", err)
 	}

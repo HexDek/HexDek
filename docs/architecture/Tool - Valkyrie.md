@@ -1,6 +1,6 @@
 # Tool - Valkyrie
 
-> Source: `cmd/mtgsquad-valkyrie/`
+> Source: `cmd/hexdek-valkyrie/`
 
 Deck regression runner. Loads every saved deck under `data/decks/`, plays real Commander games with [GreedyHat](Greedy%20Hat.md) opponents, reports issues. Designed as a CI smoke test against the curated portfolio (32 decks across 9 folders).
 
@@ -48,13 +48,13 @@ Valkyrie catches issues that **random decks miss because the random decks never 
 
 ```bash
 # Default run — all decks in data/decks/
-go run ./cmd/mtgsquad-valkyrie
+go run ./cmd/hexdek-valkyrie
 
 # Specific subfolder
-go run ./cmd/mtgsquad-valkyrie --decks data/decks/lyon --games 10
+go run ./cmd/hexdek-valkyrie --decks data/decks/lyon --games 10
 
 # Verbose, fail on first issue
-go run ./cmd/mtgsquad-valkyrie --verbose --fail-fast
+go run ./cmd/hexdek-valkyrie --verbose --fail-fast
 ```
 
 ## Output

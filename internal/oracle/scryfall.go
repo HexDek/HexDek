@@ -196,7 +196,7 @@ func fetchScryfallCollection(ctx context.Context, names []string) (map[string]*C
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "mtgsquad/0.1 (https://github.com/hexdek/hexdek)")
+	req.Header.Set("User-Agent", "hexdek/0.1 (https://github.com/hexdek/hexdek)")
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -289,7 +289,7 @@ func fetchScryfall(ctx context.Context, name string) (*Card, error) {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "mtgsquad/0.1 (https://github.com/hexdek/hexdek)")
+	req.Header.Set("User-Agent", "hexdek/0.1 (https://github.com/hexdek/hexdek)")
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)

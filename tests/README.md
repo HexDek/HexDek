@@ -18,7 +18,7 @@ tests/
 
 ## Running
 
-From the repo root (`sandbox/mtgsquad/`):
+From the repo root:
 
 ```bash
 # Full suite (~60s — the coverage test parses all 31,639 cards)

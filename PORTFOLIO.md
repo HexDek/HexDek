@@ -1,4 +1,4 @@
-# mtgsquad — High-Performance Magic: The Gathering Rules Engine
+# HexDek — High-Performance Magic: The Gathering Rules Engine
 
 > A judge-grade MTG rules engine that processes 383+ games per second with full Comprehensive Rules compliance. Built in Go. Zero dependencies.
 
@@ -72,7 +72,7 @@ Oracle Text → AST Parser → Typed AST Dataset (JSONL)
 
 ## Competitive Advantage Over Existing Engines
 
-| Feature | mtgsquad | XMage | Forge | MTGO |
+| Feature | HexDek | XMage | Forge | MTGO |
 |---|---|---|---|---|
 | Open source | ✅ | ✅ | ✅ | ❌ |
 | Humility + Opalescence correct | ✅ | ❌ (historical bug) | Partial | ✅ |
@@ -94,9 +94,9 @@ Oracle Text → AST Parser → Typed AST Dataset (JSONL)
 ## Repository
 
 ```
-sandbox/mtgsquad/
-├── cmd/mtgsquad-tournament/     # CLI tournament runner
-├── cmd/mtgsquad-parity/         # Go↔Python parity tester
+HexDek/
+├── cmd/hexdek-tournament/     # CLI tournament runner
+├── cmd/hexdek-parity/         # Go↔Python parity tester
 ├── internal/gameengine/         # Core rules engine (Go)
 │   ├── state.go                 # Game state + permanent model
 │   ├── stack.go                 # Stack + priority + casting

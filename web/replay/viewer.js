@@ -1,4 +1,4 @@
-// mtgsquad replay viewer — vanilla JS
+// hexdek replay viewer — vanilla JS
 // -----------------------------------------------------------------------------
 // The viewer is a DUMB renderer. It does not know any MTG rules. It reads
 // structured events from a JSONL file produced by playloop.py --json-log and

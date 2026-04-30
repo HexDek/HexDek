@@ -341,7 +341,7 @@ func ResolveETBChoiceDefaults(perm *Permanent) bool {
 }
 
 // HasETBChoicePatternExported is the exported version of hasETBChoicePattern
-// for use by the chaos gauntlet card builder (cmd/mtgsquad-loki).
+// for use by the chaos gauntlet card builder (cmd/hexdek-loki).
 func HasETBChoicePatternExported(oracle string) bool {
 	return hasETBChoicePattern(oracle)
 }

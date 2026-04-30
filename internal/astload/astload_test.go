@@ -17,8 +17,8 @@ import (
 // root. Test files run from the package dir, so walk up until we find it.
 func corpusPath(t testing.TB) string {
 	t.Helper()
-	// package dir: .../sandbox/mtgsquad/internal/astload
-	// corpus:       .../sandbox/mtgsquad/data/rules/ast_dataset.jsonl
+	// package dir: .../hexdek/internal/astload
+	// corpus:       .../hexdek/data/rules/ast_dataset.jsonl
 	dir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)

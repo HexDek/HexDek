@@ -1,6 +1,6 @@
 # Tool - Loki
 
-> Source: `cmd/mtgsquad-loki/main.go` (1374 lines), `internal/gameengine/chaos.go` (~600 lines)
+> Source: `cmd/hexdek-loki/main.go` (1374 lines), `internal/gameengine/chaos.go` (~600 lines)
 > Status: Production. 10K games + 50K nightmare boards = ZERO violations on the v10d release.
 
 Loki is the chaos gauntlet. It picks 4 random commanders from the full ~36K oracle corpus, builds 99-card decks matching their color identity, runs 4-seat games with [GreedyHat](Greedy%20Hat.md), and checks all 20 [Odin invariants](Invariants%20Odin.md) after every action. The point is to surface engine bugs caused by *card combinations nobody designed test cases for* — bugs only visible when specific real cards interact.
@@ -17,7 +17,7 @@ The trick is using the **full corpus**, not a curated set. A pod of "Sliver Quee
 
 ```mermaid
 flowchart TD
-    Start[mtgsquad-loki] --> Load1[Load AST corpus]
+    Start[hexdek-loki] --> Load1[Load AST corpus]
     Load1 --> Load2[Load Scryfall oracle JSON<br/>build ChaosCorpus]
     Load2 --> Cat[Categorize cards:<br/>LegendaryCreatures, NonLand,<br/>NonBasicLands, BasicLands]
     Cat --> Phase1[PHASE 1: Chaos Games]
@@ -235,25 +235,25 @@ For chaos games specifically, the tournament runner is now preferred.
 
 ```bash
 # Standard chaos run (default 1000 games, 10K nightmare boards)
-go run ./cmd/mtgsquad-loki --workers 8
+go run ./cmd/hexdek-loki --workers 8
 
 # Big run (10K games, 50K nightmare boards)
-go run ./cmd/mtgsquad-loki \
+go run ./cmd/hexdek-loki \
   --games 10000 --nightmare-boards 50000 --workers 32
 
 # Reproducible debug
-go run ./cmd/mtgsquad-loki \
+go run ./cmd/hexdek-loki \
   --games 1 --seed 42 --permutations 1 --workers 1
 
 # Permutation analysis (5 shuffles per deck set)
-go run ./cmd/mtgsquad-loki \
+go run ./cmd/hexdek-loki \
   --games 1000 --permutations 5 --workers 16
 
 # Skip nightmare boards
-go run ./cmd/mtgsquad-loki --nightmare-boards 0
+go run ./cmd/hexdek-loki --nightmare-boards 0
 
 # Skip chaos games
-go run ./cmd/mtgsquad-loki --games 0 --nightmare-boards 50000
+go run ./cmd/hexdek-loki --games 0 --nightmare-boards 50000
 ```
 
 ## When You'd Use Loki

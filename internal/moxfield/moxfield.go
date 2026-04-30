@@ -85,7 +85,7 @@ func FetchDeckByID(deckID string) (string, error) {
 		return "", fmt.Errorf("moxfield: build request: %w", err)
 	}
 	// Moxfield API requires a User-Agent header.
-	req.Header.Set("User-Agent", "mtgsquad/1.0")
+	req.Header.Set("User-Agent", "hexdek/1.0")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := client.Do(req)
@@ -125,7 +125,7 @@ func FetchDeckName(url string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("moxfield: build request: %w", err)
 	}
-	req.Header.Set("User-Agent", "mtgsquad/1.0")
+	req.Header.Set("User-Agent", "hexdek/1.0")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := client.Do(req)

@@ -63,7 +63,7 @@ Every box maps to source code:
 | Trigger fan-out | [Trigger Dispatch](Trigger%20Dispatch.md) | `internal/gameengine/triggers.go` |
 | SBA loop | [State-Based Actions](State-Based%20Actions.md) | `internal/gameengine/sba.go` |
 | Invariants | [Invariants Odin](Invariants%20Odin.md) | `internal/gameengine/invariants.go` |
-| Heimdall | [Tool - Heimdall](Tool%20-%20Heimdall.md) | `internal/analytics/`, `cmd/mtgsquad-heimdall/` |
+| Heimdall | [Tool - Heimdall](Tool%20-%20Heimdall.md) | `internal/analytics/`, `cmd/hexdek-heimdall/` |
 
 ## Layered Pipeline
 

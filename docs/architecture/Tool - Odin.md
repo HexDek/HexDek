@@ -1,6 +1,6 @@
 # Tool - Odin
 
-> Source: `cmd/mtgsquad-odin/` (binary), `internal/gameengine/invariants.go` (predicates)
+> Source: `cmd/hexdek-odin/` (binary), `internal/gameengine/invariants.go` (predicates)
 
 Property-based fuzzer. Wraps every `GameState` mutation with the 20 [Odin invariants](Invariants%20Odin.md). Designed to run overnight on DARKSTAR and produce a markdown report sorted by invariant for next-morning triage.
 
@@ -8,7 +8,7 @@ Property-based fuzzer. Wraps every `GameState` mutation with the 20 [Odin invari
 
 [Loki](Tool%20-%20Loki.md) runs invariants too, but Odin's specialty is **overnight fuzz runs**. Its violation aggregator collects per-game evidence and writes a clean markdown report at the end. The workflow is:
 
-1. Kick off `mtgsquad-odin --games 50000 --workers 32` before bed
+1. Kick off `hexdek-odin --games 50000 --workers 32` before bed
 2. Wake up to a sorted-by-invariant report listing every violation
 3. Triage each violation: which card combination, which action sequence, which invariant
 4. Fix the underlying bug
@@ -41,14 +41,14 @@ The 20 predicates live in `internal/gameengine/invariants.go` and are documented
 
 ```bash
 # Standard overnight run
-go run ./cmd/mtgsquad-odin \
+go run ./cmd/hexdek-odin \
   --games 10000 \
   --seed 42 \
   --decks data/decks/cage_match/ \
   --report data/rules/FUZZ_REPORT.md
 
 # Reproduce a specific seed (useful for debugging)
-go run ./cmd/mtgsquad-odin \
+go run ./cmd/hexdek-odin \
   --games 1 \
   --seed 12345 \
   --decks data/decks/cage_match/ \

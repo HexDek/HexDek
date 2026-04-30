@@ -1,6 +1,6 @@
 # Tool - Thor
 
-> Source: `cmd/mtgsquad-thor/` (~25,300 lines across 33 .go files: `main.go` 1199, `goldilocks.go` 4330, `corpus_audit.go` 1315, `claim_verifier.go` 1265, plus 30 module files)
+> Source: `cmd/hexdek-thor/` (~25,300 lines across 33 .go files: `main.go` 1199, `goldilocks.go` 4330, `corpus_audit.go` 1315, `claim_verifier.go` 1265, plus 30 module files)
 > Status: Production. ~96K tests across 36,083-card corpus, 0 failures on the corpus-audit suite.
 
 Thor is HexDek's deterministic per-card stress tester. The fundamental insight is simple: every Magic card has an *expected* behavior, that behavior can be tested in isolation, and there are 36,083 of them. Thor scales the test suite by automating the per-card setup. For each card it builds a minimal game state where that card's effect should fire, fires it, and verifies the result against the AST's declared behavior.
@@ -11,7 +11,7 @@ Where [Loki](Tool%20-%20Loki.md) is random chaos in real games, Thor is exhausti
 
 ```mermaid
 flowchart TD
-    Start[mtgsquad-thor] --> Load[Load AST corpus + Scryfall oracle JSON]
+    Start[hexdek-thor] --> Load[Load AST corpus + Scryfall oracle JSON]
     Load --> Pop[Populate AST onto oracle cards<br/>by name match]
     Pop --> Filter{Single-card mode?<br/>--card / --card-list}
     Filter -- yes --> One[Filter to subset]
@@ -313,28 +313,28 @@ Both lean on the same 20 [Odin invariants](Invariants%20Odin.md). Thor finds *ca
 
 ```bash
 # Full per-card battery, parallel
-go run ./cmd/mtgsquad-thor --workers 32 --report data/rules/THOR_REPORT.md
+go run ./cmd/hexdek-thor --workers 32 --report data/rules/THOR_REPORT.md
 
 # Full suite (all modules + per-card)
-go run ./cmd/mtgsquad-thor --all --workers 32
+go run ./cmd/hexdek-thor --all --workers 32
 
 # Single card, full battery
-go run ./cmd/mtgsquad-thor --card "Blood Artist"
+go run ./cmd/hexdek-thor --card "Blood Artist"
 
 # Custom card list, full battery
-go run ./cmd/mtgsquad-thor --card-list /tmp/suspect_cards.txt
+go run ./cmd/hexdek-thor --card-list /tmp/suspect_cards.txt
 
 # Just one module
-go run ./cmd/mtgsquad-thor --goldilocks --workers 16
+go run ./cmd/hexdek-thor --goldilocks --workers 16
 
 # Pre-tournament: outcome-correctness across the corpus
-go run ./cmd/mtgsquad-thor \
+go run ./cmd/hexdek-thor \
   --corpus-audit --coverage-depth \
   --oracle-compliance --ast-fidelity \
   --workers 32
 
 # Specific era (corpus-audit only)
-go run ./cmd/mtgsquad-thor --corpus-audit --corpus-era era3
+go run ./cmd/hexdek-thor --corpus-audit --corpus-era era3
 ```
 
 ## Current State (2026-04-28)

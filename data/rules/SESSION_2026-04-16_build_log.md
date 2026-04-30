@@ -1,4 +1,4 @@
-# mtgsquad Session Log — 2026-04-16
+# HexDek Session Log — 2026-04-16
 
 **Who:** Josh Wiedeman (direction), 7174n1c (rules expertise / QA), Hex (engineering).
 **What:** From "parser at 97.74% GREEN" to "judge-grade 4-player EDH engine running personal decks at 0 crashes / 100 games."

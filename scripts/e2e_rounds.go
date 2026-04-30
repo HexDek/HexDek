@@ -32,7 +32,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	log.SetFlags(log.Ltime)
-	log.Println("=== mtgsquad E2E (multi-round) ===")
+	log.Println("=== hexdek E2E (multi-round) ===")
 
 	hex := registerDevice(ctx, "Hex")
 	josh := registerDevice(ctx, "Josh")

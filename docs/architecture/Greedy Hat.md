@@ -98,7 +98,7 @@ gs.Seats[3].Hat = greedy
 Or in a tournament:
 
 ```bash
-mtgsquad-tournament --hat greedy --decks ... --games 100
+hexdek-tournament --hat greedy --decks ... --games 100
 ```
 
 ## Related

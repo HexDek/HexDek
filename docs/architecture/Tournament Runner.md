@@ -2,7 +2,7 @@
 
 > Source: `internal/tournament/runner.go`, `roundrobin.go`, `turn.go`, `aggregate.go`, `elo.go`
 
-The runtime architecture under [mtgsquad-tournament](Tool%20-%20Tournament.md). Goroutine-parallel game loop, configurable pod sourcing, ELO + TrueSkill aggregation. This is the workhorse for HexDek's 50K-game-scale runs.
+The runtime architecture under [hexdek-tournament](Tool%20-%20Tournament.md). Goroutine-parallel game loop, configurable pod sourcing, ELO + TrueSkill aggregation. This is the workhorse for HexDek's 50K-game-scale runs.
 
 ## Worker Pool
 
@@ -117,7 +117,7 @@ This was added at Josh's request for human-readability when reading hat decision
 
 ## Configuration Knobs
 
-Flags accepted by `mtgsquad-tournament`:
+Flags accepted by `hexdek-tournament`:
 
 | Flag | Default | Effect |
 |---|---|---|
@@ -136,7 +136,7 @@ Flags accepted by `mtgsquad-tournament`:
 ## Production Run
 
 ```bash
-mtgsquad-tournament \
+hexdek-tournament \
   --lazy-pool \
   --decks data/decks/all \
   --games 50000 \

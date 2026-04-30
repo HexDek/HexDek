@@ -11,7 +11,7 @@ type contextKey struct{ name string }
 
 // ctxKeySession is the key under which an authenticated *Session is stored
 // on the request context.
-var ctxKeySession = contextKey{name: "mtgsquad/auth.session"}
+var ctxKeySession = contextKey{name: "hexdek/auth.session"}
 
 // FromContext returns the authenticated session for a request, or nil if
 // the request was not authenticated.

@@ -1,4 +1,4 @@
-# mtgsquad Architecture
+# HexDek Architecture
 
 One-page map of how oracle text becomes executable game state.
 
@@ -300,4 +300,4 @@ Go engine boot → load AST JSON emitted by parser.py
 | `data/rules/ast_dataset.jsonl` | Every card's typed AST (~40 MiB) |
 | `data/rules/finetune_pairs.jsonl` | Alpaca-style instruction pairs |
 | `internal/game/` | Go runtime engine (basic today) |
-| `cmd/mtgsquad-server/` | HTTP/WebSocket entry point |
+| `cmd/hexdek-server/` | HTTP/WebSocket entry point |

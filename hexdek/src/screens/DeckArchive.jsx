@@ -277,7 +277,7 @@ export default function DeckArchive() {
                   {analyzing ? (
                     <>&gt; FREYA ENGINE ANALYZING DECK<span className="blink">_</span><br />&gt; DETECTING COMBOS, SYNERGIES, WIN LINES...<br />&gt; THIS MAY TAKE A FEW SECONDS</>
                   ) : (
-                    <>&gt; NO FREYA ANALYSIS ON FILE<br />&gt; RUN <span style={{ color: 'var(--ink)' }}>MTGSQUAD-FREYA</span> TO GENERATE STRATEGY REPORT<br />&gt; BRACKET, ARCHETYPE, WIN LINES, EVAL WEIGHTS<span className="blink">_</span></>
+                    <>&gt; NO FREYA ANALYSIS ON FILE<br />&gt; RUN <span style={{ color: 'var(--ink)' }}>HEXDEK-FREYA</span> TO GENERATE STRATEGY REPORT<br />&gt; BRACKET, ARCHETYPE, WIN LINES, EVAL WEIGHTS<span className="blink">_</span></>
                   )}
                 </div>
               </div>

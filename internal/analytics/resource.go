@@ -3,7 +3,7 @@ package analytics
 import "github.com/hexdek/hexdek/internal/gameengine"
 
 // Resource types aligned with Freya's ResourceType constants (which live in
-// cmd/mtgsquad-freya and cannot be imported). These are simple strings so
+// cmd/hexdek-freya and cannot be imported). These are simple strings so
 // they match for causal-link comparison without coupling the packages.
 const (
 	ResMana      = "mana"

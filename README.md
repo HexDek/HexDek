@@ -1,258 +1,186 @@
-# mtgsquad
+# HexDek
 
-A Magic: the Gathering platform-in-progress whose design goal is that AI agents and humans sit at the same table as first-class peers, against a game engine driven by a typed AST compiled from every printed card.
+An open-source Magic: The Gathering Commander engine. Typed AST compiled from every printed card, political AI that plays multiplayer like a human, and a live tournament forge that runs thousands of games per minute.
 
----
-
-## What this repository is
-
-This is a **parser and engine scaffold**, not a playable client. It consists of three concentric rings:
-
-1. **An oracle-text parser** (`scripts/parser.py`, ~98K lines including extensions). It ingests every printed Magic card from a Scryfall bulk dump and emits a typed AST per comprehensive rules §113 (Static / Activated / Triggered / Keyword).
-2. **A layer harness** (`scripts/layer_harness.py`). It walks every card's AST and tags every static-ability `Modification` with its §613 continuous-effects layer so a future runtime can resolve effects in the correct order without re-deriving.
-3. **A runtime engine** (`internal/game/` in Go). Today this handles turn structure, priority, mana, casting, and simple actions. It is **not** yet capable of consuming the AST end-to-end, and it is **not** yet AI-playable.
-
-The cage around all three is an HTTP/WebSocket server (`cmd/mtgsquad-server/`) with SQLite for ephemeral game state, Moxfield-format deck import, and `crypto/rand`-backed Fisher-Yates shuffle with a commit-reveal option for trustless shuffle attestation.
+**[hexdek.dev](https://hexdek.dev)** · [Donate](https://hexdek.dev/donations) · [Bug Report](https://hexdek.dev/feedback) · MIT License
 
 ---
 
-## Status (honest)
+## What HexDek does
 
-| Layer | Status |
-|---|---|
-| Parser syntactic coverage | **100%** on 31,639 real cards — every card returns an AST with no parse errors. |
-| AST engine-executability | **~24%** — cards whose AST is fully typed leaf nodes a runtime can execute from node kinds alone. See `data/rules/coverage_honest.md` for the live number. |
-| AST stub coverage | **~76%** — cards parse, but some or all abilities carry `Modification(kind="custom", args=(slug,))` placeholders that will need hand-coded resolvers in the runtime layer. |
-| Per-card handlers | 1,079 snowflake cards (`scripts/extensions/per_card.py`) — intentional stubs, a work queue for the runtime. |
-| Layer tagging | Every card's abilities tagged against §613 layers 1–7e. |
-| Python self-play loop | 3-matchup (Burn / Control / Creatures), full turn structure including combat (`scripts/playloop.py`). |
-| Regression test suite | 203 pytest tests — 201 golden card snapshots + 2 full-corpus coverage asserts. |
-| Go runtime engine | Basic: turn structure, mana, casting, simple actions. No stack-based resolution against the AST yet. Not AI-playable. |
-| Client UI | Stub (`web/`) + static replay viewer (`web/replay/`). |
+HexDek parses every printed Magic card into a typed abstract syntax tree, then runs full Commander games against that AST — complete with the stack, priority, combat, triggers, replacement effects, and state-based actions. An AI system called **Yggdrasil** plays each deck with political awareness: threat assessment, grudge tracking, alliance evaluation, and budget-controlled search depth.
 
-Read `data/rules/coverage_honest.md` for the full dual-metric breakdown. The short version: "we parsed every printed Magic card" is true and load-bearing; "we can play every printed Magic card" is not yet true.
+The engine powers a live tournament forge that simulates tens of thousands of games, producing ELO/TrueSkill ratings, win-line analysis, mana curve diagnostics, and matchup data for every deck in the pool.
 
-For architectural detail on how the parser, AST, extensions, layer harness, and runtime fit together, see **[ARCHITECTURE.md](./ARCHITECTURE.md)**.
+### Key numbers
+
+| Metric | Value |
+|--------|-------|
+| Cards parsed | **50,000+** (100% of Scryfall bulk, zero parse errors) |
+| Engine throughput | **500+ games/sec** on a single machine |
+| Rating system | TrueSkill (Bayesian μ/σ) + standard ELO |
+| AI | YggdrasilHat — 8-dimensional evaluator, political multiplayer |
+| Format | Commander (4-player pods), 1v1, Archenemy |
 
 ---
 
 ## Quick start
 
-The parser and harness are pure Python 3.11+ and have no runtime dependencies beyond stdlib.
-
 ```bash
-# From sandbox/mtgsquad/
-cd sandbox/mtgsquad
+# Clone
+git clone https://github.com/hexdek-labs/HexDek.git
+cd HexDek
 
-# 1. Parse every card, report coverage, regenerate data/rules/parser_coverage.md
-python3 scripts/parser.py
+# Build everything
+go build ./...
 
-# 2. Parse one card and dump its AST
-python3 scripts/parser.py --card "Snapcaster Mage"
+# Run the server (API + WebSocket on :8090)
+./hexdek-server
 
-# 3. Produce the honest dual-metric coverage report
-#    Writes data/rules/coverage_honest.md
-python3 scripts/coverage_honest.py
+# Run a tournament (1000 games across all decks in data/decks/)
+./hexdek-tournament --games 1000
 
-# 4. Run the §613 layer harness across every card
-#    Writes data/rules/layer_harness.md
-python3 scripts/layer_harness.py
+# Analyze a single deck
+./hexdek-freya --deck data/decks/josh/tinybones.json
+
+# Import from Moxfield
+curl -X POST http://localhost:8090/api/import/moxfield \
+  -H 'Content-Type: application/json' \
+  -d '{"url": "https://moxfield.com/decks/YOUR_DECK_ID", "owner": "yourname"}'
 ```
 
-The Go runtime and HTTP server:
+### Frontend
 
 ```bash
-# Build and run the server (listens on :8080)
-go run ./cmd/mtgsquad-server
-
-# Example endpoint (test deck, top-N of a freshly shuffled library)
-curl http://localhost:8080/game/test/library/top-3
+cd hexdek/
+npm install
+npm run dev    # Vite dev server on :5173
+npm run build  # Production build
 ```
-
-The server is scaffolding — do not treat it as a playable product.
 
 ---
 
-## Self-play loop
+## Architecture
 
-A Python-only structural self-play simulator that proves the parser AST can drive
-an end-to-end game loop. It runs three matchups (Burn / Control / Creatures),
-with a real turn structure including a combat phase (declare-attackers,
-declare-blockers, first-strike step, regular damage, state-based actions,
-keyword handling for flying, reach, first strike, double strike, trample,
-deathtouch, lifelink, vigilance, menace, defender, haste).
-
-```bash
-# 3 matchups × 20 games each, deterministic seed
-python3 scripts/playloop.py --games 20 --seed 42
-
-# More games, with per-game log spill
-python3 scripts/playloop.py --games 100
+```
+Oracle Text → Parser → Typed AST → Game Engine → Tournament Runner → Analytics
+                                        ↑
+                                   YggdrasilHat (political AI)
 ```
 
-Report: `data/rules/playloop_report.md`.
-Sample game logs: `data/rules/playloop_sample_log.txt`.
+The engine is written in Go for performance. The frontend is React + Vite with a custom brutalist design system. Communication happens over WebSocket for live spectating and REST for everything else.
 
----
+### Core systems
 
-## Replay viewer
+| System | What it does | Docs |
+|--------|-------------|------|
+| **Parser** | Compiles oracle text into typed AST nodes per CR §113 | [Card AST and Parser](docs/architecture/Card%20AST%20and%20Parser.md) |
+| **Game Engine** | Full Commander rules: stack, priority, combat, SBAs, triggers | [Engine Architecture](docs/architecture/Engine%20Architecture.md) |
+| **Zone System** | Universal MoveCard with replacement effect interception | [Zone Changes](docs/architecture/Zone%20Changes.md) |
+| **Layer System** | §613 continuous effects resolution (layers 1–7e) | [Layer System](docs/architecture/Layer%20System.md) |
+| **Stack & Priority** | APNAP ordering, split-second, modal spells | [Stack and Priority](docs/architecture/Stack%20and%20Priority.md) |
+| **Trigger Dispatch** | Zone-change, ETB/LTB, cast, damage, state triggers | [Trigger Dispatch](docs/architecture/Trigger%20Dispatch.md) |
+| **Mana System** | 6-type pool, hybrid/phyrexian, convoke, treasure | [Mana System](docs/architecture/Mana%20System.md) |
+| **Combat** | Full combat phases, first/double strike, trample, menace | [Combat Phases](docs/architecture/Combat%20Phases.md) |
+| **Replacement Effects** | Self-replacement, interaction ordering, shield counters | [Replacement Effects](docs/architecture/Replacement%20Effects.md) |
+| **State-Based Actions** | Lethal damage, 0 toughness, legend rule, +1/+1 and -1/-1 | [State-Based Actions](docs/architecture/State-Based%20Actions.md) |
 
-A zero-dependency static browser viewer for playloop logs. Open
-`web/replay/index.html` in a browser and drag-and-drop a `.jsonl` log (or use
-the bundled `web/replay/sample.jsonl`). Scrub / step / autoplay through events;
-no game logic runs in the viewer — it only plays back logged state deltas.
+### AI system
 
----
+| Component | What it does | Docs |
+|-----------|-------------|------|
+| **YggdrasilHat** | Political AI: 8-dim board evaluator, threat scoring, grudge memory, budget system | [YggdrasilHat](docs/architecture/YggdrasilHat.md) |
+| **MCTS** | Monte Carlo tree search with configurable depth and budget | [MCTS and Yggdrasil](docs/architecture/MCTS%20and%20Yggdrasil.md) |
+| **Eval Weights** | Per-archetype tuning: aggro, combo, control, midrange, stax | [Eval Weights](docs/architecture/Eval%20Weights%20and%20Archetypes.md) |
+| **Greedy Hat** | Fast fallback AI for bulk simulation | [Greedy Hat](docs/architecture/Greedy%20Hat.md) |
 
-## Combo detector
+### Analytics & tools
 
-Static-analysis scanner that surfaces infinite-combo and engine candidates from
-the parsed AST (mana-positive engines, untap triggers, storm engines, iterative
-draw engines, doublers, and 2-card pair candidates). Heuristic — every entry is
-a candidate for human review, not a solved combo.
+| Tool | What it does | Docs |
+|------|-------------|------|
+| **Thor** | Bulk tournament runner, ELO/TrueSkill ratings | [Tool - Thor](docs/architecture/Tool%20-%20Thor.md) |
+| **Odin** | Invariant checker, engine correctness verification | [Tool - Odin](docs/architecture/Tool%20-%20Odin.md) |
+| **Freya** | Deck strategy analyzer (curve, ratios, win lines, archetypes) | [Tool - Freya](docs/architecture/Tool%20-%20Freya.md) |
+| **Heimdall** | Game analytics, ELO tracking, card performance | [Tool - Heimdall](docs/architecture/Tool%20-%20Heimdall.md) |
+| **Loki** | Fuzzer, edge-case discovery, chaos testing | [Tool - Loki](docs/architecture/Tool%20-%20Loki.md) |
+| **Valkyrie** | Cross-compile and deploy automation | [Tool - Valkyrie](docs/architecture/Tool%20-%20Valkyrie.md) |
+| **Huginn** | Emergent interaction discovery (parser gap → handler graduation) | [Tool Suite](docs/architecture/Tool%20Suite.md) |
+| **Muninn** | Persistent crash/gap telemetry (append-only memory) | [Tool Suite](docs/architecture/Tool%20Suite.md) |
 
-```bash
-python3 scripts/combo_detector.py
-```
-
-Writes `data/rules/combo_detections.md` (human-readable) and
-`data/rules/combo_detections.json` (programmatic).
-
----
-
-## AST dataset export
-
-For downstream finetuning / analysis, every card's typed AST is exported as a
-JSONL dataset with `__ast_type__` tags on every dataclass node.
-
-```bash
-# Full dataset — ~40 MiB, 31,639 rows
-python3 scripts/export_ast_dataset.py
-
-# Alpaca-style instruction pairs (oracle text → AST JSON)
-python3 scripts/export_finetune_pairs.py
-```
-
-Outputs:
-- `data/rules/ast_dataset.jsonl`
-- `data/rules/ast_dataset_README.md` (Hugging Face-ready card)
-- `data/rules/finetune_pairs.jsonl`
-
----
-
-## Tests
-
-Pytest suite of 201 golden-file regressions (one test per curated card across
-8 mechanic families) plus 2 slow whole-corpus asserts.
-
-```bash
-# Fast regression-only tier
-python3 -m pytest tests/ -m "not slow"
-
-# Full suite (parses all 31,639 cards)
-python3 -m pytest tests/
-```
-
-See `tests/README.md` for the breakdown and regeneration workflow.
+Full tool reference: **[Tool Suite](docs/architecture/Tool%20Suite.md)**
 
 ---
 
 ## Repository layout
 
 ```
-mtgsquad/
-├── README.md                   # this file
-├── ARCHITECTURE.md             # parser → AST → extensions → harness → runtime
-├── go.mod / go.sum
-├── cmd/
-│   └── mtgsquad-server/        # HTTP/WebSocket entry point
-├── internal/
-│   ├── game/                   # Go runtime engine (basic; consumes AST in future)
-│   ├── shuffle/                # crypto/rand Fisher-Yates
-│   ├── moxfield/               # deck import
-│   ├── oracle/                 # card lookup / Scryfall integration
-│   ├── db/                     # SQLite ephemeral game state
-│   ├── ws/                     # WebSocket hub
-│   └── ai/, auth/, mana/, party/, rules/
-├── scripts/
-│   ├── parser.py               # oracle text → CardAST
-│   ├── mtg_ast.py              # typed frozen-dataclass schema (§113 abilities)
-│   ├── layer_harness.py        # §613 layer tagging
-│   ├── coverage_honest.py      # dual-metric reporter
-│   ├── rules_coverage.py       # detailed parser diagnostics
-│   ├── cluster_priority.py     # prioritize stub work by card-usage frequency
-│   ├── semantic_clusters.py    # AST-signature clustering
-│   ├── combo_detector.py       # static-analysis infinite-combo scanner
-│   ├── playloop.py             # Python self-play loop (3 matchups, combat)
-│   ├── export_ast_dataset.py   # dumps typed AST to JSONL
-│   ├── export_finetune_pairs.py# Alpaca-style instruction pairs
-│   ├── extensions/             # ~50 parser-extension modules
-│   └── patterns/               # additional grammar patterns
-├── tests/                      # pytest suite (203 tests)
-│   ├── card_selection.py       # 200 curated cards grouped by family
-│   ├── generate_golden.py      # regenerates golden/*.json
-│   ├── test_parser_regression.py  # 201 golden-file snapshots
-│   ├── test_parser_coverage.py    # 2 whole-corpus asserts (slow)
-│   └── golden/                 # 200 JSON signatures
+HexDek/
+├── cmd/                          # CLI entry points
+│   ├── hexdek-server/            # HTTP/WebSocket API server
+│   ├── hexdek-thor/              # Tournament runner
+│   ├── hexdek-freya/             # Deck analyzer
+│   ├── hexdek-odin/              # Invariant checker
+│   ├── hexdek-heimdall/          # Analytics/ELO tracker
+│   ├── hexdek-loki/              # Fuzzer
+│   ├── hexdek-judge/             # Rules compliance checker
+│   ├── hexdek-import/            # Bulk deck importer
+│   ├── hexdek-tournament/        # Full tournament orchestrator
+│   ├── hexdek-valkyrie/          # Deploy tool
+│   ├── hexdek-huginn/            # Interaction discovery
+│   ├── hexdek-muninn/            # Crash telemetry
+│   └── hexdek-parity/            # Cross-engine parity checker
+├── internal/                     # Core engine (Go)
+│   ├── gameengine/               # Game state, turns, combat, SBAs
+│   ├── astload/                  # AST loader from Scryfall corpus
+│   ├── deckparser/               # Deck file parsing
+│   ├── hat/                      # AI system (Yggdrasil, Greedy, strategy)
+│   ├── tournament/               # Tournament runner, round-robin, swiss
+│   ├── analytics/                # Rivalry, threat graph, resource tracking
+│   ├── versioning/               # Deck version DAG (content-addressable)
+│   ├── matchmaking/              # Rating-aware pod assembly
+│   ├── hexapi/                   # REST API handlers
+│   ├── ws/                       # WebSocket hub (live spectating)
+│   ├── moxfield/                 # Moxfield deck import
+│   ├── oracle/                   # Scryfall card lookup
+│   ├── db/                       # SQLite game state
+│   └── auth/                     # Firebase auth middleware
+├── hexdek/                       # Frontend (React + Vite)
+│   └── src/
+│       ├── screens/              # Pages (Splash, Dashboard, Spectator, etc.)
+│       ├── components/           # UI components (chrome design system)
+│       ├── hooks/                # useLiveSocket, useAnimatedCounter
+│       ├── context/              # AuthContext (Firebase)
+│       └── services/             # API client, mock data
+├── docs/                         # Documentation
+│   └── architecture/             # Engine, AI, tools, systems (you are here)
 ├── data/
-│   ├── rules/
-│   │   ├── MagicCompRules-20260227.txt   # source of truth
-│   │   ├── oracle-cards.json             # Scryfall bulk dump (gitignored)
-│   │   ├── parser_coverage.md            # produced by parser.py
-│   │   ├── coverage_honest.md            # produced by coverage_honest.py
-│   │   ├── layer_harness.md              # produced by layer_harness.py
-│   │   ├── combo_detections.{md,json}    # produced by combo_detector.py
-│   │   ├── ast_dataset.jsonl             # produced by export_ast_dataset.py
-│   │   ├── ast_dataset_README.md         # dataset card (HF-ready)
-│   │   ├── finetune_pairs.jsonl          # produced by export_finetune_pairs.py
-│   │   ├── playloop_report.md            # produced by playloop.py
-│   │   ├── playloop_sample_log.txt
-│   │   ├── cluster_priority.md
-│   │   ├── semantic_clusters.md
-│   │   └── partial_diagnostic.md
-│   ├── decks/                            # example decks (Moxfield JSON)
-│   └── mtgsquad.db                       # SQLite; ephemeral game state
-└── web/                                  # client stub (not yet wired)
-    └── replay/                           # static browser viewer for playloop logs
+│   ├── decks/                    # Deck files (owner/deck.json)
+│   └── rules/                    # Scryfall data, comp rules, coverage reports
+├── scripts/                      # Parser (Python), build scripts, extensions
+│   └── extensions/               # Per-card handlers, parser extensions
+├── tests/                        # Go + Python test suites
+└── web/                          # Vanilla JS tools (leaderboard, drilldown)
 ```
 
 ---
 
-## Design principles
+## How to contribute
 
-1. **AI is a first-class player.** The same authoritative server, the same fairness constraints. AI connects via a JSON API scoped by session token; humans connect via a UI that speaks the same protocol. Neither can query the other's hidden zones, because the token doesn't authorize that scope.
-2. **Typed AST, not string matching.** Every card's oracle text compiles to a typed tree the runtime can pattern-match against. No regex-in-the-hot-path.
-3. **Honest coverage reporting.** "Parsed" and "executable" are separate metrics. See `data/rules/coverage_honest.md`.
-4. **Structural cheating is impossible.** Session-scoped data access; no client ever touches another player's private state.
-5. **True-RNG shuffle with cryptographic provenance.** `crypto/rand` Fisher-Yates. Optional commit-reveal for trustless attestation.
-6. **Free decks.** Moxfield import, proxy-friendly. No card cost.
+- **File bug reports** at [hexdek.dev/feedback](https://hexdek.dev/feedback) or open a GitHub issue
+- **Add card handlers** — the engine has per-card handler slots for cards that need custom resolution logic beyond the generic AST executor. See `scripts/extensions/per_card.py`
+- **Import your decks** — more replays = better AI. Import from Moxfield and let the forge chew through games
+- **Donate** — no ads, no paywalls. Infrastructure costs are listed at [hexdek.dev/donations](https://hexdek.dev/donations)
 
 ---
 
-## Legal posture
+## Legal
 
-This project is open source. It ships no card images and no copyrighted card text in this repository — oracle text is pulled at runtime from Scryfall's bulk-data dump, which is the same pattern every major MTG tool (Scryfall, Moxfield, EDHREC, Archidekt) has operated under for years without incident. The runtime engine implements the comprehensive rules as a distributed system, not as Wizards IP.
+This project ships no card images and no copyrighted card text. Oracle text is pulled at runtime from Scryfall's bulk-data dump — the same pattern every major MTG tool (Scryfall, Moxfield, EDHREC, Archidekt) operates under. The engine implements the comprehensive rules as software, not as Wizards IP.
 
-We do not host paid play. We do not sell a client. We do not bundle artwork.
-
-Wizards of the Coast, *Magic: the Gathering*, card names, and card artwork are property of Wizards of the Coast LLC. This project is not affiliated with or endorsed by Wizards.
-
----
-
-## Monetization
-
-Donations only. Planned channels: GitHub Sponsors, Patreon, OpenCollective. **No advertising, no paid features, no premium tiers, no data monetization.** If the project needs money to run infrastructure, it will ask directly.
-
----
-
-## Prior art and credits
-
-- **[Scryfall](https://scryfall.com/)** — bulk card data and the operational precedent that an open MTG data tool is viable.
-- **[Magic: the Gathering Comprehensive Rules](https://magic.wizards.com/en/rules)** — the spec this project compiles against (`data/rules/MagicCompRules-20260227.txt`).
-- **[XMage](https://github.com/magefree/mage)** and **[Forge](https://github.com/Card-Forge/forge)** — long-running FOSS MTG engines in Java. Both proved that "implement every card" is a tractable problem at the right level of abstraction. mtgsquad's bet is that a typed AST plus a smaller custom-resolver surface beats a per-card class hierarchy for long-term maintainability and AI agent integration.
+Wizards of the Coast, *Magic: The Gathering*, card names, and card artwork are property of Wizards of the Coast LLC. This project is not affiliated with or endorsed by Wizards.
 
 ---
 
 ## License
 
-MIT.
+MIT. No ads. No paywalls. No premium tiers. Donations only.

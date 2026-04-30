@@ -1,5 +1,5 @@
 // Package gameengine hosts the runtime state + effect resolver for the
-// mtgsquad Go engine. It consumes the read-only AST produced by
+// hexdek Go engine. It consumes the read-only AST produced by
 // github.com/hexdek/hexdek/internal/gameast and mutates a
 // GameState in response to effect resolutions.
 //

@@ -36,7 +36,7 @@ export default function Login() {
               <form onSubmit={handleSubmit}>
                 <div className="t-md muted" style={{ lineHeight: 1.6, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 18 }}>
                   &gt; ENTER YOUR EMAIL TO RECEIVE A MAGIC LINK.<br />
-                  &gt; NO PASSWORD REQUIRED. NO TRACKING.<br />
+                  &gt; NO PASSWORD REQUIRED. NO SPAM.<br />
                   &gt; ONE CLICK. YOU'RE IN.
                 </div>
 

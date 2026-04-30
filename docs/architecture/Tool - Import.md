@@ -1,6 +1,6 @@
 # Tool - Import
 
-> Source: `cmd/mtgsquad-import/`, `internal/moxfield/`
+> Source: `cmd/hexdek-import/`, `internal/moxfield/`
 
 Single-deck importer for Moxfield and Archidekt URLs. Writes a `.txt` deck in canonical [deckparser format](Decklist%20to%20Game%20Pipeline.md).
 
@@ -36,13 +36,13 @@ This is the canonical format consumed by [deckparser](Decklist%20to%20Game%20Pip
 
 ```bash
 # Single Moxfield deck
-mtgsquad-import --moxfield https://moxfield.com/decks/XXXXX
+hexdek-import --moxfield https://moxfield.com/decks/XXXXX
 
 # Single Archidekt deck
-mtgsquad-import --archidekt https://archidekt.com/decks/12345/name
+hexdek-import --archidekt https://archidekt.com/decks/12345/name
 
 # Custom output folder
-mtgsquad-import --moxfield URL --output data/decks/josh
+hexdek-import --moxfield URL --output data/decks/josh
 ```
 
 ## Source Platforms

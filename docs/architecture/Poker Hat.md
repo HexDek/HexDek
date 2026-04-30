@@ -84,7 +84,7 @@ poker := hat.NewPokerHat()
 gs.Seats[0].Hat = poker
 
 // Or via tournament runner
-// mtgsquad-tournament --hat poker
+// hexdek-tournament --hat poker
 ```
 
 The CLI flag still works — Poker is buildable and runnable, just not recommended. Use Yggdrasil instead.

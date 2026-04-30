@@ -1,4 +1,4 @@
-// Package tournament is the mtgsquad Go parallel tournament runner.
+// Package tournament is the hexdek Go parallel tournament runner.
 //
 // Runs N games across a goroutine pool, with per-seat Hat factories for
 // decision policy, collects winrate + elimination + crash stats, and

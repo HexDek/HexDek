@@ -21,7 +21,7 @@ pretty_name: MTG Typed AST Dataset
 
 A finetuning-grade corpus of every printed Magic: The Gathering card
 (post-filtering: 31,963 cards) paired with its **typed abstract syntax tree**
-as produced by the [mtgsquad](https://github.com/) oracle-text parser.
+as produced by the [HexDek](https://github.com/hexdek-labs/HexDek) oracle-text parser.
 
 Each AST is emitted per the MTG Comprehensive Rules §113 ability taxonomy:
 
@@ -39,7 +39,7 @@ Parser syntactic coverage: **100% GREEN** on all 31,963 real cards.
 A majority of cards carry at least one `Modification(kind="custom", ...)`
 stub intended for the runtime layer; that information is preserved in this
 dataset so downstream consumers can filter on it. See
-`data/rules/coverage_honest.md` in the mtgsquad repository for live
+`data/rules/coverage_honest.md` in the HexDek repository for live
 structural / mixed / stub / vanilla breakdown.
 
 ## File
@@ -71,7 +71,7 @@ Python class (e.g. `Static`, `Activated`, `Triggered`, `Keyword`, `Damage`,
 `Sequence`, `Choice`, ...) so consumers can discriminate structurally-similar
 nodes without hand-rolled schema inference.
 
-See `scripts/mtg_ast.py` in the mtgsquad repository for the full type
+See `scripts/mtg_ast.py` in the HexDek repository for the full type
 definitions (frozen dataclasses).
 
 ## Example row (verbatim first line of the JSONL)
@@ -108,9 +108,9 @@ Please credit Scryfall when redistributing:
 ## Citation
 
 ```bibtex
-@misc{mtgsquad_ast_dataset,
+@misc{hexdek_ast_dataset,
   title  = {MTG Oracle-Text Typed AST Dataset},
-  author = {mtgsquad contributors},
+  author = {HexDek contributors},
   year   = {2026},
   note   = {Typed AST per MTG Comprehensive Rules §113,
             sourced from Scryfall oracle-cards bulk data.}

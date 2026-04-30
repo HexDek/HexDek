@@ -1,4 +1,4 @@
-// Package auth provides session-token issuance and validation for mtgsquad.
+// Package auth provides session-token issuance and validation for hexdek.
 //
 // Tokens are opaque random hex strings stored in the session table. They
 // authenticate API and WebSocket connections to a specific device. Tokens

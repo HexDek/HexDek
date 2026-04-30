@@ -1,4 +1,4 @@
-// Package db provides the SQLite-backed persistence layer for mtgsquad.
+// Package db provides the SQLite-backed persistence layer for hexdek.
 //
 // The schema is split into two tiers: persistent identity (devices, decks,
 // friends) and ephemeral game state (parties, games, cards, turn state).

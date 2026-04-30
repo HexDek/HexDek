@@ -4,7 +4,7 @@
 
 ## The "hat" vocabulary
 
-Every AI decision-maker in the mtgsquad engine is a **hat** — a pluggable policy that implements the `PlayerPolicy` protocol. The engine wears a hat per seat. Seats can swap hats freely; hats never modify the engine.
+Every AI decision-maker in the HexDek engine is a **hat** — a pluggable policy that implements the `PlayerPolicy` protocol. The engine wears a hat per seat. Seats can swap hats freely; hats never modify the engine.
 
 Current hat inventory:
 - **GreedyHat** (`scripts/extensions/policies/greedy.py`) — baseline. Attack if legal, cast biggest spell, pick highest-threat target. Stateless, no mode tracking. Current implementation class is called `GreedyPolicy`; rename to `GreedyHat` when convenient.

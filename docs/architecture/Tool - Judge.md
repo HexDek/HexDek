@@ -1,6 +1,6 @@
 # Tool - Judge
 
-> Source: `cmd/mtgsquad-judge/`
+> Source: `cmd/hexdek-judge/`
 
 Interactive REPL for adversarial rules-engine testing. Construct board states by hand, fire actions, query state, run invariants. Designed for the rules-lawyer flow: *"I claim X. Engine, prove me wrong."*
 
@@ -95,7 +95,7 @@ Compared to writing a Go test:
 ## Usage
 
 ```bash
-go run ./cmd/mtgsquad-judge \
+go run ./cmd/hexdek-judge \
   --ast data/rules/ast_dataset.jsonl \
   --oracle data/rules/oracle-cards.json
 ```

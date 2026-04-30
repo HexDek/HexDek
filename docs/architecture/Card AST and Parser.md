@@ -235,7 +235,7 @@ Per memory (`project_hexdek_corpus_audit.md`):
 | Phase 3: Per-Card Handler Compliance | 100% | 275 / 275 | Hand-rolled handlers all match oracle text |
 | Phase 4: AST-Oracle Fidelity | 100% | 31,963 / 31,963 | Every card's AST round-trips against oracle |
 
-Run all four with Thor: `mtgsquad-thor --corpus-audit --coverage-depth --oracle-compliance --ast-fidelity`. Total: 96,159 tests in ~2.2 seconds, ~43K tests/sec. Zero failures.
+Run all four with Thor: `hexdek-thor --corpus-audit --coverage-depth --oracle-compliance --ast-fidelity`. Total: 96,159 tests in ~2.2 seconds, ~43K tests/sec. Zero failures.
 
 The journey to 100% AST fidelity (memory): 89.0% → 97.7% → 99.4% → 99.6% → 99.8% → 99.9% → 100.0%. The last 0.1% required:
 
@@ -306,7 +306,7 @@ flowchart TD
     Fix --> Outcome
 ```
 
-Run via `mtgsquad-thor --corpus-audit`. For each card:
+Run via `hexdek-thor --corpus-audit`. For each card:
 
 1. Build "ideal board state" for the card to fire its effect (correct mana, valid targets, etc.)
 2. Trigger the effect

@@ -1,4 +1,4 @@
-# Go Port Plan — mtgsquad Rules Engine
+# Go Port Plan — HexDek Rules Engine
 
 > **Author:** Survey pass, 2026-04-15
 > **Goal:** Achieve the Python reference engine's rules fidelity in Go, reusing the existing Go infrastructure, with a 50k games/sec benchmark target.
@@ -44,7 +44,7 @@
 - `internal/oracle/` — Scryfall card-data fetch/cache
 - `internal/shuffle/` — crypto/rand Fisher-Yates (**keep — Python uses `random.Random` which is weaker for trustless games**)
 - `internal/mana/` — WUBRGC mana pool + parser (**better than Python's MVP; keep and use as the Go engine's mana layer**)
-- `cmd/mtgsquad-server/main.go` — server entry point
+- `cmd/hexdek-server/main.go` — server entry point
 
 **Replace (game logic — currently a thin state-tracker; needs rules engine):**
 - `internal/game/engine.go` — core game ops (StartGame, DrawCards, PlayLand, CastSpell, YurikoReveal, etc.) — move to `internal/gameengine/` as a new package, keep old `internal/game/` as the state-tracker shim so the live websocket server still works
@@ -59,7 +59,7 @@
 - `internal/policy/` — PlayerPolicy interface + GreedyPolicy + PokerPolicy
 - `internal/tournament/` — goroutine-parallel tournament runner
 - `internal/paritycheck/` — Python↔Go event-stream differ
-- `cmd/mtgsquad-sim/` — headless simulator binary (not the websocket server)
+- `cmd/hexdek-sim/` — headless simulator binary (not the websocket server)
 
 ### Q3 — Data formats
 
@@ -171,7 +171,7 @@ Each phase is a **single agent's work unit** — one context, one commit (once w
 | 8 | **§613 layer system** | `internal/gameengine/layers.go` — `ContinuousEffect`, `Modifier`, `get_effective_characteristics` with 7-layer resolution and cache, §613.7a timestamps, dependency handling for the common cases (Humility, Blood Moon, Painter's Servant, Opalescence). Duration tracking and cleanup-step expiry. | 14-18 | #7 |
 | 9 | **Multiplayer + commander** | `internal/gameengine/multiplayer.go` + `commander.go` — APNAP ordering, `opponents()`, `living_opponents()`, `living_seats()`, §800.4 leave-the-game cleanup. Commander setup, §903.8 tax, §704.6c 21-damage SBA, §704.6d zone-change return, commander_damage tracking. | 8-10 | #6, #7, #8 |
 | 10 | **PlayerPolicy + GreedyPolicy + PokerPolicy** | `internal/policy/` — 14-method Go interface, GreedyPolicy port (~300 LOC), PokerPolicy port with 7-dim threat score + HOLD/CALL/RAISE mode machine (~1,100 LOC). Replaces `internal/ai/autopilot.go`. | 10-14 | #9 |
-| 11 | **Tournament runner** | `internal/tournament/` — goroutine-parallel runner. `runtime.NumCPU()` workers, each pulls matchups from a channel, runs games in-process (no SQLite persistence — pure in-memory), emits results. `cmd/mtgsquad-sim/main.go` CLI. | 6-8 | #10 |
+| 11 | **Tournament runner** | `internal/tournament/` — goroutine-parallel runner. `runtime.NumCPU()` workers, each pulls matchups from a channel, runs games in-process (no SQLite persistence — pure in-memory), emits results. `cmd/hexdek-sim/main.go` CLI. | 6-8 | #10 |
 | 12 | **Python↔Go parity tester** | `internal/paritycheck/` — given `(seed, deck_a, deck_b)`, run Python and Go engines with identical RNG state, compare event streams. Tolerance: byte-identical on structural events (zone_change, damage_dealt, seat_eliminated); allow cosmetic diffs in log strings. Start with a 100-game corpus; expand. | 10-14 | #11 |
 | 13 | **50k games/sec benchmark** | `bench/` — `go test -bench` harness. Start with 2-player Lightning Bolt goldfish (simplest case), scale up to 4-player EDH gauntlet. Profile (`pprof`), optimize allocation hot path (likely: AST node allocation per resolution, map operations in effective-characteristics cache). Target 50k/sec @ 2-player, stretch goal 15k/sec @ 4-player EDH. | 8-12 | #12 |
 

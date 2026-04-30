@@ -12,17 +12,17 @@ HexDek is an open-source MTG (Magic: The Gathering) Commander game engine, AI pl
 
 ```
 cmd/                    # Executable entry points
-  mtgsquad-server/      # Main API server (WebSocket game engine + REST API)
-  mtgsquad-freya/       # Deck analysis pipeline (archetype, combos, win lines, roles)
-  mtgsquad-heimdall/    # Post-game analytics + spectator tool
-  mtgsquad-thor/        # Card corpus parser (Scryfall → AST)
-  mtgsquad-import/      # Moxfield deck importer
-  mtgsquad-tournament/  # CLI tournament runner
-  mtgsquad-loki/        # Fuzz tester (random games, crash detection)
-  mtgsquad-judge/       # Rules compliance checker
-  mtgsquad-valkyrie/    # Deck effectiveness ranker
-  mtgsquad-odin/        # Oracle text analyzer
-  mtgsquad-parity/      # Cross-engine parity checker
+  hexdek-server/      # Main API server (WebSocket game engine + REST API)
+  hexdek-freya/       # Deck analysis pipeline (archetype, combos, win lines, roles)
+  hexdek-heimdall/    # Post-game analytics + spectator tool
+  hexdek-thor/        # Card corpus parser (Scryfall → AST)
+  hexdek-import/      # Moxfield deck importer
+  hexdek-tournament/  # CLI tournament runner
+  hexdek-loki/        # Fuzz tester (random games, crash detection)
+  hexdek-judge/       # Rules compliance checker
+  hexdek-valkyrie/    # Deck effectiveness ranker
+  hexdek-odin/        # Oracle text analyzer
+  hexdek-parity/      # Cross-engine parity checker
   dump_drift/           # ELO drift reporter
 
 internal/               # Core packages
@@ -95,16 +95,16 @@ go test ./internal/hat/... -count=1
 go test ./internal/tournament/... -count=1
 
 # Run the server (needs oracle-cards.json in data/rules/)
-go run ./cmd/mtgsquad-server/
+go run ./cmd/hexdek-server/
 
 # Analyze a deck
-go run ./cmd/mtgsquad-freya/ --deck data/decks/mydeck.txt
+go run ./cmd/hexdek-freya/ --deck data/decks/mydeck.txt
 
 # Run a tournament
-go run ./cmd/mtgsquad-tournament/ --decks data/decks/ --games 100
+go run ./cmd/hexdek-tournament/ --decks data/decks/ --games 100
 
 # Cross-compile for DARKSTAR (Linux deployment)
-GOOS=linux GOARCH=amd64 go build -o mtgsquad-server-linux ./cmd/mtgsquad-server/
+GOOS=linux GOARCH=amd64 go build -o hexdek-server-linux ./cmd/hexdek-server/
 
 # Frontend dev
 cd hexdek && npm install && npm run dev
@@ -117,7 +117,7 @@ cd hexdek && VITE_API_URL="" npx vite build
 
 - **Engine runs on DARKSTAR** (192.168.1.207) — Ubuntu Linux, Ryzen 9
 - **Frontend on MISTY** (192.168.1.200) — behind Caddy at hexdek.bluefroganalytics.com
-- Deploy server: `scp mtgsquad-server-linux josh@192.168.1.207:~/mtgsquad/mtgsquad-server`
+- Deploy server: `scp hexdek-server-linux josh@192.168.1.207:~/hexdek/hexdek-server`
 - Deploy frontend: `scp -r hexdek/dist/* josh@192.168.1.200:~/sites/hexdek/`
 - Requires WireGuard VPN when remote: `sudo wg-quick up ~/.config/wireguard/admin-vpn.conf`
 

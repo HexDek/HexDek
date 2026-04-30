@@ -333,7 +333,7 @@ export default function Report() {
         <Panel code="RPT.C" title="DECISION ANALYSIS" style={{ gridColumn: '1 / -1' }}>
           <div className="t-md muted" style={{ lineHeight: 1.7, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
             &gt; DEEPER ANALYSIS REQUIRES FREYA<br />
-            &gt; RUN <span style={{ color: 'var(--ok)' }}>MTGSQUAD-FREYA</span> TO GENERATE:<br />
+            &gt; RUN <span style={{ color: 'var(--ok)' }}>HEXDEK-FREYA</span> TO GENERATE:<br />
             &gt; · TURN-BY-TURN DECISION GRADING<br />
             &gt; · PER-CARD MVP / LVP RANKINGS<br />
             &gt; · OPPONENT THREAT MODELING<br />

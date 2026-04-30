@@ -1,6 +1,6 @@
 # Tool - Freya
 
-> Source: `cmd/mtgsquad-freya/`
+> Source: `cmd/hexdek-freya/`
 
 Combo and synergy detector. Reads a decklist, classifies every card's effects, builds a resource graph, finds combos and synergies, classifies the deck's archetype, and writes a `strategy.json` consumed by [YggdrasilHat](YggdrasilHat.md).
 
@@ -52,13 +52,13 @@ Plus, regardless of `--format`:
 
 ```bash
 # Single deck, default text output
-go run ./cmd/mtgsquad-freya --deck data/decks/benched/ragost.txt
+go run ./cmd/hexdek-freya --deck data/decks/benched/ragost.txt
 
 # Whole directory of decks, markdown
-go run ./cmd/mtgsquad-freya --all-decks data/decks/lyon/ --format markdown
+go run ./cmd/hexdek-freya --all-decks data/decks/lyon/ --format markdown
 
 # Single deck, JSON to file
-go run ./cmd/mtgsquad-freya --deck my_deck.txt --format json > strategy.json
+go run ./cmd/hexdek-freya --deck my_deck.txt --format json > strategy.json
 ```
 
 ## Sample Run Output

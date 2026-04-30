@@ -1,6 +1,6 @@
 # Moxfield Import Pipeline
 
-> Source: `internal/moxfield/`, `cmd/mtgsquad-import/`
+> Source: `internal/moxfield/`, `cmd/hexdek-import/`
 
 Bulk decklist ingestion path for the 5K+-deck pool tournaments. Two-stage pipeline: share-link CSV → deck details NDJSON → engine-ingestion `.txt` files.
 
@@ -97,7 +97,7 @@ Imported decks are written to `data/decks/imported/{deck_id}.txt`. Tournament ru
 For tournaments that mix curated + imported decks, point at the parent directory:
 
 ```bash
-mtgsquad-tournament --decks data/decks/ --lazy-pool --games 50000
+hexdek-tournament --decks data/decks/ --lazy-pool --games 50000
 ```
 
 ## When You'd Use This

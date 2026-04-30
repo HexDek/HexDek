@@ -373,9 +373,9 @@ func (h *Handler) runFreya(deckPath string) {
 	freyaMu.Lock()
 	defer freyaMu.Unlock()
 
-	freyaBin := "mtgsquad-freya"
+	freyaBin := "hexdek-freya"
 	if _, err := exec.LookPath(freyaBin); err != nil {
-		freyaBin = "./mtgsquad-freya"
+		freyaBin = "./hexdek-freya"
 		if _, err := os.Stat(freyaBin); err != nil {
 			log.Printf("freya: binary not found")
 			return
@@ -573,7 +573,7 @@ func (h *Handler) handleMoxfieldImport(w http.ResponseWriter, r *http.Request) {
 
 	apiURL := "https://api2.moxfield.com/v3/decks/all/" + url.PathEscape(moxID)
 	apiReq, _ := http.NewRequest("GET", apiURL, nil)
-	apiReq.Header.Set("User-Agent", "HexDek/1.0 (mtgsquad deck import)")
+	apiReq.Header.Set("User-Agent", "HexDek/1.0 (hexdek deck import)")
 	apiReq.Header.Set("Accept", "application/json")
 	resp, err := moxfieldClient.Do(apiReq)
 	if err != nil {
@@ -1034,7 +1034,7 @@ func (h *Handler) handleCardArt(w http.ResponseWriter, r *http.Request) {
 	scryfallURL := "https://api.scryfall.com/cards/named?fuzzy=" + url.QueryEscape(clean) + "&format=image&version=art_crop"
 
 	req, _ := http.NewRequest("GET", scryfallURL, nil)
-	req.Header.Set("User-Agent", "HexDek/1.0 (mtgsquad card art cache)")
+	req.Header.Set("User-Agent", "HexDek/1.0 (hexdek card art cache)")
 	req.Header.Set("Accept", "image/*")
 	resp, err := artHTTPClient.Do(req)
 	if err != nil {

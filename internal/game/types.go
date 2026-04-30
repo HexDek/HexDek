@@ -1,4 +1,4 @@
-// Package game implements the mtgsquad game state machine.
+// Package game implements the hexdek game state machine.
 //
 // State-tracking, not a rules engine: players (and the AI) announce
 // intents via the WebSocket API, and the server records the resulting

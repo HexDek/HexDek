@@ -181,7 +181,7 @@ export default function Forge() {
                 <div style={{ padding: '20px 0', textAlign: 'center' }}>
                   <div className="t-md muted" style={{ lineHeight: 1.8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     &gt; NO FREYA ANALYSIS ON FILE<br />
-                    &gt; RUN <span style={{ color: 'var(--ink)' }}>MTGSQUAD-FREYA</span> TO GENERATE STRATEGY REPORT<br />
+                    &gt; RUN <span style={{ color: 'var(--ink)' }}>HEXDEK-FREYA</span> TO GENERATE STRATEGY REPORT<br />
                     &gt; BRACKET, ARCHETYPE, WIN LINES, EVAL WEIGHTS<span className="blink">_</span>
                   </div>
                 </div>

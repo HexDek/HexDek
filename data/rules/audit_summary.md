@@ -1,6 +1,6 @@
 # Audit Summary
 
-_30 games audited from `/Users/joshuawiedeman/Documents/GitHub/BlueFrogAnalytics/sandbox/mtgsquad/data/rules/audit_events.jsonl`._
+_30 games audited from `/Users/joshuawiedeman/Documents/GitHub/HexDek/data/rules/audit_events.jsonl`._
 
 _Total violations: **0**_
 

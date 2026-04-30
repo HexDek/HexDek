@@ -1,4 +1,4 @@
-# Ghost-Ship Audit — mtgsquad AST Corpus
+# Ghost-Ship Audit — HexDek AST Corpus
 
 **Generated:** 2026-04-25 (post zone-change codemod)
 **Authorized by:** 7174n1c, in HexDek Discord thread
@@ -8,7 +8,7 @@
 
 ## TL;DR
 
-The mtgsquad AST corpus contains **substantial ghost-ship population** —
+The HexDek AST corpus contains **substantial ghost-ship population** —
 cards whose AST parses but silently no-ops at runtime due to one of:
 
 1. Triggered ability with `phase=null` and/or `event=null`

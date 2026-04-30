@@ -1,4 +1,4 @@
-# mtgsquad Engine Rules Coverage
+# HexDek Engine Rules Coverage
 
 **Last Updated:** 2026-04-20
 **Engine version:** Go port, post-massive-session
@@ -619,7 +619,7 @@ Oracle-text-aware keyword testing framework. Runs 847,253 tests across all modul
 
 ### Heimdall (Analytics + Spectator)
 
-Two-mode game analysis tool (`cmd/mtgsquad-heimdall/`).
+Two-mode game analysis tool (`cmd/hexdek-heimdall/`).
 
 **Upgrades this session:**
 - Trigger tracking — logs `trigger_evaluated` events for every per-card trigger dispatch
@@ -637,7 +637,7 @@ Two-mode game analysis tool (`cmd/mtgsquad-heimdall/`).
 
 ### Freya (Combo/Synergy Detector) — NEW
 
-Automatic combo and synergy detector (`cmd/mtgsquad-freya/`). Reads a decklist, resolves oracle text from Scryfall, classifies cards as PRODUCES/CONSUMES/TRIGGERS, builds a resource graph, and finds cycles (combo loops).
+Automatic combo and synergy detector (`cmd/hexdek-freya/`). Reads a decklist, resolves oracle text from Scryfall, classifies cards as PRODUCES/CONSUMES/TRIGGERS, builds a resource graph, and finds cycles (combo loops).
 
 **Capabilities:**
 - Resource graph construction from oracle text

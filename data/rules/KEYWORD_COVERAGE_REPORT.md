@@ -1,4 +1,4 @@
-# Keyword Abilities Coverage (CR 702) -- mtgsquad Go Engine Audit
+# Keyword Abilities Coverage (CR 702) -- HexDek Go Engine Audit
 
 **Date:** 2026-04-18 (updated)
 **Engine:** `internal/gameengine/` (Go)

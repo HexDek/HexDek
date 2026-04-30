@@ -1,4 +1,4 @@
-// Package ws implements the WebSocket transport for mtgsquad. It bridges
+// Package ws implements the WebSocket transport for hexdek. It bridges
 // the coder/websocket library to the package-internal hub for connection
 // tracking and broadcast.
 //

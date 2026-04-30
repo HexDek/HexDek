@@ -1,4 +1,4 @@
--- mtgsquad ephemeral game state schema (SQLite).
+-- hexdek ephemeral game state schema (SQLite).
 --
 -- Persistent identity layer: device, deck, friend.
 -- Ephemeral game layer: party, party_member, game, game_player, game_card,

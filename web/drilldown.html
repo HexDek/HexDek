@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>mtgsquad — Deck Drilldown</title>
+  <title>HexDek — Deck Drilldown</title>
   <link rel="stylesheet" href="styles.css?v=20260430">
   <style>
     .dd-container { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
@@ -34,7 +34,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><a href="/ui/" style="color:inherit;text-decoration:none">mtgsquad</a></div>
+    <div class="brand"><a href="/ui/" style="color:inherit;text-decoration:none">HexDek</a></div>
     <nav style="display:flex;gap:1rem;font-size:0.85rem">
       <a href="/ui/" style="color:#888">Game</a>
       <a href="/ui/leaderboard.html" style="color:#888">Leaderboard</a>
@@ -95,7 +95,7 @@
         const cmdr = deck.commander_card || deck.commander || id;
         document.getElementById('dd-commander').textContent = cmdr;
         document.getElementById('dd-meta').textContent = `${deck.card_count} cards · Bracket ${deck.bracket} · Owner: ${owner}`;
-        document.title = `mtgsquad — ${cmdr}`;
+        document.title = `HexDek — ${cmdr}`;
         const artImg = document.getElementById('dd-art');
         artImg.src = `/api/card-art/${encodeURIComponent(cmdr.split('//')[0].trim())}`;
         artImg.onerror = () => { artImg.style.display = 'none'; };

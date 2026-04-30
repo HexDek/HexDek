@@ -1,6 +1,6 @@
 # Tool - Tournament
 
-> Source: `cmd/mtgsquad-tournament/`, `internal/tournament/`
+> Source: `cmd/hexdek-tournament/`, `internal/tournament/`
 
 Parallel tournament runner. Workhorse for the 5K/10K/50K-game tests Josh + 7174n1c run on DARKSTAR. See [Tournament Runner](Tournament%20Runner.md) for runtime architecture.
 
@@ -62,7 +62,7 @@ The matchup matrix is the most useful artifact for deck-tuning — shows which c
 ## Production Run (50K Games)
 
 ```bash
-mtgsquad-tournament \
+hexdek-tournament \
   --lazy-pool \
   --decks data/decks/all \
   --games 50000 \

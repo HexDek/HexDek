@@ -1,6 +1,6 @@
-# mtgsquad — Project Audit (2026-04-15)
+# HexDek — Project Audit (2026-04-15)
 
-A single-snapshot audit of the mtgsquad codebase at the end of the
+A single-snapshot audit of the HexDek codebase at the end of the
 parser-hardening / self-play push. This file is **generated**, not
 hand-maintained — it is the artifact of a "final polish" pass and is expected
 to go stale as the parser and engine evolve. Regenerate by re-running the
@@ -72,7 +72,7 @@ File tree grouped by purpose. Sizes / line counts are as of 2026-04-15.
 
 | File | Purpose |
 |---|---|
-| `cmd/mtgsquad-server/` | HTTP/WebSocket entry point |
+| `cmd/hexdek-server/` | HTTP/WebSocket entry point |
 | `internal/game/` | Turn structure, mana, casting, simple actions |
 | `internal/shuffle/` | `crypto/rand` Fisher-Yates, commit-reveal |
 | `internal/moxfield/` | Moxfield-format deck import |
@@ -132,7 +132,7 @@ File tree grouped by purpose. Sizes / line counts are as of 2026-04-15.
 
 **Go HTTP/WebSocket server (scaffold).**
 
-- `cmd/mtgsquad-server/` serves basic REST endpoints against an in-memory game. Turn structure, mana, casting, simple actions work. SQLite ephemeral state. WebSocket hub. `crypto/rand` Fisher-Yates shuffle with commit-reveal option. Moxfield deck import. This is not yet AI-playable or AST-driven.
+- `cmd/hexdek-server/` serves basic REST endpoints against an in-memory game. Turn structure, mana, casting, simple actions work. SQLite ephemeral state. WebSocket hub. `crypto/rand` Fisher-Yates shuffle with commit-reveal option. Moxfield deck import. This is not yet AI-playable or AST-driven.
 
 ---
 
@@ -215,7 +215,7 @@ Recommended work order for the next push. Tier numbering follows the pre-existin
 ## Verification log
 
 Commands run on 2026-04-15 as part of this audit pass. All invoked from
-`sandbox/mtgsquad/` with system Python 3.11.
+`HexDek/` with system Python 3.11.
 
 ### 1. Parser coverage
 
