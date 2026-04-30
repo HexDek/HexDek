@@ -317,6 +317,13 @@ body {
   font-size: 8px; color: var(--ink-2); text-transform: uppercase;
   letter-spacing: 0.05em; margin-top: 2px;
 }
+.volcmap-archetypes {
+  margin-top: 8px; border-top: 1px solid var(--rule-2); padding-top: 6px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.volcmap-archetype-row {
+  display: flex; align-items: center; gap: 6px; font-size: 9px;
+}
 .seat-perms {
   padding: 4px; display: flex; gap: 3px; flex-wrap: wrap; flex: 1; align-content: flex-start;
   overflow: hidden;

@@ -423,6 +423,40 @@ export default function Spectator() {
           </div>
 
           <div className="spectator-lower-side">
+            <Panel code="FT.VM" title="EVAL HEATMAP KEY">
+              <div className="volcmap-legend">
+                <div className="volcmap-grid">
+                  {EVAL_GRID.flat().map(key => (
+                    <span key={key} className="volcmap-cell">{EVAL_LABELS[key]}</span>
+                  ))}
+                </div>
+                <div className="volcmap-scale">
+                  <div className="volcmap-bar" />
+                  <div className="volcmap-scale-labels">
+                    <span>LOW</span>
+                    <span>HIGH</span>
+                  </div>
+                </div>
+                {game.seats?.some(s => s.eval?.archetype) && (
+                  <div className="volcmap-archetypes">
+                    {game.seats.filter(s => !s.lost && s.eval).map((s, i) => (
+                      <div key={i} className="volcmap-archetype-row">
+                        <span className="t-xs" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 80 }}>
+                          {s.commander?.split('//')[0]?.trim().split(' ').pop()?.toUpperCase()}
+                        </span>
+                        <Tag>{s.eval.archetype?.toUpperCase() || '?'}</Tag>
+                        {s.eval.budget > 0 && (
+                          <span className="t-xs muted-2" title="Budget used / total">
+                            ⚡{s.eval.budget_used}/{s.eval.budget}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Panel>
+
             <Panel code="FT.SPD" title="SPEED CONTROL">
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <input
@@ -503,22 +537,6 @@ export default function Spectator() {
               </div>
             </Panel>
 
-            <Panel code="FT.VM" title="EVAL HEATMAP KEY">
-              <div className="volcmap-legend">
-                <div className="volcmap-grid">
-                  {EVAL_GRID.flat().map(key => (
-                    <span key={key} className="volcmap-cell">{EVAL_LABELS[key]}</span>
-                  ))}
-                </div>
-                <div className="volcmap-scale">
-                  <div className="volcmap-bar" />
-                  <div className="volcmap-scale-labels">
-                    <span>LOW</span>
-                    <span>HIGH</span>
-                  </div>
-                </div>
-              </div>
-            </Panel>
           </div>
         </div>
       </div>

@@ -18,10 +18,15 @@ kanban-plugin: board
 - [ ] Web leaderboard page (show deck ratings, confidence intervals, matchup data) #ui
 - [ ] Deck import from Moxfield URL → auto-register, auto-hash, auto-rate #ui
 - [ ] Deck drilldown UI: Freya curve/ratio analysis + Heimdall game analytics (ELO, card performance, matchups) — APIs already wired #ui
+- [ ] Bug/Suggestion report: red footer button → form (page, context, symptom, expected behavior, email/discord for followup) → stores text blobs to DB #ui #platform
+- [ ] Footer component (site-wide, includes bug report link) #ui
 
 
 ## Medium Priority
 
+- [ ] About page: project overview, philosophy, no-ads donation-only stance #ui #platform
+- [ ] Donations page: monthly COGs vs needs, current donation tracker #ui #platform
+- [ ] User profile page: custom display name, personalization settings #ui #platform
 - [ ] Operator platform page/tab (operator profile, deck management, analytics dashboard — non-engine, UI + platform) #ui #platform
 - [ ] BOINC-style distributed compute (desktop client → contribute games → earn credits) #distributed
 - [ ] Deterministic replay anti-cheat (cryptographic seed, spot-check 2-5%, auto-cauterize bad actors) #anticheat

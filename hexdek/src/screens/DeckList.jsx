@@ -28,7 +28,9 @@ export default function DeckList() {
     if (e.deck_id) eloByDeckId[e.deck_id] = e
   }
 
-  const myName = user?.displayName?.toLowerCase() || user?.email?.split('@')[0]?.toLowerCase() || ''
+  const storedOwner = typeof localStorage !== 'undefined' ? localStorage.getItem('hexdek_owner') : null
+  const emailPrefix = user?.email?.split('@')[0]?.split('.')[0]?.toLowerCase() || ''
+  const myName = storedOwner || user?.displayName?.toLowerCase() || emailPrefix || ''
   const myDecks = myName ? decks.filter(d => d.owner?.toLowerCase() === myName) : []
   const hasMyDecks = myDecks.length > 0
 

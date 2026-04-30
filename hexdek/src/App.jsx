@@ -9,6 +9,8 @@ import GameBoard from './screens/GameBoard'
 import Spectator from './screens/Spectator'
 import Report from './screens/Report'
 import Forge from './screens/Forge'
+import About from './screens/About'
+import BugReport from './screens/BugReport'
 import Login from './screens/Login'
 import AuthCallback from './screens/AuthCallback'
 
@@ -33,6 +35,8 @@ export default function App() {
         <Route path="spectate" element={<Spectator />} />
         <Route path="report" element={<Report />} />
         <Route path="report/:gameId" element={<Report />} />
+        <Route path="about" element={<About />} />
+        <Route path="feedback" element={<BugReport />} />
       </Route>
     </Routes>
   )

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape, MiniBars } from '../components/chrome'
 import { useProfile, useDecks, useGames, useMatchups } from '../hooks/useData'
 import { useLiveSocket } from '../hooks/useLiveSocket'
+import { useAuth } from '../context/AuthContext'
 import { cardArtUrl, api } from '../services/api'
 
 /* ─── Deck Import Modal ──────────────────────────────────────────── */
@@ -222,6 +223,7 @@ const NewSlot = ({ slot, onImport }) => (
 
 /* ─── Main Dashboard ─────────────────────────────────────────── */
 export default function Dashboard() {
+  const { user } = useAuth()
   const { data: profile } = useProfile()
   const { data: decks, refetch: refetchDecks } = useDecks()
   const { data: games } = useGames()
@@ -236,6 +238,7 @@ export default function Dashboard() {
     throughput: [],
   } : { activeForges: 0, totalGames: 0, gamesPerMin: 0, userContrib: 0, userRank: 'LOCAL', throughput: [] }
   const elo = rawElo || []
+  const userOwner = user ? (localStorage.getItem('hexdek_owner') || user.displayName?.toLowerCase() || user.email?.split('@')[0]?.split('.')[0] || '') : ''
   const [ownerFilter, setOwnerFilter] = useState('')
   const [activeDeck, setActiveDeck] = useState(null)
   const [showImport, setShowImport] = useState(false)
@@ -243,7 +246,8 @@ export default function Dashboard() {
   const navigate = useNavigate()
 
   const owners = [...new Set(decks.map(d => d.owner).filter(Boolean))].sort()
-  const filtered = ownerFilter ? decks.filter(d => d.owner === ownerFilter) : decks
+  const effectiveFilter = ownerFilter === '__all__' ? '' : (ownerFilter || (user && userOwner && owners.includes(userOwner) ? userOwner : ''))
+  const filtered = effectiveFilter ? decks.filter(d => d.owner === effectiveFilter) : decks
   const nextSlot = String(filtered.length + 1).padStart(2, '0')
 
   // ELO lookup by deck_id for per-deck matching
@@ -322,9 +326,9 @@ export default function Dashboard() {
           <Panel code="III.A" title={`DECK ARCHIVE / / ${filtered.length} DECKS`} right={
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <Btn sm ghost onClick={() => setShowImport(true)} arrow="↑">IMPORT</Btn>
-              <Tag solid={!ownerFilter} onClick={() => setOwnerFilter('')} style={{ cursor: 'pointer' }}>ALL</Tag>
+              <Tag solid={!effectiveFilter} onClick={() => setOwnerFilter('__all__')} style={{ cursor: 'pointer' }}>ALL</Tag>
               {owners.map(o => (
-                <Tag key={o} solid={ownerFilter === o} onClick={() => setOwnerFilter(ownerFilter === o ? '' : o)} style={{ cursor: 'pointer' }}>{o.toUpperCase()}</Tag>
+                <Tag key={o} solid={effectiveFilter === o} onClick={() => setOwnerFilter(effectiveFilter === o ? '__all__' : o)} style={{ cursor: 'pointer' }}>{o.toUpperCase()}</Tag>
               ))}
             </div>
           }>

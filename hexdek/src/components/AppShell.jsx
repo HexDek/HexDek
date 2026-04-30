@@ -6,6 +6,7 @@ const PUBLIC_NAV = [
   { to: '/', label: 'SPLASH', end: true },
   { to: '/decks', label: 'DECKS' },
   { to: '/spectate', label: 'SPECTATE' },
+  { to: '/about', label: 'ABOUT' },
 ]
 
 const AUTH_NAV = [
@@ -15,6 +16,7 @@ const AUTH_NAV = [
   { to: '/forge', label: 'FORGE' },
   { to: '/spectate', label: 'SPECTATE' },
   { to: '/report', label: 'REPORT' },
+  { to: '/about', label: 'ABOUT' },
 ]
 
 export default function AppShell() {
@@ -70,6 +72,7 @@ export default function AppShell() {
 
         <div className="statusbar">
           <span>+ + +  HEXDEK CORE READY  + + +</span>
+          <NavLink to="/feedback" style={{ color: 'var(--danger)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>BUG / SUGGESTION</NavLink>
           <span>OPEN SOURCE / / DONATIONS-POWERED / / NO ADS</span>
           <span>{user ? `USR.${user.email?.split('@')[0]?.toUpperCase()}` : 'GUEST'}</span>
         </div>
