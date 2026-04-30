@@ -4,7 +4,7 @@
 > Source: `cmd/mtgsquad-freya/`
 > Output: `<deck>.strategy.json` + `<deck>_freya.md`
 
-Static deck analyzer. Reads oracle text, classifies effects, builds resource graph, finds combos and synergies. Output drives [[YggdrasilHat]] strategy via [[Eval Weights and Archetypes|StrategyProfile]].
+Static deck analyzer. Reads oracle text, classifies effects, builds resource graph, finds combos and synergies. Output drives [YggdrasilHat](YggdrasilHat.md) strategy via [StrategyProfile](Eval%20Weights%20and%20Archetypes.md).
 
 ## Pipeline
 
@@ -26,7 +26,7 @@ flowchart TD
     P5 --> Out
     Out --> JSON[strategy.json]
     Out --> MD[_freya.md]
-    JSON --> Hat[[[YggdrasilHat]] loads<br/>via LoadStrategyFromFreya]
+    JSON --> Hat[YggdrasilHat loads<br/>via LoadStrategyFromFreya]
 ```
 
 ## Output Categories
@@ -48,7 +48,7 @@ flowchart TD
 
 ## ComputeEvalWeights
 
-Derives deck-specific [[Eval Weights and Archetypes|EvalWeights]] from analysis. Combo decks get higher `ComboProximity`, control decks higher `CardAdvantage`, etc. Beats archetype defaults when wired.
+Derives deck-specific [EvalWeights](Eval%20Weights%20and%20Archetypes.md) from analysis. Combo decks get higher `ComboProximity`, control decks higher `CardAdvantage`, etc. Beats archetype defaults when wired.
 
 ## Known False-Positive Pattern
 
@@ -70,7 +70,7 @@ go run ./cmd/mtgsquad-freya --deck my_deck.txt --format json > out.json
 
 ## Related
 
-- [[Tool - Freya]]
-- [[Hat AI System]]
-- [[YggdrasilHat]]
-- [[Eval Weights and Archetypes]]
+- [Tool - Freya](Tool%20-%20Freya.md)
+- [Hat AI System](Hat%20AI%20System.md)
+- [YggdrasilHat](YggdrasilHat.md)
+- [Eval Weights and Archetypes](Eval%20Weights%20and%20Archetypes.md)

@@ -3,7 +3,7 @@
 > Last updated: 2026-04-29
 > Source: `cmd/mtgsquad-valkyrie/`
 
-Deck regression runner. Loads every saved deck from `data/decks/`, plays real Commander games with [[Greedy Hat|GreedyHat]] opponents, reports issues.
+Deck regression runner. Loads every saved deck from `data/decks/`, plays real Commander games with [GreedyHat](Greedy%20Hat.md) opponents, reports issues.
 
 ## What It Catches
 
@@ -28,8 +28,8 @@ flowchart TD
 
 ## Why It's Distinct from Loki
 
-- [[Tool - Loki|Loki]] = random decks, finds invariant violations
-- [[Tool - Thor|Thor]] = exhaustive per-card, finds effect bugs
+- [Loki](Tool%20-%20Loki.md) = random decks, finds invariant violations
+- [Thor](Tool%20-%20Thor.md) = exhaustive per-card, finds effect bugs
 - **Valkyrie** = real saved decks, finds regressions specific to "decks Josh + 7174n1c actually play" — catches issues that random decks miss because the random decks never assemble that specific cohort
 
 ## Usage
@@ -42,10 +42,10 @@ go run ./cmd/mtgsquad-valkyrie --verbose --fail-fast
 
 ## Output
 
-Per-deck breakdown of failure categories. Designed as a CI smoke test against the curated portfolio (32 decks across 9 folders, see [[Engine Overview]]).
+Per-deck breakdown of failure categories. Designed as a CI smoke test against the curated portfolio (32 decks across 9 folders, see [Engine Overview](Engine%20Overview.md)).
 
 ## Related
 
-- [[Tool - Loki]]
-- [[Tool - Thor]]
-- [[Tool - Tournament]]
+- [Tool - Loki](Tool%20-%20Loki.md)
+- [Tool - Thor](Tool%20-%20Thor.md)
+- [Tool - Tournament](Tool%20-%20Tournament.md)

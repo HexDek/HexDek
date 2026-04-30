@@ -3,7 +3,7 @@
 > Last updated: 2026-04-29
 > Source: `internal/deckparser/`, `internal/astload/`, `internal/shuffle/`
 
-How a `.txt` deck file becomes a playable [[Engine Architecture|GameState]].
+How a `.txt` deck file becomes a playable [GameState](Engine%20Architecture.md).
 
 ## Pipeline
 
@@ -45,18 +45,18 @@ Lines starting with `#` are comments. `COMMANDER:` is special. Quantity-prefixed
 
 ## Shuffle (§103.1)
 
-`internal/shuffle/fisher_yates.go` — Fisher-Yates with `crypto/rand` entropy. Returns error only if entropy source fails. For multi-party trustless shuffle, commit-reveal happens at the game layer (see [[Tool - Server]]).
+`internal/shuffle/fisher_yates.go` — Fisher-Yates with `crypto/rand` entropy. Returns error only if entropy source fails. For multi-party trustless shuffle, commit-reveal happens at the game layer (see [Tool - Server](Tool%20-%20Server.md)).
 
 ## Mulligan (§103.4)
 
-Engine offers `ChooseMulligan` to [[Hat AI System|Hat]]. Greedy: mulligan if 0-1 lands. Yggdrasil: archetype-tuned thresholds. London mulligan rules (draw 7, scry to bottom on each restart).
+Engine offers `ChooseMulligan` to [Hat](Hat%20AI%20System.md). Greedy: mulligan if 0-1 lands. Yggdrasil: archetype-tuned thresholds. London mulligan rules (draw 7, scry to bottom on each restart).
 
 ## Commander Setup
 
-Commander goes to command zone, NOT library. Cast via `ShouldCastCommander` Hat decision with [[Mana System|tax]] applied per §903.8.
+Commander goes to command zone, NOT library. Cast via `ShouldCastCommander` Hat decision with [tax](Mana%20System.md) applied per §903.8.
 
 ## Related
 
-- [[Tool - Import]]
-- [[Tournament Runner]]
-- [[Engine Architecture]]
+- [Tool - Import](Tool%20-%20Import.md)
+- [Tournament Runner](Tournament%20Runner.md)
+- [Engine Architecture](Engine%20Architecture.md)

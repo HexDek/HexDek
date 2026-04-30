@@ -3,7 +3,7 @@
 > Last updated: 2026-04-29
 > Source: `cmd/mtgsquad-freya/`
 
-Combo and synergy detector. Output drives [[YggdrasilHat]] strategy. Full pipeline detail in [[Freya Strategy Analyzer]] — this note is the at-a-glance entry point.
+Combo and synergy detector. Output drives [YggdrasilHat](YggdrasilHat.md) strategy. Full pipeline detail in [Freya Strategy Analyzer](Freya%20Strategy%20Analyzer.md) — this note is the at-a-glance entry point.
 
 ## At a Glance
 
@@ -30,12 +30,12 @@ go run ./cmd/mtgsquad-freya --deck my_deck.txt --format json
 ## Outputs
 
 - Console / markdown / JSON depending on `--format`
-- `<deck>.strategy.json` — consumed by [[Hat AI System|hats]]
+- `<deck>.strategy.json` — consumed by [hats](Hat%20AI%20System.md)
 - `<deck>_freya.md` — human-readable summary
 
 ## Pipeline
 
-5 phases — see [[Freya Strategy Analyzer]] for full detail:
+5 phases — see [Freya Strategy Analyzer](Freya%20Strategy%20Analyzer.md) for full detail:
 
 1. Statistics (mana curve, color sources, Karsten land eval)
 2. Roles (12 tags per card)
@@ -45,10 +45,10 @@ go run ./cmd/mtgsquad-freya --deck my_deck.txt --format json
 
 ## Known Bugs
 
-False-positive loops — see [[Freya Strategy Analyzer#Known False-Positive Pattern|false-positive pattern]] for self-exile, hand-vs-battlefield, attack-trigger, and randomness causes.
+False-positive loops — see false-positive pattern for self-exile, hand-vs-battlefield, attack-trigger, and randomness causes.
 
 ## Related
 
-- [[Freya Strategy Analyzer]]
-- [[Hat AI System]]
-- [[YggdrasilHat]]
+- [Freya Strategy Analyzer](Freya%20Strategy%20Analyzer.md)
+- [Hat AI System](Hat%20AI%20System.md)
+- [YggdrasilHat](YggdrasilHat.md)

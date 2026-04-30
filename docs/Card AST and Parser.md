@@ -59,14 +59,14 @@ Unconsumed fragments recorded in `parse_errors`. `data/rules/parser_coverage.md`
 
 - **Syntactic:** 100% on 31,965 cards (every card returns an AST, no parse errors)
 - **Engine-executable:** ~24% of the AST is fully typed leaves the runtime can dispatch
-- **Stub coverage:** ~76% — `Modification(kind="custom", args=(slug,))` placeholders → handed to [[Per-Card Handlers]]
+- **Stub coverage:** ~76% — `Modification(kind="custom", args=(slug,))` placeholders → handed to [Per-Card Handlers](Per-Card%20Handlers.md)
 
 ## Layer Tagging (planned in AST)
 
-Per [[#Architecture decisions|2026-04-15 decision]]: Modifications get `layer: Optional[int]` per §613 to remove engine re-derivation. See [[Layer System]].
+Per 2026-04-15 decision: Modifications get `layer: Optional[int]` per §613 to remove engine re-derivation. See [Layer System](Layer%20System.md).
 
 ## Related
 
-- [[Per-Card Handlers]]
-- [[Layer System]]
-- [[Engine Architecture]]
+- [Per-Card Handlers](Per-Card%20Handlers.md)
+- [Layer System](Layer%20System.md)
+- [Engine Architecture](Engine%20Architecture.md)

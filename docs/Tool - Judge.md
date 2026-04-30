@@ -3,7 +3,7 @@
 > Last updated: 2026-04-29
 > Source: `cmd/mtgsquad-judge/`
 
-Interactive REPL for adversarial rules-engine testing. Construct board states by hand, fire actions, query state, run invariants. The full card corpus is loaded so permanents have real AST data + [[Layer System|layer calculations]].
+Interactive REPL for adversarial rules-engine testing. Construct board states by hand, fire actions, query state, run invariants. The full card corpus is loaded so permanents have real AST data + [layer calculations](Layer%20System.md).
 
 ## REPL Loop
 
@@ -14,11 +14,11 @@ flowchart LR
     Prompt --> Cmd{command}
     Cmd -- create game --> Setup[fresh GameState]
     Cmd -- seat N add_permanent --> Build[place permanent]
-    Cmd -- seat N cast --> Cast[run [[Stack and Priority|CastSpell]]]
+    Cmd -- seat N cast --> Cast[run CastSpell]
     Cmd -- resolve --> Pop[ResolveStackTop]
     Cmd -- sba --> SBA[StateBasedActions]
     Cmd -- query --> Inspect[print state slice]
-    Cmd -- invariants --> RunInv[run all 20 [[Invariants Odin]]]
+    Cmd -- invariants --> RunInv[run all 20 Invariants Odin]
     Cmd -- assert --> Verify[PASS / FAIL]
     Cmd -- step --> Step[advance one game step]
     Setup --> Prompt
@@ -65,6 +65,6 @@ go run ./cmd/mtgsquad-judge \
 
 ## Related
 
-- [[Tool - Thor]]
-- [[Invariants Odin]]
-- [[Layer System]]
+- [Tool - Thor](Tool%20-%20Thor.md)
+- [Invariants Odin](Invariants%20Odin.md)
+- [Layer System](Layer%20System.md)

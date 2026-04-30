@@ -4,7 +4,7 @@
 > Source: `cmd/mtgsquad-thor/`
 > Stats: 541K-793K tests across 36K cards
 
-Per-card stress tester. For each card in the corpus, place it on the battlefield and apply every interaction type. Run all 9 [[Invariants Odin|Odin invariants]] after each.
+Per-card stress tester. For each card in the corpus, place it on the battlefield and apply every interaction type. Run all 9 [Odin invariants](Invariants%20Odin.md) after each.
 
 ## Goldilocks Loop
 
@@ -37,7 +37,7 @@ flowchart TD
 
 ## Difference from Loki
 
-[[Tool - Loki|Loki]] is random chaos. Thor is exhaustive and deterministic — every card gets every interaction. Output is a surgical hit list: "card X breaks under interaction Y."
+[Loki](Tool%20-%20Loki.md) is random chaos. Thor is exhaustive and deterministic — every card gets every interaction. Output is a surgical hit list: "card X breaks under interaction Y."
 
 ## Usage
 
@@ -54,6 +54,6 @@ go run ./cmd/mtgsquad-thor --workers 10 --report data/rules/THOR_REPORT.md
 
 ## Related
 
-- [[Tool - Loki]]
-- [[Tool - Odin]]
-- [[Invariants Odin]]
+- [Tool - Loki](Tool%20-%20Loki.md)
+- [Tool - Odin](Tool%20-%20Odin.md)
+- [Invariants Odin](Invariants%20Odin.md)

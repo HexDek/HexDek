@@ -13,7 +13,7 @@ flowchart TD
     Caller[Mill / Discard / Surveil /<br/>Dredge / Bounce / Tutor /<br/>Reanimate / Library Tuck] --> MC[MoveCard]
     MC --> Remove[Remove card from<br/>source zone by pointer]
     Remove --> FZC[FireZoneChange]
-    FZC --> Repl[[[Replacement Effects|§614 replacement chain]]]
+    FZC --> Repl§614 replacement chain]
     Repl --> CmdrCheck{Commander<br/>redirect?<br/>§903.9b}
     CmdrCheck -- yes --> Cmd[Place in command zone]
     CmdrCheck -- no --> Dest[Place in toZone]
@@ -53,11 +53,11 @@ Battlefield-to-X exits do NOT use `MoveCard` — they have their own lifecycle (
 
 ## Commander Redirect (§903.9a/b)
 
-When commander would change zones, owner may redirect to command zone. Choice via [[Hat AI System|Hat]] `ShouldRedirectCommanderZone`. Applied inside `FireZoneChange` after replacements run.
+When commander would change zones, owner may redirect to command zone. Choice via [Hat](Hat%20AI%20System.md) `ShouldRedirectCommanderZone`. Applied inside `FireZoneChange` after replacements run.
 
 ## Related
 
-- [[Replacement Effects]]
-- [[Trigger Dispatch]]
-- [[State-Based Actions]]
-- [[Per-Card Handlers]]
+- [Replacement Effects](Replacement%20Effects.md)
+- [Trigger Dispatch](Trigger%20Dispatch.md)
+- [State-Based Actions](State-Based%20Actions.md)
+- [Per-Card Handlers](Per-Card%20Handlers.md)

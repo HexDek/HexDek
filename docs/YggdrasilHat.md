@@ -4,7 +4,7 @@
 > Source: `internal/hat/yggdrasil.go`
 > Status: **Current** — standard for all tournament play
 
-The unified player brain. See [[MCTS and Yggdrasil]] for the budget/rollout architecture and [[Eval Weights and Archetypes]] for scoring. This note is the at-a-glance entry point.
+The unified player brain. See [MCTS and Yggdrasil](MCTS%20and%20Yggdrasil.md) for the budget/rollout architecture and [Eval Weights and Archetypes](Eval%20Weights%20and%20Archetypes.md) for scoring. This note is the at-a-glance entry point.
 
 ## Why It Exists
 
@@ -45,7 +45,7 @@ Tournament runner wires `TurnRunner` so rollouts can advance turns.
 - **Budget** — depth dial (heuristic / evaluator / rollout)
 - **Noise** — gaussian σ on targeting scores (0=deterministic, 0.2=default)
 - **TurnBudget** — eval points per turn (heuristic fallback when exhausted)
-- **Archetype** — set on `StrategyProfile`, tunes weights via [[Eval Weights and Archetypes]]
+- **Archetype** — set on `StrategyProfile`, tunes weights via [Eval Weights and Archetypes](Eval%20Weights%20and%20Archetypes.md)
 
 ## Implements All 21 Hat Methods Natively
 
@@ -61,7 +61,7 @@ Combo win conditions not fully implemented: 90%+ of wins are combat damage even 
 
 ## Related
 
-- [[Hat AI System]]
-- [[MCTS and Yggdrasil]]
-- [[Eval Weights and Archetypes]]
-- [[Freya Strategy Analyzer]]
+- [Hat AI System](Hat%20AI%20System.md)
+- [MCTS and Yggdrasil](MCTS%20and%20Yggdrasil.md)
+- [Eval Weights and Archetypes](Eval%20Weights%20and%20Archetypes.md)
+- [Freya Strategy Analyzer](Freya%20Strategy%20Analyzer.md)

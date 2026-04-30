@@ -4,7 +4,7 @@
 > Source: `internal/gameengine/per_card/` (~96 .go files), `per_card_hooks.go`
 > Count: 1079+ snowflake handlers
 
-When [[Card AST and Parser|AST]] can't express a card cleanly, hand-rolled handler. Avoids cyclic import via `per_card_hooks.go` seam.
+When [AST](Card%20AST%20and%20Parser.md) can't express a card cleanly, hand-rolled handler. Avoids cyclic import via `per_card_hooks.go` seam.
 
 ## Dispatch Decision Tree
 
@@ -47,15 +47,15 @@ flowchart TD
 
 ## Trigger Guards
 
-`per_card/registry.go:fireTrigger` enforces depth 8 / total 2000 caps. See [[Trigger Dispatch]].
+`per_card/registry.go:fireTrigger` enforces depth 8 / total 2000 caps. See [Trigger Dispatch](Trigger%20Dispatch.md).
 
 ## Trigger Dispatch Audit (2026-04)
 
-Audit found 8 dead per-card triggers due to event-name mismatches. Fixed via [[Trigger Dispatch|event_aliases.go]] normalization layer. `upkeep_controller` event was missing entirely — fix in `turn.go` added `FireCardTrigger(gs, "upkeep_controller", ...)` after `FirePhaseTriggers`. Affected cards: Mana Crypt, Eye of Vecna, The One Ring, Mystic Remora, Oloro, Necrogen Mists, Bottomless Pit.
+Audit found 8 dead per-card triggers due to event-name mismatches. Fixed via [event_aliases.go](Trigger%20Dispatch.md) normalization layer. `upkeep_controller` event was missing entirely — fix in `turn.go` added `FireCardTrigger(gs, "upkeep_controller", ...)` after `FirePhaseTriggers`. Affected cards: Mana Crypt, Eye of Vecna, The One Ring, Mystic Remora, Oloro, Necrogen Mists, Bottomless Pit.
 
 ## Authoritative Mode
 
-When `ResolveHook` returns nonzero, stock dispatch is SKIPPED. Used by Doomsday (custom 5-pile UI) and Demonic Consultation / Tainted Pact (oracle-text effect not expressible in [[Card AST and Parser|AST]]).
+When `ResolveHook` returns nonzero, stock dispatch is SKIPPED. Used by Doomsday (custom 5-pile UI) and Demonic Consultation / Tainted Pact (oracle-text effect not expressible in [AST](Card%20AST%20and%20Parser.md)).
 
 ## Discard Pipeline
 
@@ -63,6 +63,6 @@ When `ResolveHook` returns nonzero, stock dispatch is SKIPPED. Used by Doomsday 
 
 ## Related
 
-- [[Card AST and Parser]]
-- [[Trigger Dispatch]]
-- [[Engine Architecture]]
+- [Card AST and Parser](Card%20AST%20and%20Parser.md)
+- [Trigger Dispatch](Trigger%20Dispatch.md)
+- [Engine Architecture](Engine%20Architecture.md)

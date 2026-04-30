@@ -3,7 +3,7 @@
 > Last updated: 2026-04-29
 > Source: `cmd/mtgsquad-tournament/`, `internal/tournament/`
 
-Parallel tournament runner. Workhorse for the 5K/10K/50K-game tests Josh + 7174n1c run on DARKSTAR. See [[Tournament Runner]] for runtime architecture.
+Parallel tournament runner. Workhorse for the 5K/10K/50K-game tests Josh + 7174n1c run on DARKSTAR. See [Tournament Runner](Tournament%20Runner.md) for runtime architecture.
 
 ## CLI Flow
 
@@ -43,7 +43,7 @@ flowchart TD
 
 ## Audit Mode
 
-`--audit` captures the full event stream for post-game rule auditing. Used to feed [[Tool - Stack Trace]] for CR compliance verification.
+`--audit` captures the full event stream for post-game rule auditing. Used to feed [Tool - Stack Trace](Tool%20-%20Stack%20Trace.md) for CR compliance verification.
 
 ## Output
 
@@ -71,6 +71,6 @@ DARKSTAR v10d binary: 1m34s, 532 g/s, 2 timeouts (0.004%), 654/654 commanders.
 
 ## Related
 
-- [[Tournament Runner]]
-- [[YggdrasilHat]]
-- [[Tool - Heimdall]]
+- [Tournament Runner](Tournament%20Runner.md)
+- [YggdrasilHat](YggdrasilHat.md)
+- [Tool - Heimdall](Tool%20-%20Heimdall.md)

@@ -4,7 +4,7 @@
 > Source: `sandbox/mtgsquad/internal/gameengine/`
 > Language: Go
 
-Top-level dataflow for the [[HexDek]] rules engine: oracle text → AST → game state → turn loop → analytics.
+Top-level dataflow for the HexDek rules engine: oracle text → AST → game state → turn loop → analytics.
 
 ## Overview Diagram
 
@@ -12,35 +12,35 @@ Top-level dataflow for the [[HexDek]] rules engine: oracle text → AST → game
 flowchart LR
     SCRY[Scryfall<br/>oracle-cards.json<br/>37,384 cards] --> PARSER[Python parser<br/>scripts/parser.py]
     PARSER --> AST[ast_dataset.jsonl<br/>31,965 ASTs]
-    AST --> ASTLOAD[[[Card AST and Parser|astload]]]
+    AST --> ASTLOADastload]
     DECK[decklist .txt] --> DECKPARSER[deckparser]
     ASTLOAD --> CARDS[Card pool]
     DECKPARSER --> CARDS
     CARDS --> GS[GameState<br/>state.go]
-    HAT[[[Hat AI System]]] -.decisions.-> GS
-    GS --> TURN[[[Tournament Runner|TakeTurn]]]
-    TURN --> CAST[[[Stack and Priority|CastSpell]]]
-    TURN --> COMBAT[[[Combat Phases|CombatPhase]]]
+    HAT[Hat AI System] -.decisions.-> GS
+    GS --> TURNTakeTurn]
+    TURN --> CASTCastSpell]
+    TURN --> COMBATCombatPhase]
     CAST --> RESOLVE[ResolveStackTop]
-    RESOLVE --> ZONE[[[Zone Changes|MoveCard]]]
-    ZONE --> REPL[[[Replacement Effects|FireEvent]]]
-    REPL --> TRIG[[[Trigger Dispatch|FireZoneChangeTriggers]]]
-    TRIG --> SBA[[[State-Based Actions]]]
-    SBA --> INV[[[Invariants Odin|Odin invariants]]]
+    RESOLVE --> ZONEMoveCard]
+    ZONE --> REPLFireEvent]
+    REPL --> TRIGFireZoneChangeTriggers]
+    TRIG --> SBA[State-Based Actions]
+    SBA --> INVOdin invariants]
     INV --> EVENTS[Event log]
-    EVENTS --> HEIM[[[Tool - Heimdall|Heimdall analytics]]]
+    EVENTS --> HEIMHeimdall analytics]
 ```
 
 ## Layered Pipeline
 
-- **Layer 0 — Data:** Scryfall bulk dump + parser produce typed AST. See [[Card AST and Parser]].
-- **Layer 1 — Static:** [[Layer System]] computes effective characteristics (§613).
-- **Layer 2 — Action:** [[Stack and Priority]], [[Combat Phases]], [[Mana System]] mutate state.
-- **Layer 3 — Reactive:** [[Replacement Effects]], [[Trigger Dispatch]], [[Zone Changes]] modify or fan out events.
-- **Layer 4 — Stabilize:** [[State-Based Actions]] loop until quiescent.
-- **Layer 5 — Verify:** [[Invariants Odin]] predicates after every action.
-- **Layer 6 — Decide:** [[Hat AI System]] picks targets, attackers, mulligans, responses.
-- **Layer 7 — Observe:** Event log feeds [[Tool - Heimdall]] analytics.
+- **Layer 0 — Data:** Scryfall bulk dump + parser produce typed AST. See [Card AST and Parser](Card%20AST%20and%20Parser.md).
+- **Layer 1 — Static:** [Layer System](Layer%20System.md) computes effective characteristics (§613).
+- **Layer 2 — Action:** [Stack and Priority](Stack%20and%20Priority.md), [Combat Phases](Combat%20Phases.md), [Mana System](Mana%20System.md) mutate state.
+- **Layer 3 — Reactive:** [Replacement Effects](Replacement%20Effects.md), [Trigger Dispatch](Trigger%20Dispatch.md), [Zone Changes](Zone%20Changes.md) modify or fan out events.
+- **Layer 4 — Stabilize:** [State-Based Actions](State-Based%20Actions.md) loop until quiescent.
+- **Layer 5 — Verify:** [Invariants Odin](Invariants%20Odin.md) predicates after every action.
+- **Layer 6 — Decide:** [Hat AI System](Hat%20AI%20System.md) picks targets, attackers, mulligans, responses.
+- **Layer 7 — Observe:** Event log feeds [Tool - Heimdall](Tool%20-%20Heimdall.md) analytics.
 
 ## Key Files
 
@@ -63,6 +63,6 @@ flowchart LR
 
 ## Related
 
-- [[Engine Overview]] — MOC
-- [[Hat AI System]]
-- [[Tool Suite]]
+- [Engine Overview](Engine%20Overview.md) — MOC
+- [Hat AI System](Hat%20AI%20System.md)
+- [Tool Suite](Tool%20Suite.md)

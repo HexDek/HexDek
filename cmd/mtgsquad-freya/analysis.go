@@ -102,6 +102,7 @@ type CardProfile struct {
 
 	SelfExilesOnDeath  bool   // card exiles itself from graveyard on death (breaks graveyard recursion)
 	RecursionDest      string // where recursion sends cards: "hand", "battlefield", "top", ""
+	RecursionCostsMana bool   // battlefield recursion requires paying a mana cost (not free)
 	RequiresCombat     bool   // triggers require combat (attack/combat damage)
 	HasRandomSelection bool   // selects targets "at random"
 
@@ -803,6 +804,23 @@ func ClassifyCard(name, oracleText, typeLine, manaCost string, cmc int, power st
 			p.SelfExilesOnDeath = true
 		}
 	}
+	// Additional self-exile patterns: "if ~ would die, exile it instead" and
+	// "exile ~ from your graveyard" (replacement effects that stop recursion).
+	if containsAny(ot, "if "+strings.ToLower(name)+" would die, exile it instead",
+		"if ~ would die, exile it instead",
+		"if it would die, exile it instead") {
+		p.SelfExilesOnDeath = true
+	}
+	if containsAny(ot, "exile "+strings.ToLower(name)+" from your graveyard",
+		"exile ~ from your graveyard",
+		"exile it from your graveyard") {
+		p.SelfExilesOnDeath = true
+	}
+	// Leave-the-battlefield triggers that exile the card: "when ~ leaves the battlefield, exile it"
+	if strings.Contains(ot, "when") && strings.Contains(ot, "leaves the battlefield") &&
+		containsAny(ot, "exile it", "exile "+strings.ToLower(name), "exile ~") {
+		p.SelfExilesOnDeath = true
+	}
 
 	// Recursion destination: where does the graveyard return go?
 	if p.IsRecursion {
@@ -816,6 +834,30 @@ func ClassifyCard(name, oracleText, typeLine, manaCost string, cmc int, power st
 				strings.Contains(ot, "top of its owner's library") {
 				p.RecursionDest = "top"
 			}
+		}
+	}
+
+	// Recursion costs mana: battlefield recursion that requires paying {N}, {W}, {U}, {B}, {R}, or {G}.
+	// Pattern: a mana symbol appears in the same ability as "return" + "graveyard" + "battlefield".
+	// Activated abilities like "{3}: return target creature from your graveyard to the battlefield"
+	// are not free and cannot form infinite loops without infinite mana.
+	if p.IsRecursion && p.RecursionDest == "battlefield" {
+		manaSymbolBeforeReturn := false
+		for _, line := range strings.Split(ot, "\n") {
+			if strings.Contains(line, "return") && strings.Contains(line, "graveyard") &&
+				strings.Contains(line, "battlefield") {
+				// Check if this line contains a mana cost symbol before "return"
+				returnIdx := strings.Index(line, "return")
+				prefix := line[:returnIdx]
+				if containsAny(prefix, "{0}", "{1}", "{2}", "{3}", "{4}", "{5}", "{6}", "{7}", "{8}",
+					"{w}", "{u}", "{b}", "{r}", "{g}", "{c}", "{x}") {
+					manaSymbolBeforeReturn = true
+					break
+				}
+			}
+		}
+		if manaSymbolBeforeReturn {
+			p.RecursionCostsMana = true
 		}
 	}
 
@@ -1699,6 +1741,15 @@ func classifyLoop(cards ...CardProfile) string {
 	}
 
 	// False positive checks: these conditions break the loop assumption.
+
+	// Random selection: any card with HasRandomSelection makes the loop non-deterministic.
+	// Cap at synergy since the outcome is not guaranteed.
+	for _, c := range cards {
+		if c.HasRandomSelection {
+			return "synergy"
+		}
+	}
+
 	loopUsesGraveyard := false
 	for _, c := range cards {
 		if containsRes(c.Produces, ResGraveyard) || containsRes(c.Produces, ResReanimate) ||
@@ -1730,6 +1781,24 @@ func classifyLoop(cards ...CardProfile) string {
 			}
 		}
 		if hasAnyRecursion && allToHand {
+			return "synergy"
+		}
+	}
+
+	// Mana-costed battlefield recursion: if ALL recursion pieces cost mana to activate,
+	// the loop requires mana each iteration and is not freely repeatable. Cap at synergy.
+	if loopUsesGraveyard {
+		allRecursionCostsMana := true
+		hasAnyRecursion := false
+		for _, c := range cards {
+			if c.IsRecursion && c.RecursionDest == "battlefield" {
+				hasAnyRecursion = true
+				if !c.RecursionCostsMana {
+					allRecursionCostsMana = false
+				}
+			}
+		}
+		if hasAnyRecursion && allRecursionCostsMana {
 			return "synergy"
 		}
 	}
@@ -2915,7 +2984,14 @@ func triggerMatchesEffect(trigger, effect string) bool {
 	case "etb":
 		return effect == "create_token" || effect == "self_mill"
 	case "damage":
+		// "damage" trigger fires from generic damage effects, but NOT from combat-only
+		// triggers (attacks, combat damage). Keep this limited to actual damage effects.
 		return effect == "damage"
+	case "attacks":
+		// Combat triggers ("attacks", "deals combat damage") should NOT chain with
+		// non-combat effects. They only verify within their own combat context.
+		// These can only chain with other combat effects, not generic damage/drain/etc.
+		return false
 	case "lifegain":
 		return effect == "drain" // drain causes life loss for opponents + life gain for you
 	case "lifeloss":

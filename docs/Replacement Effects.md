@@ -55,13 +55,13 @@ Rest in Peace, Leyline of the Void, Anafenza, Doubling Season, Hardened Scales, 
 ## Special Mechanics
 
 - **Dredge** (§702.52) — registers as a `would_draw` replacement on the dredger
-- **Bestow** (§702.103) — applied via Layer 4 in [[Layer System]], not here
+- **Bestow** (§702.103) — applied via Layer 4 in [Layer System](Layer%20System.md), not here
 - **Shield counter** (§122.1b) — checked inline in `DestroyPermanent` before firing replacements
-- **Commander redirect** (§903.9a/b) — applied inside [[Zone Changes|FireZoneChange]] post-replacement
+- **Commander redirect** (§903.9a/b) — applied inside [FireZoneChange](Zone%20Changes.md) post-replacement
 
 ## Tiebreak
 
-§101.4 APNAP: when same-controller affected, MVP uses deterministic timestamp within category. Multi-affected-player ordering is the affected player's choice via [[Hat AI System|Hat]].
+§101.4 APNAP: when same-controller affected, MVP uses deterministic timestamp within category. Multi-affected-player ordering is the affected player's choice via [Hat](Hat%20AI%20System.md).
 
 ## Iteration Cap
 
@@ -69,6 +69,6 @@ Inner loop capped at 64 iterations (§616.1f says iterate-until-no-applicable; c
 
 ## Related
 
-- [[Zone Changes]]
-- [[State-Based Actions]]
-- [[Trigger Dispatch]]
+- [Zone Changes](Zone%20Changes.md)
+- [State-Based Actions](State-Based%20Actions.md)
+- [Trigger Dispatch](Trigger%20Dispatch.md)

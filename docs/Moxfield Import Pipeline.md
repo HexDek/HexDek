@@ -14,7 +14,7 @@ flowchart LR
     API --> Details[details.ndjson<br/>1 line per deck]
     Details --> Stage2[Stage 2: parse]
     Stage2 --> TXT[.txt files<br/>data/decks/imported/]
-    TXT --> Tournament[[[Tournament Runner|--lazy-pool]]]
+    TXT --> Tournament--lazy-pool]
 ```
 
 ## Why Two Stages
@@ -35,7 +35,7 @@ For each deck ID:
 1. `moxfield.FetchDeck(url)` calls `api.moxfield.com/v3/decks/all/{id}`
 2. JSON parsed via `apiResponse` struct (name, format, mainboard, commanders, sideboard, companions)
 3. Oracle text resolved via Scryfall lookup
-4. Written as canonical `.txt` deck — see [[Decklist to Game Pipeline]] format
+4. Written as canonical `.txt` deck — see [Decklist to Game Pipeline](Decklist%20to%20Game%20Pipeline.md) format
 
 ## Recent Run
 
@@ -51,6 +51,6 @@ Moxfield API has no published rate limits. Be polite — sleep between requests,
 
 ## Related
 
-- [[Tool - Import]]
-- [[Decklist to Game Pipeline]]
-- [[Tournament Runner]]
+- [Tool - Import](Tool%20-%20Import.md)
+- [Decklist to Game Pipeline](Decklist%20to%20Game%20Pipeline.md)
+- [Tournament Runner](Tournament%20Runner.md)

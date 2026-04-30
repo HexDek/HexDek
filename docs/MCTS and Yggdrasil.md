@@ -81,7 +81,7 @@ All hat decision logs use `R{round}.{seat}` format. Round tracked via `gs.Flags[
 
 ## Related
 
-- [[Hat AI System]]
-- [[Eval Weights and Archetypes]]
-- [[Freya Strategy Analyzer]]
-- [[Tournament Runner]]
+- [Hat AI System](Hat%20AI%20System.md)
+- [Eval Weights and Archetypes](Eval%20Weights%20and%20Archetypes.md)
+- [Freya Strategy Analyzer](Freya%20Strategy%20Analyzer.md)
+- [Tournament Runner](Tournament%20Runner.md)

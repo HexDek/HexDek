@@ -45,9 +45,9 @@ flowchart TD
 
 | Hat | Status | Purpose |
 |---|---|---|
-| [[YggdrasilHat]] | **CURRENT** | Unified brain, budget dial 0-200+, native multi-seat |
-| [[Greedy Hat]] | Deprecated | Baseline heuristic — kept for parity tests |
-| [[Poker Hat]] | Deprecated | HOLD/CALL/RAISE adaptive — superseded |
+| [YggdrasilHat](YggdrasilHat.md) | **CURRENT** | Unified brain, budget dial 0-200+, native multi-seat |
+| [Greedy Hat](Greedy%20Hat.md) | Deprecated | Baseline heuristic — kept for parity tests |
+| [Poker Hat](Poker%20Hat.md) | Deprecated | HOLD/CALL/RAISE adaptive — superseded |
 | MCTSHat | Deprecated | Was wrapping inner hat — superseded |
 | OctoHat | Test-only | Says yes to everything — engine stress only |
 
@@ -85,17 +85,17 @@ flowchart LR
     Weights --> Score
 ```
 
-See [[Eval Weights and Archetypes]] for weights and [[MCTS and Yggdrasil]] for budget mechanics.
+See [Eval Weights and Archetypes](Eval%20Weights%20and%20Archetypes.md) for weights and [MCTS and Yggdrasil](MCTS%20and%20Yggdrasil.md) for budget mechanics.
 
 ## Strategy Profile
 
-`StrategyProfile` carries deck-specific intelligence from [[Freya Strategy Analyzer]]: archetype, combo pieces, tutor priorities, value-engine keys, card roles, win lines. Loaded by tournament runner via `LoadStrategyFromFreya`.
+`StrategyProfile` carries deck-specific intelligence from [Freya Strategy Analyzer](Freya%20Strategy%20Analyzer.md): archetype, combo pieces, tutor priorities, value-engine keys, card roles, win lines. Loaded by tournament runner via `LoadStrategyFromFreya`.
 
 ## Related
 
-- [[YggdrasilHat]]
-- [[Eval Weights and Archetypes]]
-- [[MCTS and Yggdrasil]]
-- [[Greedy Hat]]
-- [[Poker Hat]]
-- [[Freya Strategy Analyzer]]
+- [YggdrasilHat](YggdrasilHat.md)
+- [Eval Weights and Archetypes](Eval%20Weights%20and%20Archetypes.md)
+- [MCTS and Yggdrasil](MCTS%20and%20Yggdrasil.md)
+- [Greedy Hat](Greedy%20Hat.md)
+- [Poker Hat](Poker%20Hat.md)
+- [Freya Strategy Analyzer](Freya%20Strategy%20Analyzer.md)

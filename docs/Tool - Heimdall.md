@@ -66,10 +66,10 @@ go run ./cmd/mtgsquad-heimdall \
 
 ## Discord Showmatch Hook
 
-[[Tournament Runner|TakeTurnWithHook]] gives Heimdall a per-phase snapshot callback. Used by the showmatch spectator loop for paced Discord narration.
+[TakeTurnWithHook](Tournament%20Runner.md) gives Heimdall a per-phase snapshot callback. Used by the showmatch spectator loop for paced Discord narration.
 
 ## Related
 
-- [[Tool - Tournament]]
-- [[Tool - Freya]]
-- [[Engine Architecture]]
+- [Tool - Tournament](Tool%20-%20Tournament.md)
+- [Tool - Freya](Tool%20-%20Freya.md)
+- [Engine Architecture](Engine%20Architecture.md)

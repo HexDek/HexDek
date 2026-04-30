@@ -54,6 +54,6 @@ for _, e := range GlobalStackTrace.Entries {
 
 ## Related
 
-- [[Stack and Priority]]
-- [[Trigger Dispatch]]
-- [[Tool - Tournament]] (use `--audit` to enable in tournament runs)
+- [Stack and Priority](Stack%20and%20Priority.md)
+- [Trigger Dispatch](Trigger%20Dispatch.md)
+- [Tool - Tournament](Tool%20-%20Tournament.md) (use `--audit` to enable in tournament runs)

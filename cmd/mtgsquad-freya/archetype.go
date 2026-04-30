@@ -39,6 +39,16 @@ type classifyContext struct {
 	selfMillCount  int
 	equipAuraCount int
 	spellCopyCount int
+	landfallCount  int
+	counterCount   int // +1/+1 counter / proliferate cards
+	enchantmentPct float64
+	lifegainCount  int
+	blinkCount     int
+	artifactCount  int
+	extraCombatCount int
+	planeswalkerCount int
+	millOppCount   int // opponent-targeting mill
+	discardForceCount int
 	profiles       []CardProfile
 	qtyProfiles    []CardProfileQty
 	oracle         *oracleDB
@@ -126,6 +136,105 @@ var archetypeFingerprints = []archetypeFingerprint{
 		},
 		Require: func(ctx *classifyContext) bool {
 			return ctx.roleRatios[RoleThreat] >= 0.15 && ctx.avgCMC < 3.0
+		},
+	},
+	{
+		Name: "Lands Matter",
+		Ratios: map[RoleTag]float64{
+			RoleRamp: 0.15, RoleThreat: 0.10, RoleDraw: 0.08,
+		},
+		Require: func(ctx *classifyContext) bool {
+			return ctx.landfallCount >= 5
+		},
+	},
+	{
+		Name: "Enchantress",
+		Ratios: map[RoleTag]float64{
+			RoleDraw: 0.12, RoleThreat: 0.10, RoleRamp: 0.08, RoleProtection: 0.08,
+		},
+		Require: func(ctx *classifyContext) bool {
+			return ctx.enchantmentPct >= 0.30
+		},
+	},
+	{
+		Name: "Counters Matter",
+		Ratios: map[RoleTag]float64{
+			RoleThreat: 0.15, RoleDraw: 0.08, RoleRamp: 0.08,
+		},
+		Require: func(ctx *classifyContext) bool {
+			return ctx.counterCount >= 8
+		},
+	},
+	{
+		Name: "Storm",
+		Ratios: map[RoleTag]float64{
+			RoleDraw: 0.14, RoleRamp: 0.12, RoleCombo: 0.06,
+		},
+		Require: func(ctx *classifyContext) bool {
+			return ctx.instantSorcPct >= 0.50 && ctx.spellCopyCount >= 3
+		},
+	},
+	{
+		Name: "Lifegain",
+		Ratios: map[RoleTag]float64{
+			RoleThreat: 0.10, RoleDraw: 0.10, RoleRamp: 0.08,
+		},
+		Require: func(ctx *classifyContext) bool {
+			return ctx.lifegainCount >= 8
+		},
+	},
+	{
+		Name: "Blink",
+		Ratios: map[RoleTag]float64{
+			RoleThreat: 0.10, RoleDraw: 0.10, RoleRamp: 0.08, RoleRemoval: 0.06,
+		},
+		Require: func(ctx *classifyContext) bool {
+			return ctx.blinkCount >= 6
+		},
+	},
+	{
+		Name: "Artifacts",
+		Ratios: map[RoleTag]float64{
+			RoleRamp: 0.12, RoleThreat: 0.10, RoleDraw: 0.10, RoleCombo: 0.04,
+		},
+		Require: func(ctx *classifyContext) bool {
+			return ctx.artifactCount >= 20
+		},
+	},
+	{
+		Name: "Extra Combats",
+		Ratios: map[RoleTag]float64{
+			RoleThreat: 0.18, RoleRamp: 0.10, RoleDraw: 0.06,
+		},
+		Require: func(ctx *classifyContext) bool {
+			return ctx.extraCombatCount >= 3
+		},
+	},
+	{
+		Name: "Superfriends",
+		Ratios: map[RoleTag]float64{
+			RoleThreat: 0.10, RoleRemoval: 0.08, RoleDraw: 0.08, RoleBoardWipe: 0.04,
+		},
+		Require: func(ctx *classifyContext) bool {
+			return ctx.planeswalkerCount >= 8
+		},
+	},
+	{
+		Name: "Mill",
+		Ratios: map[RoleTag]float64{
+			RoleDraw: 0.12, RoleRemoval: 0.08, RoleRamp: 0.08,
+		},
+		Require: func(ctx *classifyContext) bool {
+			return ctx.millOppCount >= 6
+		},
+	},
+	{
+		Name: "Discard",
+		Ratios: map[RoleTag]float64{
+			RoleThreat: 0.10, RoleDraw: 0.10, RoleRemoval: 0.08, RoleStax: 0.06,
+		},
+		Require: func(ctx *classifyContext) bool {
+			return ctx.discardForceCount >= 6
 		},
 	},
 	{
@@ -218,6 +327,7 @@ func buildClassifyContext(report *FreyaReport, qtyProfiles []CardProfileQty, ora
 	nonlandTotal := 0
 	instantSorcCount := 0
 	creatureCount := 0
+	enchantmentCount := 0
 	creatureTypes := map[string]int{}
 
 	for _, qp := range qtyProfiles {
@@ -239,6 +349,15 @@ func buildClassifyContext(report *FreyaReport, qtyProfiles []CardProfileQty, ora
 
 		if strings.Contains(tl, "equipment") || strings.Contains(tl, "aura") {
 			ctx.equipAuraCount += qp.Qty
+		}
+		if strings.Contains(tl, "enchantment") {
+			enchantmentCount += qp.Qty
+		}
+		if strings.Contains(tl, "artifact") {
+			ctx.artifactCount += qp.Qty
+		}
+		if strings.Contains(tl, "planeswalker") {
+			ctx.planeswalkerCount += qp.Qty
 		}
 
 		var ot string
@@ -284,6 +403,31 @@ func buildClassifyContext(report *FreyaReport, qtyProfiles []CardProfileQty, ora
 			ctx.selfMillCount += qp.Qty
 		}
 
+		for _, t := range qp.Profile.Triggers {
+			if t == "landfall" {
+				ctx.landfallCount += qp.Qty
+				break
+			}
+		}
+		if containsAny(ot, "+1/+1 counter", "proliferate", "number of counters", "modified") {
+			ctx.counterCount += qp.Qty
+		}
+		if containsAny(ot, "gain life", "whenever you gain life", "lifelink") {
+			ctx.lifegainCount += qp.Qty
+		}
+		if qp.Profile.IsBlinker || containsAny(ot, "exile, then return", "flicker", "exile target creature you control, then return") {
+			ctx.blinkCount += qp.Qty
+		}
+		if qp.Profile.IsExtraCombat || containsAny(ot, "additional combat", "extra combat") {
+			ctx.extraCombatCount += qp.Qty
+		}
+		if containsAny(ot, "mills", "put the top", "into their graveyard", "each opponent mills") && strings.Contains(ot, "opponent") {
+			ctx.millOppCount += qp.Qty
+		}
+		if containsAny(ot, "each opponent discards", "target opponent discards", "target player discards", "whenever an opponent discards") {
+			ctx.discardForceCount += qp.Qty
+		}
+
 		if qp.Profile.CMC <= 2 {
 			for _, r := range qp.Profile.Produces {
 				if r == ResMana {
@@ -297,6 +441,7 @@ func buildClassifyContext(report *FreyaReport, qtyProfiles []CardProfileQty, ora
 	if nonlandTotal > 0 {
 		ctx.instantSorcPct = float64(instantSorcCount) / float64(nonlandTotal)
 		ctx.creaturePct = float64(creatureCount) / float64(nonlandTotal)
+		ctx.enchantmentPct = float64(enchantmentCount) / float64(nonlandTotal)
 	}
 
 	if creatureCount > 0 {
@@ -402,6 +547,28 @@ func buildIntent(ac *ArchetypeClassification, report *FreyaReport, ctx *classify
 		gameplan = "build a critical mass of synergistic creatures"
 	case "Reanimator":
 		gameplan = "fill the graveyard and cheat high-value threats into play"
+	case "Lands Matter":
+		gameplan = "abuse land drops and landfall triggers for cumulative value"
+	case "Enchantress":
+		gameplan = "chain enchantments for card advantage while building a pillowfort"
+	case "Counters Matter":
+		gameplan = "distribute and multiply +1/+1 counters across its board"
+	case "Storm":
+		gameplan = "chain cheap spells in a single explosive turn for a lethal storm count"
+	case "Lifegain":
+		gameplan = "gain life for incremental value and convert life total into a win condition"
+	case "Blink":
+		gameplan = "flicker permanents to re-trigger ETB abilities for repeatable value"
+	case "Artifacts":
+		gameplan = "build an artifact engine that generates mana and card advantage"
+	case "Extra Combats":
+		gameplan = "take additional combat phases to multiply damage output"
+	case "Superfriends":
+		gameplan = "deploy planeswalkers and protect them while ticking toward ultimates"
+	case "Mill":
+		gameplan = "empty opponent libraries through mill effects"
+	case "Discard":
+		gameplan = "strip opponents' hands and profit from discard triggers"
 	default:
 		gameplan = "execute its game plan through incremental advantage"
 	}

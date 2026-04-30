@@ -30,7 +30,7 @@ flowchart TD
 
 ## Why Deprecated
 
-Doesn't recognize combos, doesn't archetype-tune, doesn't politic, doesn't see past the next decision. Replaced by [[YggdrasilHat]] for tournament play.
+Doesn't recognize combos, doesn't archetype-tune, doesn't politic, doesn't see past the next decision. Replaced by [YggdrasilHat](YggdrasilHat.md) for tournament play.
 
 ## Why Kept
 
@@ -47,5 +47,5 @@ Documented in `data/rules/HAT_CHOICE_GAPS.md`:
 
 ## Related
 
-- [[Hat AI System]]
-- [[YggdrasilHat]]
+- [Hat AI System](Hat%20AI%20System.md)
+- [YggdrasilHat](YggdrasilHat.md)

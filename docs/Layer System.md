@@ -36,7 +36,7 @@ Post-layer pass reads `perm.Counters["+1/+1"]` and `["-1/-1"]` plus `perm.Modifi
 
 ## Idempotency Invariant
 
-Calling `GetEffectiveCharacteristics(perm)` twice MUST return identical results. Enforced by the `LayerIdempotency` invariant — see [[Invariants Odin]].
+Calling `GetEffectiveCharacteristics(perm)` twice MUST return identical results. Enforced by the `LayerIdempotency` invariant — see [Invariants Odin](Invariants%20Odin.md).
 
 ## Known Gap
 
@@ -44,7 +44,7 @@ Calling `GetEffectiveCharacteristics(perm)` twice MUST return identical results.
 
 ## Related
 
-- [[State-Based Actions]]
-- [[Combat Phases]]
-- [[Card AST and Parser]]
-- [[Invariants Odin]]
+- [State-Based Actions](State-Based%20Actions.md)
+- [Combat Phases](Combat%20Phases.md)
+- [Card AST and Parser](Card%20AST%20and%20Parser.md)
+- [Invariants Odin](Invariants%20Odin.md)

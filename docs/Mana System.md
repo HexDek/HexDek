@@ -66,7 +66,7 @@ flowchart LR
 
 ## Drain at Phase Boundaries
 
-[[Tournament Runner|turn.go]] calls `DrainAllPools(gs)` at every step transition. Exempt cards (Upwelling) checked via `ManaExemption`.
+[turn.go](Tournament%20Runner.md) calls `DrainAllPools(gs)` at every step transition. Exempt cards (Upwelling) checked via `ManaExemption`.
 
 ## No-Mana-Cost Exploit Fix
 
@@ -74,5 +74,5 @@ CMC=0 instants/sorceries without `cost:N` tag blocked from hand casting (§202.1
 
 ## Related
 
-- [[Stack and Priority]]
-- [[Per-Card Handlers]]
+- [Stack and Priority](Stack%20and%20Priority.md)
+- [Per-Card Handlers](Per-Card%20Handlers.md)

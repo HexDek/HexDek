@@ -4,7 +4,7 @@
 > Source: `internal/gameengine/stack.go`, `triggers.go`, `loop_shortcut.go`
 > CR refs: §117, §405, §601, §603, §605, §608
 
-Cast pipeline and resolution loop. LIFO stack, [[APNAP|APNAP-ordered]] triggers, [[Mana System|mana abilities]] exempt.
+Cast pipeline and resolution loop. LIFO stack, [APNAP-ordered](APNAP.md) triggers, [mana abilities](Mana%20System.md) exempt.
 
 ## Cast → Resolve Sequence
 
@@ -15,7 +15,7 @@ sequenceDiagram
     participant Stack as gs.Stack
     participant PR as PriorityRound
     participant RS as ResolveStackTop
-    participant SBA as [[State-Based Actions]]
+    participant SBA as State-Based Actions
 
     Hat->>CS: ChooseCastFromHand
     CS->>CS: pay costs (§601.2f)
@@ -36,7 +36,7 @@ sequenceDiagram
 ## Key Functions
 
 - `CastSpell(gs, seat, card, targets)` — full §601.2 sequence
-- `PushStackItem(gs, item)` — allocate ID, append, log to [[Tool - Stack Trace]]
+- `PushStackItem(gs, item)` — allocate ID, append, log to [Tool - Stack Trace](Tool%20-%20Stack%20Trace.md)
 - `PushTriggeredAbility(gs, src, effect)` — §603.2 trigger landing
 - `PriorityRound(gs)` — §117.3-5 APNAP polling, capped at 8 iterations
 - `ResolveStackTop(gs)` — §608.2 pop + dispatch
@@ -54,7 +54,7 @@ sequenceDiagram
 
 ## Loop Shortcut (CR §727)
 
-`loop_shortcut.go` detects repeating fingerprints (FNV hash of source+controller+kind), projects per-cycle delta forward to termination. Catches Kinnan-token loops, Ashling-counter loops without timeout. See [[Trigger Dispatch]] for trigger-loop interplay.
+`loop_shortcut.go` detects repeating fingerprints (FNV hash of source+controller+kind), projects per-cycle delta forward to termination. Catches Kinnan-token loops, Ashling-counter loops without timeout. See [Trigger Dispatch](Trigger%20Dispatch.md) for trigger-loop interplay.
 
 ## Mana Abilities Exempt (§605.3a)
 
@@ -62,11 +62,11 @@ Mana abilities resolve inline, never pushed. `isManaAbilityEvent()` gates this i
 
 ## APNAP Ordering
 
-Simultaneous triggers grouped by controller, sorted by [[APNAP]] (active player first onto stack → resolves last). Within a controller, [[Hat AI System|the hat]] picks intra-group order via `OrderTriggers`. See [[Trigger Dispatch]].
+Simultaneous triggers grouped by controller, sorted by [APNAP](APNAP.md) (active player first onto stack → resolves last). Within a controller, [the hat](Hat%20AI%20System.md) picks intra-group order via `OrderTriggers`. See [Trigger Dispatch](Trigger%20Dispatch.md).
 
 ## Related
 
-- [[State-Based Actions]]
-- [[Combat Phases]]
-- [[Trigger Dispatch]]
-- [[Tool - Stack Trace]]
+- [State-Based Actions](State-Based%20Actions.md)
+- [Combat Phases](Combat%20Phases.md)
+- [Trigger Dispatch](Trigger%20Dispatch.md)
+- [Tool - Stack Trace](Tool%20-%20Stack%20Trace.md)

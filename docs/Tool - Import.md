@@ -28,7 +28,7 @@ COMMANDER: Commander Name
 ...
 ```
 
-Consumed by [[Decklist to Game Pipeline|deckparser]] in every other tool.
+Consumed by [deckparser](Decklist%20to%20Game%20Pipeline.md) in every other tool.
 
 ## Usage
 
@@ -40,7 +40,7 @@ mtgsquad-import --moxfield URL --output data/decks/josh
 
 ## Bulk Import
 
-For mass corpus pulls (e.g. 5K-decks coevolution), see [[Moxfield Import Pipeline]].
+For mass corpus pulls (e.g. 5K-decks coevolution), see [Moxfield Import Pipeline](Moxfield%20Import%20Pipeline.md).
 
 ## Known Limit
 
@@ -48,6 +48,6 @@ Moxfield API returns 403 on search endpoints. Bulk discovery requires either the
 
 ## Related
 
-- [[Decklist to Game Pipeline]]
-- [[Moxfield Import Pipeline]]
-- [[Tool - Tournament]]
+- [Decklist to Game Pipeline](Decklist%20to%20Game%20Pipeline.md)
+- [Moxfield Import Pipeline](Moxfield%20Import%20Pipeline.md)
+- [Tool - Tournament](Tool%20-%20Tournament.md)

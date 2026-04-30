@@ -48,7 +48,7 @@ Flying, reach, trample, deathtouch, lifelink, menace, vigilance, first/double st
 
 ## Multiplayer Targeting (§802)
 
-Attacker chooses defending player or planeswalker per attacker (`ChooseAttackTarget`). [[Hat AI System|Hat]] uses 7-dim threat score; Yggdrasil layers grudge/retaliation. See [[YggdrasilHat|YggdrasilHat]].
+Attacker chooses defending player or planeswalker per attacker (`ChooseAttackTarget`). [Hat](Hat%20AI%20System.md) uses 7-dim threat score; Yggdrasil layers grudge/retaliation. See [YggdrasilHat](YggdrasilHat.md).
 
 ## Combat Restrictions
 
@@ -56,14 +56,14 @@ Attacker chooses defending player or planeswalker per attacker (`ChooseAttackTar
 
 ## Commander Damage
 
-Per-source tracking on `Seat.CommanderDamage[srcID]`. SBA §704.6c kills at 21 from a single commander (partner support included). See [[State-Based Actions]].
+Per-source tracking on `Seat.CommanderDamage[srcID]`. SBA §704.6c kills at 21 from a single commander (partner support included). See [State-Based Actions](State-Based%20Actions.md).
 
 ## Extra Combats
 
-`gs.Flags["pending_extra_combats"]` drives an outer loop in [[Tournament Runner|TakeTurn]]. Aggravated Assault, World at War, Sphinx of the Second Sun all increment this.
+`gs.Flags["pending_extra_combats"]` drives an outer loop in [TakeTurn](Tournament%20Runner.md). Aggravated Assault, World at War, Sphinx of the Second Sun all increment this.
 
 ## Related
 
-- [[Stack and Priority]]
-- [[State-Based Actions]]
-- [[YggdrasilHat]]
+- [Stack and Priority](Stack%20and%20Priority.md)
+- [State-Based Actions](State-Based%20Actions.md)
+- [YggdrasilHat](YggdrasilHat.md)

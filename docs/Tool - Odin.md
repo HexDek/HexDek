@@ -3,7 +3,7 @@
 > Last updated: 2026-04-29
 > Source: `cmd/mtgsquad-odin/` (binary), `internal/gameengine/invariants.go` (predicates)
 
-Property-based fuzzer. Wraps every GameState mutation with [[Invariants Odin|the 20 invariants]]. Designed to run overnight on DARKSTAR.
+Property-based fuzzer. Wraps every GameState mutation with [the 20 invariants](Invariants%20Odin.md). Designed to run overnight on DARKSTAR.
 
 ## Fuzz Loop
 
@@ -24,7 +24,7 @@ flowchart LR
 
 ## Why It's a Separate Binary
 
-[[Tool - Loki|Loki]] runs invariants too, but Odin's specialty is overnight fuzz runs — its violation aggregator collects per-game and writes a clean markdown report at the end, designed for the next-morning triage workflow.
+[Loki](Tool%20-%20Loki.md) runs invariants too, but Odin's specialty is overnight fuzz runs — its violation aggregator collects per-game and writes a clean markdown report at the end, designed for the next-morning triage workflow.
 
 ## Usage
 
@@ -38,10 +38,10 @@ go run ./cmd/mtgsquad-odin \
 
 ## Predicate Source
 
-The 20 predicates live in `internal/gameengine/invariants.go` and are documented in [[Invariants Odin]]. Both Odin and [[Tool - Loki|Loki]] import the same predicate set — single source of truth.
+The 20 predicates live in `internal/gameengine/invariants.go` and are documented in [Invariants Odin](Invariants%20Odin.md). Both Odin and [Loki](Tool%20-%20Loki.md) import the same predicate set — single source of truth.
 
 ## Related
 
-- [[Invariants Odin]]
-- [[Tool - Loki]]
-- [[Tool - Thor]]
+- [Invariants Odin](Invariants%20Odin.md)
+- [Tool - Loki](Tool%20-%20Loki.md)
+- [Tool - Thor](Tool%20-%20Thor.md)

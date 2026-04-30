@@ -2,9 +2,9 @@
 
 > Last updated: 2026-04-29
 > Source: `internal/gameengine/invariants.go`
-> Related tool: [[Tool - Odin]]
+> Related tool: [Tool - Odin](Tool%20-%20Odin.md)
 
-20 named predicates checked after every game action by [[Tool - Odin|Odin]] / [[Tool - Loki|Loki]] / [[Tool - Thor|Thor]]. Each returns `nil` on pass, `error` on violation.
+20 named predicates checked after every game action by [Odin](Tool%20-%20Odin.md) / [Loki](Tool%20-%20Loki.md) / [Thor](Tool%20-%20Thor.md). Each returns `nil` on pass, `error` on violation.
 
 ## When Each Class Runs
 
@@ -44,7 +44,7 @@ flowchart TD
 | 4 | StackIntegrity | stack empty at phase boundary |
 | 5 | ManaPoolNonNegative | typed pool ≥ 0 |
 | 6 | IndestructibleRespected | no indestructible in graveyard from destroy |
-| 7 | LayerIdempotency | [[Layer System]] returns same answer twice |
+| 7 | LayerIdempotency | [Layer System](Layer%20System.md) returns same answer twice |
 | 8 | PhaseCheck | phase/step values valid |
 | 9 | OwnerConsistency | card owner fields valid |
 
@@ -62,7 +62,7 @@ flowchart TD
 | 17 | Timing | no sorceries on stack during combat; no instants under split-second |
 | 18 | ResourceConservation | mana pool sane; eliminated seats at zero |
 | 19 | AttachmentConsistency | aura/equipment on valid targets |
-| 20 | StackOrderCorrectness | [[APNAP]] order on stack (§101.4) |
+| 20 | StackOrderCorrectness | [APNAP](APNAP.md) order on stack (§101.4) |
 
 ## Performance Note
 
@@ -70,7 +70,7 @@ Lightweight predicates — Loki runs all 20 after every action across 10K games 
 
 ## Related
 
-- [[Tool - Odin]]
-- [[Tool - Loki]]
-- [[Tool - Thor]]
-- [[Engine Architecture]]
+- [Tool - Odin](Tool%20-%20Odin.md)
+- [Tool - Loki](Tool%20-%20Loki.md)
+- [Tool - Thor](Tool%20-%20Thor.md)
+- [Engine Architecture](Engine%20Architecture.md)

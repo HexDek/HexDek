@@ -27,7 +27,7 @@ The Python reference (`scripts/playloop.py`) is the spec. Go is the production e
 - Python bug surfaced by Go's stricter validation
 - Spec ambiguity (rules text both engines interpret differently)
 
-Parity tests baseline-pin [[Greedy Hat]] for byte-equivalence, so drift is detectable.
+Parity tests baseline-pin [Greedy Hat](Greedy%20Hat.md) for byte-equivalence, so drift is detectable.
 
 ## Skip Mode
 
@@ -50,6 +50,6 @@ Python reference is being archived as Go reaches feature parity. Parity tool sta
 
 ## Related
 
-- [[Greedy Hat]]
-- [[Tool - Tournament]]
-- [[Card AST and Parser]]
+- [Greedy Hat](Greedy%20Hat.md)
+- [Tool - Tournament](Tool%20-%20Tournament.md)
+- [Card AST and Parser](Card%20AST%20and%20Parser.md)

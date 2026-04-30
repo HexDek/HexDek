@@ -61,14 +61,14 @@ flowchart LR
 
 ## Wired Helpers
 
-Implemented mutating: 5a, 5b, 5c, 5d, 5f, 5g, 5i, 5j, 5k, 5m, 5n, 5p, 5q, 5s, 6c. Stubs: 5e, 5h (deathtouch tracked elsewhere via [[Combat Phases]]), 5r.
+Implemented mutating: 5a, 5b, 5c, 5d, 5f, 5g, 5i, 5j, 5k, 5m, 5n, 5p, 5q, 5s, 6c. Stubs: 5e, 5h (deathtouch tracked elsewhere via [Combat Phases](Combat%20Phases.md)), 5r.
 
 ## Interaction with Other Systems
 
-- Calls [[Replacement Effects|FireEvent]] for `would_die`, `would_be_put_into_graveyard`, `would_lose_game` — Platinum Angel, Rest in Peace, Anafenza all hook here.
-- Death triggers fan out via [[Trigger Dispatch]] after destroy event resolves.
-- [[Layer System]] is re-applied each pass so toughness math stays current (§704.5f).
-- Loop invocations logged to [[Tool - Stack Trace]] as `sba_check`.
+- Calls [FireEvent](Replacement%20Effects.md) for `would_die`, `would_be_put_into_graveyard`, `would_lose_game` — Platinum Angel, Rest in Peace, Anafenza all hook here.
+- Death triggers fan out via [Trigger Dispatch](Trigger%20Dispatch.md) after destroy event resolves.
+- [Layer System](Layer%20System.md) is re-applied each pass so toughness math stays current (§704.5f).
+- Loop invocations logged to [Tool - Stack Trace](Tool%20-%20Stack%20Trace.md) as `sba_check`.
 
 ## Cap Rationale
 
@@ -76,6 +76,6 @@ Implemented mutating: 5a, 5b, 5c, 5d, 5f, 5g, 5i, 5j, 5k, 5m, 5n, 5p, 5q, 5s, 6c
 
 ## Related
 
-- [[Stack and Priority]]
-- [[Invariants Odin]]
-- [[Replacement Effects]]
+- [Stack and Priority](Stack%20and%20Priority.md)
+- [Invariants Odin](Invariants%20Odin.md)
+- [Replacement Effects](Replacement%20Effects.md)

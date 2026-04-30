@@ -19,8 +19,8 @@ flowchart LR
 
 | Situation | Function |
 |---|---|
-| Multiple [[Trigger Dispatch\|triggers]] fire simultaneously | `OrderTriggersAPNAP` |
-| Multiple [[Replacement Effects\|replacements]] match same event | `FireEvent` category sort + APNAP tiebreak |
+| Multiple triggers fire simultaneously | `OrderTriggersAPNAP` |
+| Multiple replacements match same event | `FireEvent` category sort + APNAP tiebreak |
 | Each-opponent fan-out effects | `gs.OpponentsOf(seat)` returns dead-inclusive APNAP order |
 | Living-only iteration | `gs.LivingOpponents(seat)` |
 | Eliminations | `HandleSeatElimination` advances active seat per §800.4h |
@@ -35,11 +35,11 @@ So AP "loses" the speed race when multiple players trigger off the same event.
 
 ## Within a Controller
 
-Once grouped by controller, APNAP stops mattering. The controller picks intra-group order via `Hat.OrderTriggers` / `Hat.OrderReplacements`. See [[Hat AI System]].
+Once grouped by controller, APNAP stops mattering. The controller picks intra-group order via `Hat.OrderTriggers` / `Hat.OrderReplacements`. See [Hat AI System](Hat%20AI%20System.md).
 
 ## Related
 
-- [[Stack and Priority]]
-- [[Trigger Dispatch]]
-- [[Replacement Effects]]
-- [[State-Based Actions]]
+- [Stack and Priority](Stack%20and%20Priority.md)
+- [Trigger Dispatch](Trigger%20Dispatch.md)
+- [Replacement Effects](Replacement%20Effects.md)
+- [State-Based Actions](State-Based%20Actions.md)

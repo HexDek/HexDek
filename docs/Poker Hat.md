@@ -2,7 +2,7 @@
 
 > Last updated: 2026-04-29
 > Source: `internal/hat/poker.go`
-> Status: **Deprecated** — superseded by [[YggdrasilHat]]
+> Status: **Deprecated** — superseded by [YggdrasilHat](YggdrasilHat.md)
 
 HOLD/CALL/RAISE adaptive hat. The MODE is INTERNAL — engine doesn't know it exists. Mirrors Python `scripts/extensions/policies/poker.py` v2.
 
@@ -47,10 +47,10 @@ Widens GreedyHat's "stomp the best board" to include:
 
 ## Why Deprecated
 
-Wrapped delegation chain (Greedy → Poker → MCTS) was brittle. Native multi-seat awareness wasn't there. [[YggdrasilHat]] integrates the same threat dimensions plus combo urgency, politics, eval cache, and turn budget into a single brain.
+Wrapped delegation chain (Greedy → Poker → MCTS) was brittle. Native multi-seat awareness wasn't there. [YggdrasilHat](YggdrasilHat.md) integrates the same threat dimensions plus combo urgency, politics, eval cache, and turn budget into a single brain.
 
 ## Related
 
-- [[Hat AI System]]
-- [[YggdrasilHat]]
-- [[Eval Weights and Archetypes]]
+- [Hat AI System](Hat%20AI%20System.md)
+- [YggdrasilHat](YggdrasilHat.md)
+- [Eval Weights and Archetypes](Eval%20Weights%20and%20Archetypes.md)

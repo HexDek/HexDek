@@ -3,7 +3,7 @@
 > Last updated: 2026-04-29
 > Source: `cmd/mtgsquad-server/`, `internal/ws/`, `internal/hub/`, `internal/hexapi/`
 
-WebSocket game server. Currently runs on `localhost:8099` for the [[HexDek]] frontend (`web/`).
+WebSocket game server. Currently runs on `localhost:8099` for the HexDek frontend (`web/`).
 
 ## Stack
 
@@ -32,18 +32,18 @@ Per the source comment: "Load Hex's Yuriko v1.1 from disk, shuffle via Fisher-Ya
 
 ## BYOK Model
 
-Per [[#Architecture decisions|2026-04-15 decision]]: users bring their own API key (Anthropic / OpenAI / local Ollama). Server doesn't host AI inference. Multi-model possible — Opus seat 1, GPT-4o seat 2, llama seat 3.
+Per 2026-04-15 decision: users bring their own API key (Anthropic / OpenAI / local Ollama). Server doesn't host AI inference. Multi-model possible — Opus seat 1, GPT-4o seat 2, llama seat 3.
 
 ## Shuffle (§103.1)
 
-[[Decklist to Game Pipeline|Fisher-Yates]] with `crypto/rand` entropy. Commit-reveal scheme for trustless shuffle attestation in the game layer (planned).
+[Fisher-Yates](Decklist%20to%20Game%20Pipeline.md) with `crypto/rand` entropy. Commit-reveal scheme for trustless shuffle attestation in the game layer (planned).
 
 ## Production Hosting
 
-Deploys to MISTY for `hexdek.bluefroganalytics.com`. Frontend will host [[Tool - Heimdall|Heimdall]] replay viewer + [[Tool - Freya|Freya]] combo display per memory roadmap.
+Deploys to MISTY for `hexdek.bluefroganalytics.com`. Frontend will host [Heimdall](Tool%20-%20Heimdall.md) replay viewer + [Freya](Tool%20-%20Freya.md) combo display per memory roadmap.
 
 ## Related
 
-- [[Tool - Import]]
-- [[Decklist to Game Pipeline]]
-- [[Hat AI System]]
+- [Tool - Import](Tool%20-%20Import.md)
+- [Decklist to Game Pipeline](Decklist%20to%20Game%20Pipeline.md)
+- [Hat AI System](Hat%20AI%20System.md)

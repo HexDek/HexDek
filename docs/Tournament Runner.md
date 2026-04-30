@@ -3,7 +3,7 @@
 > Last updated: 2026-04-29
 > Source: `internal/tournament/runner.go`, `roundrobin.go`, `turn.go`
 
-The runtime architecture under [[Tool - Tournament|mtgsquad-tournament]]. Goroutine-parallel game loop, configurable pod sourcing, ELO + TrueSkill aggregation.
+The runtime architecture under [mtgsquad-tournament](Tool%20-%20Tournament.md). Goroutine-parallel game loop, configurable pod sourcing, ELO + TrueSkill aggregation.
 
 ## Worker Pool
 
@@ -60,7 +60,7 @@ sequenceDiagram
 
 ## Hat Factories
 
-`HatFactories` parallel to `Decks` — one factory per deck. Factory returns a fresh hat per game (so per-game state doesn't leak between games). [[YggdrasilHat]] gets its `TurnRunner` injected here via `TurnRunnerForRollout()`.
+`HatFactories` parallel to `Decks` — one factory per deck. Factory returns a fresh hat per game (so per-game state doesn't leak between games). [YggdrasilHat](YggdrasilHat.md) gets its `TurnRunner` injected here via `TurnRunnerForRollout()`.
 
 ## Aggregation
 
@@ -74,7 +74,7 @@ sequenceDiagram
 
 ## Related
 
-- [[Decklist to Game Pipeline]]
-- [[Tool - Tournament]]
-- [[YggdrasilHat]]
-- [[Hat AI System]]
+- [Decklist to Game Pipeline](Decklist%20to%20Game%20Pipeline.md)
+- [Tool - Tournament](Tool%20-%20Tournament.md)
+- [YggdrasilHat](YggdrasilHat.md)
+- [Hat AI System](Hat%20AI%20System.md)
