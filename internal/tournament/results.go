@@ -64,6 +64,10 @@ type GameOutcome struct {
 	// Analysis is the per-game deep analytics result. Only populated
 	// when AnalyticsEnabled is true in the TournamentConfig.
 	Analysis *analytics.GameAnalysis
+
+	// KillRecords captures who eliminated whom in this game. Only
+	// populated when AuditEnabled (needs event log for inference).
+	KillRecords []analytics.KillRecord
 }
 
 // TournamentResult is the aggregated result returned from Run.
@@ -161,4 +165,8 @@ type TournamentResult struct {
 	// MatchupDetails provides deep per-matchup stats. Only populated
 	// when AnalyticsEnabled.
 	MatchupDetails []analytics.MatchupDetail
+
+	// KillRecords aggregates all kill events across games. Only
+	// populated when AuditEnabled (needs event log for inference).
+	KillRecords []analytics.KillRecord
 }

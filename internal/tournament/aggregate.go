@@ -149,6 +149,11 @@ func aggregate(outcomes <-chan GameOutcome, nGames, nSeats int, commanderNames [
 		if outcome.Analysis != nil {
 			r.Analyses = append(r.Analyses, outcome.Analysis)
 		}
+
+		// Collect kill records.
+		if len(outcome.KillRecords) > 0 {
+			r.KillRecords = append(r.KillRecords, outcome.KillRecords...)
+		}
 	}
 
 	if r.Games > 0 {

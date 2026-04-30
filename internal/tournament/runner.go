@@ -562,6 +562,22 @@ func runOneGame(gameIdx int, decks []*deckparser.TournamentDeck, hats []HatFacto
 		out.Analysis.MissedFinishers = analytics.DetectMissedFinishers(gs, finisherSets)
 	}
 
+	// Kill record extraction: infer who eliminated whom from the event
+	// log. Requires auditEnabled (RetainEvents=true) for event access.
+	if auditEnabled && len(gs.EventLog) > 0 {
+		cmdrNames := make([]string, nSeats)
+		for i := 0; i < nSeats; i++ {
+			orig := originalIdxForSeat[i]
+			if orig < len(decks) {
+				cmdrNames[i] = decks[orig].CommanderName
+			}
+		}
+		out.KillRecords = analytics.ExtractKillRecords(
+			gs.EventLog, nSeats, cmdrNames, out.Winner,
+			fmt.Sprintf("game-%d", gameIdx),
+		)
+	}
+
 	return out
 }
 
@@ -1044,6 +1060,8 @@ func scanCommanderName(path string) string {
 func persistMuninn(result *TournamentResult) {
 	const muninnDir = "data/muninn"
 	const huginnDir = "data/huginn"
+	const rivalryDir = "data/rivalry"
+	const analyticsDir = "data/analytics"
 
 	if len(result.ParserGapSnippets) > 0 {
 		if err := muninn.PersistParserGaps(muninnDir, result.ParserGapSnippets); err != nil {
@@ -1061,6 +1079,20 @@ func persistMuninn(result *TournamentResult) {
 		}
 		if err := huginn.PersistRawObservations(huginnDir, result.Analyses, result.CommanderNames); err != nil {
 			fmt.Fprintf(os.Stderr, "huginn: persist raw observations: %v\n", err)
+		}
+	}
+
+	// Persist rivalry matchup data (accumulates across runs).
+	if result.MatchupMatrix != nil && result.MatchupGames != nil {
+		if err := analytics.PersistRivalries(rivalryDir, result.MatchupMatrix, result.MatchupGames); err != nil {
+			fmt.Fprintf(os.Stderr, "rivalry: persist matchups: %v\n", err)
+		}
+	}
+
+	// Persist threat graph kill records (accumulates across runs).
+	if len(result.KillRecords) > 0 {
+		if err := analytics.PersistThreatGraph(analyticsDir, result.KillRecords); err != nil {
+			fmt.Fprintf(os.Stderr, "threat_graph: persist kills: %v\n", err)
 		}
 	}
 }
