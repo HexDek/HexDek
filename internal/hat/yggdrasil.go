@@ -167,6 +167,8 @@ func BudgetForPower(baseBudget int, powerPercentile int) int {
 	return baseBudget
 }
 
+func (h *YggdrasilHat) EvalsSpent() int { return h.turnEvalsSpent }
+
 func NewYggdrasilHatWithNoise(strategy *StrategyProfile, budget int, noise float64) *YggdrasilHat {
 	h := &YggdrasilHat{
 		Evaluator:     NewEvaluator(strategy),

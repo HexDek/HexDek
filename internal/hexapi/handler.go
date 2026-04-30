@@ -16,7 +16,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hexdek/hexdek/internal/analytics"
 	"github.com/hexdek/hexdek/internal/db"
+	"github.com/hexdek/hexdek/internal/versioning"
 )
 
 type Handler struct {
@@ -36,6 +38,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/profile", h.handleProfile)
 	mux.HandleFunc("GET /api/card-art/{name}", h.handleCardArt)
 	mux.HandleFunc("GET /api/card-stats/{commander}", h.handleCardWinStats)
+	mux.HandleFunc("GET /api/rivalry/{owner}/{id}", h.handleRivalry)
+	mux.HandleFunc("GET /api/threat-graph/{owner}/{id}", h.handleThreatGraph)
+	mux.HandleFunc("GET /api/leaderboard", h.handleLeaderboard)
+	mux.HandleFunc("GET /api/decks/{owner}/{id}/lineage", h.handleDeckLineage)
+	mux.HandleFunc("POST /api/import/moxfield", h.handleMoxfieldImport)
+	mux.HandleFunc("POST /api/feedback", h.handleFeedback)
 }
 
 type DeckSummary struct {
@@ -219,6 +227,15 @@ func (h *Handler) handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
 	cards := parseDeckList(req.DeckList)
 	cmdrCard := extractCommander(deckPath)
 	commander, bracket, color := parseDeckFilename(id)
+
+	// Register new version in the DAG with prior inheritance.
+	var cardNames []string
+	for _, c := range cards {
+		if n, ok := c["name"].(string); ok {
+			cardNames = append(cardNames, n)
+		}
+	}
+	go h.registerDeckVersion(owner, id, cmdrCard, cardNames)
 
 	writeJSON(w, map[string]any{
 		"id":             id,
@@ -497,6 +514,16 @@ func (h *Handler) handleImportDeck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	finalID := strings.TrimSuffix(filepath.Base(deckPath), ".txt")
+
+	// Register version in the DAG.
+	var cardNames []string
+	for _, c := range cards {
+		if n, ok := c["name"].(string); ok {
+			cardNames = append(cardNames, n)
+		}
+	}
+	go h.registerDeckVersion(owner, finalID, cmdrCard, cardNames)
+
 	writeJSON(w, map[string]any{
 		"id":             finalID,
 		"owner":          owner,
@@ -504,6 +531,155 @@ func (h *Handler) handleImportDeck(w http.ResponseWriter, r *http.Request) {
 		"commander_card": cmdrCard,
 		"card_count":     len(cards),
 		"file_path":      filepath.Join(owner, filepath.Base(deckPath)),
+	})
+}
+
+var moxfieldClient = &http.Client{
+	Timeout: 20 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 3 {
+			return fmt.Errorf("too many redirects")
+		}
+		host := req.URL.Hostname()
+		if !strings.HasSuffix(host, "moxfield.com") {
+			return fmt.Errorf("redirect to disallowed host: %s", host)
+		}
+		return nil
+	},
+}
+
+func (h *Handler) handleMoxfieldImport(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var req struct {
+		URL   string `json:"url"`
+		Owner string `json:"owner"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	parsed, err := url.Parse(req.URL)
+	if err != nil || parsed.Host != "www.moxfield.com" {
+		http.Error(w, "invalid Moxfield URL", http.StatusBadRequest)
+		return
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(parts) < 2 || parts[0] != "decks" {
+		http.Error(w, "URL must be https://www.moxfield.com/decks/{id}", http.StatusBadRequest)
+		return
+	}
+	moxID := parts[1]
+
+	apiURL := "https://api2.moxfield.com/v3/decks/all/" + url.PathEscape(moxID)
+	apiReq, _ := http.NewRequest("GET", apiURL, nil)
+	apiReq.Header.Set("User-Agent", "HexDek/1.0 (mtgsquad deck import)")
+	apiReq.Header.Set("Accept", "application/json")
+	resp, err := moxfieldClient.Do(apiReq)
+	if err != nil {
+		writeJSON(w, map[string]string{"error": "failed to fetch from Moxfield: " + err.Error()})
+		w.WriteHeader(http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		writeJSON(w, map[string]string{"error": fmt.Sprintf("Moxfield returned %d", resp.StatusCode)})
+		return
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
+	if err != nil {
+		http.Error(w, "failed to read Moxfield response", http.StatusBadGateway)
+		return
+	}
+
+	var moxDeck struct {
+		Name       string `json:"name"`
+		Format     string `json:"format"`
+		Commanders map[string]struct {
+			Card struct {
+				Name string `json:"name"`
+			} `json:"card"`
+			Quantity int `json:"quantity"`
+		} `json:"commanders"`
+		Mainboard map[string]struct {
+			Card struct {
+				Name string `json:"name"`
+			} `json:"card"`
+			Quantity int `json:"quantity"`
+		} `json:"mainboard"`
+	}
+	if err := json.Unmarshal(body, &moxDeck); err != nil {
+		http.Error(w, "failed to parse Moxfield response", http.StatusBadGateway)
+		return
+	}
+
+	var lines []string
+	var cmdrName string
+	var cardNames []string
+	for _, c := range moxDeck.Commanders {
+		lines = append(lines, "COMMANDER: "+c.Card.Name)
+		if cmdrName == "" {
+			cmdrName = c.Card.Name
+		}
+		cardNames = append(cardNames, c.Card.Name)
+	}
+	for _, c := range moxDeck.Mainboard {
+		lines = append(lines, fmt.Sprintf("%d %s", c.Quantity, c.Card.Name))
+		cardNames = append(cardNames, c.Card.Name)
+	}
+	deckList := strings.Join(lines, "\n")
+
+	owner := sanitizeFilename(strings.TrimSpace(req.Owner))
+	if owner == "" {
+		owner = "imported"
+	}
+
+	deckName := moxDeck.Name
+	if deckName == "" {
+		deckName = cmdrName
+	}
+	fileID := sanitizeFilename(strings.ToLower(deckName))
+	if fileID == "" {
+		fileID = "moxfield_deck"
+	}
+
+	ownerDir := filepath.Join(h.DecksDir, owner)
+	if err := os.MkdirAll(ownerDir, 0755); err != nil {
+		http.Error(w, "cannot create deck directory", http.StatusInternalServerError)
+		return
+	}
+
+	deckPath := filepath.Join(ownerDir, fileID+".txt")
+	for i := 2; ; i++ {
+		if _, err := os.Stat(deckPath); os.IsNotExist(err) {
+			break
+		}
+		deckPath = filepath.Join(ownerDir, fmt.Sprintf("%s_%d.txt", fileID, i))
+		if i > 100 {
+			http.Error(w, "too many decks with the same name", http.StatusConflict)
+			return
+		}
+	}
+
+	if err := os.WriteFile(deckPath, []byte(deckList), 0644); err != nil {
+		http.Error(w, "cannot write deck file", http.StatusInternalServerError)
+		return
+	}
+
+	finalID := strings.TrimSuffix(filepath.Base(deckPath), ".txt")
+	go h.registerDeckVersion(owner, finalID, cmdrName, cardNames)
+
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, map[string]any{
+		"id":         finalID,
+		"owner":      owner,
+		"name":       deckName,
+		"commander":  cmdrName,
+		"card_count": len(cardNames),
+		"source":     "moxfield",
+		"moxfield_id": moxID,
 	})
 }
 
@@ -892,6 +1068,189 @@ func (h *Handler) handleCardArt(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "public, max-age=2592000")
 	w.Write(data)
+}
+
+func (h *Handler) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
+	dag, err := versioning.LoadDAG(filepath.Join(h.DecksDir, ".versions"))
+	if err != nil {
+		http.Error(w, "cannot load version DAG", http.StatusInternalServerError)
+		return
+	}
+
+	heads := dag.Leaderboard()
+	type entry struct {
+		Owner       string  `json:"owner"`
+		DeckID      string  `json:"deck_id"`
+		Commander   string  `json:"commander"`
+		Version     int     `json:"version"`
+		Hash        string  `json:"hash"`
+		Rating      float64 `json:"rating"`
+		Mu          float64 `json:"mu"`
+		Sigma       float64 `json:"sigma"`
+		GamesPlayed int     `json:"games_played"`
+	}
+	var out []entry
+	for _, h := range heads {
+		out = append(out, entry{
+			Owner:       h.Owner,
+			DeckID:      h.DeckID,
+			Commander:   h.Commander,
+			Version:     h.Version,
+			Hash:        h.Hash,
+			Rating:      h.Rating.Conservative(),
+			Mu:          h.Rating.Mu,
+			Sigma:       h.Rating.Sigma,
+			GamesPlayed: h.GamesPlayed,
+		})
+	}
+	writeJSON(w, out)
+}
+
+func (h *Handler) handleDeckLineage(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	id := r.PathValue("id")
+	if !validatePathComponent(owner) || !validatePathComponent(id) {
+		http.Error(w, "invalid owner or id", http.StatusBadRequest)
+		return
+	}
+
+	dag, err := versioning.LoadDAG(filepath.Join(h.DecksDir, ".versions"))
+	if err != nil {
+		http.Error(w, "cannot load version DAG", http.StatusInternalServerError)
+		return
+	}
+
+	lineage := dag.GetLineage(owner, id)
+	if lineage == nil {
+		writeJSON(w, []any{})
+		return
+	}
+
+	writeJSON(w, lineage)
+}
+
+// registerDeckVersion records a deck version in the DAG with Bayesian
+// prior inheritance. Called on import and update.
+func (h *Handler) registerDeckVersion(owner, deckID, commander string, cardNames []string) {
+	dagDir := filepath.Join(h.DecksDir, ".versions")
+	dag, err := versioning.LoadDAG(dagDir)
+	if err != nil {
+		log.Printf("versioning: load DAG: %v", err)
+		return
+	}
+
+	dag.RegisterVersion(owner, deckID, commander, cardNames)
+
+	if err := versioning.SaveDAG(dagDir, dag); err != nil {
+		log.Printf("versioning: save DAG: %v", err)
+	}
+}
+
+func (h *Handler) handleRivalry(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	id := r.PathValue("id")
+	if !validatePathComponent(owner) || !validatePathComponent(id) {
+		http.Error(w, "invalid owner or id", http.StatusBadRequest)
+		return
+	}
+
+	deckPath := findDeckFile(h.DecksDir, owner, id)
+	if deckPath == "" {
+		http.Error(w, "deck not found", http.StatusNotFound)
+		return
+	}
+
+	commander := extractCommander(deckPath)
+	if commander == "" {
+		commander, _, _ = parseDeckFilename(id)
+	}
+
+	rivalries, err := analytics.LoadRivalries("data/rivalry")
+	if err != nil {
+		http.Error(w, "cannot load rivalry data", http.StatusInternalServerError)
+		return
+	}
+
+	top := analytics.TopRivals(rivalries, commander, 10)
+	writeJSON(w, map[string]any{
+		"commander": commander,
+		"owner":     owner,
+		"deck_id":   id,
+		"rivals":    top,
+	})
+}
+
+func (h *Handler) handleThreatGraph(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	id := r.PathValue("id")
+	if !validatePathComponent(owner) || !validatePathComponent(id) {
+		http.Error(w, "invalid owner or id", http.StatusBadRequest)
+		return
+	}
+
+	deckPath := findDeckFile(h.DecksDir, owner, id)
+	if deckPath == "" {
+		http.Error(w, "deck not found", http.StatusNotFound)
+		return
+	}
+
+	commander := extractCommander(deckPath)
+	if commander == "" {
+		commander, _, _ = parseDeckFilename(id)
+	}
+
+	edges, err := analytics.LoadThreatGraph("data/analytics")
+	if err != nil {
+		http.Error(w, "cannot load threat graph", http.StatusInternalServerError)
+		return
+	}
+
+	summary := analytics.ThreatSummaryFor(edges, commander, 10)
+	writeJSON(w, summary)
+}
+
+func (h *Handler) handleFeedback(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Type     string `json:"type"`
+		Page     string `json:"page"`
+		Context  string `json:"context"`
+		Symptom  string `json:"symptom"`
+		Expected string `json:"expected"`
+		Contact  string `json:"contact"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 32768)).Decode(&body); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if body.Symptom == "" {
+		http.Error(w, "symptom required", http.StatusBadRequest)
+		return
+	}
+
+	feedbackDir := filepath.Join(h.DecksDir, "..", "feedback")
+	os.MkdirAll(feedbackDir, 0755)
+
+	entry := map[string]any{
+		"type":       body.Type,
+		"page":       body.Page,
+		"context":    body.Context,
+		"symptom":    body.Symptom,
+		"expected":   body.Expected,
+		"contact":    body.Contact,
+		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"user_agent": r.UserAgent(),
+	}
+
+	data, _ := json.MarshalIndent(entry, "", "  ")
+	fname := fmt.Sprintf("%d-%s.json", time.Now().UnixMilli(), body.Type)
+	if err := os.WriteFile(filepath.Join(feedbackDir, fname), data, 0644); err != nil {
+		log.Printf("feedback write error: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("feedback received: type=%s page=%s contact=%s", body.Type, body.Page, body.Contact)
+	writeJSON(w, map[string]string{"status": "ok"})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

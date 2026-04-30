@@ -26,6 +26,7 @@ import (
 	"github.com/hexdek/hexdek/internal/deckparser"
 	"github.com/hexdek/hexdek/internal/gameengine"
 	"github.com/hexdek/hexdek/internal/hat"
+	"github.com/hexdek/hexdek/internal/matchmaking"
 	"github.com/hexdek/hexdek/internal/tournament"
 )
 
@@ -69,6 +70,9 @@ type EvalSnapshot struct {
 	ThreatExposure    float64 `json:"threat_exposure"`
 	CommanderProgress float64 `json:"commander_progress"`
 	GraveyardValue    float64 `json:"graveyard_value"`
+	Archetype         string  `json:"archetype,omitempty"`
+	Budget            int     `json:"budget,omitempty"`
+	BudgetUsed        int     `json:"budget_used,omitempty"`
 }
 
 type PermanentSnapshot struct {
@@ -726,7 +730,24 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 		return
 	}
 
-	indices := rng.Perm(poolSize)[:showmatchSeats]
+	// Build matchmaking pool from ELO state for rating-aware pod assembly.
+	sm.mu.RLock()
+	pool := make([]matchmaking.DeckEntry, poolSize)
+	for i := 0; i < poolSize; i++ {
+		dk := deckKeyFromPath(sm.deckPool[i].Path)
+		mu := 25.0
+		sigma := 8.33
+		games := 0
+		if e, ok := sm.elo[dk]; ok {
+			mu = e.rating / 40.0 * 25.0
+			games = e.games
+			sigma = 8.33 / math.Max(1.0, math.Sqrt(float64(games)))
+		}
+		pool[i] = matchmaking.DeckEntry{Index: i, Commander: sm.deckPool[i].CommanderName, Mu: mu, Sigma: sigma, Games: games}
+	}
+	sm.mu.RUnlock()
+
+	indices := matchmaking.AssemblePod(rng, pool, showmatchSeats)
 	pickedDecks := make([]*deckparser.TournamentDeck, showmatchSeats)
 	commanders := make([]string, showmatchSeats)
 	deckKeys := make([]string, showmatchSeats)
@@ -1157,7 +1178,7 @@ func (sm *Showmatch) captureSnapshot(gs *gameengine.GameState, commanders []stri
 		}
 		if ygg, ok := s.Hat.(*hat.YggdrasilHat); ok && ygg.Evaluator != nil {
 			r := ygg.Evaluator.EvaluateDetailed(gs, i)
-			ss.Eval = &EvalSnapshot{
+			es := &EvalSnapshot{
 				Score:             r.Score,
 				BoardPresence:     r.BoardPresence,
 				CardAdvantage:     r.CardAdvantage,
@@ -1167,7 +1188,13 @@ func (sm *Showmatch) captureSnapshot(gs *gameengine.GameState, commanders []stri
 				ThreatExposure:    r.ThreatExposure,
 				CommanderProgress: r.CommanderProgress,
 				GraveyardValue:    r.GraveyardValue,
+				Budget:            ygg.Budget,
+				BudgetUsed:        ygg.EvalsSpent(),
 			}
+			if ygg.Strategy != nil {
+				es.Archetype = string(ygg.Strategy.Archetype)
+			}
+			ss.Eval = es
 		}
 		snap.Seats[i] = ss
 	}
