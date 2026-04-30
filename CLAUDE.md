@@ -134,13 +134,15 @@ Fetch oracle data: `scripts/fetch-oracle.sh`
 
 ### Ready
 - [ ] Fix triple combo cycle ordering (only tests 2/6 orderings — misses valid 3-card combos)
-- [ ] Fix combo false positives (self-exile, hand vs battlefield, attack-trigger dependency, randomness)
-- [ ] Wire 20 `archetypes.go` definitions into classifier (currently dead code, only 10 fingerprints active)
-- [ ] Add value chain templates for Storm, Artifact, Enchantress, Counters Matter engines
-- [ ] Improve Frank Karsten land formula (account for ramp count, cantrips, mana dork density)
-- [ ] Fix bracket estimation to exclude banned cards from scoring
-- [ ] Track colorless `{C}` mana production in land analysis
-- [ ] Refine card role multi-tag priority ordering
+
+### Done (2026-04-29)
+- [x] Fix combo false positives (self-exile, hand vs battlefield, attack-trigger dependency, randomness)
+- [x] Wire 20 `archetypes.go` definitions into classifier (11 new fingerprints + context signals + gameplan descriptions)
+- [x] Add value chain templates for Storm, Artifact, Enchantress, Counters Matter engines
+- [x] Improve Frank Karsten land formula (ramp/draw discount with dork fragility weight, 28-land floor)
+- [x] Fix bracket estimation to exclude banned cards from scoring
+- [x] Track colorless `{C}` mana production in land analysis
+- [x] Refine card role multi-tag priority ordering (strategic importance sort)
 
 ### Backlog
 - [ ] 4-card+ combo detection (currently capped at triples)

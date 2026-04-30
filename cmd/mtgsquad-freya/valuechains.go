@@ -143,6 +143,26 @@ func classifyZoneFlows(ot, tl string, p *CardProfile) []ZoneFlow {
 		flows = append(flows, ZoneFlow{From: "exile", To: "hand", Resource: "card"})
 	}
 
+	// Cast triggers: hand -> stack -> value (enchantress draw, storm payoff, magecraft)
+	if profileHasTrigger(*p, "cast") {
+		flows = append(flows, ZoneFlow{From: "hand", To: "battlefield", Resource: "spell"})
+	}
+
+	// Counter placement: battlefield -> battlefield (counters as resource)
+	if profileHasEffect(*p, "counter_add") || profileHasEffect(*p, "proliferate") {
+		flows = append(flows, ZoneFlow{From: "battlefield", To: "battlefield", Resource: "counter"})
+	}
+
+	// Counter payoff: battlefield state -> value (cards that care about counters existing)
+	if profileHasTrigger(*p, "counter_matters") || profileHasTrigger(*p, "counter_placed") {
+		flows = append(flows, ZoneFlow{From: "battlefield", To: "battlefield", Resource: "counter_payoff"})
+	}
+
+	// Artifact sacrifice: battlefield -> graveyard (artifact-specific)
+	if p.IsOutlet && strings.Contains(tl, "artifact") {
+		flows = append(flows, ZoneFlow{From: "battlefield", To: "graveyard", Resource: "artifact"})
+	}
+
 	return flows
 }
 
@@ -207,6 +227,36 @@ var chainTemplates = []chainTemplate{
 		Steps: []chainStepPattern{
 			{Label: "DEPLOY", From: "hand", To: "battlefield", Resource: "creature"},
 			{Label: "BLINK", From: "battlefield", To: "battlefield", Resource: "creature"},
+		},
+	},
+	{
+		Name: "Storm Engine",
+		Steps: []chainStepPattern{
+			{Label: "DISCOUNT", From: "hand", To: "battlefield", Resource: "any"},
+			{Label: "CANTRIP", From: "library", To: "hand", Resource: "card"},
+			{Label: "PAYOFF", From: "hand", To: "battlefield", Resource: "spell"},
+		},
+	},
+	{
+		Name: "Artifact Engine",
+		Steps: []chainStepPattern{
+			{Label: "DEPLOY", From: "hand", To: "battlefield", Resource: "creature"},
+			{Label: "SACRIFICE", From: "battlefield", To: "graveyard", Resource: "artifact"},
+			{Label: "RECOVER", From: "graveyard", To: "battlefield", Resource: ""},
+		},
+	},
+	{
+		Name: "Enchantress Engine",
+		Steps: []chainStepPattern{
+			{Label: "DRAW", From: "hand", To: "battlefield", Resource: "spell"},
+			{Label: "REFUEL", From: "library", To: "hand", Resource: "card"},
+		},
+	},
+	{
+		Name: "Counters Matter Engine",
+		Steps: []chainStepPattern{
+			{Label: "PLACE", From: "battlefield", To: "battlefield", Resource: "counter"},
+			{Label: "PAYOFF", From: "battlefield", To: "battlefield", Resource: "counter_payoff"},
 		},
 	},
 }

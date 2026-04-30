@@ -65,7 +65,7 @@ func main() {
 		seed        = flag.Int64("seed", 42, "master RNG seed")
 		seats       = flag.Int("seats", 4, "seats per game")
 		workers     = flag.Int("workers", 0, "goroutine pool size (0 = NumCPU)")
-		hatKind     = flag.String("hat", "yggdrasil", "hat policy: yggdrasil (default) | greedy | poker | octo (deprecated)")
+		hatKind     = flag.String("hat", "yggdrasil", "hat policy: yggdrasil (default) | greedy | poker | octo (stress-test)")
 		hatBudget     = flag.Int("hat-budget", 50, "yggdrasil budget: 0=heuristic, 1-199=evaluator-guided, 200+=rollout")
 		hatTurnBudget = flag.Int("turn-budget", 0, "per-turn eval budget (0=legacy per-action, 100=recommended). Hat allocates evals across decisions within a turn.")
 		hatNoise      = flag.Float64("hat-noise", 0.2, "gaussian σ on targeting scores (0=deterministic, 0.2=default human-scale fuzz)")

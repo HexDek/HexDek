@@ -286,10 +286,20 @@ var defaultWeights = map[string]*jsonEvalWeights{
 		LifeResource: 0.8, ComboProximity: 0.1, ThreatExposure: 0.6,
 		CommanderProgress: 0.9, GraveyardValue: 0.2,
 	},
+	"aggro / go wide": {
+		BoardPresence: 1.8, CardAdvantage: 0.4, ManaAdvantage: 0.3,
+		LifeResource: 0.7, ComboProximity: 0.1, ThreatExposure: 0.5,
+		CommanderProgress: 0.6, GraveyardValue: 0.2,
+	},
 	"combo": {
 		BoardPresence: 0.4, CardAdvantage: 0.8, ManaAdvantage: 0.7,
 		LifeResource: 0.3, ComboProximity: 2.0, ThreatExposure: 0.5,
 		CommanderProgress: 0.6, GraveyardValue: 0.5,
+	},
+	"combo / infinite": {
+		BoardPresence: 0.3, CardAdvantage: 0.9, ManaAdvantage: 0.8,
+		LifeResource: 0.2, ComboProximity: 2.2, ThreatExposure: 0.5,
+		CommanderProgress: 0.5, GraveyardValue: 0.6,
 	},
 	"control": {
 		BoardPresence: 0.5, CardAdvantage: 1.5, ManaAdvantage: 0.8,
@@ -305,6 +315,101 @@ var defaultWeights = map[string]*jsonEvalWeights{
 		BoardPresence: 0.6, CardAdvantage: 0.7, ManaAdvantage: 1.8,
 		LifeResource: 0.5, ComboProximity: 0.3, ThreatExposure: 0.6,
 		CommanderProgress: 0.8, GraveyardValue: 0.3,
+	},
+	"voltron": {
+		BoardPresence: 0.8, CardAdvantage: 0.5, ManaAdvantage: 0.5,
+		LifeResource: 0.6, ComboProximity: 0.2, ThreatExposure: 0.9,
+		CommanderProgress: 2.0, GraveyardValue: 0.3,
+	},
+	"storm": {
+		BoardPresence: 0.2, CardAdvantage: 1.3, ManaAdvantage: 1.5,
+		LifeResource: 0.2, ComboProximity: 1.8, ThreatExposure: 0.3,
+		CommanderProgress: 0.4, GraveyardValue: 0.3,
+	},
+	"aristocrats": {
+		BoardPresence: 1.0, CardAdvantage: 0.8, ManaAdvantage: 0.5,
+		LifeResource: 0.9, ComboProximity: 1.2, ThreatExposure: 0.7,
+		CommanderProgress: 0.5, GraveyardValue: 1.2,
+	},
+	"artifacts": {
+		BoardPresence: 1.2, CardAdvantage: 0.8, ManaAdvantage: 1.0,
+		LifeResource: 0.4, ComboProximity: 1.0, ThreatExposure: 0.6,
+		CommanderProgress: 0.6, GraveyardValue: 0.8,
+	},
+	"enchantress": {
+		BoardPresence: 0.8, CardAdvantage: 1.4, ManaAdvantage: 0.6,
+		LifeResource: 0.5, ComboProximity: 0.8, ThreatExposure: 0.7,
+		CommanderProgress: 0.6, GraveyardValue: 0.3,
+	},
+	"reanimator": {
+		BoardPresence: 0.7, CardAdvantage: 0.6, ManaAdvantage: 0.5,
+		LifeResource: 0.4, ComboProximity: 0.8, ThreatExposure: 0.5,
+		CommanderProgress: 0.5, GraveyardValue: 2.0,
+	},
+	"lands matter": {
+		BoardPresence: 0.7, CardAdvantage: 0.7, ManaAdvantage: 1.8,
+		LifeResource: 0.6, ComboProximity: 0.4, ThreatExposure: 0.5,
+		CommanderProgress: 0.7, GraveyardValue: 0.8,
+	},
+	"tribal": {
+		BoardPresence: 1.6, CardAdvantage: 0.6, ManaAdvantage: 0.5,
+		LifeResource: 0.7, ComboProximity: 0.3, ThreatExposure: 0.7,
+		CommanderProgress: 0.8, GraveyardValue: 0.3,
+	},
+	"superfriends": {
+		BoardPresence: 0.9, CardAdvantage: 1.2, ManaAdvantage: 0.7,
+		LifeResource: 0.8, ComboProximity: 0.4, ThreatExposure: 1.0,
+		CommanderProgress: 0.4, GraveyardValue: 0.3,
+	},
+	"mill": {
+		BoardPresence: 0.4, CardAdvantage: 0.8, ManaAdvantage: 0.6,
+		LifeResource: 0.5, ComboProximity: 1.4, ThreatExposure: 0.8,
+		CommanderProgress: 0.5, GraveyardValue: 0.3,
+	},
+	"lifegain": {
+		BoardPresence: 0.9, CardAdvantage: 0.7, ManaAdvantage: 0.5,
+		LifeResource: 1.8, ComboProximity: 0.8, ThreatExposure: 0.6,
+		CommanderProgress: 0.6, GraveyardValue: 0.3,
+	},
+	"discard / hand attack": {
+		BoardPresence: 0.6, CardAdvantage: 1.4, ManaAdvantage: 0.5,
+		LifeResource: 0.5, ComboProximity: 0.6, ThreatExposure: 1.0,
+		CommanderProgress: 0.7, GraveyardValue: 0.4,
+	},
+	"blink / flicker": {
+		BoardPresence: 1.1, CardAdvantage: 1.0, ManaAdvantage: 0.6,
+		LifeResource: 0.5, ComboProximity: 0.9, ThreatExposure: 0.6,
+		CommanderProgress: 0.5, GraveyardValue: 0.3,
+	},
+	"spellslinger": {
+		BoardPresence: 0.3, CardAdvantage: 1.4, ManaAdvantage: 1.0,
+		LifeResource: 0.3, ComboProximity: 1.2, ThreatExposure: 0.4,
+		CommanderProgress: 0.5, GraveyardValue: 0.3,
+	},
+	"counters matter": {
+		BoardPresence: 1.4, CardAdvantage: 0.6, ManaAdvantage: 0.5,
+		LifeResource: 0.6, ComboProximity: 0.8, ThreatExposure: 0.6,
+		CommanderProgress: 0.7, GraveyardValue: 0.3,
+	},
+	"stax": {
+		BoardPresence: 0.5, CardAdvantage: 1.2, ManaAdvantage: 0.8,
+		LifeResource: 0.4, ComboProximity: 0.6, ThreatExposure: 1.4,
+		CommanderProgress: 0.5, GraveyardValue: 0.3,
+	},
+	"extra combats": {
+		BoardPresence: 1.4, CardAdvantage: 0.5, ManaAdvantage: 0.5,
+		LifeResource: 0.7, ComboProximity: 0.6, ThreatExposure: 0.6,
+		CommanderProgress: 1.5, GraveyardValue: 0.2,
+	},
+	"theft / clone": {
+		BoardPresence: 0.8, CardAdvantage: 1.0, ManaAdvantage: 0.7,
+		LifeResource: 0.5, ComboProximity: 0.5, ThreatExposure: 1.0,
+		CommanderProgress: 0.5, GraveyardValue: 0.4,
+	},
+	"ninjutsu / evasion": {
+		BoardPresence: 1.0, CardAdvantage: 1.2, ManaAdvantage: 0.5,
+		LifeResource: 0.6, ComboProximity: 0.3, ThreatExposure: 0.5,
+		CommanderProgress: 0.8, GraveyardValue: 0.2,
 	},
 }
 

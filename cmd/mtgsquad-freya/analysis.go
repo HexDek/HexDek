@@ -46,7 +46,7 @@ type CardProfile struct {
 	Triggers []string       // what events trigger this card ("whenever X")
 	Effects  []string       // what this card does (damage, draw, mill, etc)
 
-	LandColors []string // colors this land produces (W/U/B/R/G), empty for non-lands
+	LandColors []string // colors this land produces (W/U/B/R/G/C), empty for non-lands
 
 	// Tribal detection
 	CreatureTypes  []string // creature types this card has or references
@@ -148,9 +148,10 @@ type FreyaReport struct {
 	WinConCount  int
 
 	// Mana curve
-	ManaCurve  [8]int // index 0-6 = CMC 0-6, index 7 = CMC 7+
-	AvgCMC     float64
-	CurveShape string // "aggro", "midrange", "control"
+	ManaCurve     [8]int // index 0-6 = CMC 0-6, index 7 = CMC 7+
+	AvgCMC        float64
+	CurveShape    string   // "aggro", "midrange", "control", "bimodal"
+	CurveWarnings []string // structural warnings about curve shape
 
 	// Color analysis
 	ColorDemand   map[string]int // W/U/B/R/G -> total pips needed
@@ -233,6 +234,12 @@ func ClassifyCard(name, oracleText, typeLine, manaCost string, cmc int, power st
 			if strings.Contains(ot, "add {g}") || strings.Contains(ot, "{g}") && strings.Contains(ot, "add") {
 				p.LandColors = append(p.LandColors, "G")
 			}
+		}
+		// Colorless-only lands (Wastes, Eldrazi Temple, etc.)
+		if len(p.LandColors) == 0 && (strings.Contains(ot, "add {c}") ||
+			strings.Contains(ot, "{c}") && strings.Contains(ot, "add") ||
+			strings.EqualFold(name, "wastes")) {
+			p.LandColors = append(p.LandColors, "C")
 		}
 	}
 
@@ -1226,6 +1233,40 @@ func AnalyzeDeck(profiles []CardProfile, deckName, deckPath, commander string) *
 		report.CurveShape = "control"
 	default:
 		report.CurveShape = "midrange"
+	}
+
+	// Bimodal detection: two distinct peaks with a valley between them.
+	if report.NonlandCount >= 20 {
+		peaks := findCurvePeaks(report.ManaCurve)
+		if len(peaks) >= 2 && peaks[1]-peaks[0] >= 3 {
+			valleyMin := report.ManaCurve[peaks[0]]
+			for i := peaks[0] + 1; i < peaks[1]; i++ {
+				if report.ManaCurve[i] < valleyMin {
+					valleyMin = report.ManaCurve[i]
+				}
+			}
+			peakAvg := (report.ManaCurve[peaks[0]] + report.ManaCurve[peaks[1]]) / 2
+			if peakAvg > 0 && float64(valleyMin)/float64(peakAvg) < 0.4 {
+				report.CurveShape = "bimodal"
+				report.CurveWarnings = append(report.CurveWarnings,
+					fmt.Sprintf("bimodal curve: peaks at CMC %d and %d with valley between — may struggle in the mid-game", peaks[0], peaks[1]))
+			}
+		}
+
+		// Top-heavy warning: more than 30% of nonlands at CMC 5+.
+		highEnd := report.ManaCurve[5] + report.ManaCurve[6] + report.ManaCurve[7]
+		if report.NonlandCount > 0 && float64(highEnd)/float64(report.NonlandCount) > 0.30 {
+			report.CurveWarnings = append(report.CurveWarnings,
+				fmt.Sprintf("top-heavy curve: %d cards (%.0f%%) at CMC 5+ — vulnerable to fast starts without ramp",
+					highEnd, float64(highEnd)/float64(report.NonlandCount)*100))
+		}
+
+		// Bottom-light warning: fewer than 15% at CMC 0-1.
+		lowEnd := report.ManaCurve[0] + report.ManaCurve[1]
+		if report.NonlandCount > 0 && float64(lowEnd)/float64(report.NonlandCount) < 0.15 && report.CurveShape != "aggro" {
+			report.CurveWarnings = append(report.CurveWarnings,
+				fmt.Sprintf("few early plays: only %d cards at CMC 0-1 — may fall behind in early turns", lowEnd))
+		}
 	}
 
 	// Color mismatch detection.
@@ -3051,6 +3092,28 @@ func containsAny(s string, subs ...string) bool {
 		}
 	}
 	return false
+}
+
+// findCurvePeaks returns indices of local maxima in the mana curve (CMC 0-7+).
+func findCurvePeaks(curve [8]int) []int {
+	var peaks []int
+	for i := 0; i < 8; i++ {
+		if curve[i] == 0 {
+			continue
+		}
+		left := 0
+		if i > 0 {
+			left = curve[i-1]
+		}
+		right := 0
+		if i < 7 {
+			right = curve[i+1]
+		}
+		if curve[i] >= left && curve[i] >= right {
+			peaks = append(peaks, i)
+		}
+	}
+	return peaks
 }
 
 // uniqueResources deduplicates a ResourceType slice.

@@ -1,7 +1,4 @@
-// Deprecated: OctoHat was test-only (per 7174n1c) and is superseded by YggdrasilHat
-// for all tournament/gameplay use. Retained for engine stress-testing only.
-//
-// Package hat — OctoHat stress-test policy.
+// OctoHat — engine stress-test policy (not for tournament use; use YggdrasilHat).
 //
 // OctoHat intentionally plays badly to force the rules engine to resolve
 // as many interactions as possible per turn. Cast every castable spell,

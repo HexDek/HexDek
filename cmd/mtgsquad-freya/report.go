@@ -154,6 +154,9 @@ func printText(w io.Writer, r *FreyaReport) {
 		fmt.Fprintf(w, "%-5s %-30s %d\n", label, bar, count)
 	}
 	fmt.Fprintf(w, "  Lands: %d  Nonlands: %d\n", r.LandCount, r.NonlandCount)
+	for _, cw := range r.CurveWarnings {
+		fmt.Fprintf(w, "  ⚠️  %s\n", cw)
+	}
 	fmt.Fprintf(w, "\n")
 
 	// Color balance.
@@ -167,10 +170,10 @@ func printText(w io.Writer, r *FreyaReport) {
 	}
 	if totalDemand > 0 || totalSupply > 0 {
 		fmt.Fprintf(w, "COLOR BALANCE\n")
-		colorNames := map[string]string{"W": "White", "U": "Blue", "B": "Black", "R": "Red", "G": "Green"}
-		fmt.Fprintf(w, "  %-8s %6s %6s  %6s %6s  %s\n", "Color", "Pips", "Dem%", "Srcs", "Sup%", "Status")
-		fmt.Fprintf(w, "  %-8s %6s %6s  %6s %6s  %s\n", "─────", "────", "────", "────", "────", "──────")
-		for _, c := range []string{"W", "U", "B", "R", "G"} {
+		colorNames := map[string]string{"W": "White", "U": "Blue", "B": "Black", "R": "Red", "G": "Green", "C": "Colorless"}
+		fmt.Fprintf(w, "  %-9s %6s %6s  %6s %6s  %s\n", "Color", "Pips", "Dem%", "Srcs", "Sup%", "Status")
+		fmt.Fprintf(w, "  %-9s %6s %6s  %6s %6s  %s\n", "─────", "────", "────", "────", "────", "──────")
+		for _, c := range []string{"W", "U", "B", "R", "G", "C"} {
 			demand := r.ColorDemand[c]
 			supply := r.ColorSupply[c]
 			dPct := 0.0
@@ -190,11 +193,11 @@ func printText(w io.Writer, r *FreyaReport) {
 				status = "📈 HIGH"
 			}
 			if demand > 0 || supply > 0 {
-				fmt.Fprintf(w, "  %-8s %6d %5.0f%%  %6d %5.0f%%  %s\n",
+				fmt.Fprintf(w, "  %-9s %6d %5.0f%%  %6d %5.0f%%  %s\n",
 					colorNames[c], demand, dPct, supply, sPct, status)
 			}
 		}
-		fmt.Fprintf(w, "  %-8s %6d %5s  %6d\n", "Total", totalDemand, "", totalSupply)
+		fmt.Fprintf(w, "  %-9s %6d %5s  %6d\n", "Total", totalDemand, "", totalSupply)
 		if len(r.ColorMismatch) > 0 {
 			fmt.Fprintf(w, "\n")
 			for _, mismatch := range r.ColorMismatch {
@@ -759,7 +762,7 @@ func printMarkdown(w io.Writer, r *FreyaReport) {
 		fmt.Fprintf(w, "## Color Balance\n\n")
 		fmt.Fprintf(w, "| Color | Demand | Supply |\n")
 		fmt.Fprintf(w, "|-------|--------|--------|\n")
-		for _, c := range []string{"W", "U", "B", "R", "G"} {
+		for _, c := range []string{"W", "U", "B", "R", "G", "C"} {
 			dPct := 0.0
 			sPct := 0.0
 			if totalDemandMD > 0 {
@@ -768,7 +771,9 @@ func printMarkdown(w io.Writer, r *FreyaReport) {
 			if totalSupplyMD > 0 {
 				sPct = float64(r.ColorSupply[c]) / float64(totalSupplyMD) * 100
 			}
-			fmt.Fprintf(w, "| %s | %.0f%% | %.0f%% |\n", c, dPct, sPct)
+			if r.ColorDemand[c] > 0 || r.ColorSupply[c] > 0 {
+				fmt.Fprintf(w, "| %s | %.0f%% | %.0f%% |\n", c, dPct, sPct)
+			}
 		}
 		fmt.Fprintf(w, "\n")
 		for _, mismatch := range r.ColorMismatch {
@@ -1027,11 +1032,12 @@ type jsonReport struct {
 }
 
 type jsonManaCurve struct {
-	Distribution [8]int  `json:"distribution"`
-	AvgCMC       float64 `json:"avg_cmc"`
-	CurveShape   string  `json:"curve_shape"`
-	LandCount    int     `json:"land_count"`
-	NonlandCount int     `json:"nonland_count"`
+	Distribution [8]int   `json:"distribution"`
+	AvgCMC       float64  `json:"avg_cmc"`
+	CurveShape   string   `json:"curve_shape"`
+	Warnings     []string `json:"warnings,omitempty"`
+	LandCount    int      `json:"land_count"`
+	NonlandCount int      `json:"nonland_count"`
 }
 
 type jsonColors struct {
@@ -1177,6 +1183,7 @@ func printJSON(w io.Writer, r *FreyaReport) {
 			Distribution: r.ManaCurve,
 			AvgCMC:       r.AvgCMC,
 			CurveShape:   r.CurveShape,
+			Warnings:     r.CurveWarnings,
 			LandCount:    r.LandCount,
 			NonlandCount: r.NonlandCount,
 		},

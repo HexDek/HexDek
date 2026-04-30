@@ -49,6 +49,7 @@ type classifyContext struct {
 	planeswalkerCount int
 	millOppCount   int // opponent-targeting mill
 	discardForceCount int
+	bannedCount    int
 	profiles       []CardProfile
 	qtyProfiles    []CardProfileQty
 	oracle         *oracleDB
@@ -334,6 +335,10 @@ func buildClassifyContext(report *FreyaReport, qtyProfiles []CardProfileQty, ora
 		if qp.Profile.IsLand {
 			continue
 		}
+		if commanderBannedList[strings.ToLower(qp.Profile.Name)] {
+			ctx.bannedCount += qp.Qty
+			continue
+		}
 		nonlandTotal += qp.Qty
 		tl := strings.ToLower(qp.Profile.TypeLine)
 
@@ -505,6 +510,10 @@ func buildSignals(ctx *classifyContext, ac *ArchetypeClassification) []string {
 
 	if ctx.topCreatureTypePct >= 0.40 && ctx.creaturePct >= 0.35 {
 		signals = append(signals, "strong tribal core")
+	}
+
+	if ctx.bannedCount > 0 {
+		signals = append(signals, fmt.Sprintf("%d banned card(s) excluded from bracket scoring", ctx.bannedCount))
 	}
 
 	return signals

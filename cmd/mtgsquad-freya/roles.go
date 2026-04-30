@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -60,6 +61,21 @@ var defaultTemplate = archetypeTemplate{
 	},
 }
 
+var rolePriority = map[RoleTag]int{
+	RoleCombo:        0,
+	RoleStax:         1,
+	RoleThreat:       2,
+	RoleBoardWipe:    3,
+	RoleCounterspell: 4,
+	RoleTutor:        5,
+	RoleRemoval:      6,
+	RoleProtection:   7,
+	RoleDraw:         8,
+	RoleRamp:         9,
+	RoleUtility:      10,
+	RoleLand:         11,
+}
+
 func TagCardRole(name, oracleText, typeLine, manaCost string, cmc int, profile CardProfile) []RoleTag {
 	var roles []RoleTag
 	ot := strings.ToLower(oracleText)
@@ -114,6 +130,10 @@ func TagCardRole(name, oracleText, typeLine, manaCost string, cmc int, profile C
 	if len(roles) == 0 && !profile.IsLand {
 		roles = append(roles, RoleUtility)
 	}
+
+	sort.Slice(roles, func(i, j int) bool {
+		return rolePriority[roles[i]] < rolePriority[roles[j]]
+	})
 
 	return roles
 }

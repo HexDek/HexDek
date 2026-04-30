@@ -55,7 +55,7 @@ func ComputeDeckStatistics(qtyProfiles []CardProfileQty) *DeckStatistics {
 		PipDemandByBracket: map[string][3]int{
 			"W": {}, "U": {}, "B": {}, "R": {}, "G": {},
 		},
-		ColorSources: map[string]int{"W": 0, "U": 0, "B": 0, "R": 0, "G": 0},
+		ColorSources: map[string]int{"W": 0, "U": 0, "B": 0, "R": 0, "G": 0, "C": 0},
 	}
 
 	totalCMCNoLands := 0
@@ -221,23 +221,40 @@ func computeColorGaps(s *DeckStatistics) {
 // ---------------------------------------------------------------------------
 
 func computeLandEvaluation(s *DeckStatistics) {
-	recommended := int(math.Round(30 + s.AvgCMC*2))
+	baseRecommended := 30 + s.AvgCMC*2
+
+	// Ramp discount: land search and mana rocks are reliable (~0.7 virtual lands each),
+	// mana dorks are fragile (~0.4 virtual lands each).
+	rampDiscount := float64(s.LandSearchCount)*0.7 +
+		float64(s.ManaRockCount)*0.7 +
+		float64(s.ManaDorkCount)*0.4 +
+		float64(s.RampCount-s.LandSearchCount-s.ManaRockCount-s.ManaDorkCount)*0.5
+
+	// Draw/cantrip discount: card draw smooths mana — each draw source
+	// worth ~0.3 virtual lands, capped at 4 to avoid absurd reductions.
+	drawDiscount := math.Min(float64(s.DrawSourceCount)*0.3, 4.0)
+
+	// Floor at 28 lands — going below that is almost always wrong in Commander.
+	recommended := int(math.Round(math.Max(baseRecommended-rampDiscount-drawDiscount, 28)))
 	s.RecommendedLands = recommended
+
+	detail := fmt.Sprintf("(base %d, ramp discount %.0f, draw discount %.0f)",
+		int(math.Round(baseRecommended)), rampDiscount, drawDiscount)
 
 	diff := s.LandCount - recommended
 	switch {
 	case diff < -3:
 		s.LandVerdict = "too_few"
-		s.LandNote = fmt.Sprintf("Running %d lands with avg CMC %.1f — Karsten recommends ~%d. Consider adding %d lands or more ramp.",
-			s.LandCount, s.AvgCMC, recommended, -diff)
+		s.LandNote = fmt.Sprintf("Running %d lands with avg CMC %.1f — adjusted Karsten recommends ~%d %s. Consider adding %d lands or more ramp.",
+			s.LandCount, s.AvgCMC, recommended, detail, -diff)
 	case diff > 4:
 		s.LandVerdict = "too_many"
-		s.LandNote = fmt.Sprintf("Running %d lands with avg CMC %.1f — Karsten recommends ~%d. Could cut %d lands for more spells.",
-			s.LandCount, s.AvgCMC, recommended, diff)
+		s.LandNote = fmt.Sprintf("Running %d lands with avg CMC %.1f — adjusted Karsten recommends ~%d %s. Could cut %d lands for more spells.",
+			s.LandCount, s.AvgCMC, recommended, detail, diff)
 	default:
 		s.LandVerdict = "ok"
-		s.LandNote = fmt.Sprintf("Running %d lands with avg CMC %.1f — Karsten recommends ~%d. On target.",
-			s.LandCount, s.AvgCMC, recommended)
+		s.LandNote = fmt.Sprintf("Running %d lands with avg CMC %.1f — adjusted Karsten recommends ~%d %s. On target.",
+			s.LandCount, s.AvgCMC, recommended, detail)
 	}
 }
 
