@@ -123,8 +123,11 @@ export default function DeckList() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, alignItems: 'center' }}>
                       <span className="t-xs muted">{d.card_count || d.cardCount} CARDS</span>
                       {deckElo && deckElo.games > 0 && (
-                        <span className="t-xs" style={{ color: 'var(--ok)' }}>
-                          {deckElo.wins}W-{deckElo.losses}L ({deckElo.win_rate}%)
+                        <span className="t-xs">
+                          <span style={{ color: 'var(--ok)' }}>{deckElo.wins}W</span>
+                          <span style={{ color: 'var(--ink-2)' }}>-</span>
+                          <span style={{ color: 'var(--danger)' }}>{deckElo.losses}L</span>
+                          <span style={{ color: 'var(--ink-2)' }}> ({deckElo.win_rate}%)</span>
                         </span>
                       )}
                     </div>

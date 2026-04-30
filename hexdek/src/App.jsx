@@ -11,6 +11,8 @@ import Report from './screens/Report'
 import Forge from './screens/Forge'
 import About from './screens/About'
 import BugReport from './screens/BugReport'
+import Donations from './screens/Donations'
+import Profile from './screens/Profile'
 import Login from './screens/Login'
 import AuthCallback from './screens/AuthCallback'
 
@@ -37,6 +39,8 @@ export default function App() {
         <Route path="report/:gameId" element={<Report />} />
         <Route path="about" element={<About />} />
         <Route path="feedback" element={<BugReport />} />
+        <Route path="donations" element={<Donations />} />
+        <Route path="profile" element={<Profile />} />
       </Route>
     </Routes>
   )

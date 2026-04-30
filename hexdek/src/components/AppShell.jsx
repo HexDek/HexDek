@@ -56,7 +56,7 @@ export default function AppShell() {
             <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {user ? (
                 <>
-                  <span className="t-xs" style={{ color: 'var(--ok)' }}>● {user.email?.split('@')[0]?.toUpperCase()}</span>
+                  <NavLink to="/profile" className="t-xs" style={{ color: 'var(--ok)', textDecoration: 'none' }}>● {user.email?.split('@')[0]?.toUpperCase()}</NavLink>
                   <a onClick={handleLogout} style={{ cursor: 'pointer', fontSize: 9, letterSpacing: '0.1em', color: 'var(--ink-2)' }}>LOGOUT</a>
                 </>
               ) : (
@@ -73,6 +73,7 @@ export default function AppShell() {
         <div className="statusbar">
           <span>+ + +  HEXDEK CORE READY  + + +</span>
           <NavLink to="/feedback" style={{ color: 'var(--danger)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>BUG / SUGGESTION</NavLink>
+          <NavLink to="/donations" style={{ color: 'var(--ok)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>DONATE ♥</NavLink>
           <span>OPEN SOURCE / / DONATIONS-POWERED / / NO ADS</span>
           <span>{user ? `USR.${user.email?.split('@')[0]?.toUpperCase()}` : 'GUEST'}</span>
         </div>

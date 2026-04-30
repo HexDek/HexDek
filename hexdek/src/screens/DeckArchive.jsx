@@ -153,7 +153,7 @@ export default function DeckArchive() {
                 <div className="hr" style={{ margin: '10px 0' }} />
                 <KV rows={[
                   ['ELO', <span className="punch">{Math.round(deckElo.rating)}</span>],
-                  ['RECORD', `${deckElo.wins}W — ${deckElo.losses}L`],
+                  ['RECORD', <span><span style={{ color: 'var(--ok)' }}>{deckElo.wins}W</span> — <span style={{ color: 'var(--danger)' }}>{deckElo.losses}L</span></span>],
                   ['WIN RATE', `${deckElo.win_rate}%`],
                   ['GAMES', `${deckElo.games}`],
                   ['DELTA', <span style={{ color: deckElo.delta >= 0 ? 'var(--ok)' : 'var(--danger)' }}>{deckElo.delta >= 0 ? '+' : ''}{Math.round(deckElo.delta)}</span>],
@@ -374,7 +374,7 @@ export default function DeckArchive() {
                     </div>
                     <div>
                       <div className="t-xs muted">RECORD</div>
-                      <div className="t-2xl" style={{ fontWeight: 700 }}>{gauntlet.wins}W — {gauntlet.losses}L</div>
+                      <div className="t-2xl" style={{ fontWeight: 700 }}><span style={{ color: 'var(--ok)' }}>{gauntlet.wins}W</span> — <span style={{ color: 'var(--danger)' }}>{gauntlet.losses}L</span></div>
                     </div>
                     <div>
                       <div className="t-xs muted">ELO DELTA</div>

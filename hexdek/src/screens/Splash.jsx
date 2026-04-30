@@ -49,8 +49,8 @@ export default function Splash() {
 
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
             <Btn solid arrow="▶" onClick={() => navigate(user ? '/dash' : '/login')}>ENTER THE FORGE</Btn>
-            <Btn ghost arrow="↗">DOCS / / HX-001.PDF</Btn>
-            <Btn ghost arrow="↗">GITHUB / / SRC</Btn>
+            <a href="https://github.com/hexdek-labs/HexDek/tree/main/docs" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}><Btn ghost arrow="↗">DOCS / / HX-001.PDF</Btn></a>
+            <a href="https://github.com/hexdek-labs/HexDek" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}><Btn ghost arrow="↗">GITHUB / / SRC</Btn></a>
           </div>
         </div>
 
