@@ -41,6 +41,10 @@ func FirePermanentETBTriggers(gs *GameState, perm *Permanent) {
 		InvokeETBHook(gs, perm)
 	}
 
+	if !faceDown && perm.IsSaga() {
+		initSagaLoreCounters(gs, perm)
+	}
+
 	CheckAscend(gs, perm.Controller)
 
 	if !perm.IsLand() {
@@ -57,4 +61,61 @@ func FirePermanentETBTriggers(gs *GameState, perm *Permanent) {
 	})
 
 	fireObserverETBTriggers(gs, perm)
+}
+
+var romanToInt = map[string]int{
+	"I": 1, "II": 2, "III": 3, "IV": 4, "V": 5,
+	"VI": 6, "VII": 7, "VIII": 8, "IX": 9, "X": 10,
+}
+
+// initSagaLoreCounters scans the saga's AST for chapter abilities and sets
+// saga_final_chapter to the highest chapter number found. Then adds 1 lore
+// counter per CR §714.3a (saga gets first lore counter on ETB).
+func initSagaLoreCounters(gs *GameState, perm *Permanent) {
+	if perm.Card.AST == nil {
+		return
+	}
+	maxChapter := 0
+	for _, ab := range perm.Card.AST.Abilities {
+		st, ok := ab.(*gameast.Static)
+		if !ok || st.Modification == nil {
+			continue
+		}
+		if st.Modification.ModKind != "saga_chapter" && st.Modification.ModKind != "parsed_tail" {
+			continue
+		}
+		if st.Modification.ModKind == "saga_chapter" && len(st.Modification.Args) >= 1 {
+			switch v := st.Modification.Args[0].(type) {
+			case string:
+				if n, ok := romanToInt[v]; ok && n > maxChapter {
+					maxChapter = n
+				}
+			case []interface{}:
+				for _, item := range v {
+					if s, ok := item.(string); ok {
+						if n, ok := romanToInt[s]; ok && n > maxChapter {
+							maxChapter = n
+						}
+					}
+				}
+			}
+		}
+	}
+	if maxChapter == 0 {
+		maxChapter = 3
+	}
+	if perm.Counters == nil {
+		perm.Counters = map[string]int{}
+	}
+	perm.Counters["saga_final_chapter"] = maxChapter
+	perm.AddCounter("lore", 1)
+	gs.LogEvent(Event{
+		Kind:   "saga_etb",
+		Seat:   perm.Controller,
+		Source: perm.Card.DisplayName(),
+		Details: map[string]interface{}{
+			"final_chapter": maxChapter,
+			"lore":          perm.Counters["lore"],
+		},
+	})
 }

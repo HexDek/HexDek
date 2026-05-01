@@ -796,6 +796,11 @@ func (d *decoder) decodeEffect(raw json.RawMessage) gameast.Effect {
 		}
 		_ = jsonString(obj["duration"], &e.Duration)
 		return e
+	case "TurnFaceUp":
+		e := &gameast.TurnFaceUp{}
+		e.Target = d.decodeFilter(obj["target"])
+		_ = jsonBool(obj["megamorph"], &e.Megamorph)
+		return e
 	case "UnknownEffect":
 		e := &gameast.UnknownEffect{}
 		_ = jsonString(obj["raw_text"], &e.RawText)

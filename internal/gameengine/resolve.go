@@ -68,6 +68,8 @@ func ResolveEffect(gs *GameState, src *Permanent, effect gameast.Effect) {
 		resolveGainControl(gs, src, e)
 	case *gameast.Sacrifice:
 		resolveSacrifice(gs, src, e)
+	case *gameast.TurnFaceUp:
+		resolveTurnFaceUp(gs, src, e)
 	case *gameast.Fight:
 		resolveFight(gs, src, e)
 
@@ -1330,6 +1332,36 @@ func resolveSacrifice(gs *GameState, src *Permanent, e *gameast.Sacrifice) {
 		// effects, fires dies/LTB triggers, and handles commander redirect.
 		// Sacrifice bypasses indestructible per CR §701.17b.
 		SacrificePermanent(gs, victim, sourceName(src))
+	}
+}
+
+func resolveTurnFaceUp(gs *GameState, src *Permanent, e *gameast.TurnFaceUp) {
+	targets := PickTarget(gs, src, e.Target)
+	if len(targets) == 0 && src != nil {
+		targets = []Target{{Kind: TargetKindPermanent, Permanent: src}}
+	}
+	for _, t := range targets {
+		p := t.Permanent
+		if p == nil {
+			continue
+		}
+		TurnFaceUp(gs, p, "effect")
+		if e.Megamorph {
+			if p.Counters == nil {
+				p.Counters = map[string]int{}
+			}
+			p.Counters["+1/+1"]++
+			gs.LogEvent(Event{
+				Kind:   "counter_added",
+				Seat:   p.Controller,
+				Source: p.Card.DisplayName(),
+				Amount: 1,
+				Details: map[string]interface{}{
+					"counter_kind": "+1/+1",
+					"reason":       "megamorph",
+				},
+			})
+		}
 	}
 }
 

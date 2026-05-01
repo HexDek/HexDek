@@ -502,6 +502,16 @@ type Prevent struct {
 
 func (Prevent) Kind() string { return "prevent" }
 
+// TurnFaceUp models turning a face-down permanent face up (morph, disguise,
+// manifest). CR §702.37e — special action, doesn't use the stack.
+type TurnFaceUp struct {
+	baseEffect
+	Target    Filter `json:"target"`
+	Megamorph bool   `json:"megamorph,omitempty"`
+}
+
+func (TurnFaceUp) Kind() string { return "turn_face_up" }
+
 // UnknownEffect is the catch-all for effect text the parser could not
 // structure into a typed node. The engine's resolver should log and skip,
 // never panic. RawText preserves the original oracle text fragment so

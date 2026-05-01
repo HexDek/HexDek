@@ -6,10 +6,7 @@ kanban-plugin: board
 
 ## High Priority — Parser (100% Coverage Push)
 
-- [ ] **P1: Reduce UnknownEffect** — remaining ~4,339 cards (13.6%). Long tail: parsed_tail (1,875), custom (1,039), ability_word (820) #parser
-- [ ] **P2: spell_effect kind** (820 cards) — ability word labels whose trigger body failed re-parse #parser
-- [ ] **P6: saga_chapter kind** (70 cards) — saga chapter text parsing + lore counter mechanics #parser #engine
-- [ ] **P12: TurnFaceUp handler** — only missing effect type (1/43). Morph/disguise face-up, needs Phase 8 layer-1b framework #engine
+- [ ] **P1: Reduce UnknownEffect** — remaining 14 cards (0.04%). Long tail: conditional attacks, monstrous triggers, calculated P/T #parser
 
 
 ## High Priority — Engine
@@ -86,6 +83,9 @@ kanban-plugin: board
 
 ## Done
 
+- [x] **P12: TurnFaceUp effect handler** — 44th effect type wired in resolve.go, calls existing dfc.go:TurnFaceUp, megamorph +1/+1 counter support, 3 tests (2026-05-01) #engine
+- [x] **P6: Saga ETB + chapter tagging** — saga_chapter detection moved before extension loop (all chapters tagged correctly), initSagaLoreCounters on ETB sets saga_final_chapter + first lore counter, 2 tests (2026-05-01) #parser #engine
+- [x] **P2: Ability word extension** — already wired via load_extensions() STATIC_PATTERNS → EXT_STATIC_PATTERNS. Stale TODO: 820 cards resolved, coverage at 99.96% (2026-05-01) #parser
 - [x] **SBA 704.5r counter limit enforcement** — parses "can't have more than N counters" from AST raw text, trims excess, 3 tests (2026-05-01) #engine
 - [x] **AI autopilot behavior policy** — plays lands, taps mana, casts highest-CMC affordable spells, alpha-strikes in combat (2026-05-01) #engine #ai
 - [x] **ELO reset #2** — cleared 1196 entries + 367 games + 4585 card stats, grinder resampling with 447 handlers active (2026-05-01) #rating

@@ -1003,3 +1003,109 @@ func BenchmarkResolveSequenceDmgDraw(b *testing.B) {
 		ResolveEffect(gs, src, seq)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// TurnFaceUp effect (P12)
+// ---------------------------------------------------------------------------
+
+func TestTurnFaceUp_FlipsFaceDown(t *testing.T) {
+	gs := newFixtureGame(t)
+	p := addBattlefield(gs, 0, "Willbender", 1, 2, "creature")
+	p.Card.FaceDown = true
+	p.Card.AST = &gameast.CardAST{Name: "Willbender"}
+
+	eff := &gameast.TurnFaceUp{
+		Target: gameast.Filter{Base: "self"},
+	}
+	ResolveEffect(gs, p, eff)
+
+	if p.Card.FaceDown {
+		t.Fatal("expected FaceDown=false after TurnFaceUp")
+	}
+	if countEvents(gs, "turn_face_up") != 1 {
+		t.Fatalf("expected 1 turn_face_up event, got %d", countEvents(gs, "turn_face_up"))
+	}
+}
+
+func TestTurnFaceUp_Megamorph(t *testing.T) {
+	gs := newFixtureGame(t)
+	p := addBattlefield(gs, 0, "Den Protector", 2, 1, "creature")
+	p.Card.FaceDown = true
+	p.Card.AST = &gameast.CardAST{Name: "Den Protector"}
+
+	eff := &gameast.TurnFaceUp{
+		Target:    gameast.Filter{Base: "self"},
+		Megamorph: true,
+	}
+	ResolveEffect(gs, p, eff)
+
+	if p.Card.FaceDown {
+		t.Fatal("expected FaceDown=false after megamorph flip")
+	}
+	if p.Counters["+1/+1"] != 1 {
+		t.Fatalf("expected 1 +1/+1 counter from megamorph, got %d", p.Counters["+1/+1"])
+	}
+}
+
+func TestTurnFaceUp_AlreadyFaceUp(t *testing.T) {
+	gs := newFixtureGame(t)
+	p := addBattlefield(gs, 0, "Ixidron", 0, 0, "creature")
+	p.Card.AST = &gameast.CardAST{Name: "Ixidron"}
+
+	eff := &gameast.TurnFaceUp{Target: gameast.Filter{Base: "self"}}
+	ResolveEffect(gs, p, eff)
+
+	if countEvents(gs, "turn_face_up") != 0 {
+		t.Fatal("no event expected for already-face-up permanent")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Saga ETB initialization (P6)
+// ---------------------------------------------------------------------------
+
+func TestSagaETB_SetsLoreAndFinalChapter(t *testing.T) {
+	gs := newFixtureGame(t)
+	p := addBattlefield(gs, 0, "The Eldest Reborn", 0, 0, "enchantment", "saga")
+	p.Card.AST = &gameast.CardAST{
+		Name: "The Eldest Reborn",
+		Abilities: []gameast.Ability{
+			&gameast.Static{Modification: &gameast.Modification{
+				ModKind: "saga_chapter",
+				Args:    []interface{}{"I", "each opponent sacrifices a creature"},
+			}},
+			&gameast.Static{Modification: &gameast.Modification{
+				ModKind: "saga_chapter",
+				Args:    []interface{}{"II", "each opponent discards a card"},
+			}},
+			&gameast.Static{Modification: &gameast.Modification{
+				ModKind: "saga_chapter",
+				Args:    []interface{}{"III", "reanimate target creature"},
+			}},
+		},
+	}
+
+	FirePermanentETBTriggers(gs, p)
+
+	if p.Counters["saga_final_chapter"] != 3 {
+		t.Fatalf("expected saga_final_chapter=3, got %d", p.Counters["saga_final_chapter"])
+	}
+	if p.Counters["lore"] != 1 {
+		t.Fatalf("expected 1 lore counter on ETB, got %d", p.Counters["lore"])
+	}
+	if countEvents(gs, "saga_etb") != 1 {
+		t.Fatalf("expected 1 saga_etb event, got %d", countEvents(gs, "saga_etb"))
+	}
+}
+
+func TestSagaETB_NonSagaSkips(t *testing.T) {
+	gs := newFixtureGame(t)
+	p := addBattlefield(gs, 0, "Lightning Bolt", 0, 0, "instant")
+	p.Card.AST = &gameast.CardAST{Name: "Lightning Bolt"}
+
+	FirePermanentETBTriggers(gs, p)
+
+	if p.Counters["lore"] != 0 {
+		t.Fatal("non-saga should not get lore counters")
+	}
+}

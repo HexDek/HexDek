@@ -2194,7 +2194,21 @@ def parse_static(text: str) -> Optional[Static]:
     """Static abilities are anything that's not a triggered/activated/keyword.
     For v0 we recognize a few common shapes; the rest stays as raw text."""
     s = text.strip().rstrip(".").lower()
-    # Try extension-supplied static patterns first (specific → general)
+    # Saga chapter detection — must run before extensions to prevent
+    # parsed_tail from stealing chapters II+ (§714 chapter abilities).
+    _m_saga = re.match(
+        r"^((?:i{1,3}v?|iv|v|vi|vii|viii|ix|x)(?:\s*,\s*(?:i{1,3}v?|iv|v|vi|vii|viii|ix|x))*)\s*-\s*(.+)$",
+        s, re.I | re.S)
+    if _m_saga:
+        nums_raw = _m_saga.group(1)
+        body = _m_saga.group(2).strip().rstrip(".")
+        if body:
+            parts = tuple(p.strip().upper() for p in nums_raw.split(","))
+            roman_arg = parts[0] if len(parts) == 1 else parts
+            return Static(
+                modification=Modification(kind="saga_chapter", args=(roman_arg, body)),
+                raw=text)
+    # Try extension-supplied static patterns (specific → general)
     for pat, builder in EXT_STATIC_PATTERNS:
         m = pat.match(s)
         if m:
