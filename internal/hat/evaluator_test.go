@@ -241,6 +241,151 @@ func TestEvaluator_TanhNormalization(t *testing.T) {
 	}
 }
 
+func TestEvaluator_PartnerSynergy(t *testing.T) {
+	gs := newTestGame(t, 2)
+	gs.CommanderFormat = true
+	gs.Seats[0].Life = 40
+	gs.Seats[0].StartingLife = 40
+	gs.Seats[1].Life = 40
+	gs.Seats[1].StartingLife = 40
+
+	// Non-partner deck should score 0.
+	gs.Seats[0].CommanderNames = []string{"Korvold"}
+	ev := NewEvaluator(nil)
+	r := ev.EvaluateDetailed(gs, 0)
+	if r.PartnerSynergy != 0 {
+		t.Errorf("single commander should have 0 partner synergy, got %f", r.PartnerSynergy)
+	}
+
+	// Partner pair with both on field.
+	gs.Seats[0].CommanderNames = []string{"Kraum", "Tymna"}
+	gs.Seats[0].CommanderCastCounts = map[string]int{"Kraum": 0, "Tymna": 0}
+	kraum := newTestCardMinimal("Kraum", []string{"creature"}, 5,
+		&gameast.CardAST{Name: "Kraum", Abilities: []gameast.Ability{
+			&gameast.Triggered{Raw: "whenever an opponent casts a spell, draw a card"},
+		}})
+	kraum.Colors = []string{"U", "R"}
+	tymna := newTestCardMinimal("Tymna", []string{"creature"}, 3,
+		&gameast.CardAST{Name: "Tymna", Abilities: []gameast.Ability{
+			&gameast.Triggered{Raw: "at the beginning of your postcombat, draw cards for each combat damage"},
+		}})
+	tymna.Colors = []string{"W", "B"}
+	newTestPermanent(gs.Seats[0], kraum, 4, 4)
+	newTestPermanent(gs.Seats[0], tymna, 2, 2)
+
+	r2 := ev.EvaluateDetailed(gs, 0)
+	if r2.PartnerSynergy <= 0 {
+		t.Errorf("partner pair both on field should be positive, got %f", r2.PartnerSynergy)
+	}
+}
+
+func TestEvaluator_ActivationTempo(t *testing.T) {
+	gs := newTestGame(t, 2)
+	gs.Seats[0].Life = 40
+	gs.Seats[0].StartingLife = 40
+	gs.Seats[1].Life = 40
+	gs.Seats[1].StartingLife = 40
+
+	// No activations = 0.
+	ev := NewEvaluator(nil)
+	r0 := ev.EvaluateDetailed(gs, 0)
+	if r0.ActivationTempo != 0 {
+		t.Errorf("empty board should have 0 activation tempo, got %f", r0.ActivationTempo)
+	}
+
+	// Add a permanent with an activated ability (not mana-only).
+	c := newTestCardMinimal("Staff of Domination", []string{"artifact"}, 3,
+		&gameast.CardAST{Name: "Staff of Domination", Abilities: []gameast.Ability{
+			&gameast.Activated{Raw: "{1}: untap staff of domination"},
+			&gameast.Activated{Raw: "{2}, {t}: draw a card"},
+		}})
+	newTestPermanent(gs.Seats[0], c, 0, 0)
+
+	r1 := ev.EvaluateDetailed(gs, 0)
+	if r1.ActivationTempo <= 0 {
+		t.Errorf("Staff of Domination should give positive activation tempo, got %f", r1.ActivationTempo)
+	}
+}
+
+func TestEvaluator_ToolboxBreadth(t *testing.T) {
+	gs := newTestGame(t, 2)
+	gs.Seats[0].Life = 40
+	gs.Seats[0].StartingLife = 40
+	gs.Seats[1].Life = 40
+	gs.Seats[1].StartingLife = 40
+
+	// Add tutors and modal spells to hand.
+	tutor := newTestCardMinimal("Demonic Tutor", []string{"sorcery"}, 2,
+		&gameast.CardAST{Name: "Demonic Tutor", Abilities: []gameast.Ability{
+			&gameast.Activated{Raw: "search your library for a card and put it into your hand"},
+		}})
+	modal := newTestCardMinimal("Cryptic Command", []string{"instant"}, 4,
+		&gameast.CardAST{Name: "Cryptic Command", Abilities: []gameast.Ability{
+			&gameast.Activated{Raw: "choose two — counter target spell; return target permanent; tap all creatures; draw a card"},
+		}})
+	gs.Seats[0].Hand = append(gs.Seats[0].Hand, tutor, modal)
+
+	ev := NewEvaluator(nil)
+	r := ev.EvaluateDetailed(gs, 0)
+	if r.ToolboxBreadth <= 0 {
+		t.Errorf("tutor + modal spell should give positive toolbox breadth, got %f", r.ToolboxBreadth)
+	}
+}
+
+func TestEvaluator_ThreatTrajectory(t *testing.T) {
+	gs := newTestGame(t, 2)
+	gs.Seats[0].Life = 40
+	gs.Seats[0].StartingLife = 40
+	gs.Seats[1].Life = 40
+	gs.Seats[1].StartingLife = 40
+
+	// Opponent with big board + full hand + lots of mana = high trajectory threat.
+	for i := 0; i < 3; i++ {
+		c := newTestCardMinimal("Dragon", []string{"creature"}, 6, nil)
+		newTestPermanent(gs.Seats[1], c, 5, 5)
+	}
+	for i := 0; i < 6; i++ {
+		c := newTestCardMinimal("Forest", []string{"land"}, 0, nil)
+		newTestPermanent(gs.Seats[1], c, 0, 0)
+	}
+	for i := 0; i < 5; i++ {
+		gs.Seats[1].Hand = append(gs.Seats[1].Hand,
+			newTestCardMinimal("Spell", []string{"creature"}, 3, nil))
+	}
+
+	ev := NewEvaluator(nil)
+	r := ev.EvaluateDetailed(gs, 0)
+	if r.ThreatTrajectory >= 0 {
+		t.Errorf("heavy opponent board+hand should give negative threat trajectory, got %f", r.ThreatTrajectory)
+	}
+}
+
+func TestEvaluator_DynamicRescaling(t *testing.T) {
+	gs := newTestGame(t, 2)
+	gs.Seats[0].Life = 40
+	gs.Seats[0].StartingLife = 40
+	gs.Seats[1].Life = 40
+	gs.Seats[1].StartingLife = 40
+
+	ev := NewEvaluator(nil)
+
+	// Early game: mana advantage weight should be boosted.
+	gs.Turn = 2
+	wEarly := ev.rescaleWeights(gs, 0)
+
+	gs.Turn = 20
+	wLate := ev.rescaleWeights(gs, 0)
+
+	if wEarly.ManaAdvantage <= wLate.ManaAdvantage {
+		t.Errorf("early game mana weight (%.3f) should exceed late game (%.3f)",
+			wEarly.ManaAdvantage, wLate.ManaAdvantage)
+	}
+	if wLate.ComboProximity <= wEarly.ComboProximity {
+		t.Errorf("late game combo weight (%.3f) should exceed early game (%.3f)",
+			wLate.ComboProximity, wEarly.ComboProximity)
+	}
+}
+
 func TestDefaultWeightsForArchetype_UnknownFallsToMidrange(t *testing.T) {
 	mid := DefaultWeightsForArchetype(ArchetypeMidrange)
 	unk := DefaultWeightsForArchetype("some_unknown_archetype")

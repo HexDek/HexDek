@@ -108,6 +108,10 @@ type YggdrasilHat struct {
 	// Diagnostic: track the lowest relative position ever seen.
 	MinRelPos float64
 
+	// Cached exploration factor for UCB1 — recomputed per turn.
+	explorationC     float64
+	explorationCTurn int
+
 	// Per-turn evaluation budget. TurnBudget > 0 enables the system:
 	// each evaluator-path decision costs 1 point, each rollout costs
 	// rolloutEvalCost points. When exhausted, remaining decisions in
@@ -1082,8 +1086,61 @@ func (h *YggdrasilHat) ucb1(key string, baseValue float64) float64 {
 		return baseValue + 2.0
 	}
 	avg := stat.value / float64(stat.visits)
-	exploration := math.Sqrt(2.0) * math.Sqrt(math.Log(float64(h.totalVisits+1))/float64(stat.visits))
+	c := h.explorationC
+	if c <= 0 {
+		c = math.Sqrt(2.0)
+	}
+	exploration := c * math.Sqrt(math.Log(float64(h.totalVisits+1))/float64(stat.visits))
 	return avg + exploration
+}
+
+// refreshExplorationFactor recomputes the UCB1 exploration constant C when
+// the turn changes. Archetype, turn count, and game stage all influence the
+// balance between exploration and exploitation.
+func (h *YggdrasilHat) refreshExplorationFactor(gs *gameengine.GameState) {
+	turn := 0
+	if gs != nil {
+		turn = gs.Turn
+	}
+	if turn == h.explorationCTurn && h.explorationC > 0 {
+		return
+	}
+	h.explorationCTurn = turn
+
+	base := math.Sqrt(2.0)
+	if h.Strategy != nil {
+		switch h.Strategy.Archetype {
+		case ArchetypeAggro, ArchetypeTribal:
+			base = 1.0
+		case ArchetypeCombo:
+			base = 1.8
+		case ArchetypeControl:
+			base = 1.6
+		case ArchetypeStax:
+			base = 1.2
+		case ArchetypeRamp:
+			base = 1.3
+		case ArchetypeMidrange:
+			base = 1.4
+		case ArchetypeAristocrats:
+			base = 1.3
+		case ArchetypeReanimator:
+			base = 1.5
+		case ArchetypeSpellslinger:
+			base = 1.5
+		}
+	}
+
+	if turn <= 5 {
+		base += 0.3
+	} else if turn >= 15 {
+		base -= math.Min(0.3, float64(turn-14)*0.02)
+	}
+
+	if base < 0.5 {
+		base = 0.5
+	}
+	h.explorationC = base
 }
 
 func (h *YggdrasilHat) recordAction(key string, value float64) {
@@ -1488,6 +1545,8 @@ func (h *YggdrasilHat) ChooseLandToPlay(gs *gameengine.GameState, seatIdx int, l
 // -- Interface: ChooseCastFromHand --
 
 func (h *YggdrasilHat) ChooseCastFromHand(gs *gameengine.GameState, seatIdx int, castable []*gameengine.Card) *gameengine.Card {
+	h.refreshExplorationFactor(gs)
+
 	pool := make([]*gameengine.Card, 0, len(castable))
 	for _, c := range castable {
 		if c == nil || gameengine.CardHasCounterSpell(c) {
@@ -1814,6 +1873,8 @@ func (h *YggdrasilHat) simulateRolloutForCard(gs *gameengine.GameState, seatIdx 
 // -- Interface: ChooseActivation --
 
 func (h *YggdrasilHat) ChooseActivation(gs *gameengine.GameState, seatIdx int, options []gameengine.Activation) *gameengine.Activation {
+	h.refreshExplorationFactor(gs)
+
 	if len(options) == 0 {
 		return nil
 	}
@@ -2013,6 +2074,8 @@ func (h *YggdrasilHat) activationHeuristic(gs *gameengine.GameState, seatIdx int
 // -- Interface: ChooseAttackers --
 
 func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, legal []*gameengine.Permanent) []*gameengine.Permanent {
+	h.refreshExplorationFactor(gs)
+
 	if len(legal) == 0 {
 		return nil
 	}

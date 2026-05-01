@@ -17,6 +17,10 @@ type EvalWeights struct {
 	ArtifactSynergy    float64 `json:"artifact_synergy"`
 	EnchantmentSynergy      float64 `json:"enchantment_synergy"`
 	OpponentGraveyardThreat float64 `json:"opponent_graveyard_threat"`
+	PartnerSynergy     float64 `json:"partner_synergy"`
+	ActivationTempo    float64 `json:"activation_tempo"`
+	ToolboxBreadth     float64 `json:"toolbox_breadth"`
+	ThreatTrajectory   float64 `json:"threat_trajectory"`
 }
 
 var archetypeWeights = map[string]EvalWeights{
@@ -33,6 +37,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ArtifactSynergy:        0.2,
 		EnchantmentSynergy:     0.2,
 		OpponentGraveyardThreat: 0.3,
+		PartnerSynergy:         0.4,
+		ActivationTempo:        0.2,
+		ToolboxBreadth:         0.2,
+		ThreatTrajectory:       0.3,
 	},
 	ArchetypeCombo: {
 		BoardPresence:          0.4,
@@ -47,6 +55,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ArtifactSynergy:        0.4,
 		EnchantmentSynergy:     0.3,
 		OpponentGraveyardThreat: 0.5,
+		PartnerSynergy:         0.2,
+		ActivationTempo:        0.3,
+		ToolboxBreadth:         0.6,
+		ThreatTrajectory:       0.5,
 	},
 	ArchetypeControl: {
 		BoardPresence:          0.5,
@@ -61,6 +73,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ArtifactSynergy:        0.3,
 		EnchantmentSynergy:     0.3,
 		OpponentGraveyardThreat: 1.0,
+		PartnerSynergy:         0.4,
+		ActivationTempo:        0.7,
+		ToolboxBreadth:         0.7,
+		ThreatTrajectory:       0.8,
 	},
 	ArchetypeMidrange: {
 		BoardPresence:          1.0,
@@ -75,6 +91,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ArtifactSynergy:        0.3,
 		EnchantmentSynergy:     0.3,
 		OpponentGraveyardThreat: 0.6,
+		PartnerSynergy:         0.5,
+		ActivationTempo:        0.4,
+		ToolboxBreadth:         0.5,
+		ThreatTrajectory:       0.5,
 	},
 	ArchetypeRamp: {
 		BoardPresence:          0.6,
@@ -89,6 +109,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ArtifactSynergy:        0.5,
 		EnchantmentSynergy:     0.2,
 		OpponentGraveyardThreat: 0.4,
+		PartnerSynergy:         0.3,
+		ActivationTempo:        0.4,
+		ToolboxBreadth:         0.3,
+		ThreatTrajectory:       0.4,
 	},
 	ArchetypeStax: {
 		BoardPresence:          0.7,
@@ -103,6 +127,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ArtifactSynergy:        0.6,
 		EnchantmentSynergy:     0.5,
 		OpponentGraveyardThreat: 0.8,
+		PartnerSynergy:         0.3,
+		ActivationTempo:        0.5,
+		ToolboxBreadth:         0.4,
+		ThreatTrajectory:       0.7,
 	},
 	ArchetypeReanimator: {
 		BoardPresence:          0.8,
@@ -117,6 +145,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ArtifactSynergy:        0.2,
 		EnchantmentSynergy:     0.2,
 		OpponentGraveyardThreat: 0.8,
+		PartnerSynergy:         0.3,
+		ActivationTempo:        0.3,
+		ToolboxBreadth:         0.4,
+		ThreatTrajectory:       0.5,
 	},
 	ArchetypeSpellslinger: {
 		BoardPresence:          0.4,
@@ -131,6 +163,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ArtifactSynergy:        0.2,
 		EnchantmentSynergy:     0.3,
 		OpponentGraveyardThreat: 0.5,
+		PartnerSynergy:         0.3,
+		ActivationTempo:        0.3,
+		ToolboxBreadth:         0.6,
+		ThreatTrajectory:       0.5,
 	},
 	ArchetypeTribal: {
 		BoardPresence:          1.4,
@@ -145,6 +181,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ArtifactSynergy:        0.2,
 		EnchantmentSynergy:     0.2,
 		OpponentGraveyardThreat: 0.4,
+		PartnerSynergy:         0.4,
+		ActivationTempo:        0.3,
+		ToolboxBreadth:         0.3,
+		ThreatTrajectory:       0.4,
 	},
 	ArchetypeAristocrats: {
 		BoardPresence:          0.6,
@@ -159,6 +199,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ArtifactSynergy:        0.3,
 		EnchantmentSynergy:     0.3,
 		OpponentGraveyardThreat: 0.6,
+		PartnerSynergy:         0.4,
+		ActivationTempo:        0.5,
+		ToolboxBreadth:         0.3,
+		ThreatTrajectory:       0.4,
 	},
 	ArchetypeSelfmill: {
 		BoardPresence:          0.5,
@@ -173,6 +217,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ArtifactSynergy:        0.2,
 		EnchantmentSynergy:     0.2,
 		OpponentGraveyardThreat: 0.5,
+		PartnerSynergy:         0.3,
+		ActivationTempo:        0.3,
+		ToolboxBreadth:         0.3,
+		ThreatTrajectory:       0.4,
 	},
 	ArchetypeEnchantress: {
 		BoardPresence:          0.5,
@@ -187,6 +235,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ArtifactSynergy:        0.2,
 		EnchantmentSynergy:     2.0,
 		OpponentGraveyardThreat: 0.4,
+		PartnerSynergy:         0.3,
+		ActivationTempo:        0.4,
+		ToolboxBreadth:         0.4,
+		ThreatTrajectory:       0.5,
 	},
 	ArchetypeArtifacts: {
 		BoardPresence:          0.7,
@@ -201,6 +253,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ArtifactSynergy:        2.0,
 		EnchantmentSynergy:     0.2,
 		OpponentGraveyardThreat: 0.5,
+		PartnerSynergy:         0.3,
+		ActivationTempo:        0.6,
+		ToolboxBreadth:         0.4,
+		ThreatTrajectory:       0.5,
 	},
 }
 

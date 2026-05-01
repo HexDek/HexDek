@@ -26,12 +26,6 @@ kanban-plugin: board
 
 ## Medium Priority — Engine
 
-- [ ] **PartnerSynergy evaluator dimension** — score partner pair interactions, shared color identity, complementary abilities #engine #evaluator
-- [ ] **ActivationTempo evaluator dimension** — score board state value of activated abilities vs passing #engine #evaluator
-- [ ] **ToolboxBreadth evaluator dimension** — score diversity of available lines (tutors, modal spells, activated toolkits) #engine #evaluator
-- [ ] **Threat trajectory prediction** — hand/mana/spell cadence to project opponent power, not just board state #engine #evaluator
-- [ ] **UCB1 exploration factor per archetype/turn** — tune exploration vs exploitation by deck type and game stage #engine #evaluator
-- [ ] **Dynamic evaluator weight rescaling** — adjust evaluator dimension weights by game state (early/mid/late, ahead/behind) #engine #evaluator
 - [ ] **opponentLikelyHasWrath expansion** — factor hand size + cast cadence + prior wrath history #engine #evaluator
 - [ ] **Partner-aware mulligan adjustment** — mulligan logic for partner decks (keep enablers for both halves) #engine
 - [ ] **Transform recognition in cardHeuristic** — score DFC cards for both faces, not just front #engine
@@ -65,6 +59,12 @@ kanban-plugin: board
 
 ## Done
 
+- [x] **PartnerSynergy evaluator dimension** — partner pair on-field bonus, 4-color coverage scoring, complementary role detection (draw/attack/tutor/removal), tax penalty for repeated deaths. 13 archetype weight profiles. Tests (2026-05-01) #engine #evaluator
+- [x] **ActivationTempo evaluator dimension** — non-mana activated ability scoring, untapped vs tapped weighting, repeatable (no-tap) engines boosted, high-impact activation bonus, opponent-relative comparison. Tests (2026-05-01) #engine #evaluator
+- [x] **ToolboxBreadth evaluator dimension** — tutors in hand, modal spells, MDFC flexibility, non-mana board activations, tutor-target-aware bonus from Freya profile. Tests (2026-05-01) #engine #evaluator
+- [x] **Threat trajectory prediction** — forward-looking opponent power projection: board power + deployment potential (hand × mana) + spell cadence bonus. Clamps to [-2, 0]. Tests (2026-05-01) #engine #evaluator
+- [x] **UCB1 exploration factor per archetype/turn** — `refreshExplorationFactor()` replaces hardcoded √2. Aggro/Tribal=1.0, Combo=1.8, Control=1.6, Stax=1.2. Early game +0.3, late game -0.3 decay. Floor 0.5. Cached per turn (2026-05-01) #engine #evaluator
+- [x] **Dynamic evaluator weight rescaling** — `rescaleWeights()` adjusts all 16 dimension weights by game stage (early boosts mana/card, late boosts combo/threat/board) and position (behind boosts combo/toolbox, ahead boosts card/mana/life). Tests (2026-05-01) #engine #evaluator
 - [x] **Light mode toggle** — `[data-theme="light"]` CSS vars, toggle button on all pages (drilldown, leaderboard, import, game), localStorage persistence (2026-05-01) #ui
 - [x] **Curve analysis UI** — mana curve bar chart + color balance demand/supply visualization in Freya Analysis tab. ManaCurve + ColorBalance added to strategy.json (2026-05-01) #ui #analytics
 - [x] **Deck page auto-refresh on Freya push** — SSE endpoint `/api/decks/{owner}/{id}/events` broadcasts `freya_complete` event when analysis finishes. Drilldown page auto-reloads data via EventSource (2026-05-01) #ui #infra
