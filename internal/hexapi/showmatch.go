@@ -794,11 +794,15 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 			games = e.games
 			sigma = 8.33 / math.Max(1.0, math.Sqrt(float64(games)))
 		}
-		pool[i] = matchmaking.DeckEntry{Index: i, Commander: sm.deckPool[i].CommanderName, Mu: mu, Sigma: sigma, Games: games}
+		bracket := 0
+		if e, ok := sm.elo[dk]; ok {
+			bracket = e.bracket
+		}
+		pool[i] = matchmaking.DeckEntry{Index: i, Commander: sm.deckPool[i].CommanderName, Mu: mu, Sigma: sigma, Games: games, Bracket: bracket}
 	}
 	sm.mu.RUnlock()
 
-	indices := matchmaking.AssemblePod(rng, pool, showmatchSeats)
+	indices := matchmaking.AssembleBracketPod(rng, pool, showmatchSeats)
 	pickedDecks := make([]*deckparser.TournamentDeck, showmatchSeats)
 	commanders := make([]string, showmatchSeats)
 	deckKeys := make([]string, showmatchSeats)

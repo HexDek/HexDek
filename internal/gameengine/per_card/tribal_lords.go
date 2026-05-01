@@ -249,6 +249,7 @@ func coatOfArmsETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 
 func registerDoorOfDestinies(r *Registry) {
 	r.OnETB("Door of Destinies", doorOfDestiniesETB)
+	r.OnTrigger("Door of Destinies", "spell_cast", doorOfDestiniesSpellCast)
 }
 
 func doorOfDestiniesETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
@@ -261,7 +262,21 @@ func doorOfDestiniesETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	emit(gs, "door_of_destinies_etb", "Door of Destinies", map[string]interface{}{
 		"seat": perm.Controller,
 	})
-	emitPartial(gs, "door_of_destinies", "Door of Destinies", "charge counter increment requires cast observer hook")
+}
+
+func doorOfDestiniesSpellCast(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	casterSeat, _ := ctx["caster_seat"].(int)
+	if casterSeat != perm.Controller {
+		return
+	}
+	if perm.Counters == nil {
+		perm.Counters = map[string]int{}
+	}
+	perm.Counters["charge"]++
+	emit(gs, "door_of_destinies_charge", "Door of Destinies", map[string]interface{}{
+		"seat":   perm.Controller,
+		"charge": perm.Counters["charge"],
+	})
 }
 
 // ---------------------------------------------------------------------------

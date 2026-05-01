@@ -601,6 +601,14 @@ func AddManaFromPermanent(gs *GameState, seat *Seat, sourcePerm *Permanent,
 		"seat":        seat.Idx,
 		"from_kinnan": false,
 	})
+	if sourcePerm != nil && sourcePerm.IsLand() {
+		FireCardTrigger(gs, "land_tapped_for_mana", map[string]interface{}{
+			"source_perm": sourcePerm,
+			"color":       color,
+			"amount":      amount,
+			"seat":        seat.Idx,
+		})
+	}
 }
 
 // SpendMana deducts mana from the typed pool and syncs the legacy ManaPool.

@@ -54,6 +54,16 @@ func MoveCard(gs *GameState, card *Card, ownerSeat int, fromZone, toZone, reason
 	}
 	FireZoneChangeTriggers(gs, nil, card, fromZone, dest)
 
+	if fromZone == "graveyard" {
+		FireCardTrigger(gs, "graveyard_leave", map[string]interface{}{
+			"card":      card,
+			"seat":      ownerSeat,
+			"from_zone": fromZone,
+			"to_zone":   dest,
+			"reason":    reason,
+		})
+	}
+
 	// CR Ixalan descend: a permanent card entering any graveyard — the
 	// owner's or not — counts as a "descend" event for that permanent's
 	// OWNER. We only track the owner seat's flag here; observer triggers

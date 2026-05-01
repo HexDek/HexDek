@@ -501,6 +501,7 @@ func cryptbreakerETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 
 func registerTormod(r *Registry) {
 	r.OnETB("Tormod, the Desecrator", tormodETB)
+	r.OnTrigger("Tormod, the Desecrator", "graveyard_leave", tormodGraveyardLeave)
 }
 
 func tormodETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
@@ -511,7 +512,17 @@ func tormodETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		"seat":   perm.Controller,
 		"effect": "graveyard_leave_creates_zombie",
 	})
-	emitPartial(gs, "tormod", "Tormod, the Desecrator", "graveyard-leave observer not yet wired")
+}
+
+func tormodGraveyardLeave(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	seat, _ := ctx["seat"].(int)
+	if seat != perm.Controller {
+		return
+	}
+	gameengine.CreateCreatureToken(gs, perm.Controller, "Zombie", []string{"creature"}, 2, 2)
+	emit(gs, "tormod_trigger", "Tormod, the Desecrator", map[string]interface{}{
+		"seat": perm.Controller,
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -696,6 +707,7 @@ func chiefOfTheFoundryETB(gs *gameengine.GameState, perm *gameengine.Permanent) 
 
 func registerCagedSun(r *Registry) {
 	r.OnETB("Caged Sun", cagedSunETB)
+	r.OnTrigger("Caged Sun", "land_tapped_for_mana", cagedSunLandTap)
 }
 
 func cagedSunETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
@@ -726,7 +738,28 @@ func cagedSunETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		"seat":   perm.Controller,
 		"buffed": buffed,
 	})
-	emitPartial(gs, "caged_sun", "Caged Sun", "mana doubling requires land-tap hook")
+}
+
+func cagedSunLandTap(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	seat, _ := ctx["seat"].(int)
+	if seat != perm.Controller {
+		return
+	}
+	color, _ := ctx["color"].(string)
+	amount, _ := ctx["amount"].(int)
+	if amount <= 0 {
+		amount = 1
+	}
+	s := gs.Seats[perm.Controller]
+	if s == nil {
+		return
+	}
+	gameengine.AddMana(gs, s, color, amount, "Caged Sun")
+	emit(gs, "caged_sun_mana", "Caged Sun", map[string]interface{}{
+		"seat":   perm.Controller,
+		"color":  color,
+		"amount": amount,
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -735,6 +768,7 @@ func cagedSunETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 
 func registerGauntletOfPower(r *Registry) {
 	r.OnETB("Gauntlet of Power", gauntletOfPowerETB)
+	r.OnTrigger("Gauntlet of Power", "land_tapped_for_mana", gauntletLandTap)
 }
 
 func gauntletOfPowerETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
@@ -766,7 +800,28 @@ func gauntletOfPowerETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		"seat":   perm.Controller,
 		"buffed": buffed,
 	})
-	emitPartial(gs, "gauntlet_of_power", "Gauntlet of Power", "mana doubling requires land-tap hook")
+}
+
+func gauntletLandTap(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	seat, _ := ctx["seat"].(int)
+	color, _ := ctx["color"].(string)
+	amount, _ := ctx["amount"].(int)
+	if amount <= 0 {
+		amount = 1
+	}
+	if seat < 0 || seat >= len(gs.Seats) {
+		return
+	}
+	s := gs.Seats[seat]
+	if s == nil {
+		return
+	}
+	gameengine.AddMana(gs, s, color, amount, "Gauntlet of Power")
+	emit(gs, "gauntlet_mana", "Gauntlet of Power", map[string]interface{}{
+		"seat":   seat,
+		"color":  color,
+		"amount": amount,
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -776,6 +831,7 @@ func gauntletOfPowerETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 
 func registerImotekh(r *Registry) {
 	r.OnETB("Imotekh the Stormlord", imotekhETB)
+	r.OnTrigger("Imotekh the Stormlord", "graveyard_leave", imotekhGraveyardLeave)
 }
 
 func imotekhETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
@@ -786,7 +842,33 @@ func imotekhETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		"seat":   perm.Controller,
 		"effect": "artifact_graveyard_leave_creates_necrons",
 	})
-	emitPartial(gs, "imotekh", "Imotekh the Stormlord", "graveyard-leave observer not yet wired")
+}
+
+func imotekhGraveyardLeave(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	seat, _ := ctx["seat"].(int)
+	if seat != perm.Controller {
+		return
+	}
+	card, _ := ctx["card"].(*gameengine.Card)
+	if card == nil {
+		return
+	}
+	isArtifact := false
+	for _, t := range card.Types {
+		if t == "artifact" {
+			isArtifact = true
+			break
+		}
+	}
+	if !isArtifact {
+		return
+	}
+	for i := 0; i < 2; i++ {
+		gameengine.CreateCreatureToken(gs, perm.Controller, "Necron Warrior", []string{"artifact", "creature"}, 2, 2)
+	}
+	emit(gs, "imotekh_trigger", "Imotekh the Stormlord", map[string]interface{}{
+		"seat": perm.Controller,
+	})
 }
 
 // ---------------------------------------------------------------------------

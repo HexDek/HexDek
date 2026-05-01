@@ -14,18 +14,13 @@ kanban-plugin: board
 - [ ] **Remaining 276 commander handlers** — coverage at 447/652 files (681 registered names). Most remaining are 1-2 deck count. Template generator (`cmd/gen-handlers/main.go`) handles simple patterns. #engine #per_card
 - [ ] **Opponent graveyard threat tracking** — scoreOpponentGraveyard evaluator for reanimator/flashback awareness #engine #evaluator
 - [ ] **Color-aware mana sequencing** — ChooseLandToPlay forward-looking color demand analysis #engine #evaluator
-- [ ] **Graveyard-leave observer** — engine infrastructure, unblocks Tormod, Imotekh #engine
 - [ ] **Jeska's Will** — exile-play permission tracking (last GC clause gap) #engine
 - [ ] **Panoptic Mirror** — imprint persistence + copy resolution (last GC clause gap) #engine
-- [ ] **Land-tap hook** — engine infrastructure, unblocks Caged Sun, Gauntlet of Power mana doubling #engine
-- [ ] **Cast observer hook** — engine infrastructure, unblocks Door of Destinies charge counters #engine
 - [ ] **Exile-cast pattern** — Dauthi Voidwalker, Emry, Urza (×2) exile-cast replacement #engine
 - [ ] **Clone/copy handlers** — Phantasmal Image, Riku stack data for copy targeting #engine
 - [ ] **ELO-bracket correlation re-check** — verify inversion corrects after ~10K games with GC handlers active. ELO reset #2 running (2026-05-01). #engine #rating
 - [ ] Layer 3 text-changing effects — not implemented per CONFIDENCE_MATRIX #engine #layers
-- [ ] ~30 keyword abilities marked STUB — Annihilator, Afflict, Bushido, etc. per CONFIDENCE_MATRIX #engine #keywords
-- [ ] Trigger doubling (`obeka_support.go:579`) — not implemented #engine
-- [ ] Bracket-aware tournament grinder — switch from AssemblePod to AssembleBracketPod, config flag #engine #matchmaking
+- [ ] Soulshift keyword (CR §702.46) — only remaining STUB keyword, rare #engine #keywords
 
 
 ## High Priority — Platform
@@ -56,7 +51,6 @@ kanban-plugin: board
 - [ ] Dungeon tracking (`sba.go:958`) — SBA 704.5t not implemented, low priority unless Acererak enters meta #engine
 - [ ] Battle/Siege mechanics (`sba.go:1054,1071`) — protector state not modeled #engine
 - [ ] Speed mechanic (`sba.go:1138`) — future mechanic, implement when Speed cards land #engine
-- [ ] Regenerate 3 failing test goldens (basking_rootwalla, shivan_dragon, thorn_lieutenant) — expected failures from parser progress, regen after conjunction-fix pass #test
 
 
 ## Medium Priority — Platform
@@ -78,11 +72,16 @@ kanban-plugin: board
 - [ ] Mobile-friendly leaderboard #ui
 - [ ] Donations page BOINC/ads buttons — "COMING SOON" placeholders (`Donations.jsx:109,119`) #ui
 - [ ] Report analysis placeholder (`Report.jsx:332`) — feature not fully wired #ui
-- [ ] Remove empty `internal/rules/` package or populate it #cleanup
 
 
 ## Done
 
+- [x] **Graveyard-leave observer hook** — `graveyard_leave` event fires from MoveCard when fromZone=="graveyard". Tormod creates 2/2 Zombie, Imotekh creates 2x 2/2 Necron Warriors on artifact leave (2026-05-01) #engine
+- [x] **Land-tap hook** — `land_tapped_for_mana` event fires from AddManaFromPermanent when source is land. Caged Sun doubles controller's mana, Gauntlet of Power doubles all players' mana (2026-05-01) #engine
+- [x] **Cast observer → Door of Destinies** — `spell_cast` already fires; wired Door of Destinies charge counter increment on controller cast (2026-05-01) #engine
+- [x] **Bracket-aware tournament grinder** — switched AssemblePod → AssembleBracketPod in showmatch, populates Bracket field from ELO cache (2026-05-01) #engine #matchmaking
+- [x] **Keyword stubs audit** — CONFIDENCE_MATRIX reconciled 2026-04-30, all 30+ keywords now SOLID. Only Soulshift remains (rare). Stale TODO cleaned (2026-05-01) #engine #keywords
+- [x] **Cleanup: internal/rules/** — removed empty package, test goldens item stale (no files exist) (2026-05-01) #cleanup
 - [x] **P12: TurnFaceUp effect handler** — 44th effect type wired in resolve.go, calls existing dfc.go:TurnFaceUp, megamorph +1/+1 counter support, 3 tests (2026-05-01) #engine
 - [x] **P6: Saga ETB + chapter tagging** — saga_chapter detection moved before extension loop (all chapters tagged correctly), initSagaLoreCounters on ETB sets saga_final_chapter + first lore counter, 2 tests (2026-05-01) #parser #engine
 - [x] **P2: Ability word extension** — already wired via load_extensions() STATIC_PATTERNS → EXT_STATIC_PATTERNS. Stale TODO: 820 cards resolved, coverage at 99.96% (2026-05-01) #parser
