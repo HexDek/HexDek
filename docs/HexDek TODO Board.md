@@ -14,9 +14,17 @@ kanban-plugin: board
 
 ## High Priority — Engine
 
-- [ ] Duplicate prevention rules (`sba.go:894`) — parser doesn't surface "can't have more than N" state, needs phase-7 wiring #engine
-- [ ] AI behavior policy (`internal/ai/autopilot.go`) — only advances phases, no card play or combat decisions. Non-functional stub. #engine #ai
-- [ ] 20 missing Game Changer per-card handlers (Wave 7 in progress) — Humility, Teferi's Protection, Consecrated Sphinx, Narset, Braids, etc. #engine #per_card
+- [ ] **Remaining 276 commander handlers** — coverage at 447/652 files (681 registered names). Most remaining are 1-2 deck count. Template generator (`cmd/gen-handlers/main.go`) handles simple patterns. #engine #per_card
+- [ ] **Opponent graveyard threat tracking** — scoreOpponentGraveyard evaluator for reanimator/flashback awareness #engine #evaluator
+- [ ] **Color-aware mana sequencing** — ChooseLandToPlay forward-looking color demand analysis #engine #evaluator
+- [ ] **Graveyard-leave observer** — engine infrastructure, unblocks Tormod, Imotekh #engine
+- [ ] **Jeska's Will** — exile-play permission tracking (last GC clause gap) #engine
+- [ ] **Panoptic Mirror** — imprint persistence + copy resolution (last GC clause gap) #engine
+- [ ] **Land-tap hook** — engine infrastructure, unblocks Caged Sun, Gauntlet of Power mana doubling #engine
+- [ ] **Cast observer hook** — engine infrastructure, unblocks Door of Destinies charge counters #engine
+- [ ] **Exile-cast pattern** — Dauthi Voidwalker, Emry, Urza (×2) exile-cast replacement #engine
+- [ ] **Clone/copy handlers** — Phantasmal Image, Riku stack data for copy targeting #engine
+- [ ] **ELO-bracket correlation re-check** — verify inversion corrects after ~10K games with GC handlers active. ELO reset #2 running (2026-05-01). #engine #rating
 - [ ] Layer 3 text-changing effects — not implemented per CONFIDENCE_MATRIX #engine #layers
 - [ ] ~30 keyword abilities marked STUB — Annihilator, Afflict, Bushido, etc. per CONFIDENCE_MATRIX #engine #keywords
 - [ ] Trigger doubling (`obeka_support.go:579`) — not implemented #engine
@@ -25,6 +33,9 @@ kanban-plugin: board
 
 ## High Priority — Platform
 
+- [ ] **Curve analysis UI** — expose Freya Phase 1 stats in user-facing deck drilldown (7174n1c request) #ui #analytics
+- [ ] **Deck page auto-refresh on Freya push** — WebSocket push from Freya classifier to deck page for live updates (7174n1c request) #ui #infra
+- [ ] **Light mode toggle** — CSS vars exist for `[data-theme="light"]`, no toggle wired #ui
 - [ ] Negative ELO shame badges — "MID" stamp at 0, escalating tiers for deep negative. Leaderboard bottom-10 wall of shame section #ui #fun
 - [ ] Operator platform page/tab (operator profile, deck management, analytics dashboard) #ui #platform
 - [ ] Friends system + player profiles — add friends, view each other's profiles/decks #ui #social
@@ -34,6 +45,17 @@ kanban-plugin: board
 
 ## Medium Priority — Engine
 
+- [ ] **PartnerSynergy evaluator dimension** — score partner pair interactions, shared color identity, complementary abilities #engine #evaluator
+- [ ] **ActivationTempo evaluator dimension** — score board state value of activated abilities vs passing #engine #evaluator
+- [ ] **ToolboxBreadth evaluator dimension** — score diversity of available lines (tutors, modal spells, activated toolkits) #engine #evaluator
+- [ ] **Threat trajectory prediction** — hand/mana/spell cadence to project opponent power, not just board state #engine #evaluator
+- [ ] **UCB1 exploration factor per archetype/turn** — tune exploration vs exploitation by deck type and game stage #engine #evaluator
+- [ ] **Dynamic evaluator weight rescaling** — adjust evaluator dimension weights by game state (early/mid/late, ahead/behind) #engine #evaluator
+- [ ] **opponentLikelyHasWrath expansion** — factor hand size + cast cadence + prior wrath history #engine #evaluator
+- [ ] **Partner-aware mulligan adjustment** — mulligan logic for partner decks (keep enablers for both halves) #engine
+- [ ] **Transform recognition in cardHeuristic** — score DFC cards for both faces, not just front #engine
+- [ ] **Tournament runner post-game stat emission** — 7174n1c request, per-game stat events for analysis #engine #analytics
+- [ ] **Temporal Pincer** — anon UUID cookie → session tracking → on login stitch all anon device UUIDs to authenticated profile. No PII, all UUIDs. Powers P&R via GraphQL. #infra #platform
 - [ ] Dungeon tracking (`sba.go:958`) — SBA 704.5t not implemented, low priority unless Acererak enters meta #engine
 - [ ] Battle/Siege mechanics (`sba.go:1054,1071`) — protector state not modeled #engine
 - [ ] Speed mechanic (`sba.go:1138`) — future mechanic, implement when Speed cards land #engine
@@ -51,6 +73,9 @@ kanban-plugin: board
 
 ## Low Priority
 
+- [ ] **Remaining batch17 infra** — Jhoira (suspend/time-counters), Lich's Mastery (life observers), Ulrich (transform events) #engine
+- [ ] **Tribal observer hooks** — Wayward Servant ETB observer, Coat of Arms layer 7 #engine
+- [ ] **i18n** — internationalize hexdek.dev for global audience #platform
 - [ ] Concession diagnostics — track concession rate per commander, board state at scoop, turn of scoop. Muninn + Heimdall. #rating #analytics
 - [ ] Multi-format support beyond Commander (Modern, Legacy deck ratings) #engine
 - [ ] Mobile-friendly leaderboard #ui
@@ -61,6 +86,22 @@ kanban-plugin: board
 
 ## Done
 
+- [x] **SBA 704.5r counter limit enforcement** — parses "can't have more than N counters" from AST raw text, trims excess, 3 tests (2026-05-01) #engine
+- [x] **AI autopilot behavior policy** — plays lands, taps mana, casts highest-CMC affordable spells, alpha-strikes in combat (2026-05-01) #engine #ai
+- [x] **ELO reset #2** — cleared 1196 entries + 367 games + 4585 card stats, grinder resampling with 447 handlers active (2026-05-01) #rating
+- [x] **Handler coverage push** — 66→447 handler files across waves 1-14, 6 dev hexes. Template generator `cmd/gen-handlers/main.go` (201 auto-gen + 228 manual) (2026-05-01) #engine #per_card
+- [x] **53/53 GC per-card handlers** — all Game Changers have registered handlers (2026-04-30) #engine #per_card
+- [x] **Spectator UI scroll fix** — overflow-anchor + CSS containment + rAF log scroll (2026-05-01) #ui
+- [x] **Turn bar redesign** — left-anchor commander, right-anchor perms, kill blinker, ellipsis overflow (2026-05-01) #ui
+- [x] **Stax lock wiring** — Null Rod/Ouphe/Totem via StaxCheck, Grand Abolisher cast block (2026-04-30) #engine
+- [x] **CreateToken hook** — token_created trigger fires, Chatterfang + Anointed Procession + Pitiless Plunderer (2026-04-30) #engine
+- [x] **Dual-track ELO** — standard + HexELO (bracket-weighted) computed every game (2026-04-30) #rating
+- [x] **HexELO drift detection** — /api/live/elo/drift endpoint, outlier tagging (2026-04-30) #rating
+- [x] **Loss reason display** — spectator UI shows GG reason (cmdr dmg, life, poison, etc) (2026-05-01) #ui
+- [x] **Partner commander casting priority** — +0.20 base, +0.45 when partner on board (2026-05-01) #engine
+- [x] **Sacrifice-as-value overhaul** — drain/draw/ramp payoffs, 1.5x fodder multiplier (2026-05-01) #engine
+- [x] **Sandbagging exemption** — aristocrats/combo/enchantress/artifacts at 30% penalty (2026-05-01) #engine
+- [x] **Reanimate activation awareness** — activationHeuristic graveyard-to-battlefield scoring (2026-05-01) #engine
 - [x] Fix Tergrid recursive trigger crash (depth guard + total trigger cap) #engine
 - [x] Fix Obeka wrong ability resolution #engine
 - [x] Fix DFC commander name mismatch #engine
