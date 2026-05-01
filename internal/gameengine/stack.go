@@ -264,6 +264,12 @@ func CastSpell(gs *GameState, seatIdx int, card *Card, targets []Target) error {
 		return &CastError{Reason: "sorcery_speed_restriction"}
 	}
 
+	// Grand Abolisher: opponents can't cast spells during the
+	// Abolisher-controller's turn.
+	if seatIdx != gs.Active && grandAbolisherBlocksCast(gs, seatIdx) {
+		return &CastError{Reason: "grand_abolisher"}
+	}
+
 	// Remove from hand. CR §601.2a places the card on the stack (it leaves
 	// its origin zone) as the first step of casting.
 	if !removeFromHand(seat, card) {
@@ -1082,6 +1088,19 @@ func resolvePermanentSpellETB(gs *GameState, item *StackItem) *Permanent {
 		return nil
 	}
 
+	// MDFC back-face entry: swap type identity so the permanent enters as
+	// the back face (e.g., Bridge = enchantment, not Esika = creature).
+	if card.CastingBackFace && card.BackFaceName != "" {
+		card.Name = card.BackFaceName
+		if len(card.BackFaceTypes) > 0 {
+			card.Types = card.BackFaceTypes
+		}
+		if card.BackFaceTypeLine != "" {
+			card.TypeLine = card.BackFaceTypeLine
+		}
+		card.CastingBackFace = false
+	}
+
 	// Summoning sickness: only creatures care (§302.1 / §212.3f). A creature
 	// with haste ignores it.
 	isCreature := cardHasType(card, "creature")
@@ -1286,7 +1305,13 @@ func isPermanentSpell(c *Card) bool {
 	if c == nil {
 		return false
 	}
-	for _, t := range c.Types {
+	// MDFC back face: use back-face types to determine if the spell is
+	// a permanent (e.g., Jadzi back face = sorcery, not permanent).
+	types := c.Types
+	if c.CastingBackFace && len(c.BackFaceTypes) > 0 {
+		types = c.BackFaceTypes
+	}
+	for _, t := range types {
 		switch strings.ToLower(t) {
 		case "creature", "artifact", "enchantment", "planeswalker",
 			"land", "battle":
@@ -1413,6 +1438,17 @@ func OppRestrictsDefenderToSorcerySpeed(gs *GameState, defenderSeat int) bool {
 		}
 	}
 	return false
+}
+
+// grandAbolisherBlocksCast returns true if the active player controls
+// a Grand Abolisher, preventing castingSeat (an opponent) from casting
+// spells during the active player's turn. Checks
+// gs.Flags["grand_abolisher_active_seat_N"] set by the per_card ETB handler.
+func grandAbolisherBlocksCast(gs *GameState, castingSeat int) bool {
+	if gs == nil || gs.Flags == nil {
+		return false
+	}
+	return gs.Flags["grand_abolisher_active_seat_"+itoa(gs.Active)] > 0
 }
 
 // fireCastTriggers emits the family of "spell was cast" per-card

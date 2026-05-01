@@ -46,8 +46,6 @@ func grandAbolisherETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat": seat,
 	})
-	emitPartial(gs, slug, perm.Card.DisplayName(),
-		"cast_restriction_enforcement_is_engine_side_flag_set_but_not_consumed_yet")
 }
 
 // GrandAbolisherActive returns true if seat `duringTurn` has a Grand

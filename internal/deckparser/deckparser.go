@@ -43,6 +43,13 @@ type CardMeta struct {
 	Colors    []string
 	Power     int
 	Toughness int
+
+	// MDFC back-face data (populated by SupplementWithOracleJSON for
+	// layout=="modal_dfc"). Zero-valued for non-MDFC cards.
+	BackFaceName     string
+	BackFaceCMC      int
+	BackFaceTypeLine string
+	BackFaceTypes    []string
 }
 
 // MetaDB maps normalized card name -> CardMeta. Built alongside the
@@ -86,6 +93,8 @@ func (m *MetaDB) All() []*CardMeta {
 // we consume for P/T supplementation.
 type oracleFace struct {
 	Name      string `json:"name"`
+	ManaCost  string `json:"mana_cost"`
+	TypeLine  string `json:"type_line"`
 	Power     string `json:"power"`
 	Toughness string `json:"toughness"`
 	Loyalty   string `json:"loyalty"`
@@ -95,6 +104,7 @@ type oracleFace struct {
 // oracleCard mirrors the top-level Scryfall oracle-cards.json row.
 type oracleCard struct {
 	Name      string       `json:"name"`
+	Layout    string       `json:"layout"`
 	Power     string       `json:"power"`
 	Toughness string       `json:"toughness"`
 	Loyalty   string       `json:"loyalty"`
@@ -168,6 +178,15 @@ func (m *MetaDB) SupplementWithOracleJSON(path string) error {
 		}
 		if cm.Toughness == 0 {
 			cm.Toughness = tg
+		}
+		// MDFC back-face data: extract cost + type from face[1] for
+		// modal DFCs so the casting system can offer both faces.
+		if e.Layout == "modal_dfc" && len(e.CardFaces) >= 2 && cm.BackFaceName == "" {
+			bf := e.CardFaces[1]
+			cm.BackFaceName = bf.Name
+			cm.BackFaceCMC = parseMDFCManaCost(bf.ManaCost)
+			cm.BackFaceTypeLine = bf.TypeLine
+			cm.BackFaceTypes = parseTypes(bf.TypeLine)
 		}
 		merged++
 	}
@@ -376,9 +395,14 @@ func ParseDeckReader(r io.Reader, corpus *astload.Corpus, meta *MetaDB) (*Tourna
 		if raw == "" || strings.HasPrefix(raw, "#") || strings.HasPrefix(raw, "//") {
 			continue
 		}
-		// COMMANDER: <name>
+		// COMMANDER: <name> — Moxfield uses two COMMANDER: lines for partners
 		if m := commanderLineRE.FindStringSubmatch(raw); m != nil {
-			explicitCommander = strings.TrimSpace(m[1])
+			name := strings.TrimSpace(m[1])
+			if explicitCommander == "" {
+				explicitCommander = name
+			} else if explicitPartner == "" {
+				explicitPartner = name
+			}
 			continue
 		}
 		// PARTNER: <name>
@@ -606,6 +630,15 @@ func buildCard(name string, corpus *astload.Corpus, meta *MetaDB) *gameengine.Ca
 		}
 		c.CMC = md.CMC
 		c.TypeLine = strings.ToLower(md.TypeLine)
+		// MDFC back-face data.
+		if md.BackFaceName != "" {
+			c.BackFaceName = md.BackFaceName
+			c.BackFaceCMC = md.BackFaceCMC
+			c.BackFaceTypeLine = strings.ToLower(md.BackFaceTypeLine)
+			if len(md.BackFaceTypes) > 0 {
+				c.BackFaceTypes = append([]string(nil), md.BackFaceTypes...)
+			}
+		}
 	}
 	return c
 }
@@ -628,6 +661,10 @@ func CloneLibrary(src []*gameengine.Card) []*gameengine.Card {
 		if len(c.Types) > 0 {
 			cp.Types = append([]string(nil), c.Types...)
 		}
+		if len(c.BackFaceTypes) > 0 {
+			cp.BackFaceTypes = append([]string(nil), c.BackFaceTypes...)
+		}
+		cp.CastingBackFace = false
 		out[i] = &cp
 	}
 	return out
@@ -653,6 +690,39 @@ var partnerLineRE = regexp.MustCompile(`(?i)^\s*PARTNER\s*:\s*(.+?)\s*$`)
 // We split on the em-dash or hyphen the same way moxfield.splitTypeLine
 // does; both halves are lowercased and whitespace-trimmed. Any side can
 // be empty.
+// parseMDFCManaCost converts a Scryfall mana cost string like "{W}{U}{B}{R}{G}"
+// or "{3}{U}{U}" into a total CMC integer. Each {W}/{U}/{B}/{R}/{G}/{C} = 1,
+// {N} = N, {X} = 0, hybrid {W/U} = 1.
+func parseMDFCManaCost(cost string) int {
+	cmc := 0
+	i := 0
+	for i < len(cost) {
+		if cost[i] == '{' {
+			j := strings.IndexByte(cost[i:], '}')
+			if j < 0 {
+				break
+			}
+			sym := cost[i+1 : i+j]
+			switch {
+			case sym == "X":
+				// X contributes 0 to CMC
+			case len(sym) == 1 && sym[0] >= '0' && sym[0] <= '9':
+				cmc += int(sym[0] - '0')
+			case len(sym) == 2 && sym[0] >= '1' && sym[1] >= '0' && sym[0] <= '9' && sym[1] <= '9':
+				cmc += int(sym[0]-'0')*10 + int(sym[1]-'0')
+			case strings.Contains(sym, "/"):
+				cmc++ // hybrid symbols count as 1 CMC
+			default:
+				cmc++ // single color symbol
+			}
+			i += j + 1
+		} else {
+			i++
+		}
+	}
+	return cmc
+}
+
 func parseTypes(typeLine string) []string {
 	if typeLine == "" {
 		return nil

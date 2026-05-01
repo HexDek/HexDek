@@ -57,8 +57,6 @@ func nullRodETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		"rod_count":  gs.Flags["null_rod_count"],
 		"suppresses": "artifact_activated_non_mana",
 	})
-	emitPartial(gs, slug, perm.Card.DisplayName(),
-		"activation_dispatch_must_consult_NullRodSuppresses_at_activation_time")
 }
 
 // NullRodActive returns true if at least one Null Rod / Collector

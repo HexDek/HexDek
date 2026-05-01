@@ -38,6 +38,4 @@ func collectorOupheETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		"rod_count":  gs.Flags["null_rod_count"],
 		"suppresses": "artifact_activated_non_mana",
 	})
-	emitPartial(gs, slug, perm.Card.DisplayName(),
-		"shares_null_rod_counter_activation_dispatch_must_consult_NullRodSuppresses")
 }

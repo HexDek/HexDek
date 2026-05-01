@@ -65,6 +65,9 @@ func CalculateTotalCost(gs *GameState, card *Card, seatIdx int) int {
 		return 0
 	}
 	baseCost := manaCostOf(card)
+	if card.CastingBackFace && card.BackFaceCMC > 0 {
+		baseCost = card.BackFaceCMC
+	}
 	mods := ScanCostModifiers(gs, card, seatIdx)
 
 	// §903.8 — Commander tax. Each prior cast from the command zone adds {2}

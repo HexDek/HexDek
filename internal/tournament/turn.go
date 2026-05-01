@@ -889,11 +889,43 @@ func buildCastableList(gs *gameengine.GameState, seatIdx int) []*gameengine.Card
 		// Vision) have CMC=0 but should only be cast via their suspend
 		// triggered ability, not from hand.
 		if hasNoManaCost(c) {
+			// MDFC: front face may be unccastable (no mana cost / suspend)
+			// but back face is a normal spell. Try back face.
+			if c.IsMDFC() && c.BackFaceCMC > 0 {
+				c.CastingBackFace = true
+				backCost := gameengine.CalculateTotalCost(gs, c, seatIdx)
+				c.CastingBackFace = false
+				if backCost <= availableMana {
+					c.CastingBackFace = true
+					out = append(out, c)
+					continue
+				}
+			}
 			continue
 		}
+		c.CastingBackFace = false
 		cost := gameengine.CalculateTotalCost(gs, c, seatIdx)
 		if cost > availableMana {
+			// Front face too expensive — try back face if MDFC.
+			if c.IsMDFC() && c.BackFaceCMC > 0 {
+				c.CastingBackFace = true
+				backCost := gameengine.CalculateTotalCost(gs, c, seatIdx)
+				c.CastingBackFace = false
+				if backCost <= availableMana {
+					c.CastingBackFace = true
+					out = append(out, c)
+					continue
+				}
+			}
 			continue
+		}
+		// Front face is affordable. For MDFCs, also check if back face is
+		// affordable AND strategically preferable (non-creature back faces
+		// like enchantments/sorceries are typically the "real" spell).
+		if c.IsMDFC() && c.BackFaceCMC > 0 && c.BackFaceCMC <= availableMana {
+			if mdfcPreferBackFace(c) {
+				c.CastingBackFace = true
+			}
 		}
 		// Target legality gate: counterspells require a spell on the stack
 		// controlled by an opponent. During main phase (stack empty), they
@@ -1141,6 +1173,20 @@ func isLand(c *gameengine.Card) bool {
 // and can be cast normally. We detect "no mana cost" as: CMC=0, no
 // cost:N type tag, not an artifact/creature with 0-cost (those are
 // legitimate free spells).
+// mdfcPreferBackFace returns true when an MDFC's back face is the
+// strategically better cast. Heuristic: if the front face is a creature
+// and the back face is an enchantment, sorcery, or artifact, prefer the
+// back face (Bridge, Journey to the Oracle, etc.). For creature//creature
+// MDFCs, prefer front face (already the default).
+func mdfcPreferBackFace(c *gameengine.Card) bool {
+	if c == nil || !c.IsMDFC() {
+		return false
+	}
+	frontIsCreature := containsType(c.Types, "creature")
+	backIsNonCreature := !containsType(c.BackFaceTypes, "creature")
+	return frontIsCreature && backIsNonCreature
+}
+
 func hasNoManaCost(c *gameengine.Card) bool {
 	if c == nil {
 		return false

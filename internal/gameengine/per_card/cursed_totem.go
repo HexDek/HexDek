@@ -43,8 +43,6 @@ func cursedTotemETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		"count":      gs.Flags["cursed_totem_count"],
 		"suppresses": "creature_activated_including_mana_abilities",
 	})
-	emitPartial(gs, slug, perm.Card.DisplayName(),
-		"activation_dispatch_must_consult_CursedTotemSuppresses_at_activation_time")
 }
 
 // CursedTotemActive returns true if at least one Cursed Totem is on

@@ -635,6 +635,16 @@ type Card struct {
 	// tokens/copies that want a human-readable string.
 	TypeLine string
 
+	// MDFC back-face data (CR §712.11). For modal double-faced cards, the
+	// player chooses which face to cast from hand/command zone. These fields
+	// hold the back face's characteristics so buildCastableList can offer
+	// both faces. Non-MDFC cards leave these zero-valued.
+	BackFaceCMC      int
+	BackFaceName     string
+	BackFaceTypes    []string
+	BackFaceTypeLine string
+	CastingBackFace  bool // transient: set by casting logic when back face chosen
+
 	// IsCopy is true for card objects that were created as copies of other
 	// cards (Fork, Twinflame, storm copies). CR §706.10: a copy of a spell
 	// ceases to exist in any zone other than the stack. CR §704.5e: a copy
@@ -656,6 +666,7 @@ func (c *Card) DeepCopy() *Card {
 	cp := *c
 	cp.Types = append([]string(nil), c.Types...)
 	cp.Colors = append([]string(nil), c.Colors...)
+	cp.BackFaceTypes = append([]string(nil), c.BackFaceTypes...)
 	return &cp
 }
 
@@ -672,6 +683,23 @@ func (c *Card) DisplayName() string {
 		return c.AST.Name
 	}
 	return "<anonymous>"
+}
+
+// IsMDFC returns true if this card has a castable back face (modal DFC).
+func (c *Card) IsMDFC() bool {
+	return c != nil && c.BackFaceName != ""
+}
+
+// EffectiveCMC returns the mana value used for casting: BackFaceCMC
+// when CastingBackFace is set, otherwise the front-face CMC.
+func (c *Card) EffectiveCMC() int {
+	if c != nil && c.CastingBackFace && c.BackFaceCMC > 0 {
+		return c.BackFaceCMC
+	}
+	if c != nil {
+		return c.CMC
+	}
+	return 0
 }
 
 // -----------------------------------------------------------------------------
