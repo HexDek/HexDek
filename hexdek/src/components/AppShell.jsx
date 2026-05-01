@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { Crops } from './chrome'
 import { useAuth } from '../context/AuthContext'
@@ -21,10 +22,22 @@ const AUTH_NAV = [
   { to: '/about', label: 'ABOUT' },
 ]
 
+function useTheme() {
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem('hexdek.theme') || 'dark' } catch { return 'dark' }
+  })
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    try { localStorage.setItem('hexdek.theme', theme) } catch {}
+  }, [theme])
+  return [theme, () => setTheme(t => t === 'dark' ? 'light' : 'dark')]
+}
+
 export default function AppShell() {
   const { user, loading, logout } = useAuth()
   const navigate = useNavigate()
   const nav = user ? AUTH_NAV : PUBLIC_NAV
+  const [theme, toggleTheme] = useTheme()
 
   const handleLogout = async () => {
     await logout()
@@ -53,7 +66,14 @@ export default function AppShell() {
               ))}
             </nav>
           </div>
-          <span>SYS.BUILD 25.04.28 · HEXDEK V0.10D</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            SYS.BUILD 25.04.28 · HEXDEK V0.10D
+            <button onClick={toggleTheme} className="btn--sm btn--ghost" style={{
+              padding: '2px 6px', border: '1px solid var(--rule-2)', background: 'transparent',
+              color: 'var(--ink-2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 9,
+              letterSpacing: '0.08em', textTransform: 'uppercase',
+            }}>{theme === 'dark' ? '☽ DARK' : '☀ LIGHT'}</button>
+          </span>
           {!loading && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {user ? (

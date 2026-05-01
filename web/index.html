@@ -13,6 +13,7 @@
     <div class="connection">
       <span id="status-pill" class="status-pill status-disconnected">disconnected</span>
       <span id="party-code"></span>
+      <label class="theme-switch" title="Toggle light/dark mode"><input type="checkbox" id="theme-toggle"><span class="track"></span><span class="icon icon-moon">&#9790;</span><span class="icon icon-sun">&#9788;</span></label>
     </div>
   </header>
 
@@ -170,6 +171,9 @@
     </aside>
   </section>
 
+  <script>
+  (function(){var tc=document.getElementById('theme-toggle');function at(t){document.documentElement.setAttribute('data-theme',t);tc.checked=t==='light';try{localStorage.setItem('hexdek.theme',t)}catch{}}try{if(localStorage.getItem('hexdek.theme')==='light')at('light')}catch{}tc.addEventListener('change',function(){at(tc.checked?'light':'dark')})})();
+  </script>
   <script src="app.js"></script>
 </body>
 </html>

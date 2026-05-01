@@ -17,9 +17,6 @@ kanban-plugin: board
 
 ## High Priority — Platform
 
-- [ ] **Curve analysis UI** — expose Freya Phase 1 stats in user-facing deck drilldown (7174n1c request) #ui #analytics
-- [ ] **Deck page auto-refresh on Freya push** — WebSocket push from Freya classifier to deck page for live updates (7174n1c request) #ui #infra
-- [ ] **Light mode toggle** — CSS vars exist for `[data-theme="light"]`, no toggle wired #ui
 - [ ] Negative ELO shame badges — "MID" stamp at 0, escalating tiers for deep negative. Leaderboard bottom-10 wall of shame section #ui #fun
 - [ ] Operator platform page/tab (operator profile, deck management, analytics dashboard) #ui #platform
 - [ ] Friends system + player profiles — add friends, view each other's profiles/decks #ui #social
@@ -68,6 +65,9 @@ kanban-plugin: board
 
 ## Done
 
+- [x] **Light mode toggle** — `[data-theme="light"]` CSS vars, toggle button on all pages (drilldown, leaderboard, import, game), localStorage persistence (2026-05-01) #ui
+- [x] **Curve analysis UI** — mana curve bar chart + color balance demand/supply visualization in Freya Analysis tab. ManaCurve + ColorBalance added to strategy.json (2026-05-01) #ui #analytics
+- [x] **Deck page auto-refresh on Freya push** — SSE endpoint `/api/decks/{owner}/{id}/events` broadcasts `freya_complete` event when analysis finishes. Drilldown page auto-reloads data via EventSource (2026-05-01) #ui #infra
 - [x] **Exile-cast pattern** — Dauthi Voidwalker (replacement effect via graveyard_enter trigger), Emry (ZoneCastGrant from graveyard + ExileOnResolve), Urza (free cast from exile + EOT cleanup) (2026-05-01) #engine
 - [x] **Clone/copy handlers** — already implemented: Phantasmal Image (DeepCopy + sac-on-target flag), Riku (creature token copy + spell stack copy). Stale TODO removed (2026-05-01) #engine
 - [x] **ELO-bracket correlation re-check** — 485K games, rho=-0.49 (inverted). B1 avg 1649, B5 avg 1315 in standard ELO. HexELO preserves bracket ordering via seeded starts. Drift outliers: 921/1196 decks (2026-05-01) #engine #rating

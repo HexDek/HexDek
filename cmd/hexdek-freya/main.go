@@ -644,6 +644,8 @@ type strategyJSON struct {
 	PowerPercentile  int      `json:"power_percentile,omitempty"`
 	MetaMatchups       []strategyMatchup       `json:"meta_matchups,omitempty"`
 	EmergentSynergies  []strategyEmergentSynergy `json:"emergent_synergies,omitempty"`
+	ManaCurve          *jsonManaCurve            `json:"mana_curve,omitempty"`
+	ColorBalance       *jsonColors               `json:"color_balance,omitempty"`
 }
 
 type strategyEmergentSynergy struct {
@@ -801,6 +803,31 @@ func saveStrategyJSON(path string, report *FreyaReport) {
 
 	// Emergent synergies from Huginn learned interactions.
 	sj.EmergentSynergies = findEmergentSynergies(report)
+
+	// Mana curve for UI visualization.
+	sj.ManaCurve = &jsonManaCurve{
+		Distribution: report.ManaCurve,
+	}
+	if report.Stats != nil {
+		sj.ManaCurve.AvgCMC = report.Stats.AvgCMC
+		sj.ManaCurve.LandCount = report.Stats.LandCount
+		sj.ManaCurve.NonlandCount = report.Stats.NonlandCount
+	}
+
+	// Color balance (demand vs supply) for UI visualization.
+	if report.Stats != nil {
+		demand := make(map[string]int)
+		for col, brackets := range report.Stats.PipDemandByBracket {
+			demand[col] = brackets[0] + brackets[1] + brackets[2]
+		}
+		sj.ColorBalance = &jsonColors{
+			Demand: demand,
+			Supply: make(map[string]int),
+		}
+		for col, count := range report.Stats.ColorSources {
+			sj.ColorBalance.Supply[col] = count
+		}
+	}
 
 	f, err := os.Create(path)
 	if err != nil {

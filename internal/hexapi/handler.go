@@ -25,6 +25,14 @@ type Handler struct {
 	DecksDir  string
 	Showmatch *Showmatch
 	cardDB    map[string]oracleCard
+
+	deckSubsMu sync.RWMutex
+	deckSubs   map[string]map[chan deckEvent]struct{}
+}
+
+type deckEvent struct {
+	Event string
+	Data  string
 }
 
 type oracleCard struct {
@@ -80,6 +88,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/leaderboard", h.handleLeaderboard)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/lineage", h.handleDeckLineage)
 	mux.HandleFunc("POST /api/import/moxfield", h.handleMoxfieldImport)
+	mux.HandleFunc("GET /api/decks/{owner}/{id}/events", h.handleDeckEvents)
 	mux.HandleFunc("POST /api/feedback", h.handleFeedback)
 	mux.HandleFunc("POST /api/kofi/webhook", h.handleKofiWebhook)
 	mux.HandleFunc("GET /api/donations/summary", h.handleDonationsSummary)
@@ -553,6 +562,88 @@ func (h *Handler) runFreya(deckPath string) {
 		return
 	}
 	log.Printf("freya: completed %s", deckPath)
+
+	rel, _ := filepath.Rel(h.DecksDir, deckPath)
+	parts := strings.SplitN(rel, string(filepath.Separator), 2)
+	if len(parts) == 2 {
+		owner := parts[0]
+		id := strings.TrimSuffix(parts[1], filepath.Ext(parts[1]))
+		h.publishDeck(owner+"/"+id, deckEvent{
+			Event: "freya_complete",
+			Data:  `{"status":"complete"}`,
+		})
+	}
+}
+
+func (h *Handler) subscribeDeck(key string) chan deckEvent {
+	h.deckSubsMu.Lock()
+	defer h.deckSubsMu.Unlock()
+	if h.deckSubs == nil {
+		h.deckSubs = make(map[string]map[chan deckEvent]struct{})
+	}
+	if h.deckSubs[key] == nil {
+		h.deckSubs[key] = make(map[chan deckEvent]struct{})
+	}
+	ch := make(chan deckEvent, 4)
+	h.deckSubs[key][ch] = struct{}{}
+	return ch
+}
+
+func (h *Handler) unsubscribeDeck(key string, ch chan deckEvent) {
+	h.deckSubsMu.Lock()
+	defer h.deckSubsMu.Unlock()
+	if subs, ok := h.deckSubs[key]; ok {
+		delete(subs, ch)
+		if len(subs) == 0 {
+			delete(h.deckSubs, key)
+		}
+	}
+	close(ch)
+}
+
+func (h *Handler) publishDeck(key string, ev deckEvent) {
+	h.deckSubsMu.RLock()
+	defer h.deckSubsMu.RUnlock()
+	for ch := range h.deckSubs[key] {
+		select {
+		case ch <- ev:
+		default:
+		}
+	}
+}
+
+func (h *Handler) handleDeckEvents(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	owner := r.PathValue("owner")
+	id := r.PathValue("id")
+	if !validatePathComponent(owner) || !validatePathComponent(id) {
+		http.Error(w, "invalid owner or id", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	flusher.Flush()
+
+	key := owner + "/" + id
+	ch := h.subscribeDeck(key)
+	defer h.unsubscribeDeck(key, ch)
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case ev := <-ch:
+			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Event, ev.Data)
+			flusher.Flush()
+		}
+	}
 }
 
 func (h *Handler) handleProfile(w http.ResponseWriter, r *http.Request) {
