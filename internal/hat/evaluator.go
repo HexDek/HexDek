@@ -17,16 +17,18 @@ type GameStateEvaluator struct {
 
 // EvalResult holds the per-dimension breakdown alongside the final score.
 type EvalResult struct {
-	Score             float64
-	BoardPresence     float64
-	CardAdvantage     float64
-	ManaAdvantage     float64
-	LifeResource      float64
-	ComboProximity    float64
-	ThreatExposure    float64
-	CommanderProgress float64
-	GraveyardValue    float64
-	DrainEngine       float64
+	Score              float64
+	BoardPresence      float64
+	CardAdvantage      float64
+	ManaAdvantage      float64
+	LifeResource       float64
+	ComboProximity     float64
+	ThreatExposure     float64
+	CommanderProgress  float64
+	GraveyardValue     float64
+	DrainEngine        float64
+	ArtifactSynergy    float64
+	EnchantmentSynergy float64
 }
 
 // NewEvaluator constructs an evaluator from a strategy profile. If sp is
@@ -69,6 +71,8 @@ func (e *GameStateEvaluator) EvaluateDetailed(gs *gameengine.GameState, seatIdx 
 	r.CommanderProgress = e.scoreCommander(gs, seatIdx)
 	r.GraveyardValue = e.scoreGraveyard(gs, seatIdx)
 	r.DrainEngine = e.scoreDrainEngine(gs, seatIdx)
+	r.ArtifactSynergy = e.scoreArtifactSynergy(gs, seatIdx)
+	r.EnchantmentSynergy = e.scoreEnchantmentSynergy(gs, seatIdx)
 
 	raw := e.Weights.BoardPresence*r.BoardPresence +
 		e.Weights.CardAdvantage*r.CardAdvantage +
@@ -78,7 +82,9 @@ func (e *GameStateEvaluator) EvaluateDetailed(gs *gameengine.GameState, seatIdx 
 		e.Weights.ThreatExposure*r.ThreatExposure +
 		e.Weights.CommanderProgress*r.CommanderProgress +
 		e.Weights.GraveyardValue*r.GraveyardValue +
-		e.Weights.DrainEngine*r.DrainEngine
+		e.Weights.DrainEngine*r.DrainEngine +
+		e.Weights.ArtifactSynergy*r.ArtifactSynergy +
+		e.Weights.EnchantmentSynergy*r.EnchantmentSynergy
 
 	if e.Strategy != nil && e.Strategy.Weakness != nil {
 		w := e.Strategy.Weakness
@@ -634,5 +640,97 @@ func (e *GameStateEvaluator) scoreDrainEngine(gs *gameengine.GameState, seatIdx 
 		}
 	}
 
+	return score
+}
+
+// scoreArtifactSynergy: counts artifacts on battlefield, treasure tokens,
+// and artifact-matters payoffs on the commander.
+func (e *GameStateEvaluator) scoreArtifactSynergy(gs *gameengine.GameState, seatIdx int) float64 {
+	seat := gs.Seats[seatIdx]
+
+	artifactCount := 0
+	treasureCount := 0
+	for _, p := range seat.Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		if p.IsArtifact() {
+			artifactCount++
+		}
+		for _, t := range p.Card.Types {
+			if t == "treasure" {
+				treasureCount++
+				break
+			}
+		}
+	}
+
+	commanderBonus := 0.0
+	for _, c := range seat.CommandZone {
+		if c == nil {
+			continue
+		}
+		ot := gameengine.OracleTextLower(c)
+		if strings.Contains(ot, "artifact") &&
+			(strings.Contains(ot, "whenever") || strings.Contains(ot, "for each") ||
+				strings.Contains(ot, "control") || strings.Contains(ot, "cast")) {
+			commanderBonus = 0.6
+			break
+		}
+	}
+	if commanderBonus == 0 {
+		for _, p := range seat.Battlefield {
+			if p == nil || p.Card == nil {
+				continue
+			}
+			isCommander := false
+			for _, cn := range seat.CommanderNames {
+				if p.Card.DisplayName() == cn {
+					isCommander = true
+					break
+				}
+			}
+			if !isCommander {
+				continue
+			}
+			ot := gameengine.OracleTextLower(p.Card)
+			if strings.Contains(ot, "artifact") &&
+				(strings.Contains(ot, "whenever") || strings.Contains(ot, "for each") ||
+					strings.Contains(ot, "control") || strings.Contains(ot, "cast")) {
+				commanderBonus = 0.6
+			}
+			break
+		}
+	}
+
+	return float64(artifactCount)*0.1 + float64(treasureCount)*0.15 + commanderBonus
+}
+
+// scoreEnchantmentSynergy: counts enchantments on battlefield and
+// enchantress-style draw engines (whenever you cast an enchantment, draw).
+func (e *GameStateEvaluator) scoreEnchantmentSynergy(gs *gameengine.GameState, seatIdx int) float64 {
+	seat := gs.Seats[seatIdx]
+
+	enchantmentCount := 0
+	enchantressEngines := 0
+	for _, p := range seat.Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		if p.IsEnchantment() {
+			enchantmentCount++
+		}
+		ot := gameengine.OracleTextLower(p.Card)
+		if strings.Contains(ot, "whenever you cast an enchantment") &&
+			strings.Contains(ot, "draw") {
+			enchantressEngines++
+		}
+	}
+
+	score := float64(enchantmentCount) * 0.12
+	score += float64(enchantressEngines) * 0.5
+	if enchantressEngines > 0 && enchantmentCount > 3 {
+		score *= 1.0 + math.Min(float64(enchantressEngines), 3)*0.2
+	}
 	return score
 }

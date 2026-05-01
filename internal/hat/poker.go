@@ -98,6 +98,8 @@ const (
 	ArchetypeTribal       = "tribal"
 	ArchetypeAristocrats  = "aristocrats"
 	ArchetypeSelfmill     = "selfmill"
+	ArchetypeEnchantress  = "enchantress"
+	ArchetypeArtifacts    = "artifacts"
 )
 
 // observation is a running tally of an OTHER seat's plays. A PokerHat

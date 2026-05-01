@@ -56,6 +56,9 @@ func applyMigrations(db *sql.DB) error {
 		{"game_card", "tapped_for_mana_this_turn", "INTEGER NOT NULL DEFAULT 0"},
 		{"showmatch_game_seat", "battlefield_cards", "TEXT NOT NULL DEFAULT '[]'"},
 		{"showmatch_game_seat", "deck_key", "TEXT NOT NULL DEFAULT ''"},
+		{"showmatch_elo", "bracket", "INTEGER NOT NULL DEFAULT 0"},
+		{"showmatch_elo", "hex_rating", "REAL NOT NULL DEFAULT 0.0"},
+		{"showmatch_elo", "hex_delta", "REAL NOT NULL DEFAULT 0.0"},
 	}
 	// Migrate showmatch_elo from commander-keyed to deck_key-keyed.
 	hasDeckKey, _ := columnExists(db, "showmatch_elo", "deck_key")

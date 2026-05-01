@@ -764,6 +764,13 @@ func registerDefaults() {
 	registerVitoFanaticOfAclazotz(Global())
 	registerMaraudingBlightPriest(Global())
 	registerCorpseKnight(Global())
+
+	// Batch #19 — enchantment toolbox commanders (attack-trigger tutors).
+	registerZurTheEnchanter(Global())
+	registerLightPawsEmperorsVoice(Global())
+	// Batch #19 — artifact-commander synergy.
+	registerDrafna(Global())
+	registerJolene(Global())
 }
 
 func init() {

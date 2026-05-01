@@ -702,6 +702,47 @@ func (h *YggdrasilHat) cardHeuristic(gs *gameengine.GameState, seatIdx int, c *g
 		if strings.Contains(ot, "mill") || strings.Contains(ot, "graveyard") {
 			base += 0.20
 		}
+	case ArchetypeEnchantress:
+		if typeLineContains(c, "enchantment") || h.valueEngineSet[c.DisplayName()] {
+			base += 0.25
+		}
+		if typeLineContains(c, "aura") {
+			base += 0.15
+		}
+	case ArchetypeArtifacts:
+		if typeLineContains(c, "artifact") {
+			base += 0.20
+		}
+		ot := gameengine.OracleTextLower(c)
+		if strings.Contains(ot, "treasure token") {
+			base += 0.15
+		}
+	}
+
+	// Partner commander priority: when a partner pair is in the command zone,
+	// deploying the second partner is high-value — it unlocks the deck's full
+	// identity. Boost if the other partner is already on the battlefield.
+	if gs != nil && len(gs.Seats[seatIdx].CommanderNames) == 2 {
+		seat := gs.Seats[seatIdx]
+		cName := c.DisplayName()
+		isCommander := false
+		otherPartner := ""
+		for _, cn := range seat.CommanderNames {
+			if strings.EqualFold(cn, cName) {
+				isCommander = true
+			} else {
+				otherPartner = cn
+			}
+		}
+		if isCommander {
+			base += 0.20
+			for _, p := range seat.Battlefield {
+				if p != nil && p.Card != nil && strings.EqualFold(p.Card.DisplayName(), otherPartner) {
+					base += 0.25
+					break
+				}
+			}
+		}
 	}
 
 	// Combo piece bonus — applies to ALL archetypes. Every deck has
@@ -783,6 +824,8 @@ func (h *YggdrasilHat) cardHeuristic(gs *gameengine.GameState, seatIdx int, c *g
 	// Sandbagging: if casting a high-value piece would make us the tallest
 	// blade of grass (highest eval at the table), delay to avoid becoming
 	// archenemy — unless we can win this turn or it's late enough to commit.
+	// Engine archetypes (aristocrats, combo, enchantress, artifacts) get a
+	// reduced penalty because deploying engine pieces IS their win condition.
 	if gs != nil && gs.Turn < 30 {
 		isHighValue := h.isComboRelevant(c) || h.isValueEngineKey(c)
 		if isHighValue {
@@ -801,6 +844,12 @@ func (h *YggdrasilHat) cardHeuristic(gs *gameengine.GameState, seatIdx int, c *g
 				penalty := (myEval - bestOpp) * 0.3
 				if penalty > 0.25 {
 					penalty = 0.25
+				}
+				switch arch {
+				case ArchetypeAristocrats, ArchetypeCombo, ArchetypeEnchantress, ArchetypeArtifacts:
+					penalty *= 0.3
+				case ArchetypeSelfmill, ArchetypeReanimator:
+					penalty *= 0.5
 				}
 				base -= penalty
 			}
@@ -1227,6 +1276,32 @@ func (h *YggdrasilHat) ChooseMulligan(gs *gameengine.GameState, seatIdx int, han
 				if landCount >= 2 {
 					return false
 				}
+			case ArchetypeEnchantress:
+				enchantmentCount := 0
+				for _, c := range hand {
+					if c == nil {
+						continue
+					}
+					if typeLineContains(c, "enchantment") || h.valueEngineSet[c.DisplayName()] {
+						enchantmentCount++
+					}
+				}
+				if landCount >= 2 && enchantmentCount >= 1 {
+					return false
+				}
+			case ArchetypeArtifacts:
+				artifactCount := 0
+				for _, c := range hand {
+					if c == nil {
+						continue
+					}
+					if typeLineContains(c, "artifact") || isManaRock(c) {
+						artifactCount++
+					}
+				}
+				if landCount >= 2 && artifactCount >= 1 {
+					return false
+				}
 			}
 		}
 		// Any archetype: a hand with 2+ lands and a VE key or star card is worth keeping.
@@ -1475,6 +1550,15 @@ func (h *YggdrasilHat) ChooseCastFromHand(gs *gameengine.GameState, seatIdx int,
 		if poolHasCombo {
 			passBoost -= 0.15
 		}
+	case ArchetypeEnchantress:
+		passBoost -= 0.05
+	case ArchetypeArtifacts:
+		passBoost -= 0.10
+		if poolHasVE {
+			passBoost -= 0.10
+		}
+	case ArchetypeSelfmill:
+		passBoost -= 0.10
 	}
 	// Game clock pressure: reduce pass incentive as the game drags past
 	// the archetype's comfort zone. Aggro at turn 20 shouldn't be patient.
@@ -1755,33 +1839,68 @@ func (h *YggdrasilHat) activationHeuristic(gs *gameengine.GameState, seatIdx int
 		}
 	}
 
-	// Sacrifice outlets are much more valuable when we have death-trigger
-	// payoffs (aristocrats) or token fodder on board.
+	// Sacrifice outlets: score based on full engine density. Each death-payoff
+	// type (drain, draw, ramp, recursion) stacks, and token fodder availability
+	// multiplies the value. A fully assembled aristocrats engine (outlet + 3
+	// payoffs + tokens) should aggressively sacrifice.
 	if strings.Contains(ot, "sacrifice") {
 		deathPayoffs := 0
+		drainPayoffs := 0
+		drawPayoffs := 0
+		rampPayoffs := 0
 		tokenCount := 0
+		fodderCount := 0
 		for _, p := range gs.Seats[seatIdx].Battlefield {
 			if p == nil || p.Card == nil {
 				continue
 			}
 			pot := gameengine.OracleTextLower(p.Card)
-			if strings.Contains(pot, "whenever") && (strings.Contains(pot, "dies") || strings.Contains(pot, "leaves")) {
+			isDeath := strings.Contains(pot, "whenever") && (strings.Contains(pot, "dies") || strings.Contains(pot, "leaves"))
+			if isDeath {
 				deathPayoffs++
+				if strings.Contains(pot, "lose") || strings.Contains(pot, "drain") || strings.Contains(pot, "life") {
+					drainPayoffs++
+				}
+				if strings.Contains(pot, "draw") || strings.Contains(pot, "scry") {
+					drawPayoffs++
+				}
+				if strings.Contains(pot, "add") || strings.Contains(pot, "treasure") || strings.Contains(pot, "mana") {
+					rampPayoffs++
+				}
 			}
+			isToken := false
 			for _, t := range p.Card.Types {
 				if t == "token" {
-					tokenCount++
+					isToken = true
 					break
 				}
 			}
+			if isToken {
+				tokenCount++
+			}
+			if p.IsCreature() && (isToken || gameengine.ManaCostOf(p.Card) <= 2) {
+				fodderCount++
+			}
 		}
-		if deathPayoffs > 0 {
-			base += float64(deathPayoffs) * 0.15
+		payoffBonus := float64(deathPayoffs) * 0.20
+		if drainPayoffs > 0 {
+			payoffBonus += 0.15
 		}
-		if tokenCount > 0 {
-			base += 0.10
+		if drawPayoffs > 0 {
+			payoffBonus += 0.15
 		}
-		// Mana-producing sacrifices (Ashnod's, Phyrexian Altar) are ramp.
+		if rampPayoffs > 0 {
+			payoffBonus += 0.10
+		}
+		if fodderCount >= 2 {
+			payoffBonus *= 1.5
+		} else if tokenCount > 0 {
+			payoffBonus += 0.10
+		}
+		if payoffBonus > 0.80 {
+			payoffBonus = 0.80
+		}
+		base += payoffBonus
 		if strings.Contains(ot, "add") && (strings.Contains(ot, "mana") || strings.Contains(ot, "{")) {
 			base += 0.15
 		}

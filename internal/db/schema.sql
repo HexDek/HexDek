@@ -179,10 +179,13 @@ CREATE TABLE IF NOT EXISTS showmatch_elo (
     commander    TEXT NOT NULL DEFAULT '',
     owner        TEXT NOT NULL DEFAULT '',
     rating       REAL NOT NULL DEFAULT 1500.0,
+    hex_rating   REAL NOT NULL DEFAULT 0.0,
     games        INTEGER NOT NULL DEFAULT 0,
     wins         INTEGER NOT NULL DEFAULT 0,
     losses       INTEGER NOT NULL DEFAULT 0,
     delta        REAL NOT NULL DEFAULT 0.0,
+    hex_delta    REAL NOT NULL DEFAULT 0.0,
+    bracket      INTEGER NOT NULL DEFAULT 0,
     updated_at   INTEGER NOT NULL
 );
 

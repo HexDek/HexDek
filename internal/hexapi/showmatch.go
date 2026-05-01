@@ -112,11 +112,17 @@ type ELOEntry struct {
 	Commander string  `json:"commander"`
 	Owner     string  `json:"owner"`
 	Rating    float64 `json:"rating"`
+	HexRating float64 `json:"hex_rating"`
 	Games     int     `json:"games"`
 	Wins      int     `json:"wins"`
 	Losses    int     `json:"losses"`
 	WinRate   float64 `json:"win_rate"`
 	Delta     float64 `json:"delta"`
+	HexDelta  float64 `json:"hex_delta"`
+	Bracket   int     `json:"bracket"`
+	Band      string  `json:"band"`
+	Drift     float64 `json:"drift"`
+	DriftTag  string  `json:"drift_tag,omitempty"`
 }
 
 type SessionStats struct {
@@ -168,6 +174,7 @@ type Showmatch struct {
 	mu              sync.RWMutex
 	snap            *GameSnapshot
 	elo             map[string]*eloState
+	bracketCache    map[string]int // deck key → Freya bracket (1-5)
 	stats           sessionState
 	start           time.Time
 	corpus          *astload.Corpus
@@ -194,12 +201,15 @@ type spectatorConn struct {
 }
 
 type eloState struct {
-	rating    float64
+	rating    float64 // standard ELO (flat K=32, start 1500)
+	hexRating float64 // HexELO (bracket-seeded, K-modulated, gravity)
 	games     int
 	delta     float64
+	hexDelta  float64
 	wins      int
 	commander string
 	owner     string
+	bracket   int
 }
 
 type sessionState struct {
@@ -212,6 +222,7 @@ type sessionState struct {
 func NewShowmatch(astPath, oraclePath, decksDir string, database *sql.DB) *Showmatch {
 	sm := &Showmatch{
 		elo:             make(map[string]*eloState),
+		bracketCache:    make(map[string]int),
 		start:           time.Now(),
 		speedMultiplier: 1.0,
 		sqlDB:           database,
@@ -244,11 +255,14 @@ func (sm *Showmatch) loadPersistedState() {
 	for _, r := range records {
 		sm.elo[r.DeckKey] = &eloState{
 			rating:    r.Rating,
+			hexRating: r.HexRating,
 			games:     r.Games,
 			wins:      r.Wins,
 			delta:     r.Delta,
+			hexDelta:  r.HexDelta,
 			commander: r.Commander,
 			owner:     r.Owner,
+			bracket:   r.Bracket,
 		}
 	}
 
@@ -341,6 +355,7 @@ func (sm *Showmatch) loadAndRun(astPath, oraclePath, decksDir string) {
 	}
 
 	var decks []*deckparser.TournamentDeck
+	var bannedSkipped int
 	for _, p := range deckPaths {
 		d, perr := deckparser.ParseDeckFile(p, corpus, meta)
 		if perr != nil {
@@ -350,7 +365,14 @@ func (sm *Showmatch) loadAndRun(astPath, oraclePath, decksDir string) {
 		if len(d.CommanderCards) == 0 || totalCards < 100 {
 			continue
 		}
+		if commanderBanned(d.CommanderName) {
+			bannedSkipped++
+			continue
+		}
 		decks = append(decks, d)
+	}
+	if bannedSkipped > 0 {
+		log.Printf("showmatch: skipped %d decks with banned commanders", bannedSkipped)
 	}
 	log.Printf("showmatch: %d decks parsed successfully (from %d files)", len(decks), len(deckPaths))
 
@@ -362,10 +384,35 @@ func (sm *Showmatch) loadAndRun(astPath, oraclePath, decksDir string) {
 		return
 	}
 
+	bracketMap := make(map[string]int, len(decks))
+	bracketCounts := [6]int{}
+	for _, d := range decks {
+		key := deckKeyFromPath(d.Path)
+		sp := hat.LoadStrategyFromFreya(d.Path)
+		if sp != nil && sp.Bracket >= 1 && sp.Bracket <= 5 {
+			bracketMap[key] = sp.Bracket
+			bracketCounts[sp.Bracket]++
+		}
+	}
+	log.Printf("showmatch: HexELO bracket cache: B1=%d B2=%d B3=%d B4=%d B5=%d (%d unclassified)",
+		bracketCounts[1], bracketCounts[2], bracketCounts[3], bracketCounts[4], bracketCounts[5],
+		len(decks)-bracketCounts[1]-bracketCounts[2]-bracketCounts[3]-bracketCounts[4]-bracketCounts[5])
+
 	sm.mu.Lock()
 	sm.corpus = corpus
 	sm.meta = meta
 	sm.deckPool = decks
+	sm.bracketCache = bracketMap
+	for key, e := range sm.elo {
+		if e.bracket == 0 {
+			if b, ok := bracketMap[key]; ok {
+				e.bracket = b
+			}
+		}
+		if e.hexRating == 0 && e.bracket > 0 {
+			e.hexRating = hexELOStartRating(e.bracket)
+		}
+	}
 	sm.ready = true
 	sm.mu.Unlock()
 
@@ -687,10 +734,13 @@ func (sm *Showmatch) flushELO() {
 			Commander: e.commander,
 			Owner:     e.owner,
 			Rating:    e.rating,
+			HexRating: e.hexRating,
 			Games:     e.games,
 			Wins:      e.wins,
 			Losses:    e.games - e.wins,
 			Delta:     e.delta,
+			HexDelta:  e.hexDelta,
+			Bracket:   e.bracket,
 		})
 	}
 	if err := db.BatchUpsertELO(context.Background(), sm.sqlDB, records); err != nil {
@@ -1201,18 +1251,97 @@ func (sm *Showmatch) captureSnapshot(gs *gameengine.GameState, commanders []stri
 	return snap
 }
 
+// hexELOStartRating returns the bracket-seeded starting ELO.
+// B1=400, B2=1100, B3=1800, B4=2450, B5=3000.
+func hexELOStartRating(bracket int) float64 {
+	switch bracket {
+	case 1:
+		return 400
+	case 2:
+		return 1100
+	case 3:
+		return 1800
+	case 4:
+		return 2450
+	case 5:
+		return 3000
+	default:
+		return 1500
+	}
+}
+
+// hexELOBandLabel returns the human-readable band for a rating.
+func hexELOBandLabel(rating float64) string {
+	switch {
+	case rating >= 3000:
+		return "B5"
+	case rating >= 2100:
+		return "B4"
+	case rating >= 1400:
+		return "B3"
+	case rating >= 700:
+		return "B2"
+	default:
+		return "B1"
+	}
+}
+
+// hexELOKFactor computes the bracket-aware K-factor.
+// Same bracket: full K. Cross-bracket expected results: dampened.
+// Cross-bracket upsets: less dampened (interesting signal).
+func hexELOKFactor(baseK float64, winnerBracket, loserBracket int) float64 {
+	if winnerBracket <= 0 || loserBracket <= 0 {
+		return baseK
+	}
+	dist := winnerBracket - loserBracket
+	if dist < 0 {
+		dist = -dist
+	}
+	if dist == 0 {
+		return baseK
+	}
+	if winnerBracket > loserBracket {
+		return baseK * math.Max(0.3, 1.0-float64(dist)*0.25)
+	}
+	return baseK * math.Max(0.5, 1.0-float64(dist)*0.15)
+}
+
+// hexELOGravity applies a mild pull toward the deck's bracket center.
+// Keeps expected decks in their band; genuine outliers overcome it.
+func hexELOGravity(rating float64, bracket int) float64 {
+	if bracket <= 0 {
+		return 0
+	}
+	center := hexELOStartRating(bracket)
+	pull := 0.02 * (center - rating)
+	if pull > 5.0 {
+		pull = 5.0
+	}
+	if pull < -5.0 {
+		pull = -5.0
+	}
+	return pull
+}
+
 func (sm *Showmatch) updateELO(deckKeys, commanders []string, decks []*deckparser.TournamentDeck, winner int) {
-	const k = 32.0
+	const baseK = 32.0
 	n := len(deckKeys)
 	if n < 2 {
 		return
 	}
-	kScaled := k / float64(n-1)
+	kScaled := baseK / float64(n-1)
 
 	for i, key := range deckKeys {
 		if _, ok := sm.elo[key]; !ok {
 			owner, _ := deckOwnerFromKey(key)
-			sm.elo[key] = &eloState{rating: 1500, commander: commanders[i], owner: owner}
+			bracket := sm.bracketCache[key]
+			sm.elo[key] = &eloState{
+				rating:    1500,
+				hexRating: hexELOStartRating(bracket),
+				commander: commanders[i],
+				owner:     owner,
+				bracket:   bracket,
+			}
 		}
 		sm.elo[key].games++
 	}
@@ -1227,12 +1356,21 @@ func (sm *Showmatch) updateELO(deckKeys, commanders []string, decks []*deckparse
 		for i := 0; i < n; i++ {
 			for j := i + 1; j < n; j++ {
 				a, b := deckKeys[i], deckKeys[j]
+				// Standard ELO
 				ea := 1.0 / (1.0 + math.Pow(10, (sm.elo[b].rating-sm.elo[a].rating)/400.0))
 				eb := 1.0 - ea
 				sm.elo[a].delta = kScaled * (0.5 - ea)
 				sm.elo[b].delta = kScaled * (0.5 - eb)
 				sm.elo[a].rating += sm.elo[a].delta
 				sm.elo[b].rating += sm.elo[b].delta
+				// HexELO
+				hexEa := 1.0 / (1.0 + math.Pow(10, (sm.elo[b].hexRating-sm.elo[a].hexRating)/400.0))
+				hexEb := 1.0 - hexEa
+				hk := hexELOKFactor(kScaled, sm.elo[a].bracket, sm.elo[b].bracket)
+				sm.elo[a].hexDelta = hk * (0.5 - hexEa)
+				sm.elo[b].hexDelta = hk * (0.5 - hexEb)
+				sm.elo[a].hexRating += sm.elo[a].hexDelta + hexELOGravity(sm.elo[a].hexRating, sm.elo[a].bracket)
+				sm.elo[b].hexRating += sm.elo[b].hexDelta + hexELOGravity(sm.elo[b].hexRating, sm.elo[b].bracket)
 			}
 		}
 		return
@@ -1242,6 +1380,7 @@ func (sm *Showmatch) updateELO(deckKeys, commanders []string, decks []*deckparse
 		if loserKey == winnerKey {
 			continue
 		}
+		// Standard ELO
 		eW := 1.0 / (1.0 + math.Pow(10, (sm.elo[loserKey].rating-sm.elo[winnerKey].rating)/400.0))
 		eL := 1.0 - eW
 		wDelta := kScaled * (1.0 - eW)
@@ -1250,6 +1389,18 @@ func (sm *Showmatch) updateELO(deckKeys, commanders []string, decks []*deckparse
 		sm.elo[loserKey].delta = lDelta
 		sm.elo[winnerKey].rating += wDelta
 		sm.elo[loserKey].rating += lDelta
+		// HexELO
+		wBracket := sm.elo[winnerKey].bracket
+		lBracket := sm.elo[loserKey].bracket
+		hk := hexELOKFactor(kScaled, wBracket, lBracket)
+		hexEW := 1.0 / (1.0 + math.Pow(10, (sm.elo[loserKey].hexRating-sm.elo[winnerKey].hexRating)/400.0))
+		hexEL := 1.0 - hexEW
+		hwDelta := hk * (1.0 - hexEW)
+		hlDelta := hk * (0.0 - hexEL)
+		sm.elo[winnerKey].hexDelta = hwDelta
+		sm.elo[loserKey].hexDelta = hlDelta
+		sm.elo[winnerKey].hexRating += hwDelta + hexELOGravity(sm.elo[winnerKey].hexRating, wBracket)
+		sm.elo[loserKey].hexRating += hlDelta + hexELOGravity(sm.elo[loserKey].hexRating, lBracket)
 	}
 }
 
@@ -1275,13 +1426,18 @@ func (sm *Showmatch) GetELO() []ELOEntry {
 			Commander: e.commander,
 			Owner:     owner,
 			Rating:    math.Round(e.rating*10) / 10,
+			HexRating: math.Round(e.hexRating*10) / 10,
 			Games:     e.games,
 			Wins:      e.wins,
 			Losses:    losses,
 			WinRate:   winRate,
 			Delta:     math.Round(e.delta*10) / 10,
+			HexDelta:  math.Round(e.hexDelta*10) / 10,
+			Bracket:   e.bracket,
+			Band:      hexELOBandLabel(e.hexRating),
 		})
 	}
+	// Sort by standard ELO for primary ranking.
 	sort.SliceStable(entries, func(i, j int) bool {
 		if entries[i].Rating != entries[j].Rating {
 			return entries[i].Rating > entries[j].Rating
@@ -1291,6 +1447,41 @@ func (sm *Showmatch) GetELO() []ELOEntry {
 		}
 		return entries[i].Commander < entries[j].Commander
 	})
+	// Build HexELO rank index for drift computation.
+	hexOrder := make([]int, len(entries))
+	for i := range hexOrder {
+		hexOrder[i] = i
+	}
+	sort.SliceStable(hexOrder, func(a, b int) bool {
+		return entries[hexOrder[a]].HexRating > entries[hexOrder[b]].HexRating
+	})
+	hexRank := make(map[int]int, len(entries))
+	for rank, idx := range hexOrder {
+		hexRank[idx] = rank
+	}
+	// Compute drift: standard rank minus hex rank, normalized to [-100, +100].
+	// Positive drift = deck ranks higher in standard ELO than HexELO (overperforming bracket).
+	// Negative drift = deck ranks higher in HexELO than standard (underperforming bracket).
+	n := float64(len(entries))
+	for i := range entries {
+		if n <= 1 {
+			continue
+		}
+		stdPct := float64(i) / (n - 1) * 100.0
+		hexPct := float64(hexRank[i]) / (n - 1) * 100.0
+		drift := math.Round((hexPct-stdPct)*10) / 10
+		entries[i].Drift = drift
+		switch {
+		case drift >= 15:
+			entries[i].DriftTag = "outlier_above"
+		case drift >= 5:
+			entries[i].DriftTag = "above_bracket"
+		case drift <= -15:
+			entries[i].DriftTag = "outlier_below"
+		case drift <= -5:
+			entries[i].DriftTag = "below_bracket"
+		}
+	}
 	return entries
 }
 
@@ -1387,6 +1578,7 @@ func (sm *Showmatch) GetGame(id int) *CompletedGame {
 func (sm *Showmatch) RegisterShowmatch(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/live/game", sm.handleLiveGame)
 	mux.HandleFunc("GET /api/live/elo", sm.handleLiveELO)
+	mux.HandleFunc("GET /api/live/elo/drift", sm.handleLiveDrift)
 	mux.HandleFunc("GET /api/live/stats", sm.handleLiveStatsReal)
 	mux.HandleFunc("GET /api/games", sm.handleGames)
 	mux.HandleFunc("GET /api/games/{id}", sm.handleGameByID)
@@ -1473,6 +1665,35 @@ func (sm *Showmatch) handleLiveGame(w http.ResponseWriter, r *http.Request) {
 
 func (sm *Showmatch) handleLiveELO(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, sm.GetELO())
+}
+
+type DriftReport struct {
+	TotalDecks    int        `json:"total_decks"`
+	OutliersAbove []ELOEntry `json:"outliers_above"`
+	OutliersBelow []ELOEntry `json:"outliers_below"`
+	AboveBracket  []ELOEntry `json:"above_bracket"`
+	BelowBracket  []ELOEntry `json:"below_bracket"`
+}
+
+func (sm *Showmatch) handleLiveDrift(w http.ResponseWriter, r *http.Request) {
+	all := sm.GetELO()
+	report := DriftReport{TotalDecks: len(all)}
+	for _, e := range all {
+		if e.Games < 50 {
+			continue
+		}
+		switch e.DriftTag {
+		case "outlier_above":
+			report.OutliersAbove = append(report.OutliersAbove, e)
+		case "outlier_below":
+			report.OutliersBelow = append(report.OutliersBelow, e)
+		case "above_bracket":
+			report.AboveBracket = append(report.AboveBracket, e)
+		case "below_bracket":
+			report.BelowBracket = append(report.BelowBracket, e)
+		}
+	}
+	writeJSON(w, report)
 }
 
 func (sm *Showmatch) handleLiveStatsReal(w http.ResponseWriter, r *http.Request) {
@@ -1684,6 +1905,23 @@ func deckOwnerFromKey(key string) (owner, deckID string) {
 		return "", key
 	}
 	return key[:idx], key[idx+1:]
+}
+
+var bannedCommanders = map[string]bool{
+	"braids, cabal minion":        true,
+	"emrakul, the aeons torn":     true,
+	"erayo, soratami ascendant":   true,
+	"golos, tireless pilgrim":     true,
+	"griselbrand":                 true,
+	"iona, shield of emeria":      true,
+	"leovold, emissary of trest":  true,
+	"lutri, the spellchaser":      true,
+	"nadu, winged wisdom":         true,
+	"rofellos, llanowar emissary": true,
+}
+
+func commanderBanned(name string) bool {
+	return bannedCommanders[strings.ToLower(strings.TrimSpace(name))]
 }
 
 func findDeckFiles(dir string) ([]string, error) {
