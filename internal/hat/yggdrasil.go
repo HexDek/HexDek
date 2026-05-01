@@ -854,6 +854,10 @@ func (h *YggdrasilHat) isComboRelevant(c *gameengine.Card) bool {
 // Returns the bonus for a specific card: +1.0 if it's the LAST piece
 // needed, +0.5 if 1 of 2 missing, +0.0 otherwise. Also returns the
 // best overall combo completeness ratio for pass/hold decisions.
+//
+// When all pieces are present, applies a readiness check: sacrifice-
+// based combos need creatures to sacrifice, activated abilities need
+// to not be summoning-sick. A "ready" combo gets an extra bonus.
 func (h *YggdrasilHat) comboUrgency(gs *gameengine.GameState, seatIdx int, card *gameengine.Card) (cardBonus float64, bestRatio float64) {
 	if len(h.comboPieceSet) == 0 || gs == nil {
 		return 0, 0
@@ -868,9 +872,12 @@ func (h *YggdrasilHat) comboUrgency(gs *gameengine.GameState, seatIdx int, card 
 			available[c.DisplayName()] = true
 		}
 	}
+	// Track which pieces are on the battlefield (not just in hand).
+	onBattlefield := map[string]bool{}
 	for _, p := range seat.Battlefield {
 		if p != nil && p.Card != nil {
 			available[p.Card.DisplayName()] = true
+			onBattlefield[p.Card.DisplayName()] = true
 		}
 	}
 
@@ -884,11 +891,15 @@ func (h *YggdrasilHat) comboUrgency(gs *gameengine.GameState, seatIdx int, card 
 			continue
 		}
 		found := 0
+		allOnField := true
 		cardIsInCombo := false
 		cardIsMissing := false
 		for _, piece := range cp.Pieces {
 			if available[piece] {
 				found++
+			}
+			if !onBattlefield[piece] {
+				allOnField = false
 			}
 			if piece == cardName {
 				cardIsInCombo = true
@@ -909,8 +920,58 @@ func (h *YggdrasilHat) comboUrgency(gs *gameengine.GameState, seatIdx int, card 
 				cardBonus = 0.5
 			}
 		}
+		// Combo readiness: all pieces present AND on battlefield.
+		// Check if the combo can actually execute this turn.
+		if found == len(cp.Pieces) && allOnField {
+			ready := h.comboCanExecute(gs, seatIdx, cp.Pieces)
+			if ready && cardBonus < 0.5 {
+				cardBonus = 0.5
+			}
+			if ratio > bestRatio {
+				bestRatio = ratio
+			}
+		}
 	}
 	return cardBonus, bestRatio
+}
+
+// comboCanExecute checks if a fully-assembled combo can actually fire.
+// Verifies sacrifice fodder availability and that key permanents aren't
+// summoning-sick when they need to activate.
+func (h *YggdrasilHat) comboCanExecute(gs *gameengine.GameState, seatIdx int, pieces []string) bool {
+	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
+		return false
+	}
+	seat := gs.Seats[seatIdx]
+	needsSacFodder := false
+	hasSacFodder := false
+	for _, piece := range pieces {
+		for _, p := range seat.Battlefield {
+			if p == nil || p.Card == nil {
+				continue
+			}
+			if strings.ToLower(p.Card.DisplayName()) != strings.ToLower(piece) {
+				continue
+			}
+			ot := gameengine.OracleTextLower(p.Card)
+			if strings.Contains(ot, "sacrifice a creature") || strings.Contains(ot, "sacrifice another") {
+				needsSacFodder = true
+			}
+		}
+	}
+	if needsSacFodder {
+		creatureCount := 0
+		for _, p := range seat.Battlefield {
+			if p != nil && p.IsCreature() {
+				creatureCount++
+			}
+		}
+		hasSacFodder = creatureCount > len(pieces)
+	}
+	if needsSacFodder && !hasSacFodder {
+		return false
+	}
+	return true
 }
 
 func (h *YggdrasilHat) isValueEngineKey(c *gameengine.Card) bool {
@@ -2144,13 +2205,7 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 		if len(survivors) > 0 {
 			chosen = []*gameengine.Permanent{survivors[0]}
 		} else if willDieIfUnblocked {
-			smallest := legal[0]
-			for _, b := range legal[1:] {
-				if b.Power()+b.Toughness() < smallest.Power()+smallest.Toughness() {
-					smallest = b
-				}
-			}
-			chosen = []*gameengine.Permanent{smallest}
+			chosen = []*gameengine.Permanent{bestChumpBlocker(legal)}
 		}
 
 		// Menace: need a second blocker.

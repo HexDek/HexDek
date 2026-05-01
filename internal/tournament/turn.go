@@ -1663,7 +1663,15 @@ func runCombatActivations(gs *gameengine.GameState, seatIdx int) {
 	if seat == nil || seat.Hat == nil {
 		return
 	}
-	const maxCombatActivations = 2
+	maxCombatActivations := 2
+	for _, p := range seat.Battlefield {
+		if p != nil && p.IsCreature() {
+			maxCombatActivations++
+		}
+	}
+	if maxCombatActivations > 8 {
+		maxCombatActivations = 8
+	}
 	for actCount := 0; actCount < maxCombatActivations; actCount++ {
 		options := buildActivationOptions(gs, seatIdx, "combat")
 		if len(options) == 0 {

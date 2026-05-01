@@ -1931,6 +1931,50 @@ func attackerRank(a *gameengine.Permanent) int {
 	return a.Power() + dt + ds
 }
 
+// bestChumpBlocker picks the best creature to sacrifice as a chump blocker.
+// Prefers tokens, then creatures with death triggers, then summoning-sick
+// creatures, then smallest. This ensures we don't waste valuable permanents
+// when we need to chump-block to survive.
+func bestChumpBlocker(legal []*gameengine.Permanent) *gameengine.Permanent {
+	if len(legal) == 0 {
+		return nil
+	}
+	best := legal[0]
+	bestScore := chumpScore(best)
+	for _, b := range legal[1:] {
+		s := chumpScore(b)
+		if s > bestScore {
+			best = b
+			bestScore = s
+		}
+	}
+	return best
+}
+
+func chumpScore(p *gameengine.Permanent) float64 {
+	if p == nil {
+		return -100
+	}
+	score := 0.0
+	if p.Card != nil {
+		for _, t := range p.Card.Types {
+			if t == "token" {
+				score += 3.0
+				break
+			}
+		}
+		ot := gameengine.OracleTextLower(p.Card)
+		if strings.Contains(ot, "when") && (strings.Contains(ot, "dies") || strings.Contains(ot, "leaves the battlefield")) {
+			score += 2.0
+		}
+	}
+	if p.SummoningSick {
+		score += 1.0
+	}
+	score -= float64(p.Power()+p.Toughness()) * 0.1
+	return score
+}
+
 // stackItemScore — cheap proxy for _stack_item_threat_score. CMC +
 // kind-specific bonus. Full scoring lives in the engine; this is only
 // the mode-threshold gate.
