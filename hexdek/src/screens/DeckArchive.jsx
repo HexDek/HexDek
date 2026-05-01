@@ -1,13 +1,26 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { Panel, KV, Bar, Tag, Btn, Tape } from '../components/chrome'
+import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPie, computeColorByCmc } from '../components/chrome'
 import { api, cardArtUrl } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useAuth } from '../context/AuthContext'
+import { trackEvent } from '../hooks/useAnalytics'
 import { MOCK_DECK_ANALYSIS } from '../services/mock'
 
-const CardThumb = ({ name, cmc, score }) => {
+const CardThumb = ({ name, cmc, score, compact }) => {
   const imgUrl = cardArtUrl(name)
+  if (compact) {
+    return (
+      <div className="panel" style={{ padding: 0 }}>
+        <div style={{ aspectRatio: '5/4', position: 'relative', overflow: 'hidden' }}>
+          <img src={imgUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'saturate(0.6) contrast(1.1)' }} onError={e => { e.target.style.display = 'none'; e.target.parentElement.classList.add('hatch') }} />
+        </div>
+        <div style={{ padding: '3px 5px' }}>
+          <div style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1.1, minHeight: 14, overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="panel" style={{ padding: 0 }}>
       <div style={{ aspectRatio: '5/7', borderBottom: '1px solid var(--rule-2)', position: 'relative', overflow: 'hidden' }}>
@@ -96,13 +109,71 @@ export default function DeckArchive() {
 
   const deckName = deck?.commander || id?.replace(/_/g, ' ').toUpperCase() || 'DECK'
   const cardCount = deck?.card_count || deck?.cards?.length || 99
-  const bracket = deck?.bracket || analysis?.bracket || '?'
+  const userBracket = deck?.bracket || '?'
+  const wbs = analysis?.bracket || userBracket
+  const wbsLabel = analysis?.bracket_label || ''
+  const pls = analysis?.plays_like || null
+  const plsLabel = analysis?.plays_like_label || ''
+  const gameChangers = analysis?.game_changer_count ?? null
   const archetype = analysis?.archetype?.toUpperCase() || 'UNKNOWN'
   const summary = analysis?.gameplan_summary || ''
   const winLines = analysis?.win_lines || []
   const valueKeys = analysis?.value_engine_keys || []
   const evalWeights = analysis?.eval_weights || {}
   const cards = deck?.cards || []
+
+  const clientCurve = (() => {
+    if (!cards.length) return null
+    const dist = Array(8).fill(0)
+    let totalCmc = 0, nonlandCount = 0, landCount = 0
+    const demand = {}
+    for (const c of cards) {
+      const qty = c.quantity || 1
+      const hasType = c.type_line || c.types
+      const typeStr = (c.type_line || (c.types && c.types.join(' ')) || '').toLowerCase()
+      const isLand = hasType ? /\bland\b/.test(typeStr) : ((c.cmc ?? -1) === 0 && !c.mana_cost)
+      if (isLand) { landCount += qty; continue }
+      const cmc = Math.min(c.cmc ?? 0, 7)
+      dist[cmc] += qty
+      totalCmc += (c.cmc ?? 0) * qty
+      nonlandCount += qty
+      if (c.mana_cost) {
+        const pips = c.mana_cost.match(/\{([WUBRG])}/gi) || []
+        for (const p of pips) {
+          const color = p.replace(/[{}]/g, '')
+          demand[color] = (demand[color] || 0) + qty
+        }
+      }
+    }
+    const avgCmc = nonlandCount > 0 ? totalCmc / nonlandCount : 0
+    const peak = dist.indexOf(Math.max(...dist))
+    const shape = peak <= 2 ? 'LOW CURVE' : peak <= 4 ? 'MID CURVE' : 'HIGH CURVE'
+    return { distribution: dist, avg_cmc: avgCmc, curve_shape: shape, land_count: landCount, nonland_count: nonlandCount, demand }
+  })()
+
+  const curveData = analysis?.mana_curve || clientCurve
+  const colorData = analysis?.color_balance?.demand || clientCurve?.demand
+
+  const manaProduction = deck?.mana_production || (() => {
+    if (!cards.length) return null
+    const production = {}
+    const basicMap = { plains: 'W', island: 'U', swamp: 'B', mountain: 'R', forest: 'G' }
+    for (const c of cards) {
+      const qty = c.quantity || 1
+      const typeStr = (c.type_line || '').toLowerCase()
+      if (!/\bland\b/.test(typeStr)) continue
+      for (const [basic, color] of Object.entries(basicMap)) {
+        if (typeStr.includes(basic)) {
+          production[color] = (production[color] || 0) + qty
+        }
+      }
+    }
+    return production
+  })()
+
+  const demandColors = colorData ? Object.keys(colorData).filter(k => colorData[k] > 0) : []
+  const isMultiColor = demandColors.length >= 2
+
   const cmdrCardName = deck?.commander_card || cards.find(c => c.name?.startsWith('COMMANDER:'))?.name?.replace('COMMANDER:', '').trim()
   const cmdrImageUrl = cmdrCardName
     ? cardArtUrl(cmdrCardName)
@@ -121,7 +192,7 @@ export default function DeckArchive() {
 
   return (
     <>
-      <Tape left={`DECK ARCHIVE / / ${owner?.toUpperCase()} / / ${deckName}`} mid={`B${bracket}`} right="EXPORT ↗ ANALYZE ↗" />
+      <Tape left={`DECK ARCHIVE / / ${owner?.toUpperCase()} / / ${deckName}`} mid={pls ? `PLS B${pls} (WBS B${wbs})` : `WBS B${wbs}`} right="EXPORT ↗ ANALYZE ↗" />
 
       <div className="archive-layout">
         <div className="archive-sidebar">
@@ -145,17 +216,23 @@ export default function DeckArchive() {
             <KV rows={[
               ['OWNER', <Link to={`/decks?q=${owner}`} style={{ color: 'var(--ink)', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)' }}>{owner?.toUpperCase()}</Link>],
               ['CARDS', `${cardCount}`],
-              ['BRACKET', `${bracket}`],
+              ['WBS', `B${wbs}${wbsLabel ? ' ' + wbsLabel : ''}`],
+              ['PLS', pls ? `B${pls}${plsLabel ? ' ' + plsLabel : ''}${pls != wbs ? ' ⬆' : ''}` : '—'],
+              ['GAME CHANGERS', gameChangers != null ? `${gameChangers}` : '—'],
               ['ARCHETYPE', archetype],
             ]} />
             {deckElo && (
               <>
                 <div className="hr" style={{ margin: '10px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span className="t-xs muted">CONFIDENCE</span>
+                  <ConfidenceDots games={deckElo.games} showLabel size="lg" />
+                </div>
                 <KV rows={[
-                  ['ELO', <span className="punch">{Math.round(deckElo.rating)}</span>],
+                  ['HexELO', <span className="punch">{Math.round(deckElo.rating)}</span>],
                   ['RECORD', <span><span style={{ color: 'var(--ok)' }}>{deckElo.wins}W</span> — <span style={{ color: 'var(--danger)' }}>{deckElo.losses}L</span></span>],
                   ['WIN RATE', `${deckElo.win_rate}%`],
-                  ['GAMES', `${deckElo.games}`],
+                  ['GAMES', `${deckElo.games?.toLocaleString()}`],
                   ['DELTA', <span style={{ color: deckElo.delta >= 0 ? 'var(--ok)' : 'var(--danger)' }}>{deckElo.delta >= 0 ? '+' : ''}{Math.round(deckElo.delta)}</span>],
                 ]} />
               </>
@@ -189,6 +266,7 @@ export default function DeckArchive() {
               <Btn ghost arrow="↗" onClick={() => {
                 if (!owner || !id) return
                 setAnalyzing(true)
+                trackEvent('run_freya', { deck: `${owner}/${id}` })
                 api.runAnalysis(`${owner}/${id}`).then(() => {
                   setTimeout(() => fetchAnalysis(owner, id), 3000)
                 }).catch(() => setAnalyzing(false))
@@ -270,7 +348,7 @@ export default function DeckArchive() {
           )}
 
           {/* Strategy summary */}
-          <Panel code="04.C" title="FREYA / / ENGINE ANALYSIS" right={<Tag solid>BRACKET {bracket}</Tag>}>
+          <Panel code="04.C" title="FREYA / / ENGINE ANALYSIS" right={<Tag solid>WBS B{wbs}{pls && pls !== wbs ? ` → PLS B${pls}` : ''}</Tag>}>
             {!analysis ? (
               <div style={{ padding: '20px 0', textAlign: 'center' }}>
                 <div className="t-md muted" style={{ lineHeight: 1.8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -305,6 +383,66 @@ export default function DeckArchive() {
               </div>
             )}
           </Panel>
+
+          {/* Mana Curve + Color Balance */}
+          {curveData && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }} className="curve-grid">
+              <Panel code="04.M" title="MANA CURVE">
+                <ManaCurveChart
+                  distribution={curveData.distribution}
+                  avgCmc={curveData.avg_cmc}
+                  curveShape={curveData.curve_shape}
+                  warnings={curveData.warnings}
+                  landCount={curveData.land_count}
+                  nonlandCount={curveData.nonland_count}
+                  colorByCmc={computeColorByCmc(cards)}
+                />
+              </Panel>
+              <Panel code="04.N" title="COLOR BALANCE">
+                <ColorPie demand={colorData} />
+                {isMultiColor && manaProduction && colorData && (() => {
+                  const MANA_COLORS = { W: '#E0EBD3', U: '#6E8FA0', B: '#3a3628', R: '#CC5C4A', G: '#82C472', C: '#8A9682' }
+                  const allColors = [...new Set([...Object.keys(colorData), ...Object.keys(manaProduction)])].filter(k => (colorData[k] || 0) > 0).sort()
+                  const totalProd = allColors.reduce((s, k) => s + (manaProduction[k] || 0), 0)
+                  const totalDem = allColors.reduce((s, k) => s + (colorData[k] || 0), 0)
+                  if (totalProd === 0 || totalDem === 0) return null
+                  return (
+                    <div style={{ marginTop: 12 }}>
+                      <div className="t-xs muted" style={{ marginBottom: 6 }}>PRODUCTION vs DEMAND</div>
+                      {allColors.map(color => {
+                        const prodPct = Math.round(((manaProduction[color] || 0) / totalProd) * 100)
+                        const demPct = Math.round(((colorData[color] || 0) / totalDem) * 100)
+                        const diff = prodPct - demPct
+                        const ok = diff >= -3
+                        return (
+                          <div key={color} style={{ marginBottom: 6 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2 }}>
+                              <span className="t-xs" style={{ fontWeight: 700 }}>{color}</span>
+                              <span className="t-xs" style={{ color: ok ? 'var(--ok)' : 'var(--danger)' }}>
+                                {prodPct}% / {demPct}%{diff !== 0 ? ` (${diff > 0 ? '+' : ''}${diff})` : ''}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 1, height: 6 }}>
+                              <div style={{ width: `${prodPct}%`, height: '100%', background: MANA_COLORS[color] || 'var(--ink-3)', opacity: 0.9, borderRadius: 1 }} title={`Production: ${prodPct}% (${manaProduction[color] || 0} sources)`} />
+                            </div>
+                            <div style={{ display: 'flex', gap: 1, height: 3, marginTop: 1 }}>
+                              <div style={{ width: `${demPct}%`, height: '100%', background: 'var(--ink-3)', opacity: 0.4, borderRadius: 1 }} title={`Demand: ${demPct}% (${colorData[color] || 0} pips)`} />
+                            </div>
+                          </div>
+                        )
+                      })}
+                      <div className="t-xs muted" style={{ marginTop: 4 }}>% OF SOURCES / % OF PIPS</div>
+                    </div>
+                  )
+                })()}
+                {analysis?.color_balance?.warnings?.length > 0 && (
+                  <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {analysis.color_balance.warnings.map((w, i) => <Tag key={i} kind="warn" solid>{w}</Tag>)}
+                  </div>
+                )}
+              </Panel>
+            </div>
+          )}
 
           {/* Win lines */}
           {winLines.length > 0 && (
@@ -416,6 +554,7 @@ export default function DeckArchive() {
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <Btn solid arrow="▶" onClick={() => {
                 if (gauntlet?.status === 'running') return
+                trackEvent('start_gauntlet', { deck: `${owner}/${id}`, games: 10000 })
                 api.startGauntlet(`${owner}/${id}`, 10000).then(() => {
                   const poll = () => {
                     api.getGauntlet(`${owner}/${id}`).then(r => {

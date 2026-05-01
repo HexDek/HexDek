@@ -2,7 +2,7 @@
   "abilities": [
     {
       "first5": [
-        "static:if_intervening_tail:_"
+        "static:replacement_static:_"
       ],
       "index": 0,
       "kind": "static"

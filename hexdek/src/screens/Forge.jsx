@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Panel, KV, Bar, Tag, Btn, Tape } from '../components/chrome'
 import { api, cardArtUrl } from '../services/api'
 import { useDecks } from '../hooks/useData'
+import { trackEvent } from '../hooks/useAnalytics'
 
 export default function Forge() {
   const { data: decks, loading: decksLoading } = useDecks()
@@ -9,6 +10,9 @@ export default function Forge() {
   const [deck, setDeck] = useState(null)
   const [analysis, setAnalysis] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [gauntlet, setGauntlet] = useState(null)
+  const [gauntletGames, setGauntletGames] = useState(10000)
+  const [gauntletError, setGauntletError] = useState(null)
 
   // Auto-select first deck when list loads
   useEffect(() => {
@@ -34,9 +38,51 @@ export default function Forge() {
     })
   }, [selectedDeck])
 
+  // Clear gauntlet state when deck changes
+  useEffect(() => {
+    if (!selectedDeck) return
+    setGauntlet(null)
+    setGauntletError(null)
+    // Check if there's an existing gauntlet for this deck
+    const deckId = `${selectedDeck.owner}/${selectedDeck.id}`
+    api.getGauntlet(deckId).then(r => {
+      if (r && r.status && r.status !== 'none') setGauntlet(r)
+    }).catch(() => {})
+  }, [selectedDeck])
+
+  // Poll gauntlet progress while running
+  useEffect(() => {
+    if (!gauntlet || gauntlet.status !== 'running' || !selectedDeck) return
+    const deckId = `${selectedDeck.owner}/${selectedDeck.id}`
+    const interval = setInterval(() => {
+      api.getGauntlet(deckId).then(r => {
+        if (r && r.status && r.status !== 'none') setGauntlet(r)
+        if (r && r.status !== 'running') clearInterval(interval)
+      }).catch(() => {})
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [gauntlet?.status, selectedDeck])
+
+  const handleStartGauntlet = async () => {
+    if (!selectedDeck) return
+    setGauntletError(null)
+    const deckId = `${selectedDeck.owner}/${selectedDeck.id}`
+    try {
+      trackEvent('start_gauntlet', { deck: deckId, games: gauntletGames })
+      await api.startGauntlet(deckId, gauntletGames)
+      setGauntlet({ status: 'running', deck_key: deckId, games: 0, target: gauntletGames, wins: 0, losses: 0, win_rate: 0, commander: deck?.commander || selectedDeck?.name || '' })
+    } catch (e) {
+      setGauntletError(e.message || 'Failed to start gauntlet')
+    }
+  }
+
   const deckName = deck?.commander || selectedDeck?.name || 'SELECT A DECK'
   const cardCount = deck?.card_count || deck?.cards?.length || 0
-  const bracket = deck?.bracket || analysis?.bracket || '?'
+  const wbs = analysis?.bracket || deck?.bracket || '?'
+  const wbsLabel = analysis?.bracket_label || ''
+  const pls = analysis?.plays_like || null
+  const plsLabel = analysis?.plays_like_label || ''
+  const gameChangers = analysis?.game_changer_count ?? null
   const archetype = analysis?.archetype?.toUpperCase() || '—'
   const summary = analysis?.gameplan_summary || ''
   const winLines = analysis?.win_lines || []
@@ -49,7 +95,7 @@ export default function Forge() {
     <>
       <Tape
         left="VARIANT FORGE / / DOC HX-1101"
-        mid={selectedDeck ? `B${bracket}` : 'SELECT DECK'}
+        mid={selectedDeck ? (pls ? `PLS B${pls} (WBS B${wbs})` : `WBS B${wbs}`) : 'SELECT DECK'}
         right={selectedDeck ? `${selectedDeck.owner?.toUpperCase()} / / ${deckName}` : ''}
       />
 
@@ -104,7 +150,9 @@ export default function Forge() {
                     ['COMMANDER', deckName],
                     ['OWNER', selectedDeck.owner?.toUpperCase()],
                     ['CARDS', `${cardCount}`],
-                    ['BRACKET', `${bracket}`],
+                    ['WBS', `B${wbs}${wbsLabel ? ' ' + wbsLabel : ''}`],
+                    ['PLS', pls ? `B${pls}${plsLabel ? ' ' + plsLabel : ''}` : '—'],
+                    ['GAME CHANGERS', gameChangers != null ? `${gameChangers}` : '—'],
                     ['ARCHETYPE', archetype],
                   ]} />
                   {summary && (
@@ -121,7 +169,7 @@ export default function Forge() {
               <>
                 {/* Eval weights */}
                 {Object.keys(evalWeights).length > 0 && (
-                  <Panel code="11.B" title="FREYA / / EVAL WEIGHTS" right={<Tag solid>BRACKET {bracket}</Tag>}>
+                  <Panel code="11.B" title="FREYA / / EVAL WEIGHTS" right={<Tag solid>WBS B{wbs}{pls && pls !== wbs ? ` → PLS B${pls}` : ''}</Tag>}>
                     {Object.entries(evalWeights).slice(0, 8).map(([k, v], i) => (
                       <div key={i} style={{ display: 'grid', gridTemplateColumns: '140px 1fr 36px', alignItems: 'center', gap: 6, marginTop: 6 }}>
                         <span className="t-xs">{k.replace(/_/g, ' ').toUpperCase()}</span>
@@ -202,14 +250,38 @@ export default function Forge() {
               </Panel>
             )}
 
-            {/* Action buttons — simulation features are placeholders */}
+            {/* Gauntlet controls + results */}
             <Panel code="11.F" title="FORGE ACTIONS">
-              <div className="t-xs muted" style={{ marginBottom: 10, lineHeight: 1.6 }}>
-                &gt; VARIANT SIMULATION ENGINE NOT YET CONNECTED.<br />
-                &gt; USE THE DECK ARCHIVE TO VIEW FULL ANALYSIS.<span className="blink">_</span>
-              </div>
+              {gauntletError && (
+                <div className="t-xs" style={{ color: 'var(--danger)', marginBottom: 8 }}>
+                  &gt; ERROR: {gauntletError}
+                </div>
+              )}
+
+              {(!gauntlet || gauntlet.status === 'none' || gauntlet.status === 'complete' || gauntlet.status === 'error') && (
+                <>
+                  <div className="t-xs muted" style={{ marginBottom: 10, lineHeight: 1.6 }}>
+                    &gt; RUN THIS DECK THROUGH A GAUNTLET OF SIMULATED GAMES.<br />
+                    &gt; TRACKS WIN RATE, ELO DELTA, AND MATCHUP DATA.<span className="blink">_</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span className="t-xs">GAMES:</span>
+                    {[1000, 5000, 10000, 25000].map(n => (
+                      <Tag key={n} solid={gauntletGames === n} onClick={() => setGauntletGames(n)} style={{ cursor: 'pointer' }}>
+                        {n >= 1000 ? `${n / 1000}K` : n}
+                      </Tag>
+                    ))}
+                  </div>
+                </>
+              )}
+
               <div className="flex gap-2">
-                <Btn solid arrow="▶" onClick={() => {}}>RUN GAUNTLET (SOON)</Btn>
+                {(!gauntlet || gauntlet.status === 'none' || gauntlet.status === 'complete' || gauntlet.status === 'error') && (
+                  <Btn solid arrow="▶" onClick={handleStartGauntlet}>RUN GAUNTLET</Btn>
+                )}
+                {gauntlet?.status === 'running' && (
+                  <Btn solid arrow="◼" onClick={() => {}}>RUNNING ({gauntlet.games || 0}/{gauntlet.target || gauntletGames})</Btn>
+                )}
                 <Btn ghost arrow="↗" onClick={() => {
                   if (!cards.length) return
                   const lines = cards.map(c => c.quantity > 1 ? `${c.quantity} ${c.name}` : `1 ${c.name}`)
@@ -223,6 +295,66 @@ export default function Forge() {
                 }}>EXPORT .TXT</Btn>
               </div>
             </Panel>
+
+            {/* Gauntlet progress / results */}
+            {gauntlet && gauntlet.status === 'running' && (
+              <Panel code="11.G" title={`GAUNTLET / / ${gauntlet.commander || deckName}`} right={<Tag>RUNNING</Tag>}>
+                <div style={{ marginBottom: 10 }}>
+                  <Bar value={gauntlet.games && gauntlet.target ? (gauntlet.games / gauntlet.target) * 100 : 0} />
+                </div>
+                <KV rows={[
+                  ['PROGRESS', `${gauntlet.games || 0} / ${gauntlet.target || gauntletGames} GAMES`],
+                  ['WINS', `${gauntlet.wins || 0}`],
+                  ['LOSSES', `${gauntlet.losses || 0}`],
+                  ['WIN RATE', `${gauntlet.win_rate || 0}%`],
+                ]} />
+                <div className="t-xs muted" style={{ marginTop: 10 }}>
+                  &gt; GAUNTLET IN PROGRESS. UPDATING EVERY 2S<span className="blink">_</span>
+                </div>
+              </Panel>
+            )}
+
+            {gauntlet && gauntlet.status === 'complete' && (
+              <Panel code="11.G" title={`GAUNTLET RESULTS / / ${gauntlet.commander || deckName}`} right={<Tag solid>COMPLETE</Tag>}>
+                <KV rows={[
+                  ['GAMES', `${gauntlet.games}`],
+                  ['WINS / LOSSES', `${gauntlet.wins} / ${gauntlet.losses}`],
+                  ['WIN RATE', `${gauntlet.win_rate}%`],
+                  ['ELO DELTA', `${gauntlet.elo_delta >= 0 ? '+' : ''}${gauntlet.elo_delta}`],
+                  ['ELO', `${gauntlet.elo_start} → ${gauntlet.elo_end}`],
+                  ['AVG TURNS', `${gauntlet.avg_turns}`],
+                ]} />
+                {(gauntlet.top_beaten?.length > 0 || gauntlet.top_lost_to?.length > 0) && (
+                  <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    {gauntlet.top_beaten?.length > 0 && (
+                      <div>
+                        <div className="t-xs" style={{ fontWeight: 700, marginBottom: 4 }}>TOP BEATEN</div>
+                        {gauntlet.top_beaten.map((b, i) => (
+                          <div key={i} className="t-xs muted" style={{ lineHeight: 1.6 }}>{b}</div>
+                        ))}
+                      </div>
+                    )}
+                    {gauntlet.top_lost_to?.length > 0 && (
+                      <div>
+                        <div className="t-xs" style={{ fontWeight: 700, marginBottom: 4 }}>TOP LOST TO</div>
+                        {gauntlet.top_lost_to.map((l, i) => (
+                          <div key={i} className="t-xs muted" style={{ lineHeight: 1.6 }}>{l}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Panel>
+            )}
+
+            {gauntlet && gauntlet.status === 'error' && (
+              <Panel code="11.G" title="GAUNTLET / / ERROR">
+                <div className="t-xs" style={{ color: 'var(--danger)', lineHeight: 1.6 }}>
+                  &gt; DECK NOT FOUND IN ENGINE POOL.<br />
+                  &gt; ENSURE THIS DECK HAS A VALID COMMANDER AND 100+ CARDS.<span className="blink">_</span>
+                </div>
+              </Panel>
+            )}
           </>
         )}
 

@@ -10,7 +10,7 @@
     {
       "first5": [
         "trig:attack",
-        "damage_effect"
+        "damage"
       ],
       "index": 1,
       "kind": "triggered"

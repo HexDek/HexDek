@@ -60,8 +60,6 @@ func oppositionAgentETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		"controls": "opponent_library_searches",
 		"rule":     "701.19",
 	})
-	emitPartial(gs, slug, perm.Card.DisplayName(),
-		"search_replacement_callsites_must_consult_OppositionAgentControlsSearch")
 }
 
 // OppositionAgentControlsSearch returns the seat index of the player

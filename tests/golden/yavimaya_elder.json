@@ -3,7 +3,8 @@
     {
       "first5": [
         "trig:die",
-        "optional_effect"
+        "optional",
+        "tutor"
       ],
       "index": 0,
       "kind": "triggered"

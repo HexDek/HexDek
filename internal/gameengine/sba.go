@@ -55,7 +55,9 @@ func StateBasedActions(gs *GameState) bool {
 		if sba704_5d(gs) {
 			changed = true
 		}
-		sba704_5e(gs) // stub — see helper.
+		if sba704_5e(gs) {
+			changed = true
+		}
 
 		// Creature / planeswalker death SBAs (§704.5f–§704.5i).
 		if sba704_5f(gs) {
@@ -399,14 +401,81 @@ func cardIsToken(c *Card) bool {
 // ceases to exist. If a copy of a card is in any zone other than the stack
 // or the battlefield, it ceases to exist." (CR §704.5e, rules file line 5461.)
 //
-// STUB — Phase 3 doesn't yet track spell-copies (Fork / Twinflame). Mirrors
-// Python's stub (_sba_704_5e). Revisit once copy-tracking is wired into the
-// stack.
+// Copies are flagged via Card.IsCopy (set by resolveCopySpell, storm copies,
+// cascade copies, etc.). This SBA sweeps hand, graveyard, exile, and library
+// for copy-flagged cards and removes them — they were never real cards in any
+// deck, so zone conservation doesn't apply.
 func sba704_5e(gs *GameState) bool {
-	// TODO(phase-7): flag copies via a `Card.IsCopy` bool or per-StackItem
-	// `IsCopy` flag. No-op until the stack resolver creates copies.
-	_ = gs
-	return false
+	changed := false
+	for _, s := range gs.Seats {
+		if s == nil {
+			continue
+		}
+		// Sweep hand.
+		if n := removeCopiesFromZone(&s.Hand); n > 0 {
+			gs.LogEvent(Event{
+				Kind: "sba_704_5e", Seat: s.Idx,
+				Amount: n,
+				Details: map[string]interface{}{
+					"zone": "hand", "rule": "704.5e",
+				},
+			})
+			changed = true
+		}
+		// Sweep graveyard.
+		if n := removeCopiesFromZone(&s.Graveyard); n > 0 {
+			gs.LogEvent(Event{
+				Kind: "sba_704_5e", Seat: s.Idx,
+				Amount: n,
+				Details: map[string]interface{}{
+					"zone": "graveyard", "rule": "704.5e",
+				},
+			})
+			changed = true
+		}
+		// Sweep exile.
+		if n := removeCopiesFromZone(&s.Exile); n > 0 {
+			gs.LogEvent(Event{
+				Kind: "sba_704_5e", Seat: s.Idx,
+				Amount: n,
+				Details: map[string]interface{}{
+					"zone": "exile", "rule": "704.5e",
+				},
+			})
+			changed = true
+		}
+		// Sweep library.
+		if n := removeCopiesFromZone(&s.Library); n > 0 {
+			gs.LogEvent(Event{
+				Kind: "sba_704_5e", Seat: s.Idx,
+				Amount: n,
+				Details: map[string]interface{}{
+					"zone": "library", "rule": "704.5e",
+				},
+			})
+			changed = true
+		}
+	}
+	return changed
+}
+
+// removeCopiesFromZone removes all Card entries with IsCopy==true from the
+// given zone slice in-place. Returns the count removed. Used by sba704_5e.
+func removeCopiesFromZone(zone *[]*Card) int {
+	if zone == nil || len(*zone) == 0 {
+		return 0
+	}
+	removed := 0
+	kept := (*zone)[:0]
+	for _, c := range *zone {
+		if c != nil && c.IsCopy {
+			removed++
+			continue
+		}
+		kept = append(kept, c)
+	}
+	*zone = kept
+	return removed
 }
 
 // -----------------------------------------------------------------------------

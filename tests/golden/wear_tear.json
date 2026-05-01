@@ -2,7 +2,7 @@
   "abilities": [
     {
       "first5": [
-        "static:spell_effect:_"
+        "static:typed_spell_effect:_"
       ],
       "index": 0,
       "kind": "static"
@@ -16,7 +16,7 @@
     },
     {
       "first5": [
-        "static:spell_effect:_"
+        "static:typed_spell_effect:_"
       ],
       "index": 2,
       "kind": "static"

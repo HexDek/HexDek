@@ -2,10 +2,10 @@
   "abilities": [
     {
       "first5": [
-        "static:bare_self_orphan:_"
+        "keyword:changeling"
       ],
       "index": 0,
-      "kind": "static"
+      "kind": "keyword"
     },
     {
       "first5": [

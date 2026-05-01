@@ -6,7 +6,6 @@ kanban-plugin: board
 
 ## Known Unknowns
 
-- [ ] Copy token mana value — do copy tokens (Clone, Satya, Populate) inherit mana_cost from the original? CR 706.2 says copiable values include mana cost. If engine zeros it on token creation, mana-value-matters cards (Engineered Explosives, Culling Sun, etc.) break. Needs verification. #engine #copy
 
 
 ## Confirmed Bugs
@@ -25,6 +24,7 @@ kanban-plugin: board
 - [x] Compound type filter for cast triggers #engine
 - [x] 8 dead per_card triggers — 7 fixed, alias normalization added #engine
 - [x] Freya false positives (~20/28) — self-exile, hand vs battlefield, attack-trigger dependency, randomness #freya
+- [x] Copy token mana value — BaseCharacteristics() missing `c.CMC = p.Card.CMC`. Copy tokens (Satya, Kiki-Jiki, Clone, Sakashima, Rite of Replication) now inherit mana cost per CR §707.2 #engine #copy
 
 
 

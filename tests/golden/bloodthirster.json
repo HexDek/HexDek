@@ -24,14 +24,14 @@
     },
     {
       "first5": [
-        "static:spell_effect:_"
+        "static:typed_spell_effect:_"
       ],
       "index": 3,
       "kind": "static"
     },
     {
       "first5": [
-        "static:parsed_tail:_"
+        "static:restriction:_"
       ],
       "index": 4,
       "kind": "static"

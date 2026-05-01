@@ -10,7 +10,7 @@
     },
     {
       "first5": [
-        "static:if_intervening_tail:_"
+        "static:conditional_static:_"
       ],
       "index": 1,
       "kind": "static"

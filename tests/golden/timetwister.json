@@ -2,7 +2,7 @@
   "abilities": [
     {
       "first5": [
-        "static:parsed_tail:_"
+        "static:typed_spell_effect:_"
       ],
       "index": 0,
       "kind": "static"

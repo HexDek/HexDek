@@ -558,6 +558,7 @@ func registerDefaults() {
 	registerEternalWitness(Global())
 	registerSylvanLibrary(Global())
 	registerChromeMox(Global())
+	registerMoxDiamond(Global())
 	registerMoxAmber(Global())
 	registerMoxOpal(Global())
 	registerGemstoneCaverns(Global())
@@ -701,6 +702,54 @@ func registerDefaults() {
 	registerDefenseGrid(Global())
 	registerNotionThief(Global())
 	// Trinisphere: already wired in ScanCostModifiers by name, no per-card handler needed.
+
+	// Batch #15 — high-impact commander staples that were skewing ELO.
+	registerSolRing(Global())
+	registerManaVault(Global())
+	registerDarkRitual(Global())
+	registerSmotheringTithe(Global())
+	registerWindfall(Global())
+	registerWheelOfFortune(Global())
+	registerEntomb(Global())
+	registerReanimate(Global())
+	registerAnimateDead(Global())
+	registerForceOfWill(Global())
+	registerForceOfNegation(Global())
+	registerFierceGuardianship(Global())
+	registerLionsEyeDiamond(Global())
+	registerDauthiVoidwalker(Global())
+	registerYawgmothThranPhysician(Global())
+	registerGildedDrake(Global())
+	registerSurvivalOfTheFittest(Global())
+
+	// Batch #16 — WotC Game Changers: the 25 highest-impact cards in
+	// Commander that were missing handlers, causing cEDH decks to
+	// underperform against precons.
+	registerHumility(Global())
+	registerTeferisProtection(Global())
+	registerConsecratedSphinx(Global())
+	registerGiftsUngiven(Global())
+	registerIntuition(Global())
+	registerNarsetParterOfVeils(Global())
+	registerBraidsCabalMinion(Global())
+	registerImperialSeal(Global())
+	registerOrcishBowmasters(Global())
+	registerGamble(Global())
+	registerJeskasWill(Global())
+	registerBiorhythm(Global())
+	registerCropRotation(Global())
+	registerNaturalOrder(Global())
+	registerSeedbornMuse(Global())
+	registerAuraShards(Global())
+	registerCoalitionVictory(Global())
+	registerGrandArbiterAugustinIV(Global())
+	registerFieldOfTheDead(Global())
+	registerGaeasCradle(Global())
+	registerGlacialChasm(Global())
+	registerMishrasWorkshop(Global())
+	registerPanopticMirror(Global())
+	registerSerrasSanctum(Global())
+	registerTabernacleAtPendrellVale(Global())
 }
 
 func init() {

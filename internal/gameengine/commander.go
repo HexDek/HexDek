@@ -1,6 +1,9 @@
 package gameengine
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // Phase 9 — Commander format (CR §903).
 //
@@ -369,6 +372,13 @@ func CastCommanderFromCommandZone(gs *GameState, seatIdx int, commanderName stri
 		return &CastError{Reason: "commander_not_in_command_zone"}
 	}
 	cmdr := seat.CommandZone[cmdrIdx]
+
+	// §601.2a — Drannith Magistrate prevents opponents from casting
+	// spells from anywhere other than their hand (includes command zone).
+	if drannithBlocksZoneCast(gs, seatIdx) {
+		return &CastError{Reason: "drannith_magistrate"}
+	}
+
 	// §903.8 cost calc — per-commander cast count.
 	tax := 0
 	if seat.CommanderCastCounts != nil {
@@ -624,4 +634,23 @@ func TotalCommanderDamageBy(seat *Seat, commanderName string) int {
 		total += byName[commanderName]
 	}
 	return total
+}
+
+// drannithBlocksZoneCast returns true if an opponent controls a
+// Drannith Magistrate that prevents castingSeat from casting spells
+// from non-hand zones. Checks gs.Flags["drannith_active_seat_N"]
+// set by the per_card ETB handler.
+func drannithBlocksZoneCast(gs *GameState, castingSeat int) bool {
+	if gs == nil || gs.Flags == nil {
+		return false
+	}
+	for i := range gs.Seats {
+		if i == castingSeat {
+			continue
+		}
+		if gs.Flags["drannith_active_seat_"+strconv.Itoa(i)] > 0 {
+			return true
+		}
+	}
+	return false
 }

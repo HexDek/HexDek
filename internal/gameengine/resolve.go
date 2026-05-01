@@ -490,9 +490,108 @@ func resolveDamage(gs *GameState, src *Permanent, e *gameast.Damage) {
 			targets = []Target{{Kind: TargetKindSeat, Seat: opps[0]}}
 		}
 	}
-	for _, t := range targets {
-		applyDamage(gs, src, t, amount)
+	if e.Divided && len(targets) > 1 {
+		// CR §601.2d: "distribute N damage among any number of targets".
+		// The caster divides the total damage among the targets at cast
+		// time. MVP heuristic: distribute as evenly as possible, with
+		// remainder going to the first target(s). A Hat-driven chooser
+		// can override this via ChooseDamageDistribution in the future.
+		distributeDamage(gs, src, targets, amount)
+	} else {
+		for _, t := range targets {
+			applyDamage(gs, src, t, amount)
+		}
 	}
+}
+
+// distributeDamage divides `total` damage among `targets` as evenly as
+// possible. CR §601.2d requires each target to receive at least 1 damage
+// when damage is being distributed. Remainder after equal division goes
+// to the first targets (heuristic: prioritize player targets over
+// permanent targets since reducing life totals is typically more
+// impactful for game outcome).
+func distributeDamage(gs *GameState, src *Permanent, targets []Target, total int) {
+	n := len(targets)
+	if n == 0 || total <= 0 {
+		return
+	}
+	// CR §601.2d: each chosen target must receive at least 1 damage.
+	// If total < number of targets, only assign to the first `total` targets.
+	if total < n {
+		for i := 0; i < total; i++ {
+			applyDamage(gs, src, targets[i], 1)
+		}
+		gs.LogEvent(Event{
+			Kind:   "damage_distributed",
+			Seat:   controllerSeat(src),
+			Source: sourceName(src),
+			Amount: total,
+			Details: map[string]interface{}{
+				"targets_hit": total,
+				"targets_total": n,
+				"rule":          "601.2d",
+			},
+		})
+		return
+	}
+	base := total / n
+	remainder := total % n
+	// Hat-driven distribution: ask the controller's Hat if it implements
+	// the optional DamageDistributor interface.
+	controller := controllerSeat(src)
+	if controller >= 0 && controller < len(gs.Seats) {
+		seat := gs.Seats[controller]
+		if dd, ok := seat.Hat.(DamageDistributor); seat != nil && seat.Hat != nil && ok {
+			amounts := dd.ChooseDamageDistribution(gs, controller, targets, total)
+			if len(amounts) == n {
+				// Validate: sum must equal total, each >= 1.
+				sum := 0
+				valid := true
+				for _, a := range amounts {
+					if a < 1 {
+						valid = false
+						break
+					}
+					sum += a
+				}
+				if valid && sum == total {
+					for i, t := range targets {
+						applyDamage(gs, src, t, amounts[i])
+					}
+					gs.LogEvent(Event{
+						Kind:   "damage_distributed",
+						Seat:   controller,
+						Source: sourceName(src),
+						Amount: total,
+						Details: map[string]interface{}{
+							"distribution": amounts,
+							"rule":         "601.2d",
+						},
+					})
+					return
+				}
+			}
+		}
+	}
+	// Default heuristic: even split with remainder to first targets.
+	for i, t := range targets {
+		dmg := base
+		if i < remainder {
+			dmg++
+		}
+		applyDamage(gs, src, t, dmg)
+	}
+	gs.LogEvent(Event{
+		Kind:   "damage_distributed",
+		Seat:   controllerSeat(src),
+		Source: sourceName(src),
+		Amount: total,
+		Details: map[string]interface{}{
+			"targets": n,
+			"base":    base,
+			"rule":    "601.2d",
+		},
+	})
 }
 
 func applyDamage(gs *GameState, src *Permanent, t Target, amount int) {
@@ -586,6 +685,9 @@ func resolveDraw(gs *GameState, src *Permanent, e *gameast.Draw) {
 		// alt-win (Laboratory Maniac) cancels the draw and sets Won.
 		drawn := 0
 		for i := 0; i < count; i++ {
+			if NarsetBlocksDraw(gs, seat) {
+				break
+			}
 			modifiedCount, cancelled := FireDrawEvent(gs, seat, src)
 			if cancelled {
 				continue
@@ -593,6 +695,7 @@ func resolveDraw(gs *GameState, src *Permanent, e *gameast.Draw) {
 			for k := 0; k < modifiedCount; k++ {
 				if _, ok := gs.drawOne(seat); ok {
 					drawn++
+					IncrementDrawCount(gs, seat)
 				}
 			}
 		}
@@ -647,12 +750,17 @@ func DiscardCard(gs *GameState, card *Card, seat int) {
 	if gs == nil || card == nil || seat < 0 || seat >= len(gs.Seats) {
 		return
 	}
-	MoveCard(gs, card, seat, "hand", "graveyard", "discard")
+	dest := "graveyard"
+	if NecropotenceSkipsDraw(gs, seat) {
+		dest = "exile"
+	}
+	MoveCard(gs, card, seat, "hand", dest, "discard")
 	FireCardTrigger(gs, "card_discarded", map[string]interface{}{
 		"card":           card,
 		"card_name":      card.DisplayName(),
 		"discarder_seat": seat,
 		"is_permanent":   cardIsPermanentType(card),
+		"exiled":         dest == "exile",
 	})
 }
 
@@ -1751,6 +1859,48 @@ func oppositionAgentControlsSeat(gs *GameState, searchingSeat int) int {
 	return -1
 }
 
+// NarsetBlocksDraw returns true if an opponent of drawingSeat controls
+// a Narset, Parter of Veils AND the seat has already drawn 1+ cards
+// this turn. Consults gs.Flags["narset_parter_seat_N"] (set by per_card
+// ETB handler) and gs.Flags["draws_this_turn_seat_N"].
+func NarsetBlocksDraw(gs *GameState, drawingSeat int) bool {
+	if gs == nil || gs.Flags == nil {
+		return false
+	}
+	if gs.Flags["draws_this_turn_seat_"+strconv.Itoa(drawingSeat)] < 1 {
+		return false
+	}
+	for i := range gs.Seats {
+		if i == drawingSeat {
+			continue
+		}
+		if gs.Flags["narset_parter_seat_"+strconv.Itoa(i)] > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// IncrementDrawCount bumps the per-seat-per-turn draw counter.
+func IncrementDrawCount(gs *GameState, seat int) {
+	if gs == nil {
+		return
+	}
+	if gs.Flags == nil {
+		gs.Flags = map[string]int{}
+	}
+	gs.Flags["draws_this_turn_seat_"+strconv.Itoa(seat)]++
+}
+
+// NecropotenceSkipsDraw returns true if the active seat has a
+// Necropotence flag set (skip draw step per oracle text).
+func NecropotenceSkipsDraw(gs *GameState, seat int) bool {
+	if gs == nil || gs.Flags == nil {
+		return false
+	}
+	return gs.Flags["necropotence_seat_"+strconv.Itoa(seat)] > 0
+}
+
 // placeTutoredCard puts a tutored card into the chosen destination.
 // Handles "hand" (default), "battlefield" (+ "battlefield_tapped"),
 // "graveyard", "top_of_library".
@@ -1938,6 +2088,7 @@ func resolveCopySpell(gs *GameState, src *Permanent, e *gameast.CopySpell) {
 	// §707.2: create a copy of the spell on the stack. The copy is not
 	// "cast" — it was "created" directly on the stack (CR §706.10).
 	copyCard := target.Card.DeepCopy()
+	copyCard.IsCopy = true // CR §704.5e — ceases to exist outside stack/battlefield
 	copyItem := &StackItem{
 		Controller: controller,
 		Card:       copyCard,

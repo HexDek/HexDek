@@ -24,6 +24,43 @@ import (
 type Handler struct {
 	DecksDir  string
 	Showmatch *Showmatch
+	cardDB    map[string]oracleCard
+}
+
+type oracleCard struct {
+	CMC        float64 `json:"cmc"`
+	ManaCost   string  `json:"mana_cost"`
+	TypeLine   string  `json:"type_line"`
+	OracleText string  `json:"oracle_text"`
+}
+
+func (h *Handler) LoadCardDB(path string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		log.Printf("carddb: %v", err)
+		return
+	}
+	var cards []struct {
+		Name       string  `json:"name"`
+		CMC        float64 `json:"cmc"`
+		ManaCost   string  `json:"mana_cost"`
+		TypeLine   string  `json:"type_line"`
+		OracleText string  `json:"oracle_text"`
+	}
+	if err := json.Unmarshal(data, &cards); err != nil {
+		log.Printf("carddb: parse error: %v", err)
+		return
+	}
+	h.cardDB = make(map[string]oracleCard, len(cards))
+	for _, c := range cards {
+		h.cardDB[strings.ToLower(c.Name)] = oracleCard{
+			CMC:        c.CMC,
+			ManaCost:   c.ManaCost,
+			TypeLine:   c.TypeLine,
+			OracleText: c.OracleText,
+		}
+	}
+	log.Printf("carddb: loaded %d cards", len(h.cardDB))
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -49,15 +86,21 @@ func (h *Handler) Register(mux *http.ServeMux) {
 }
 
 type DeckSummary struct {
-	ID            string    `json:"id"`
-	Owner         string    `json:"owner"`
-	Name          string    `json:"name"`
-	Commander     string    `json:"commander"`
-	CommanderCard string    `json:"commander_card,omitempty"`
-	CardCount     int       `json:"card_count"`
-	Bracket       string    `json:"bracket"`
-	Color         string    `json:"color"`
-	ImportedAt    time.Time `json:"imported_at"`
+	ID               string    `json:"id"`
+	Owner            string    `json:"owner"`
+	Name             string    `json:"name"`
+	Commander        string    `json:"commander"`
+	CommanderCard    string    `json:"commander_card,omitempty"`
+	CardCount        int       `json:"card_count"`
+	Bracket          string    `json:"bracket"`
+	Color            string    `json:"color"`
+	ImportedAt       time.Time `json:"imported_at"`
+	WBS              int       `json:"wbs,omitempty"`
+	WBSLabel         string    `json:"wbs_label,omitempty"`
+	PLS              int       `json:"pls,omitempty"`
+	PLSLabel         string    `json:"pls_label,omitempty"`
+	GameChangerCount int       `json:"game_changer_count,omitempty"`
+	Archetype        string    `json:"archetype,omitempty"`
 }
 
 func (h *Handler) handleListDecks(w http.ResponseWriter, r *http.Request) {
@@ -119,11 +162,46 @@ func (h *Handler) handleListDecks(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	for i := range decks {
+		enrichDeckSummary(h.DecksDir, &decks[i])
+	}
+
 	sort.Slice(decks, func(i, j int) bool {
 		return decks[i].ImportedAt.After(decks[j].ImportedAt)
 	})
 
 	writeJSON(w, decks)
+}
+
+func enrichDeckSummary(decksDir string, ds *DeckSummary) {
+	strategyFile := filepath.Join(decksDir, ds.Owner, "freya", ds.ID+".strategy.json")
+	data, err := os.ReadFile(strategyFile)
+	if err != nil {
+		return
+	}
+	var strat struct {
+		Bracket          int    `json:"bracket"`
+		BracketLabel     string `json:"bracket_label"`
+		PlaysLike        int    `json:"plays_like"`
+		PlaysLikeLabel   string `json:"plays_like_label"`
+		GameChangerCount int    `json:"game_changer_count"`
+		Archetype        string `json:"archetype"`
+	}
+	if json.Unmarshal(data, &strat) != nil {
+		return
+	}
+	if strat.Bracket > 0 {
+		ds.WBS = strat.Bracket
+		ds.WBSLabel = strat.BracketLabel
+	}
+	if strat.PlaysLike > 0 {
+		ds.PLS = strat.PlaysLike
+		ds.PLSLabel = strat.PlaysLikeLabel
+	}
+	ds.GameChangerCount = strat.GameChangerCount
+	if strat.Archetype != "" {
+		ds.Archetype = strat.Archetype
+	}
 }
 
 func (h *Handler) handleGetDeck(w http.ResponseWriter, r *http.Request) {
@@ -162,17 +240,100 @@ func (h *Handler) handleGetDeck(w http.ResponseWriter, r *http.Request) {
 		} else {
 			totalCards++
 		}
+		if h.cardDB != nil {
+			name, _ := c["name"].(string)
+			lookupName := name
+			if idx := strings.Index(lookupName, "("); idx > 0 {
+				lookupName = strings.TrimSpace(lookupName[:idx])
+			}
+			if oc, ok := h.cardDB[strings.ToLower(lookupName)]; ok {
+				if _, hasCmc := c["cmc"]; !hasCmc {
+					c["cmc"] = int(oc.CMC)
+				}
+				if _, hasMana := c["mana_cost"]; !hasMana && oc.ManaCost != "" {
+					c["mana_cost"] = oc.ManaCost
+				}
+				if _, hasType := c["type_line"]; !hasType && oc.TypeLine != "" {
+					c["type_line"] = oc.TypeLine
+				}
+			}
+		}
 	}
+	production := computeManaProduction(h.cardDB, cards)
 	writeJSON(w, map[string]any{
-		"id":             id,
-		"owner":          owner,
-		"commander":      commander,
-		"commander_card": cmdrCard,
-		"bracket":        bracket,
-		"color":          color,
-		"card_count":     totalCards,
-		"cards":          cards,
+		"id":              id,
+		"owner":           owner,
+		"commander":       commander,
+		"commander_card":  cmdrCard,
+		"bracket":         bracket,
+		"color":           color,
+		"card_count":      totalCards,
+		"cards":           cards,
+		"mana_production": production,
 	})
+}
+
+func computeManaProduction(cardDB map[string]oracleCard, cards []map[string]any) map[string]int {
+	production := map[string]int{}
+	basicMap := map[string]string{"plains": "W", "island": "U", "swamp": "B", "mountain": "R", "forest": "G"}
+	anyColorPhrases := []string{
+		"add one mana of any color",
+		"add one mana of any type",
+		"adds one mana of any color",
+		"add two mana of any",
+		"add three mana of any",
+		"any combination of colors",
+		"mana of any color",
+	}
+
+	for _, c := range cards {
+		qty := 1
+		if q, ok := c["quantity"].(int); ok {
+			qty = q
+		}
+		typeStr := strings.ToLower(fmt.Sprintf("%v", c["type_line"]))
+		if !strings.Contains(typeStr, "land") {
+			continue
+		}
+
+		colored := map[string]bool{}
+		for basic, color := range basicMap {
+			if strings.Contains(typeStr, basic) {
+				colored[color] = true
+			}
+		}
+
+		if cardDB != nil {
+			name, _ := c["name"].(string)
+			lookupName := name
+			if idx := strings.Index(lookupName, "("); idx > 0 {
+				lookupName = strings.TrimSpace(lookupName[:idx])
+			}
+			if oc, ok := cardDB[strings.ToLower(lookupName)]; ok {
+				oracle := strings.ToLower(oc.OracleText)
+				for _, phrase := range anyColorPhrases {
+					if strings.Contains(oracle, phrase) {
+						for _, color := range basicMap {
+							colored[color] = true
+						}
+						break
+					}
+				}
+				for _, pip := range []string{"{w}", "{u}", "{b}", "{r}", "{g}"} {
+					colorKey := strings.ToUpper(strings.Trim(pip, "{}"))
+					addPattern := "add " + pip
+					if strings.Contains(oracle, addPattern) || strings.Contains(oracle, "adds "+pip) {
+						colored[colorKey] = true
+					}
+				}
+			}
+		}
+
+		for color := range colored {
+			production[color] += qty
+		}
+	}
+	return production
 }
 
 func (h *Handler) handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
@@ -804,11 +965,18 @@ func parseDeckJSON(data []byte) []map[string]any {
 	cmdrLower := strings.ToLower(deck.Commander)
 	cmdrInList := false
 	for _, c := range deck.Mainboard {
-		cards = append(cards, map[string]any{
+		entry := map[string]any{
 			"name":     c.Name,
 			"quantity": c.Quantity,
 			"cmc":      c.CMC,
-		})
+		}
+		if c.ManaCost != "" {
+			entry["mana_cost"] = c.ManaCost
+		}
+		if len(c.Types) > 0 {
+			entry["type_line"] = strings.Join(c.Types, " ")
+		}
+		cards = append(cards, entry)
 		if cmdrLower != "" && strings.Contains(strings.ToLower(c.Name), cmdrLower) {
 			cmdrInList = true
 		}
@@ -972,6 +1140,30 @@ var artCacheDir = filepath.Join("data", "cache", "art")
 var artCacheMu sync.Mutex
 var artMemCache sync.Map
 var artInflight sync.Map
+
+func init() {
+	go warmArtCache()
+}
+
+func warmArtCache() {
+	entries, err := os.ReadDir(artCacheDir)
+	if err != nil {
+		return
+	}
+	loaded := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jpg") {
+			continue
+		}
+		hash := strings.TrimSuffix(e.Name(), ".jpg")
+		data, err := os.ReadFile(filepath.Join(artCacheDir, e.Name()))
+		if err == nil && len(data) > 0 {
+			artMemCache.Store(hash, data)
+			loaded++
+		}
+	}
+	log.Printf("art cache: warmed %d images from disk", loaded)
+}
 var artHTTPClient = &http.Client{
 	Timeout: 15 * time.Second,
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -1002,7 +1194,7 @@ func (h *Handler) handleCardArt(w http.ResponseWriter, r *http.Request) {
 
 	if cached, ok := artMemCache.Load(hash); ok {
 		w.Header().Set("Content-Type", "image/jpeg")
-		w.Header().Set("Cache-Control", "public, max-age=2592000")
+		w.Header().Set("Cache-Control", "public, max-age=2592000, stale-while-revalidate=86400")
 		w.Write(cached.([]byte))
 		return
 	}
@@ -1011,7 +1203,7 @@ func (h *Handler) handleCardArt(w http.ResponseWriter, r *http.Request) {
 	if data, err := os.ReadFile(cachePath); err == nil {
 		artMemCache.Store(hash, data)
 		w.Header().Set("Content-Type", "image/jpeg")
-		w.Header().Set("Cache-Control", "public, max-age=2592000")
+		w.Header().Set("Cache-Control", "public, max-age=2592000, stale-while-revalidate=86400")
 		w.Write(data)
 		return
 	}
@@ -1025,7 +1217,7 @@ func (h *Handler) handleCardArt(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "image/jpeg")
-		w.Header().Set("Cache-Control", "public, max-age=2592000")
+		w.Header().Set("Cache-Control", "public, max-age=2592000, stale-while-revalidate=86400")
 		w.Write(res.data)
 		return
 	}
@@ -1068,7 +1260,7 @@ func (h *Handler) handleCardArt(w http.ResponseWriter, r *http.Request) {
 	ch <- artResult{data: data}
 
 	w.Header().Set("Content-Type", "image/jpeg")
-	w.Header().Set("Cache-Control", "public, max-age=2592000")
+	w.Header().Set("Cache-Control", "public, max-age=2592000, stale-while-revalidate=86400")
 	w.Write(data)
 }
 

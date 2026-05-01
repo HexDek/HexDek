@@ -8,32 +8,32 @@ import (
 //
 // Oracle text:
 //
-//	Each instant and sorcery card in your graveyard has escape. The
-//	escape cost is equal to the card's mana cost plus exile three
-//	other cards from your graveyard.
+//	Each nonland card in your graveyard has escape. The escape cost
+//	is equal to the card's mana cost plus exile three other cards
+//	from your graveyard.
 //	At the beginning of the end step, sacrifice Underworld Breach.
 //
-// Breach is a zone-cast-grant. Without a proper "cast from graveyard
-// with escape" primitive in the engine, we model the CORE combo loop:
-// given a pool of instants/sorceries in the graveyard, the controller
-// can repeatedly cast them while Breach is out, exiling 3 other cards
-// each time. The typical combo line is Breach + Brain Freeze /
-// Grapeshot / Lion's Eye Diamond to mill/storm to a win.
+// Breach is THE combo enabler for storm lines. Combined with Lion's Eye
+// Diamond + Brain Freeze, it loops: LED for mana → Brain Freeze from GY
+// via escape (exile 3) → mill yourself for more fuel → LED from GY →
+// repeat until opponents are milled out.
 //
-// Batch #1 scope (MVP):
-//   - Flag the controller's graveyard as "escape_enabled" (perm.Flags).
-//     Downstream cast-spell logic can consult this flag when we build
-//     zone-cast support (Phase 15+). Currently a NO-OP at the cast
-//     resolution site — tests assert the flag is set.
-//   - Register a delayed end-step trigger to sacrifice Breach.
-//   - Does NOT actually allow cards to be cast from the graveyard yet
-//     (engine doesn't have zone-cast primitive). Log partial.
-//
-// Why ship the stub: having the flag + sacrifice trigger means decks
-// using Breach won't crash, and downstream work can plug in the zone-
-// cast grant without refactoring call sites.
+// Implementation:
+//   - OnETB: grant escape to every nonland card in the controller's
+//     graveyard using RegisterZoneCastGrant + NewBreachEscapePermission.
+//     This integrates with the engine's zone_cast.go CastFromZone
+//     primitive so the Hat/AI can actually cast spells from the
+//     graveyard. Also register a delayed end-step trigger to sacrifice
+//     Breach.
+//   - Trigger on graveyard changes: when new cards enter the graveyard
+//     (mill, discard, etc.), grant them escape too. This is critical for
+//     the combo loop where Brain Freeze mills cards that then become
+//     escape-castable.
 func registerUnderworldBreach(r *Registry) {
 	r.OnETB("Underworld Breach", underworldBreachETB)
+	// Refresh escape grants when cards enter the controller's graveyard.
+	r.OnTrigger("Underworld Breach", "zone_change", underworldBreachRefresh)
+	r.OnTrigger("Underworld Breach", "creature_dies", underworldBreachRefresh)
 }
 
 func underworldBreachETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
@@ -46,8 +46,7 @@ func underworldBreachETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		return
 	}
 
-	// Flag the controller's graveyard as escape-enabled. A future
-	// zone-cast pass will consult perm.Flags / gs.Flags.
+	// Set the global flag.
 	if perm.Flags == nil {
 		perm.Flags = map[string]int{}
 	}
@@ -57,11 +56,29 @@ func underworldBreachETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	}
 	gs.Flags["breach_active_seat_"+intToStr(seat)] = perm.Timestamp
 
+	// Grant escape to every nonland card in the controller's graveyard.
+	s := gs.Seats[seat]
+	granted := 0
+	for _, c := range s.Graveyard {
+		if c == nil {
+			continue
+		}
+		if cardHasType(c, "land") {
+			continue
+		}
+		cmc := cardCMC(c)
+		escapePerm := gameengine.NewBreachEscapePermission(cmc)
+		escapePerm.RequireController = seat
+		gameengine.RegisterZoneCastGrant(gs, c, escapePerm)
+		granted++
+	}
+
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
-		"seat": seat,
+		"seat":            seat,
+		"escape_granted":  granted,
+		"zone_cast":       "graveyard_escape_with_exile_3",
+		"integrated":      true,
 	})
-	emitPartial(gs, slug, perm.Card.DisplayName(),
-		"zone_cast_from_graveyard_not_implemented_in_batch1")
 
 	// Register the end-step sacrifice trigger. Delayed triggers fire at
 	// phase/step boundaries; "end_of_turn" is the canonical key.
@@ -75,6 +92,50 @@ func underworldBreachETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 			gameengine.SacrificePermanent(gs, perm, "underworld_breach_end_step")
 			// Remove the escape-grant flag.
 			delete(gs.Flags, "breach_active_seat_"+intToStr(seat))
+			// Revoke all escape grants from the controller's graveyard.
+			seatData := gs.Seats[seat]
+			if seatData != nil {
+				for _, c := range seatData.Graveyard {
+					if c != nil {
+						gameengine.RemoveZoneCastGrant(gs, c)
+					}
+				}
+			}
 		},
 	})
+}
+
+// underworldBreachRefresh fires when cards enter the graveyard. Any new
+// nonland card that arrives while Breach is active gets an escape grant.
+func underworldBreachRefresh(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	if gs == nil || perm == nil {
+		return
+	}
+	seat := perm.Controller
+	if seat < 0 || seat >= len(gs.Seats) {
+		return
+	}
+	// Confirm Breach is still active.
+	if gs.Flags == nil || gs.Flags["breach_active_seat_"+intToStr(seat)] == 0 {
+		return
+	}
+	// Grant escape to any nonland card in the graveyard that doesn't
+	// already have a zone-cast grant.
+	s := gs.Seats[seat]
+	for _, c := range s.Graveyard {
+		if c == nil {
+			continue
+		}
+		if cardHasType(c, "land") {
+			continue
+		}
+		// Check if already granted.
+		if gameengine.GetZoneCastGrant(gs, c) != nil {
+			continue
+		}
+		cmc := cardCMC(c)
+		escapePerm := gameengine.NewBreachEscapePermission(cmc)
+		escapePerm.RequireController = seat
+		gameengine.RegisterZoneCastGrant(gs, c, escapePerm)
+	}
 }

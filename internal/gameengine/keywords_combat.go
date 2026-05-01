@@ -324,7 +324,7 @@ func ApplyBandingDamageRedistribution(gs *GameState, bandedCreatures []*Permanen
 // ---------------------------------------------------------------------------
 
 // GetRampageN returns the rampage N value for a permanent.
-// Reads from Flags["rampage_n"] or defaults to 1 if keyword present.
+// Checks (in priority order): Flags["rampage_n"], AST keyword Args, default 1.
 func GetRampageN(p *Permanent) int {
 	if p == nil {
 		return 0
@@ -336,6 +336,10 @@ func GetRampageN(p *Permanent) int {
 	}
 	if !p.HasKeyword("rampage") {
 		return 0
+	}
+	// Extract N from AST keyword args (e.g. "rampage 2" → Args[0] = 2).
+	if n := keywordNFromAST(p, "rampage"); n > 0 {
+		return n
 	}
 	return 1
 }
@@ -575,6 +579,7 @@ func ApplyMelee(gs *GameState, attackerSeat int, attackers []*Permanent) {
 // ---------------------------------------------------------------------------
 
 // GetAnnihilatorN returns the annihilator N value for a permanent.
+// Checks (in priority order): Flags["annihilator_n"], AST keyword Args, default 1.
 func GetAnnihilatorN(p *Permanent) int {
 	if p == nil {
 		return 0
@@ -586,6 +591,10 @@ func GetAnnihilatorN(p *Permanent) int {
 	}
 	if !p.HasKeyword("annihilator") {
 		return 0
+	}
+	// Extract N from AST keyword args (e.g. "annihilator 6" → Args[0] = 6).
+	if n := keywordNFromAST(p, "annihilator"); n > 0 {
+		return n
 	}
 	return 1 // Default annihilator 1 if not specified.
 }
@@ -668,6 +677,7 @@ func FireAnnihilatorTriggers(gs *GameState, attackers []*Permanent) {
 // ---------------------------------------------------------------------------
 
 // GetAfflictN returns the afflict N value for a permanent.
+// Checks (in priority order): Flags["afflict_n"], AST keyword Args, default 1.
 func GetAfflictN(p *Permanent) int {
 	if p == nil {
 		return 0
@@ -679,6 +689,10 @@ func GetAfflictN(p *Permanent) int {
 	}
 	if !p.HasKeyword("afflict") {
 		return 0
+	}
+	// Extract N from AST keyword args (e.g. "afflict 3" → Args[0] = 3).
+	if n := keywordNFromAST(p, "afflict"); n > 0 {
+		return n
 	}
 	return 1
 }
@@ -1758,6 +1772,39 @@ func AllCombatKeywords() []string {
 // ============================================================================
 // Internal helpers
 // ============================================================================
+
+// keywordNFromAST extracts the numeric N argument from a keyword ability
+// on a permanent's AST. For keywords like "annihilator 6", "afflict 3",
+// "bushido 2", the parser stores the number in Args[0]. Returns 0 if the
+// keyword isn't found or has no numeric argument.
+func keywordNFromAST(p *Permanent, keywordName string) int {
+	if p == nil || p.Card == nil || p.Card.AST == nil {
+		return 0
+	}
+	want := strings.ToLower(strings.TrimSpace(keywordName))
+	for _, ab := range p.Card.AST.Abilities {
+		kw, ok := ab.(*gameast.Keyword)
+		if !ok {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(kw.Name)) != want {
+			continue
+		}
+		if len(kw.Args) > 0 {
+			switch v := kw.Args[0].(type) {
+			case float64:
+				if int(v) > 0 {
+					return int(v)
+				}
+			case int:
+				if v > 0 {
+					return v
+				}
+			}
+		}
+	}
+	return 0
+}
 
 // cardHasKeywordByName checks if a card has a keyword by name in its AST.
 func cardHasKeywordByName(card *Card, name string) bool {

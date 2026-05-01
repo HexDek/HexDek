@@ -617,9 +617,13 @@ func saveFreyaData(deckPath string, report *FreyaReport) {
 // strategyJSON is the compact machine-consumable format read by
 // hat.LoadStrategyFromFreya. Contains only what the evaluator needs.
 type strategyJSON struct {
-	Archetype       string            `json:"archetype"`
-	Bracket         int               `json:"bracket"`
-	GameplanSummary string            `json:"gameplan_summary"`
+	Archetype        string            `json:"archetype"`
+	Bracket          int               `json:"bracket"`
+	BracketLabel     string            `json:"bracket_label"`
+	PlaysLike        int               `json:"plays_like"`
+	PlaysLikeLabel   string            `json:"plays_like_label"`
+	GameChangerCount int               `json:"game_changer_count"`
+	GameplanSummary  string            `json:"gameplan_summary"`
 	WinLines        []strategyWinLine `json:"win_lines"`
 	ValueEngineKeys []string          `json:"value_engine_keys,omitempty"`
 	TutorTargets    []string          `json:"tutor_targets,omitempty"`
@@ -667,10 +671,18 @@ func saveStrategyJSON(path string, report *FreyaReport) {
 	if report.Profile != nil {
 		sj.Archetype = strings.ToLower(report.Profile.PrimaryArchetype)
 		sj.Bracket = report.Profile.Bracket
+		sj.BracketLabel = report.Profile.BracketLabel
+		sj.PlaysLike = report.Profile.PlaysLike
+		sj.PlaysLikeLabel = report.Profile.PlaysLikeLabel
+		sj.GameChangerCount = report.Profile.GameChangerCount
 		sj.GameplanSummary = report.Profile.GameplanSummary
 	} else if report.Archetype != nil {
 		sj.Archetype = strings.ToLower(report.Archetype.Primary)
 		sj.Bracket = report.Archetype.Bracket
+		sj.BracketLabel = report.Archetype.BracketLabel
+		sj.PlaysLike = report.Archetype.PlaysLike
+		sj.PlaysLikeLabel = report.Archetype.PlaysLikeLabel
+		sj.GameChangerCount = report.Archetype.GameChangerCount
 	}
 
 	if report.WinLines != nil {

@@ -555,6 +555,21 @@ func TestGetBushidoN(t *testing.T) {
 	}
 }
 
+func TestGetBushidoN_FromAST(t *testing.T) {
+	gs := newP1P2Game(t)
+	p := addP1P2Battlefield(gs, 0, "Isao, Enlightened Bushi", 2, 1, "creature")
+	p.Card.AST = &gameast.CardAST{
+		Name: "Isao, Enlightened Bushi",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "bushido", Args: []interface{}{float64(2)}},
+		},
+	}
+	// No Flags set — should extract N=2 from AST Args.
+	if got := GetBushidoN(p); got != 2 {
+		t.Fatalf("expected bushido 2 from AST, got %d", got)
+	}
+}
+
 func TestFireBushidoTriggers(t *testing.T) {
 	gs := newP1P2Game(t)
 

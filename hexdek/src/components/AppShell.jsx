@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 const PUBLIC_NAV = [
   { to: '/', label: 'SPLASH', end: true },
   { to: '/decks', label: 'DECKS' },
+  { to: '/leaderboard', label: 'LEADERBOARD' },
   { to: '/spectate', label: 'SPECTATE' },
   { to: '/about', label: 'ABOUT' },
 ]
@@ -12,6 +13,7 @@ const PUBLIC_NAV = [
 const AUTH_NAV = [
   { to: '/dash', label: 'DASH' },
   { to: '/decks', label: 'DECKS' },
+  { to: '/leaderboard', label: 'LEADERBOARD' },
   { to: '/play', label: 'PLAY' },
   { to: '/forge', label: 'FORGE' },
   { to: '/spectate', label: 'SPECTATE' },

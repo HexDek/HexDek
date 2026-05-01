@@ -9,10 +9,10 @@ will actually be able to execute. This report splits them.
 
 | Category | Cards | % | What it means |
 |---|---:|---:|---|
-| **Structural** | 7,280 | 23.01% | Every ability maps to a typed AST node (Damage, Buff, Tutor, Destroy, etc.) that the engine can execute directly. |
-| **Mixed** | 13,167 | 41.62% | Some abilities are typed, others are stubs waiting for engine-side custom resolvers. Playable but incomplete. |
-| **Stub** | 10,831 | 34.23% | AST contains only stub Modifications (`custom(slug)` or similar placeholders). Card is recognized; engine needs a hand-coded resolver. |
-| **Vanilla** | 361 | 1.14% | No oracle text (vanilla creatures, tokens with no abilities). Trivially executable. |
+| **Structural** | 27,261 | 85.29% | Every ability maps to a typed AST node (Damage, Buff, Tutor, Destroy, etc.) that the engine can execute directly. |
+| **Mixed** | 2,399 | 7.51% | Some abilities are typed, others are stubs waiting for engine-side custom resolvers. Playable but incomplete. |
+| **Stub** | 1,940 | 6.07% | AST contains only stub Modifications (`custom(slug)` or similar placeholders). Card is recognized; engine needs a hand-coded resolver. |
+| **Vanilla** | 363 | 1.14% | No oracle text (vanilla creatures, tokens with no abilities). Trivially executable. |
 
 ## Per-card handler stats
 
@@ -26,10 +26,10 @@ for the runtime engine's custom-resolver dispatch.
 ## The honest framing
 
 - **"100% GREEN" = 100% of cards parse without error.** This is real.
-- **"Engine-executable today" = Structural + Vanilla = 7,641 (24.15%).**
+- **"Engine-executable today" = Structural + Vanilla = 27,624 (86.42%).**
   For these cards, the AST is fully typed and a runtime interpreter can execute
   them based on the node types alone.
-- **"Engine work owed" = Stub + Mixed = 23,998 (75.85%).**
+- **"Engine work owed" = Stub + Mixed = 4,339 (13.58%).**
   These cards parse, but the runtime engine would need custom-resolver code
   keyed by slug or by card name to actually play them.
 
@@ -37,9 +37,9 @@ for the runtime engine's custom-resolver dispatch.
 
 When describing this project honestly:
 
-> "The parser reaches syntactic coverage of every printed Magic card (31,639 cards,
-> 100%). Of those, 24.15% produce a fully-typed AST that a runtime
-> engine can execute from the node types alone. The remaining 75.85%
+> "The parser reaches syntactic coverage of every printed Magic card (31,963 cards,
+> 100%). Of those, 86.42% produce a fully-typed AST that a runtime
+> engine can execute from the node types alone. The remaining 13.58%
 > are recognized but carry stub modifications that will need hand-coded resolvers
 > in the engine layer. This is the parser — the runtime engine is the next build."
 

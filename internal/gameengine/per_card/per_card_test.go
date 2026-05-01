@@ -279,9 +279,8 @@ func TestUnderworldBreach_FlagsGraveyardAndRegistersEndStep(t *testing.T) {
 	if len(gs.DelayedTriggers) < 1 {
 		t.Errorf("expected end-step sacrifice trigger registered")
 	}
-	if hasEvent(gs, "per_card_partial") < 1 {
-		t.Errorf("expected per_card_partial breadcrumb for zone-cast stub")
-	}
+	// per_card_partial breadcrumb check removed — Underworld Breach
+	// now uses direct escape implementation instead of emitPartial stub.
 }
 
 // -----------------------------------------------------------------------------

@@ -20,7 +20,8 @@
     {
       "first5": [
         "trig:phase",
-        "conditional_effect"
+        "conditional",
+        "damage"
       ],
       "index": 2,
       "kind": "triggered"

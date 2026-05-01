@@ -4,14 +4,44 @@ kanban-plugin: board
 
 ---
 
+## High Priority — Parser (100% Coverage Push)
+
+- [ ] **P1: Reduce UnknownEffect** — remaining ~4,339 cards (13.6%). Long tail: parsed_tail (1,875), custom (1,039), ability_word (820) #parser
+- [ ] **P2: spell_effect kind** (820 cards) — ability word labels whose trigger body failed re-parse #parser
+- [ ] **P6: saga_chapter kind** (70 cards) — saga chapter text parsing + lore counter mechanics #parser #engine
+- [ ] **P12: TurnFaceUp handler** — only missing effect type (1/43). Morph/disguise face-up, needs Phase 8 layer-1b framework #engine
+
+
 ## High Priority — Engine
+
+- [ ] Duplicate prevention rules (`sba.go:894`) — parser doesn't surface "can't have more than N" state, needs phase-7 wiring #engine
+- [ ] AI behavior policy (`internal/ai/autopilot.go`) — only advances phases, no card play or combat decisions. Non-functional stub. #engine #ai
+- [ ] 20 missing Game Changer per-card handlers (Wave 7 in progress) — Humility, Teferi's Protection, Consecrated Sphinx, Narset, Braids, etc. #engine #per_card
+- [ ] Layer 3 text-changing effects — not implemented per CONFIDENCE_MATRIX #engine #layers
+- [ ] ~30 keyword abilities marked STUB — Annihilator, Afflict, Bushido, etc. per CONFIDENCE_MATRIX #engine #keywords
+- [ ] Trigger doubling (`obeka_support.go:579`) — not implemented #engine
+- [ ] Bracket-aware tournament grinder — switch from AssemblePod to AssembleBracketPod, config flag #engine #matchmaking
 
 
 ## High Priority — Platform
 
-- [ ] Web leaderboard page (show deck ratings, confidence intervals, matchup data) #ui
-- [ ] Deck drilldown UI: Freya curve/ratio analysis + Heimdall game analytics (ELO, card performance, matchups) — APIs already wired #ui
-- [ ] Operator platform page/tab (operator profile, deck management, analytics dashboard — non-engine, UI + platform) #ui #platform
+- [ ] Negative ELO shame badges — "MID" stamp at 0, escalating tiers for deep negative. Leaderboard bottom-10 wall of shame section #ui #fun
+- [ ] Operator platform page/tab (operator profile, deck management, analytics dashboard) #ui #platform
+- [ ] Friends system + player profiles — add friends, view each other's profiles/decks #ui #social
+- [ ] Bracket-stratified leaderboard tabs — filter by B1-B5, separate rankings per bracket #ui
+- [ ] Game Changer cards list on deck page — show which specific GC cards the deck runs #ui
+
+
+## Medium Priority — Engine
+
+- [ ] Dungeon tracking (`sba.go:958`) — SBA 704.5t not implemented, low priority unless Acererak enters meta #engine
+- [ ] Battle/Siege mechanics (`sba.go:1054,1071`) — protector state not modeled #engine
+- [ ] Speed mechanic (`sba.go:1138`) — future mechanic, implement when Speed cards land #engine
+- [ ] Regenerate 3 failing test goldens (basking_rootwalla, shivan_dragon, thorn_lieutenant) — expected failures from parser progress, regen after conjunction-fix pass #test
+
+
+## Medium Priority — Platform
+
 - [ ] BOINC-style distributed compute (desktop client → contribute games → earn credits) #distributed
 - [ ] Deterministic replay anti-cheat (cryptographic seed, spot-check 2-5%, auto-cauterize bad actors) #anticheat
 - [ ] Statistical anomaly detection (per-contributor distribution tracking, 3σ flagging) #anticheat
@@ -21,9 +51,12 @@ kanban-plugin: board
 
 ## Low Priority
 
-- [ ] Concession diagnostics first: track concession rate per commander, board state at scoop, turn of scoop — collect data before designing discount system. Falls under Muninn + Heimdall. #rating #analytics
-- [ ] Multi-format support beyond Commander (future: Modern, Legacy deck ratings) #engine
+- [ ] Concession diagnostics — track concession rate per commander, board state at scoop, turn of scoop. Muninn + Heimdall. #rating #analytics
+- [ ] Multi-format support beyond Commander (Modern, Legacy deck ratings) #engine
 - [ ] Mobile-friendly leaderboard #ui
+- [ ] Donations page BOINC/ads buttons — "COMING SOON" placeholders (`Donations.jsx:109,119`) #ui
+- [ ] Report analysis placeholder (`Report.jsx:332`) — feature not fully wired #ui
+- [ ] Remove empty `internal/rules/` package or populate it #cleanup
 
 
 ## Done
@@ -58,6 +91,25 @@ kanban-plugin: board
 - [x] User profile page (display name, owner name for deck filtering) #ui #platform
 - [x] Splash page GitHub + docs links #ui
 - [x] W/L color fix (wins green, losses red across DeckList, DeckArchive, gauntlet) #ui
+- [x] Parser Wave 4: 73% → 86.42% (+4,193 cards, 125 new rules) #parser
+- [x] Engine resolve stubs: 163/163 mod handlers promoted (0 remaining) #engine
+- [x] Per-card handlers: 17 commander staples (Sol Ring, Force of Will, Smothering Tithe, etc.) #engine
+- [x] Per-card handlers: Necrotic Ooze, Bolas's Citadel, Food Chain, Underworld Breach improved #engine
+- [x] Spell-copy tracking — `Card.IsCopy` bool + SBA 704.5e copy cleanup #engine #copy
+- [x] Layer 7d P/T switching — RegisterPTSwitch, RegisterDoranSiegeTower #engine #layers
+- [x] Reflexive triggers — QueueReflexiveTrigger via DelayedTrigger system #engine #triggers
+- [x] Damage distribution (601.2d) — distributeDamage + DamageDistributor interface #engine
+- [x] Monarch system — BecomeMonarch wired via court cards #engine
+- [x] Annihilator/Afflict/Rampage/Bushido keywords — AST-aware N extraction #engine #keywords
+- [x] Elimination logging — `>>>` death entries with loss reason (life/poison/cmdr/mill) #engine #spectator
+- [x] Custom brutalist sliders — 3px track, 12x12 square thumb, var(--ok) fill #ui #design
+- [x] Web leaderboard — sortable table, search, mobile sort bar, clickable rows, confidence dots #ui
+- [x] ELO confidence badges on deck list + drilldown #ui #rating
+- [x] Deck drilldown mana curve/color pie (client-side fallback when no Freya data) #ui
+- [x] Wire Forge gauntlet backend — game count selector, RUN button, progress bar, results #ui
+- [x] Scryfall card art prefetcher (`cmd/hexdek-artfetch/`) + RAM cache warming at startup #infra
+- [x] Bracket System v2 — WotC-aligned 5-tier (Exhibition/Core/Upgraded/Optimized/cEDH) + 53 Game Changers scoring #engine #rating
+- [x] Bracket-aware matchmaking — AssembleBracketPod with soft ±1 weighting #matchmaking
 
 
 

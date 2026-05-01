@@ -15,6 +15,9 @@ type ArchetypeClassification struct {
 	Intent            string
 	Bracket           int
 	BracketLabel      string
+	PlaysLike         int
+	PlaysLikeLabel    string
+	GameChangerCount  int
 	Signals           []string
 }
 
@@ -50,9 +53,42 @@ type classifyContext struct {
 	millOppCount   int // opponent-targeting mill
 	discardForceCount int
 	bannedCount    int
+	gameChangerCount int
 	profiles       []CardProfile
 	qtyProfiles    []CardProfileQty
 	oracle         *oracleDB
+}
+
+// WotC Commander Game Changers list (53 cards, Feb 2026 update).
+// Presence of these cards is the primary WotC bracket classification signal.
+var gameChangersList = map[string]bool{
+	// White
+	"drannith magistrate": true, "enlightened tutor": true, "farewell": true,
+	"humility": true, "teferi's protection": true, "smothering tithe": true,
+	// Blue
+	"consecrated sphinx": true, "cyclonic rift": true, "force of will": true,
+	"fierce guardianship": true, "gifts ungiven": true, "intuition": true,
+	"mystical tutor": true, "narset, parter of veils": true, "rhystic study": true,
+	"thassa's oracle": true,
+	// Black
+	"ad nauseam": true, "bolas's citadel": true, "braids, cabal minion": true,
+	"demonic tutor": true, "imperial seal": true, "necropotence": true,
+	"opposition agent": true, "orcish bowmasters": true,
+	"tergrid, god of fright": true, "vampiric tutor": true,
+	// Red
+	"gamble": true, "jeska's will": true, "underworld breach": true,
+	// Green
+	"biorhythm": true, "crop rotation": true, "natural order": true,
+	"seedborn muse": true, "survival of the fittest": true, "worldly tutor": true,
+	// Multicolor
+	"aura shards": true, "coalition victory": true,
+	"grand arbiter augustin iv": true, "notion thief": true,
+	// Colorless
+	"ancient tomb": true, "chrome mox": true, "field of the dead": true,
+	"gaea's cradle": true, "glacial chasm": true, "grim monolith": true,
+	"lion's eye diamond": true, "mana vault": true, "mishra's workshop": true,
+	"mox diamond": true, "panoptic mirror": true, "serra's sanctum": true,
+	"the one ring": true, "the tabernacle at pendrell vale": true,
 }
 
 var archetypeFingerprints = []archetypeFingerprint{
@@ -303,6 +339,8 @@ func ClassifyArchetype(report *FreyaReport, qtyProfiles []CardProfileQty, oracle
 	ac.Signals = buildSignals(ctx, ac)
 	ac.Intent = buildIntent(ac, report, ctx)
 	ac.Bracket, ac.BracketLabel = estimateBracket(ctx, report)
+	ac.PlaysLike, ac.PlaysLikeLabel = estimatePlaysLike(ctx, report)
+	ac.GameChangerCount = ctx.gameChangerCount
 
 	return ac
 }
@@ -335,9 +373,13 @@ func buildClassifyContext(report *FreyaReport, qtyProfiles []CardProfileQty, ora
 		if qp.Profile.IsLand {
 			continue
 		}
-		if commanderBannedList[strings.ToLower(qp.Profile.Name)] {
+		nameLower := strings.ToLower(qp.Profile.Name)
+		if commanderBannedList[nameLower] {
 			ctx.bannedCount += qp.Qty
 			continue
+		}
+		if gameChangersList[nameLower] {
+			ctx.gameChangerCount += qp.Qty
 		}
 		nonlandTotal += qp.Qty
 		tl := strings.ToLower(qp.Profile.TypeLine)
@@ -512,6 +554,10 @@ func buildSignals(ctx *classifyContext, ac *ArchetypeClassification) []string {
 		signals = append(signals, "strong tribal core")
 	}
 
+	if ctx.gameChangerCount > 0 {
+		signals = append(signals, fmt.Sprintf("%d Game Changer(s)", ctx.gameChangerCount))
+	}
+
 	if ctx.bannedCount > 0 {
 		signals = append(signals, fmt.Sprintf("%d banned card(s) excluded from bracket scoring", ctx.bannedCount))
 	}
@@ -602,6 +648,17 @@ func buildIntent(ac *ArchetypeClassification, report *FreyaReport, ctx *classify
 func estimateBracket(ctx *classifyContext, report *FreyaReport) (int, string) {
 	score := 0
 
+	// WotC Game Changers — heaviest signal, aligns with official bracket axis
+	if ctx.gameChangerCount >= 8 {
+		score += 4
+	} else if ctx.gameChangerCount >= 4 {
+		score += 3
+	} else if ctx.gameChangerCount >= 2 {
+		score += 2
+	} else if ctx.gameChangerCount >= 1 {
+		score += 1
+	}
+
 	if ctx.tutorDensity >= 0.12 {
 		score += 3
 	} else if ctx.tutorDensity >= 0.08 {
@@ -648,21 +705,173 @@ func estimateBracket(ctx *classifyContext, report *FreyaReport) (int, string) {
 	var bracket int
 	var label string
 	switch {
-	case score >= 10:
+	case score >= 12:
 		bracket = 5
 		label = "cEDH"
-	case score >= 7:
+	case score >= 8:
 		bracket = 4
-		label = "High Power"
-	case score >= 4:
+		label = "Optimized"
+	case score >= 5:
 		bracket = 3
-		label = "Focused"
+		label = "Upgraded"
 	case score >= 2:
 		bracket = 2
-		label = "Casual+"
+		label = "Core"
 	default:
 		bracket = 1
-		label = "Casual"
+		label = "Exhibition"
+	}
+
+	// Ceilings — WotC GC caps
+	if ctx.gameChangerCount == 0 && bracket > 2 {
+		bracket = 2
+		label = "Core"
+	}
+	if ctx.gameChangerCount >= 1 && ctx.gameChangerCount <= 3 && bracket > 3 {
+		bracket = 3
+		label = "Upgraded"
+	}
+
+	// Floors — GC presence guarantees minimum bracket
+	if ctx.gameChangerCount >= 1 && ctx.gameChangerCount <= 3 && bracket < 2 {
+		bracket = 2
+		label = "Core"
+	}
+	if ctx.gameChangerCount >= 4 && bracket < 3 {
+		bracket = 3
+		label = "Upgraded"
+	}
+
+	return bracket, label
+}
+
+// estimatePlaysLike determines what bracket a deck PERFORMS at based on
+// mechanical signals: win condition consistency, speed, redundancy, and
+// strategy coherence. This ignores card pedigree (Game Changers) and
+// focuses on how the deck actually plays.
+func estimatePlaysLike(ctx *classifyContext, report *FreyaReport) (int, string) {
+	score := 0
+
+	// Win line density — more lines = more consistent closing power
+	winLines := 0
+	if report.WinLines != nil {
+		winLines = len(report.WinLines.WinLines)
+	}
+	if winLines >= 5 {
+		score += 3
+	} else if winLines >= 2 {
+		score += 2
+	} else if winLines >= 1 {
+		score += 1
+	}
+
+	// Combo density — true infinites are the strongest signal
+	trueInf := len(report.TrueInfinites)
+	if trueInf >= 3 {
+		score += 3
+	} else if trueInf >= 1 {
+		score += 2
+	}
+	if ctx.comboCount >= 5 {
+		score += 2
+	} else if ctx.comboCount >= 2 {
+		score += 1
+	}
+
+	// Speed — low CMC decks execute faster
+	if ctx.avgCMC < 2.0 {
+		score += 3
+	} else if ctx.avgCMC < 2.5 {
+		score += 2
+	} else if ctx.avgCMC < 3.0 {
+		score += 1
+	} else if ctx.avgCMC > 4.0 {
+		score -= 1
+	}
+
+	// Tutor consistency — ability to find win conditions
+	if ctx.tutorDensity >= 0.12 {
+		score += 3
+	} else if ctx.tutorDensity >= 0.08 {
+		score += 2
+	} else if ctx.tutorDensity >= 0.04 {
+		score += 1
+	}
+
+	// Fast mana — acceleration matters for "plays like"
+	if ctx.fastManaCount >= 8 {
+		score += 2
+	} else if ctx.fastManaCount >= 4 {
+		score += 1
+	}
+
+	// Interaction density — counterspells + removal
+	if ctx.roleRatios[RoleCounterspell] >= 0.08 {
+		score += 2
+	} else if ctx.roleRatios[RoleCounterspell] >= 0.04 {
+		score += 1
+	}
+
+	// Alternate win conditions that bypass normal combat
+	// (poison, infect, commander damage voltron, mill, etc.)
+	hasAltWin := false
+	// Check commander oracle text first
+	if ctx.oracle != nil && report.Commander != "" {
+		entry := ctx.oracle.lookup(report.Commander)
+		if entry != nil {
+			ot := strings.ToLower(entry.OracleText)
+			if ot == "" && len(entry.CardFaces) > 0 {
+				ot = strings.ToLower(entry.CardFaces[0].OracleText)
+			}
+			if strings.Contains(ot, "poison counter") ||
+				strings.Contains(ot, "infect") ||
+				strings.Contains(ot, "you win the game") ||
+				strings.Contains(ot, "loses the game") ||
+				strings.Contains(ot, "commander damage") {
+				hasAltWin = true
+			}
+		}
+	}
+	// Check cards in the 99
+	if !hasAltWin {
+		for _, qp := range ctx.qtyProfiles {
+			if ctx.oracle != nil {
+				entry := ctx.oracle.lookup(qp.Profile.Name)
+				if entry != nil {
+					ot := strings.ToLower(entry.OracleText)
+					if strings.Contains(ot, "poison counter") ||
+						strings.Contains(ot, "infect") ||
+						strings.Contains(ot, "you win the game") ||
+						strings.Contains(ot, "loses the game") {
+						hasAltWin = true
+						break
+					}
+				}
+			}
+		}
+	}
+	if hasAltWin {
+		score += 2
+	}
+
+	var bracket int
+	var label string
+	switch {
+	case score >= 14:
+		bracket = 5
+		label = "cEDH"
+	case score >= 10:
+		bracket = 4
+		label = "Optimized"
+	case score >= 6:
+		bracket = 3
+		label = "Upgraded"
+	case score >= 3:
+		bracket = 2
+		label = "Core"
+	default:
+		bracket = 1
+		label = "Exhibition"
 	}
 
 	return bracket, label

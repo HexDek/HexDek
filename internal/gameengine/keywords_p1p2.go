@@ -565,7 +565,7 @@ func ApplyBushido(gs *GameState, perm *Permanent, bushidoN int) {
 }
 
 // GetBushidoN returns the bushido N value for a permanent.
-// Reads from Flags["bushido_n"] or parses from keyword raw text.
+// Checks (in priority order): Flags["bushido_n"], AST keyword Args, default 1.
 // Returns 0 if no bushido.
 func GetBushidoN(p *Permanent) int {
 	if p == nil {
@@ -580,6 +580,10 @@ func GetBushidoN(p *Permanent) int {
 	// Check keyword flag.
 	if !p.HasKeyword("bushido") {
 		return 0
+	}
+	// Extract N from AST keyword args (e.g. "bushido 2" → Args[0] = 2).
+	if n := keywordNFromAST(p, "bushido"); n > 0 {
+		return n
 	}
 	// Default bushido 1 if keyword present but no N specified.
 	return 1

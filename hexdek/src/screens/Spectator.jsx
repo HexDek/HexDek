@@ -39,10 +39,15 @@ function magma(t) {
   return [a[0] + (b[0] - a[0]) * f | 0, a[1] + (b[1] - a[1]) * f | 0, a[2] + (b[2] - a[2]) * f | 0]
 }
 
-function drawEvalContour(canvas, ev) {
-  if (!canvas || !ev) return
+function drawEvalContour(canvas, ev, lost) {
+  if (!canvas) return
   const S = canvas.width
   const ctx = canvas.getContext('2d')
+  if (!ev || lost) {
+    ctx.fillStyle = '#0c0d0a'
+    ctx.fillRect(0, 0, S, S)
+    return
+  }
   const nm = v => ((v || 0) + 1) / 2
   const g = [
     [nm(ev.board_presence),  nm(ev.card_advantage),      nm(ev.mana_advantage)],
@@ -140,6 +145,17 @@ const LOG_COLORS = {
   mill: 'var(--ink-2)',
 }
 
+const ELIMINATION_KINDS = new Set([
+  'elimination', 'sba_704_5a', 'sba_704_5b', 'sba_704_5c', 'sba_704_5d',
+])
+
+const ELIMINATION_REASONS = {
+  sba_704_5a: 'LIFE ≤ 0',
+  sba_704_5b: 'EMPTY LIBRARY',
+  sba_704_5c: '10+ POISON',
+  sba_704_5d: '21+ COMMANDER DMG',
+}
+
 export default function Spectator() {
   const navigate = useNavigate()
   const { game, elo, stats, speed, status } = useLiveSocket()
@@ -203,7 +219,7 @@ export default function Spectator() {
   useEffect(() => {
     if (!game?.seats) return
     game.seats.forEach((s, i) => {
-      if (heatmapRefs.current[i]) drawEvalContour(heatmapRefs.current[i], s.eval)
+      if (heatmapRefs.current[i]) drawEvalContour(heatmapRefs.current[i], s.eval, s.lost)
     })
   }, [game])
 
@@ -287,7 +303,18 @@ export default function Spectator() {
                       </span>
                     </span>
                   </div>
-                  <div className="seat-body">
+                  <div className="seat-body" style={{ position: 'relative' }}>
+                    {s.lost && !isWinner && (
+                      <div style={{
+                        position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        zIndex: 2, pointerEvents: 'none',
+                      }}>
+                        <span style={{
+                          fontSize: 28, fontWeight: 900, letterSpacing: '0.15em', color: 'var(--danger)',
+                          opacity: 0.7, textShadow: '0 0 12px rgba(0,0,0,0.8)',
+                        }}>GG</span>
+                      </div>
+                    )}
                     <div className="seat-art-col">
                       {artUrl && (
                         <div className="seat-art" style={{
@@ -376,22 +403,36 @@ export default function Spectator() {
                   return reversed.map((entry, i) => {
                     const entryRound = Math.ceil(entry.turn / numSeats)
                     const isOldRound = entryRound < currentRound
+                    const isElim = ELIMINATION_KINDS.has(entry.kind)
+                    const elimReason = ELIMINATION_REASONS[entry.kind]
                     return (
                       <div
                         key={i}
+                        className={isElim ? 'log-elimination' : undefined}
                         style={{
                           display: 'grid',
                           gridTemplateColumns: '50px 1fr',
                           gap: 8,
-                          padding: '2px 0',
+                          padding: isElim ? '4px 0' : '2px 0',
                           borderBottom: i < reversed.length - 1 ? '1px dotted var(--rule)' : 'none',
-                          opacity: isOldRound ? 0.4 : 1,
+                          opacity: isOldRound && !isElim ? 0.4 : 1,
                         }}
                       >
                         <span className="muted-2" style={{ fontSize: 10 }}>{rt(entry.turn)}</span>
-                        <span style={{ color: LOG_COLORS[entry.kind] || 'var(--ink)', letterSpacing: '0.02em' }}>
-                          &gt; {entry.action}
-                        </span>
+                        {isElim ? (
+                          <span style={{
+                            color: 'var(--danger)',
+                            letterSpacing: '0.04em',
+                            fontWeight: 700,
+                            fontSize: 12,
+                          }}>
+                            &gt;&gt;&gt; {entry.action}{elimReason ? ` [${elimReason}]` : ''}
+                          </span>
+                        ) : (
+                          <span style={{ color: LOG_COLORS[entry.kind] || 'var(--ink)', letterSpacing: '0.02em' }}>
+                            &gt; {entry.action}
+                          </span>
+                        )}
                       </div>
                     )
                   })
@@ -454,22 +495,47 @@ export default function Spectator() {
                     ))}
                   </div>
                 )}
+                <div className="hr" style={{ margin: '8px 0' }} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px' }}>
+                  <span className="t-xs"><span style={{ color: 'var(--ink)' }}>♥</span> <span className="muted">LIFE TOTAL</span></span>
+                  <span className="t-xs"><span style={{ color: 'var(--ink)' }}>H</span> <span className="muted">HAND SIZE</span></span>
+                  <span className="t-xs"><span style={{ color: 'var(--ink)' }}>L</span> <span className="muted">LIBRARY SIZE</span></span>
+                  <span className="t-xs"><span style={{ color: 'var(--ink)' }}>G</span> <span className="muted">GRAVEYARD</span></span>
+                  <span className="t-xs"><span style={{ color: 'var(--ink)' }}>B</span> <span className="muted">BATTLEFIELD</span></span>
+                  <span className="t-xs"><span style={{ color: 'var(--ink)' }}>R</span> <span className="muted">ROUND #</span></span>
+                  <span className="t-xs"><span style={{ color: 'var(--ink)' }}>T</span> <span className="muted">TURN #</span></span>
+                  <span className="t-xs"><span style={{ color: 'var(--ok)' }}>●</span> <span className="muted">ACTIVE PLAYER</span></span>
+                  <span className="t-xs"><span style={{ color: 'var(--ok)' }}>★</span> <span className="muted">WINNER</span></span>
+                  <span className="t-xs"><span style={{ color: 'var(--danger)' }}>✕</span> <span className="muted">ELIMINATED</span></span>
+                  <span className="t-xs"><span style={{ color: 'var(--ok)' }}>+N</span> <span className="muted">ELO GAINED</span></span>
+                  <span className="t-xs"><span style={{ color: 'var(--danger)' }}>-N</span> <span className="muted">ELO LOST</span></span>
+                </div>
               </div>
             </Panel>
 
             <Panel code="FT.SPD" title="SPEED CONTROL">
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <input
-                  type="range"
-                  min={0}
-                  max={SPEED_MARKS.length - 1}
-                  step={1}
-                  value={SPEED_MARKS.indexOf(speed) >= 0 ? SPEED_MARKS.indexOf(speed) : 2}
-                  onChange={(e) => setSpeedMultiplier(SPEED_MARKS[e.target.value])}
-                  style={{ flex: 1, accentColor: 'var(--ok)' }}
-                />
+                {(() => {
+                  const idx = SPEED_MARKS.indexOf(speed) >= 0 ? SPEED_MARKS.indexOf(speed) : 2
+                  const pct = (idx / (SPEED_MARKS.length - 1)) * 100
+                  return (
+                    <input
+                      type="range"
+                      className="slider"
+                      min={0}
+                      max={SPEED_MARKS.length - 1}
+                      step={1}
+                      value={idx}
+                      onChange={(e) => setSpeedMultiplier(SPEED_MARKS[e.target.value])}
+                      style={{
+                        flex: 1,
+                        background: `linear-gradient(to right, var(--ok) ${pct}%, var(--rule-2) ${pct}%)`,
+                      }}
+                    />
+                  )
+                })()}
                 <span className="t-md" style={{ fontWeight: 700, minWidth: 50, textAlign: 'right' }}>
-                  {speed}×
+                  {parseFloat(speed.toFixed(2))}×
                 </span>
               </div>
               <div className="speed-marks">
@@ -477,7 +543,7 @@ export default function Spectator() {
                   <span
                     key={i}
                     className="t-xs"
-                    style={{ cursor: 'pointer', color: speed === m ? 'var(--ok)' : 'var(--ink-2)' }}
+                    style={{ cursor: 'pointer', color: Math.abs(speed - m) < 0.01 ? 'var(--ok)' : 'var(--ink-2)' }}
                     onClick={() => setSpeedMultiplier(m)}
                   >
                     {m}×
@@ -536,6 +602,7 @@ export default function Spectator() {
                 )}
               </div>
             </Panel>
+
 
           </div>
         </div>

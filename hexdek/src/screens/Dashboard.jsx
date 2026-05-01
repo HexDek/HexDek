@@ -5,6 +5,7 @@ import { useProfile, useDecks, useGames, useMatchups } from '../hooks/useData'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useAuth } from '../context/AuthContext'
 import { cardArtUrl, api } from '../services/api'
+import { trackEvent } from '../hooks/useAnalytics'
 
 /* ─── Deck Import Modal ──────────────────────────────────────────── */
 const ImportModal = ({ onClose, onImported }) => {
@@ -22,6 +23,7 @@ const ImportModal = ({ onClose, onImported }) => {
     setImporting(true)
     setError(null)
     try {
+      trackEvent('import_deck', { name: name || 'Imported Deck', owner: owner || 'imported' })
       await api.importDeck(name || 'Imported Deck', owner || 'imported', deckList)
       onImported()
       onClose()

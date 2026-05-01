@@ -2,14 +2,14 @@
   "abilities": [
     {
       "first5": [
-        "static:if_intervening_tail:_"
+        "static:conditional_static:_"
       ],
       "index": 0,
       "kind": "static"
     },
     {
       "first5": [
-        "static:spell_effect:_"
+        "static:typed_spell_effect:_"
       ],
       "index": 1,
       "kind": "static"

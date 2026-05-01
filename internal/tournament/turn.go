@@ -2,6 +2,7 @@ package tournament
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -89,6 +90,14 @@ func takeTurnImpl(gs *gameengine.GameState, hook func(*gameengine.GameState)) {
 			"rule": "500.1",
 		},
 	})
+
+	// Reset per-seat draws-this-turn counters (Narset draw suppression).
+	if gs.Flags == nil {
+		gs.Flags = map[string]int{}
+	}
+	for i := range gs.Seats {
+		gs.Flags["draws_this_turn_seat_"+strconv.Itoa(i)] = 0
+	}
 
 	// turnEndingNow is a local helper that checks + consumes the
 	// "turn_ending_now" flag set by Sundial of the Infinite (or any
@@ -198,7 +207,15 @@ func takeTurnImpl(gs *gameengine.GameState, hook func(*gameengine.GameState)) {
 	// §504 Draw — first active player does not draw on turn 1.
 	gs.Phase, gs.Step = "beginning", "draw"
 	if gs.Turn > 1 || active != firstActive(gs) {
-		drawTop(gs, active)
+		if gameengine.NecropotenceSkipsDraw(gs, active) {
+			gs.LogEvent(gameengine.Event{
+				Kind: "skip_draw", Seat: active,
+				Source: "Necropotence",
+				Details: map[string]interface{}{"rule": "504.1"},
+			})
+		} else {
+			drawTop(gs, active)
+		}
 	}
 	gameengine.FirePhaseTriggers(gs, gs.Phase, gs.Step)
 	gameengine.FireCardTrigger(gs, "draw_step_controller", map[string]interface{}{
@@ -615,6 +632,10 @@ func drawN(gs *gameengine.GameState, seatIdx int, n int) {
 
 // drawTop pulls one card from the top of seat's library into its hand.
 func drawTop(gs *gameengine.GameState, seatIdx int) {
+	// Narset: opponents can't draw more than one card each turn.
+	if gameengine.NarsetBlocksDraw(gs, seatIdx) {
+		return
+	}
 	s := gs.Seats[seatIdx]
 	if len(s.Library) == 0 {
 		s.AttemptedEmptyDraw = true
@@ -623,6 +644,7 @@ func drawTop(gs *gameengine.GameState, seatIdx int) {
 	c := s.Library[0]
 	s.Library = s.Library[1:]
 	s.Hand = append(s.Hand, c)
+	gameengine.IncrementDrawCount(gs, seatIdx)
 	gs.LogEvent(gameengine.Event{
 		Kind:   "draw",
 		Seat:   seatIdx,

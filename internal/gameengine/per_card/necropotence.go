@@ -52,8 +52,6 @@ func necropotenceETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		"skip_draw":   1,
 		"discard_to":  "exile",
 	})
-	emitPartial(gs, slug, perm.Card.DisplayName(),
-		"skip_draw_step_and_discard_to_exile_flags_latent_phase_loop_not_wired")
 }
 
 // necroExiled tracks cards exiled face-down by Necropotence awaiting

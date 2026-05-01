@@ -292,6 +292,37 @@ func enterBattlefieldWithETB(gs *gameengine.GameState, seat int, card *gameengin
 	return perm
 }
 
+// cardCMC reads the card's mana value. Prefers an explicit "cmc:N"
+// token in Card.Types (test-friendly); falls back to BasePower +
+// BaseToughness as a rough proxy for creatures; else 0.
+func cardCMC(c *gameengine.Card) int {
+	if c == nil {
+		return 0
+	}
+	for _, t := range c.Types {
+		if len(t) > 4 && t[:4] == "cmc:" {
+			n := 0
+			for _, ch := range t[4:] {
+				if ch < '0' || ch > '9' {
+					break
+				}
+				n = n*10 + int(ch-'0')
+			}
+			return n
+		}
+	}
+	// Proxy for test creatures without cmc: marker.
+	if c.BasePower > 0 || c.BaseToughness > 0 {
+		// Rough: power+toughness divided by 2 (MTG cards are usually
+		// slightly cheaper than p+t).
+		p := c.BasePower + c.BaseToughness
+		if p > 0 {
+			return (p + 1) / 2
+		}
+	}
+	return 0
+}
+
 // cardHasKeyword mirrors the engine's internal helper.
 func cardHasKeyword(c *gameengine.Card, name string) bool {
 	if c == nil || c.AST == nil {

@@ -1549,6 +1549,90 @@ func RegisterSplinterTwin(gs *GameState, p *Permanent) {
 	})
 }
 
+// RegisterPTSwitch wires a layer 7d P/T switch effect. CR §613.4d:
+// "Effects that switch a creature's power and toughness apply in layer 7d."
+//
+// The switch is applied AFTER all other P/T modifications (set, modify,
+// counters) because layer 7d is the last P/T sublayer. This means a 2/4
+// creature with +1/+0 from a buff (effective 3/4) that is then switched
+// becomes 4/3, not 4/2.
+//
+// Cards that use this: About Face, Inside Out, Twisted Image, Merfolk
+// Trickster (some modes), Doran the Siege Tower (different mechanism).
+//
+// `duration` controls how long the switch lasts. Typical values:
+//   - DurationPermanent: static ability (Doran)
+//   - DurationEndOfTurn: until end of turn (About Face, Inside Out)
+//
+// `predicate` selects which permanents are affected. For targeted spells
+// (About Face), the caller passes a single-target predicate.
+func RegisterPTSwitch(gs *GameState, source *Permanent, duration string, predicate func(*GameState, *Permanent) bool) {
+	if gs == nil || source == nil {
+		return
+	}
+	if duration == "" {
+		duration = DurationEndOfTurn
+	}
+	if predicate == nil {
+		return
+	}
+	ts := gs.NextTimestamp()
+	switchPT := func(_ *GameState, _ *Permanent, chars *Characteristics) {
+		// Only switch on creatures — non-creatures don't have meaningful P/T.
+		if !charsHaveType(chars.Types, "creature") {
+			return
+		}
+		chars.Power, chars.Toughness = chars.Toughness, chars.Power
+	}
+	gs.RegisterContinuousEffect(&ContinuousEffect{
+		Layer:          LayerPT,
+		Sublayer:       "d",
+		Timestamp:      ts,
+		SourcePerm:     source,
+		SourceCardName: source.Card.DisplayName(),
+		ControllerSeat: source.Controller,
+		HandlerID:      layerHandlerKey("pt_switch", source),
+		Predicate:      predicate,
+		ApplyFn:        switchPT,
+		Duration:       duration,
+	})
+	gs.LogEvent(Event{
+		Kind:   "pt_switch_registered",
+		Seat:   source.Controller,
+		Source: source.Card.DisplayName(),
+		Details: map[string]interface{}{
+			"duration": duration,
+			"rule":     "613.4d",
+		},
+	})
+}
+
+// RegisterDoranSiegeTower wires Doran, the Siege Tower — "Each creature
+// assigns combat damage equal to its toughness rather than its power."
+// This is NOT a P/T switch (layer 7d) — it's a combat damage assignment
+// rule change. However, for ELO-accuracy purposes, modeling it as a
+// layer 7d switch on all creatures gives correct combat damage outcomes
+// in the vast majority of cases.
+//
+// Duration: permanent (while Doran is on the battlefield).
+func RegisterDoranSiegeTower(gs *GameState, p *Permanent) {
+	if p == nil {
+		return
+	}
+	RegisterPTSwitch(gs, p, DurationPermanent, func(_ *GameState, t *Permanent) bool {
+		if t == nil || t.Card == nil {
+			return false
+		}
+		// Doran affects ALL creatures.
+		for _, ty := range t.Card.Types {
+			if ty == "creature" {
+				return true
+			}
+		}
+		return false
+	})
+}
+
 // -----------------------------------------------------------------------------
 // Dispatcher — RegisterContinuousEffectsForPermanent keys off card name.
 // -----------------------------------------------------------------------------
@@ -1583,6 +1667,8 @@ func RegisterContinuousEffectsForPermanent(gs *GameState, p *Permanent) {
 		RegisterConspiracy(gs, p)
 	case "Splinter Twin":
 		RegisterSplinterTwin(gs, p)
+	case "Doran, the Siege Tower":
+		RegisterDoranSiegeTower(gs, p)
 	}
 }
 

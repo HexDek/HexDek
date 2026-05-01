@@ -635,6 +635,13 @@ type Card struct {
 	// tokens/copies that want a human-readable string.
 	TypeLine string
 
+	// IsCopy is true for card objects that were created as copies of other
+	// cards (Fork, Twinflame, storm copies). CR §706.10: a copy of a spell
+	// ceases to exist in any zone other than the stack. CR §704.5e: a copy
+	// of a card in any zone other than the stack or battlefield ceases to
+	// exist. SBA sba704_5e sweeps these from hand/graveyard/exile/library.
+	IsCopy bool
+
 	// OracleTextCache — lowercased oracle text, computed once on first
 	// access via OracleTextLower. Avoids repeated string building +
 	// ToLower in hot evaluator loops.

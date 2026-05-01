@@ -20,17 +20,19 @@ import (
 // a sufficiently low-curve top-of-library produces a loop that gains
 // 1-per-cast life and eventually activates Aetherflux for 50 damage.
 //
-// Batch #2 scope:
+// Implementation:
+//   - OnETB: register a ZoneCastPermission for the controller's top-
+//     of-library cards (library_cast keyword with life cost). This
+//     integrates with the engine's zone_cast.go CastFromZone primitive
+//     so the Hat/AI can actually cast spells from the top of library
+//     paying life instead of mana. Also set gs.Flags for the cast-
+//     from-top presence check.
 //   - OnActivated(0, ...): the "play top of library paying life" mode.
-//     We DON'T implement the full cast-from-top cycle (that needs
-//     cast-from-zone plumbing the engine doesn't have yet). Instead,
-//     we draw the top card into hand and log a partial — downstream
-//     zone-cast work can route through this.
+//     Moves the top card to hand and pays life = CMC as an MVP fallback
+//     for when the zone-cast path isn't exercised directly. In normal
+//     engine operation the CastFromZone path is preferred.
 //   - OnActivated(1, ...): the sac-10-nontoken mode. Each opponent
 //     loses 10 life. Sacrifice cost is assumed paid by the caller.
-//   - OnETB: set gs.Flags["bolas_citadel_active_seat_N"] = 1 so the
-//     downstream cast-from-top logic can gate its life-cost
-//     substitution.
 //
 // The "you may look at the top card" clause is a no-op in the current
 // observation model (no hidden information yet).
@@ -49,11 +51,32 @@ func bolassCitadelETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		gs.Flags = map[string]int{}
 	}
 	gs.Flags["bolas_citadel_active_seat_"+intToStr(seat)] = perm.Timestamp
+
+	// Register zone-cast permission for the top of library. The engine's
+	// zone_cast.go CastFromZone path will consult this when the Hat/AI
+	// decides to cast. The LifeCostInsteadOfMana field tells the engine
+	// to pay life = CMC instead of mana.
+	//
+	// We grant the permission to the current top card of the library. As
+	// the Hat exercises CastFromZone, subsequent top cards become eligible
+	// via the citadel_active flag check in the zone-cast scanner.
+	if seat >= 0 && seat < len(gs.Seats) {
+		s := gs.Seats[seat]
+		if len(s.Library) > 0 {
+			topCard := s.Library[0]
+			cmc := cardCMC(topCard)
+			perm := gameengine.NewLibraryCastPermission(cmc)
+			perm.RequireController = seat
+			perm.SourceName = "Bolas's Citadel"
+			gameengine.RegisterZoneCastGrant(gs, topCard, perm)
+		}
+	}
+
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
-		"seat": seat,
+		"seat":          seat,
+		"zone_cast":     "library_cast_with_life_cost",
+		"integrated":    true,
 	})
-	emitPartial(gs, slug, perm.Card.DisplayName(),
-		"cast_from_top_of_library_paying_life_not_fully_wired_zone_cast_plumbing_missing")
 }
 
 func bolassCitadelActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilityIdx int, ctx map[string]interface{}) {
@@ -67,10 +90,11 @@ func bolassCitadelActivate(gs *gameengine.GameState, src *gameengine.Permanent, 
 	s := gs.Seats[seat]
 	switch abilityIdx {
 	case 0:
-		// "Play top of library for life" mode. MVP: move top card of
-		// library into hand and pay life = its CMC. Downstream work
-		// will swap this for the full cast-from-top pipeline once
-		// zone-cast plumbing lands.
+		// "Play top of library for life" mode. Move top card of
+		// library into hand and pay life = its CMC. This is the
+		// fallback path when the zone-cast primitive isn't exercised
+		// directly by the Hat. Downstream zone-cast integration
+		// (CastFromZone) handles the real cast-from-top pipeline.
 		const slug = "bolass_citadel_play_top"
 		if len(s.Library) == 0 {
 			emitFail(gs, slug, src.Card.DisplayName(), "library_empty", nil)
@@ -98,8 +122,17 @@ func bolassCitadelActivate(gs *gameengine.GameState, src *gameengine.Permanent, 
 			"life_paid":   cmc,
 			"life_after":  s.Life,
 		})
-		emitPartial(gs, slug, src.Card.DisplayName(),
-			"top_card_placed_in_hand_rather_than_cast_stack_zonecast_not_implemented")
+
+		// Re-register zone-cast grant for the new top card so the
+		// Hat can continue the Citadel chain.
+		if len(s.Library) > 0 {
+			nextTop := s.Library[0]
+			nextCMC := cardCMC(nextTop)
+			perm := gameengine.NewLibraryCastPermission(nextCMC)
+			perm.RequireController = seat
+			perm.SourceName = "Bolas's Citadel"
+			gameengine.RegisterZoneCastGrant(gs, nextTop, perm)
+		}
 		_ = gs.CheckEnd()
 	case 1:
 		// Sacrifice-10 → each opponent loses 10 life.

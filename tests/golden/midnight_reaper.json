@@ -3,7 +3,9 @@
     {
       "first5": [
         "trig:nontoken_ally_event",
-        "damage_effect"
+        "sequence",
+        "damage",
+        "draw"
       ],
       "index": 0,
       "kind": "triggered"

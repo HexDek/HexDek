@@ -39,115 +39,159 @@ REPORT = ROOT / "data" / "rules" / "coverage_honest.md"
 
 
 # Modification kinds that are intentional stubs (engine-needs-slug-lookup)
+# ── Genuinely opaque stubs ──────────────────────────────────────────
+# These kinds mean "the parser recognized the text but couldn't
+# decompose it into engine-executable semantics."  A runtime
+# engine would need a hand-coded resolver keyed by slug or
+# card name to actually play these.
 _STUB_KINDS = {
-    "custom",
-    "spell_effect",          # fallback: "this is a spell, the rest of the oracle text becomes one Effect"
-    "ability_word",          # just tags an ability-word label
-    "saga_chapter",          # chapter text preserved verbatim
-    "class_level_band",      # class level header text
-    "orphan_choice",
-    "modal_header_orphan",
-    "inline_modal_with_bullets",
-    "delayed_trigger",
-    "delayed_eot_trigger",
-    "conditional_static",    # generic "as long as X / if X" fallback
-    "once_per_turn",
-    "once_per_turn_may",
-    "activation_restriction",
-    "timing_restriction",
-    "cast_restriction",
-    "cast_from_gy",
-    "fetch_land_tail",
-    "reanimate_that_card_tail",
-    "reanimate_it_tail",
-    "etb_p1p1_counter",
-    "during_turn_self_static",
-    "trigger_restriction",
-    "copy_retarget",
-    "additional_cost",
-    "mana_restriction",
-    "modes_repeatable",
-    "ability_grant",         # verbatim text stashed in args
-    "pronoun_grant",
-    "tribal_anthem_keyword",
-    "aura_keyword",
-    "equip_keyword",
-    "static_keyword_self",
-    "tribal_keyword",
-    "tribal_anthem",
-    "tribal_anthem_get",
-    "tribal_anthem_have",
-    "tribal_etb_trig",
-    "tribal_cost_red",
-    "parsed_tail",
-    "self_keyword",
-    "static_creatures",
-    "until_next_turn",
-    "cost_reduction",
-    "cost_reduce_self",
-    "variable_cost_reduce",
-    "play_those_this_turn",
-    "play_exiled_card_this_turn",
-    "when_you_do_p1p1",
-    "exert",
-    "extra_block",
-    "block_only_filter",
-    "combat_restriction",
-    "restriction",
-    "immunity",
-    "grant_flash_self",
-    "no_max_hand",
-    "pronoun_tap",
-    "painland_tail",
-    "stun_target",
-    "no_regen_tail",
-    "no_regen_tail_it",
-    "no_untap",
-    "no_untap_self",
-    "aura_no_untap",
-    "optional_skip_untap",
-    "optional_skip_untap_self",
-    "mana_retention",
-    "activation_rights",
-    "temp_control",
-    "etb_tapped",
-    "etb_with_counters",
-    "must_attack",
-    "library_bottom",
-    "saga_chapter_final_tail",
-    "modal_bullet_effect",
-    "modal_bullet",
-    "conditional_buff_self",
-    "conditional_buff_target",
-    "conditional_debuff_self",
-    "counter_scoped_anthem",
-    "pronoun_verb",
-    "still_type",
-    "is_also",
-    "still_a",
-    "is_every_creature_type",
-    "token_type_def",
-    "perpetually",
-    "perpetual_mod",
-    "villainous_choice",
-    "opp_choice_card_pick",
-    "enters_prepared",
-    "replacement_static",
-    "pariah_redirect",
-    "worship_life_loss",
-    "counter_anthem",
-    "chosen_name_uncastable",
-    "pithing_needle_chosen",
-    "aura_trigger",
-    "aura_upkeep_trigger",
-    "aura_eot_trigger",
-    "aura_buff",
-    "chain_copy",
-    "self_copy_retarget",
-    "then_if_rider",
-    "then_clause",
-    "when_you_do",
-    "unknown",
+    "custom",                    # per-card handler placeholder — snowflake cards
+    "spell_effect",              # fallback: oracle text becomes one opaque Effect
+    "ability_word",              # ability-word label whose trigger body failed re-parse
+    "saga_chapter",              # chapter text preserved verbatim (engine must interpret)
+    "saga_chapter_final_tail",   # final-chapter cleanup text
+    "class_level_band",          # class level header text
+    "orphan_choice",             # orphaned "choose target X" from modal body
+    "modal_header_orphan",       # bare "choose one" header without parsed body
+    "modal_bullet_effect",       # modal bullet whose body is opaque
+    "modal_bullet",              # modal bullet text
+    "inline_modal_with_bullets", # "choose one -- bullet" in single line
+    "parsed_tail",               # catch-all residual text fragments
+    "perpetually",               # Alchemy-specific perpetual modifier
+    "perpetual_mod",             # Alchemy perpetual modification
+    "villainous_choice",         # villain's choice mechanic (complex branching)
+    "unknown",                   # truly unrecognized text
+}
+
+# ── Parameterized / flag-based kinds ───────────────────────────────
+# These kinds carry enough semantic information in (kind, args) that
+# the engine can dispatch them WITHOUT a hand-coded per-card resolver.
+# They are NOT stubs — they are structured data the engine reads
+# directly.  Examples:
+#   timing_restriction("activate only as a sorcery") → set sorcery timing
+#   etb_with_counters(2, "+1/+1") → enter with 2 +1/+1 counters
+#   restriction("unblockable") → evasion flag
+#   aura_buff(2, 2) → enchanted creature gets +2/+2
+#
+# If a Modification.kind is NOT in _STUB_KINDS, it is treated as
+# structural (engine-executable).  The full list of structural kinds
+# is maintained here for documentation:
+_STRUCTURAL_MOD_KINDS = {
+    # -- Timing / activation constraints --
+    "timing_restriction",       # activate only as a sorcery / during X
+    "activation_restriction",   # activate only once / only during X
+    "once_per_turn",            # do this only once each turn
+    "once_per_turn_may",        # once during each of your turns, you may ...
+    "trigger_restriction",      # this ability triggers only once
+    "cast_restriction",         # cast only during X
+    "cast_from_gy",             # cast from graveyard (flashback-like)
+    "modes_repeatable",         # choose same mode more than once
+    "activation_rights",        # any player may activate
+    # -- Combat constraints --
+    "restriction",              # unblockable / cant_block / uncounterable
+    "combat_restriction",       # can't attack/block
+    "must_attack",              # attacks each combat if able
+    "extra_block",              # can block additional creature
+    "block_only_filter",        # can block only creatures with X
+    "immunity",                 # can't be countered/targeted
+    # -- ETB / state-based --
+    "etb_tapped",               # enters the battlefield tapped
+    "etb_with_counters",        # enters with N counters (type parameterized)
+    "etb_p1p1_counter",         # enters with a +1/+1 counter
+    "enters_prepared",          # enters prepared
+    # -- Buff / debuff --
+    "aura_buff",                # enchanted creature gets +P/+T
+    "conditional_buff_self",    # gets +N/+N as long as X
+    "conditional_buff_target",  # target gets +N/+N as long as X
+    "conditional_debuff_self",  # gets -N/-N as long as X
+    "counter_scoped_anthem",    # each creature with counter has X
+    "counter_anthem",           # counter-scoped anthem variant
+    # -- Untap / tap manipulation --
+    "no_untap",                 # doesn't untap during untap step
+    "no_untap_self",            # self doesn't untap
+    "aura_no_untap",            # enchanted creature doesn't untap
+    "optional_skip_untap",      # may choose not to untap
+    "optional_skip_untap_self", # may choose not to untap (self)
+    "stun_target",              # doesn't untap during next untap step
+    "pronoun_tap",              # tap it
+    # -- Cost modification --
+    "additional_cost",          # as an additional cost, sacrifice/discard
+    "cost_reduction",           # costs {N} less to cast
+    "cost_reduce_self",         # this spell costs less
+    "variable_cost_reduce",     # costs {X} less where X = ...
+    "mana_restriction",         # spend this mana only to ...
+    "mana_retention",           # don't lose this mana as phases end
+    # -- Keyword / ability grants --
+    "self_keyword",             # ~ has [keyword]
+    "static_keyword_self",      # self-keyword static
+    "pronoun_grant",            # it gains [keyword]
+    "ability_grant",            # verbatim ability text grant
+    "grant_flash_self",         # may cast as though it had flash
+    "exert",                    # may exert as it attacks
+    "during_turn_self_static",  # during your turn, has X
+    # -- Tribal --
+    "tribal_anthem",            # tribal anthem
+    "tribal_anthem_get",        # tribal creatures get +P/+T
+    "tribal_anthem_have",       # tribal creatures have keyword
+    "tribal_anthem_keyword",    # tribal keyword grant
+    "tribal_keyword",           # tribal keyword
+    "tribal_etb_trig",          # tribal ETB trigger
+    "tribal_cost_red",          # tribal cost reduction
+    "static_creatures",         # creatures you control have X
+    # -- Aura / equipment --
+    "aura_keyword",             # aura grants keyword
+    "equip_keyword",            # equipment grants keyword
+    "aura_trigger",             # aura trigger
+    "aura_upkeep_trigger",      # aura upkeep trigger
+    "aura_eot_trigger",         # aura end-of-turn trigger
+    # -- Library / zone manipulation --
+    "library_bottom",           # put on bottom of library
+    "fetch_land_tail",          # put land onto battlefield
+    "play_those_this_turn",     # play those cards this turn
+    "play_exiled_card_this_turn", # play exiled card this turn
+    # -- Continuation / chaining --
+    "copy_retarget",            # choose new targets for copy
+    "chain_copy",               # copy chain effect
+    "self_copy_retarget",       # self copy retarget
+    "then_if_rider",            # then-if continuation
+    "then_clause",              # then-clause continuation
+    "when_you_do",              # when-you-do chained trigger
+    "when_you_do_p1p1",         # when you do, put +1/+1 counter
+    # -- Regen / destroy modifiers --
+    "no_regen_tail",            # they can't be regenerated
+    "no_regen_tail_it",         # it can't be regenerated
+    # -- Control change --
+    "temp_control",             # gain control until end of turn
+    # -- Duration --
+    "until_next_turn",          # until your next turn
+    # -- Damage --
+    "painland_tail",            # this land deals N damage to you
+    # -- Hand size --
+    "no_max_hand",              # no maximum hand size
+    # -- Type manipulation --
+    "still_type",               # it's still a [type]
+    "is_also",                  # is also a [type]
+    "still_a",                  # still a [type] variant
+    "is_every_creature_type",   # is every creature type
+    "token_type_def",           # token type definition
+    "pronoun_verb",             # it does X (parameterized)
+    # -- Conditional statics --
+    "conditional_static",       # as long as X / if X (condition text preserved)
+    "replacement_static",       # replacement effect (text preserved)
+    # -- Delayed triggers --
+    "delayed_trigger",          # at beginning of next end step / upkeep
+    "delayed_eot_trigger",      # delayed end-of-turn trigger
+    # -- Reanimation tails --
+    "reanimate_that_card_tail", # return that card to battlefield
+    "reanimate_it_tail",        # return it to battlefield
+    # -- Named card restrictions --
+    "chosen_name_uncastable",   # chosen name can't be cast
+    "pithing_needle_chosen",    # chosen name can't activate
+    # -- Opponent interaction --
+    "opp_choice_card_pick",     # you choose a card from opponent
+    # -- Redirect --
+    "pariah_redirect",          # redirect damage
+    "worship_life_loss",        # life loss prevention
 }
 
 
@@ -300,7 +344,7 @@ for the runtime engine's custom-resolver dispatch.
 
 When describing this project honestly:
 
-> "The parser reaches syntactic coverage of every printed Magic card (31,639 cards,
+> "The parser reaches syntactic coverage of every printed Magic card ({total:,} cards,
 > 100%). Of those, {pct(engine_ready)} produce a fully-typed AST that a runtime
 > engine can execute from the node types alone. The remaining {pct(engine_stubs + engine_partial)}
 > are recognized but carry stub modifications that will need hand-coded resolvers

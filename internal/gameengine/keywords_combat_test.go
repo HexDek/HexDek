@@ -1189,6 +1189,93 @@ func TestHexproofFromColor_AllowsOtherColorTargeting(t *testing.T) {
 }
 
 // ============================================================================
+// AST KEYWORD N-VALUE EXTRACTION TESTS
+// ============================================================================
+
+// Verify that GetAnnihilatorN reads N from AST keyword Args, not just Flags.
+func TestAnnihilator_GetN_FromAST(t *testing.T) {
+	gs := newKWCombatGame(t)
+	p := addKWCombatBattlefield(gs, 0, "Ulamog", 10, 10, "creature")
+	p.Card.AST = &gameast.CardAST{
+		Name: "Ulamog",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "annihilator", Args: []interface{}{float64(4)}},
+		},
+	}
+	// No Flags set — should extract N=4 from AST Args.
+	if got := GetAnnihilatorN(p); got != 4 {
+		t.Errorf("expected annihilator 4 from AST, got %d", got)
+	}
+}
+
+func TestAnnihilator_GetN_FlagOverridesAST(t *testing.T) {
+	gs := newKWCombatGame(t)
+	p := addKWCombatBattlefield(gs, 0, "Emrakul", 15, 15, "creature")
+	p.Card.AST = &gameast.CardAST{
+		Name: "Emrakul",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "annihilator", Args: []interface{}{float64(6)}},
+		},
+	}
+	p.Flags["annihilator_n"] = 8 // Runtime override should take priority.
+	if got := GetAnnihilatorN(p); got != 8 {
+		t.Errorf("expected flag override annihilator 8, got %d", got)
+	}
+}
+
+func TestAfflict_GetN_FromAST(t *testing.T) {
+	gs := newKWCombatGame(t)
+	p := addKWCombatBattlefield(gs, 0, "Neheb", 4, 4, "creature")
+	p.Card.AST = &gameast.CardAST{
+		Name: "Neheb",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "afflict", Args: []interface{}{float64(3)}},
+		},
+	}
+	if got := GetAfflictN(p); got != 3 {
+		t.Errorf("expected afflict 3 from AST, got %d", got)
+	}
+}
+
+func TestRampage_GetN_FromAST(t *testing.T) {
+	gs := newKWCombatGame(t)
+	p := addKWCombatBattlefield(gs, 0, "Craw Giant", 6, 4, "creature")
+	p.Card.AST = &gameast.CardAST{
+		Name: "Craw Giant",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "rampage", Args: []interface{}{float64(2)}},
+		},
+	}
+	if got := GetRampageN(p); got != 2 {
+		t.Errorf("expected rampage 2 from AST, got %d", got)
+	}
+}
+
+func TestKeywordNFromAST_DefaultsTo1_NoArgs(t *testing.T) {
+	gs := newKWCombatGame(t)
+	// Keyword with no Args — should fall back to default 1.
+	p := addKWCombatBattlefieldWithKeyword(gs, 0, "GenericAnnihilator", 5, 5, "annihilator", "creature")
+	if got := GetAnnihilatorN(p); got != 1 {
+		t.Errorf("expected annihilator default 1 with no Args, got %d", got)
+	}
+}
+
+func TestKeywordNFromAST_IntArg(t *testing.T) {
+	gs := newKWCombatGame(t)
+	p := addKWCombatBattlefield(gs, 0, "IntArgCreature", 5, 5, "creature")
+	p.Card.AST = &gameast.CardAST{
+		Name: "IntArgCreature",
+		Abilities: []gameast.Ability{
+			// Parser may produce int instead of float64 in some paths.
+			&gameast.Keyword{Name: "afflict", Args: []interface{}{5}},
+		},
+	}
+	if got := GetAfflictN(p); got != 5 {
+		t.Errorf("expected afflict 5 from int arg, got %d", got)
+	}
+}
+
+// ============================================================================
 // INTEGRATION TESTS
 // ============================================================================
 

@@ -27,6 +27,9 @@ type DeckProfile struct {
 	ArchetypeConfidence float64
 	Bracket             int
 	BracketLabel        string
+	PlaysLike           int
+	PlaysLikeLabel      string
+	GameChangerCount    int
 	Intent              string
 
 	PrimaryWinLine    string
@@ -142,6 +145,9 @@ func BuildDeckProfile(report *FreyaReport, oracle *oracleDB) *DeckProfile {
 		dp.ArchetypeConfidence = report.Archetype.PrimaryConfidence
 		dp.Bracket = report.Archetype.Bracket
 		dp.BracketLabel = report.Archetype.BracketLabel
+		dp.PlaysLike = report.Archetype.PlaysLike
+		dp.PlaysLikeLabel = report.Archetype.PlaysLikeLabel
+		dp.GameChangerCount = report.Archetype.GameChangerCount
 		dp.Intent = report.Archetype.Intent
 	}
 
@@ -767,7 +773,15 @@ func buildGameplanSummary(dp *DeckProfile, report *FreyaReport) string {
 		tutorNote = fmt.Sprintf(" Supported by %d tutors.", report.TutorCount)
 	}
 
-	bracket := fmt.Sprintf(" Plays at bracket %d/5 (%s).", dp.Bracket, dp.BracketLabel)
+	var gcNote string
+	if dp.GameChangerCount > 0 {
+		gcNote = fmt.Sprintf(", %d GC", dp.GameChangerCount)
+	}
+	var playsLikeNote string
+	if dp.PlaysLike != dp.Bracket {
+		playsLikeNote = fmt.Sprintf(" Plays like B%d (%s).", dp.PlaysLike, dp.PlaysLikeLabel)
+	}
+	bracket := fmt.Sprintf(" Strict B%d (%s%s).%s", dp.Bracket, dp.BracketLabel, gcNote, playsLikeNote)
 
 	return fmt.Sprintf("%s deck that wins via %s.%s%s%s",
 		archetype, winMethod, backup, tutorNote, bracket)

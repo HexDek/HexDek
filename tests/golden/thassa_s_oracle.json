@@ -10,7 +10,7 @@
     },
     {
       "first5": [
-        "static:spell_effect:_"
+        "static:typed_spell_effect:_"
       ],
       "index": 1,
       "kind": "static"

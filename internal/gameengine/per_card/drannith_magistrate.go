@@ -54,8 +54,6 @@ func drannithMagistrateETB(gs *gameengine.GameState, perm *gameengine.Permanent)
 		"timestamp":  perm.Timestamp,
 		"restricts":  "opponent_cast_from_non_hand_zones",
 	})
-	emitPartial(gs, slug, perm.Card.DisplayName(),
-		"zone_cast_restriction_cast_time_check_callers_must_consult_DrannithMagistrateRestrictsOpponent")
 }
 
 // DrannithMagistrateRestrictsOpponent returns true if `castingSeat`

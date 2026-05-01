@@ -331,11 +331,18 @@ func asForetoldUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 // token with haste. If you're the monarch, create three of those tokens
 // instead, then Court of Embereth deals damage to each opponent equal
 // to the number of creatures you control."
-// Simplified: create 1 token (monarch check omitted — no monarch system).
 // ---------------------------------------------------------------------------
 
 func registerCourtOfEmbereth(r *Registry) {
+	r.OnETB("Court of Embereth", courtOfEmberethETB)
 	r.OnTrigger("Court of Embereth", "upkeep_controller", courtOfEmberethUpkeep)
+}
+
+func courtOfEmberethETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
+	if gs == nil || perm == nil {
+		return
+	}
+	gameengine.BecomeMonarch(gs, perm.Controller)
 }
 
 func courtOfEmberethUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
@@ -346,13 +353,49 @@ func courtOfEmberethUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent,
 	if activeSeat != perm.Controller {
 		return
 	}
-	gameengine.CreateCreatureToken(gs, perm.Controller, "Knight",
-		[]string{"creature", "knight"}, 1, 1)
+	isMonarch := gameengine.IsMonarch(gs, perm.Controller)
+	tokenCount := 1
+	if isMonarch {
+		tokenCount = 3
+	}
+	for i := 0; i < tokenCount; i++ {
+		tok := gameengine.CreateCreatureToken(gs, perm.Controller, "Knight",
+			[]string{"creature", "knight"}, 1, 1)
+		if tok != nil {
+			tok.GrantedAbilities = append(tok.GrantedAbilities, "haste")
+			tok.SummoningSick = false
+		}
+	}
+	// If monarch, deal damage to each opponent equal to creatures controlled.
+	if isMonarch {
+		creatures := 0
+		for _, p := range gs.Seats[perm.Controller].Battlefield {
+			if p != nil && p.IsCreature() {
+				creatures++
+			}
+		}
+		for _, opp := range gs.Opponents(perm.Controller) {
+			oppSeat := gs.Seats[opp]
+			if oppSeat != nil && !oppSeat.Lost {
+				oppSeat.Life -= creatures
+				gs.LogEvent(gameengine.Event{
+					Kind:   "damage",
+					Seat:   opp,
+					Source: "Court of Embereth",
+					Amount: creatures,
+					Details: map[string]interface{}{
+						"source_seat": perm.Controller,
+						"rule":        "court_of_embereth_monarch_damage",
+					},
+				})
+			}
+		}
+	}
 	emit(gs, "court_of_embereth_trigger", "Court of Embereth", map[string]interface{}{
-		"seat":   perm.Controller,
-		"tokens": 1,
+		"seat":       perm.Controller,
+		"tokens":     tokenCount,
+		"is_monarch": isMonarch,
 	})
-	emitPartial(gs, "court_of_embereth", "Court of Embereth", "monarch system not implemented")
 }
 
 // ---------------------------------------------------------------------------
@@ -362,11 +405,20 @@ func courtOfEmberethUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent,
 // "At the beginning of your upkeep, look at the top card of each player's
 // library. If you're the monarch, you may put any number of them on the
 // bottom."
-// Simplified: scry 1 (look at own top card, optionally bottom it).
+// Non-monarch: scry 1 (look at own top card, optionally bottom it).
+// Monarch: look at all opponents' top cards too, may bottom any.
 // ---------------------------------------------------------------------------
 
 func registerCourtOfVantress(r *Registry) {
+	r.OnETB("Court of Vantress", courtOfVantressETB)
 	r.OnTrigger("Court of Vantress", "upkeep_controller", courtOfVantressUpkeep)
+}
+
+func courtOfVantressETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
+	if gs == nil || perm == nil {
+		return
+	}
+	gameengine.BecomeMonarch(gs, perm.Controller)
 }
 
 func courtOfVantressUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
@@ -377,24 +429,50 @@ func courtOfVantressUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent,
 	if activeSeat != perm.Controller {
 		return
 	}
+	isMonarch := gameengine.IsMonarch(gs, perm.Controller)
 	seat := gs.Seats[perm.Controller]
-	if seat == nil || len(seat.Library) == 0 {
+	if seat == nil {
 		return
 	}
-	// Simplified: the Hat decides via ChooseScry if available.
-	if seat.Hat != nil && len(seat.Library) > 0 {
-		top := []*gameengine.Card{seat.Library[len(seat.Library)-1]}
+	// Always look at own top card (scry 1).
+	if len(seat.Library) > 0 && seat.Hat != nil {
+		top := []*gameengine.Card{seat.Library[0]}
 		keepTop, _ := seat.Hat.ChooseScry(gs, perm.Controller, top)
 		if len(keepTop) == 0 {
-			card := seat.Library[len(seat.Library)-1]
-			seat.Library = seat.Library[:len(seat.Library)-1]
-			seat.Library = append([]*gameengine.Card{card}, seat.Library...)
+			// Bottom the card.
+			card := seat.Library[0]
+			seat.Library = append(seat.Library[1:], card)
+		}
+	}
+	// If monarch, also look at each opponent's top card and may bottom it.
+	if isMonarch {
+		for _, opp := range gs.Opponents(perm.Controller) {
+			oppSeat := gs.Seats[opp]
+			if oppSeat == nil || len(oppSeat.Library) == 0 {
+				continue
+			}
+			// Heuristic: bottom any non-land card from opponent's top
+			// (this helps the controller strategically).
+			topCard := oppSeat.Library[0]
+			if topCard != nil {
+				isLand := false
+				for _, t := range topCard.Types {
+					if t == "land" {
+						isLand = true
+						break
+					}
+				}
+				if !isLand {
+					// Bottom the opponent's top card.
+					oppSeat.Library = append(oppSeat.Library[1:], topCard)
+				}
+			}
 		}
 	}
 	emit(gs, "court_of_vantress_trigger", "Court of Vantress", map[string]interface{}{
-		"seat": perm.Controller,
+		"seat":       perm.Controller,
+		"is_monarch": isMonarch,
 	})
-	emitPartial(gs, "court_of_vantress", "Court of Vantress", "monarch system not implemented")
 }
 
 // ---------------------------------------------------------------------------
@@ -403,11 +481,18 @@ func courtOfVantressUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent,
 // "When Skyline Despot enters the battlefield, you become the monarch."
 // "At the beginning of your upkeep, if you're the monarch, create a
 // 5/5 red Dragon creature token with flying."
-// Simplified: create a dragon every upkeep (always treated as monarch).
 // ---------------------------------------------------------------------------
 
 func registerSkylineDespot(r *Registry) {
+	r.OnETB("Skyline Despot", skylineDespotETB)
 	r.OnTrigger("Skyline Despot", "upkeep_controller", skylineDespotUpkeep)
+}
+
+func skylineDespotETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
+	if gs == nil || perm == nil {
+		return
+	}
+	gameengine.BecomeMonarch(gs, perm.Controller)
 }
 
 func skylineDespotUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
@@ -418,13 +503,23 @@ func skylineDespotUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, c
 	if activeSeat != perm.Controller {
 		return
 	}
+	if !gameengine.IsMonarch(gs, perm.Controller) {
+		emit(gs, "skyline_despot_trigger", "Skyline Despot", map[string]interface{}{
+			"seat":       perm.Controller,
+			"is_monarch": false,
+			"created":    false,
+		})
+		return
+	}
 	dragon := gameengine.CreateCreatureToken(gs, perm.Controller, "Dragon",
 		[]string{"creature", "dragon"}, 5, 5)
 	if dragon != nil {
-		dragon.Card.Types = append(dragon.Card.Types, "flying")
+		dragon.GrantedAbilities = append(dragon.GrantedAbilities, "flying")
 	}
 	emit(gs, "skyline_despot_trigger", "Skyline Despot", map[string]interface{}{
-		"seat": perm.Controller,
+		"seat":       perm.Controller,
+		"is_monarch": true,
+		"created":    true,
 	})
 }
 

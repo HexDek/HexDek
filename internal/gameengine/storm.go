@@ -147,6 +147,7 @@ func ApplyStormCopies(gs *GameState, original *StackItem, controller int) int {
 			Colors:        append([]string(nil), original.Card.Colors...),
 			CMC:           0, // copies cost nothing
 			TypeLine:      original.Card.TypeLine,
+			IsCopy:        true, // CR §706.10 — ceases to exist outside stack
 		}
 		copyItem := &StackItem{
 			Controller: controller,

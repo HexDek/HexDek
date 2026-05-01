@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import AppShell from './components/AppShell'
 import { useAuth } from './context/AuthContext'
+import { usePageTracking } from './hooks/useAnalytics'
 import Splash from './screens/Splash'
 import Dashboard from './screens/Dashboard'
 import DeckArchive from './screens/DeckArchive'
@@ -9,6 +10,7 @@ import GameBoard from './screens/GameBoard'
 import Spectator from './screens/Spectator'
 import Report from './screens/Report'
 import Forge from './screens/Forge'
+import Leaderboard from './screens/Leaderboard'
 import About from './screens/About'
 import BugReport from './screens/BugReport'
 import Donations from './screens/Donations'
@@ -23,6 +25,7 @@ function RequireAuth({ children }) {
 }
 
 export default function App() {
+  usePageTracking()
   return (
     <Routes>
       <Route element={<AppShell />}>
@@ -34,6 +37,7 @@ export default function App() {
         <Route path="decks/:owner/:id" element={<DeckArchive />} />
         <Route path="play" element={<GameBoard />} />
         <Route path="forge" element={<Forge />} />
+        <Route path="leaderboard" element={<Leaderboard />} />
         <Route path="spectate" element={<Spectator />} />
         <Route path="report" element={<Report />} />
         <Route path="report/:gameId" element={<Report />} />

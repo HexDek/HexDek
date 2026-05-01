@@ -251,6 +251,11 @@ _NUM_WORDS = {
     "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "x": "x",
 }
 
+# Regex alternation matching any word-number or digit-number understood by
+# _NUM_WORDS.  Used by multiple @rule patterns to avoid piecemeal subsets
+# that silently miss uncommon counts (e.g. "seven" in Timetwister).
+_NUM_RE = r"(?:a|an|one|two|three|four|five|six|seven|eight|nine|ten|x|\d+)"
+
 _SUBTYPE_WORDS = {  # rough — comp rules has the full list, this catches common ones
     "creature", "artifact", "enchantment", "land", "planeswalker", "instant",
     "sorcery", "battle", "permanent", "spell", "card", "token",
@@ -445,7 +450,7 @@ def _damage_var(m):
 
 
 # ---- Card draw ----
-@rule(r"^draw (a|one|two|three|four|five|x|\d+) cards?(?:\.|$)")
+@rule(r"^draw (" + _NUM_RE + r") cards?(?:\.|$)")
 def _draw(m):
     n = _NUM_WORDS.get(m.group(1), m.group(1))
     if isinstance(n, str) and n.isdigit():
@@ -453,15 +458,16 @@ def _draw(m):
     return Draw(count=n, target=SELF)
 
 
-@rule(r"^target player draws (a|one|two|three|x|\d+) cards?(?:\.|$)")
+@rule(r"^target (?:player|opponent) draws (" + _NUM_RE + r") cards?(?:\.|$)")
 def _force_draw(m):
     n = _NUM_WORDS.get(m.group(1), m.group(1))
     if isinstance(n, str) and n.isdigit():
         n = int(n)
-    return Draw(count=n, target=TARGET_PLAYER)
+    target = TARGET_OPPONENT if "opponent" in m.string else TARGET_PLAYER
+    return Draw(count=n, target=target)
 
 
-@rule(r"^each (?:player|opponent) draws (a|one|two|three|x|\d+) cards?(?:\.|$)")
+@rule(r"^each (?:player|opponent) draws (" + _NUM_RE + r") cards?(?:\.|$)")
 def _draw_each(m):
     n = _NUM_WORDS.get(m.group(1), m.group(1))
     if isinstance(n, str) and n.isdigit():
@@ -470,7 +476,7 @@ def _draw_each(m):
 
 
 # ---- Discard ----
-@rule(r"^discard (a|one|two|three|x|\d+) cards?(?:\.|$)")
+@rule(r"^discard (" + _NUM_RE + r") cards?(?:\.|$)")
 def _self_discard(m):
     n = _NUM_WORDS.get(m.group(1), m.group(1))
     if isinstance(n, str) and n.isdigit():
@@ -478,12 +484,30 @@ def _self_discard(m):
     return Discard(count=n, target=SELF)
 
 
-@rule(r"^target player discards (a|one|two|three|x|\d+) cards?(?:\.|$)")
+@rule(r"^target (?:player|opponent) discards (" + _NUM_RE + r") cards?(?:\.|$)")
 def _force_discard(m):
     n = _NUM_WORDS.get(m.group(1), m.group(1))
     if isinstance(n, str) and n.isdigit():
         n = int(n)
-    return Discard(count=n, target=TARGET_PLAYER, chosen_by="discarder")
+    target = TARGET_OPPONENT if "opponent" in m.string else TARGET_PLAYER
+    return Discard(count=n, target=target, chosen_by="discarder")
+
+
+# ---- Discard hand (Timetwister, Windfall, etc.) ----
+@rule(r"^(?:each (?:player|opponent)|target (?:player|opponent)|you) discards? (?:their|your|his or her) hand(?:\.|$)")
+def _discard_hand(m):
+    text = m.group(0).lower()
+    if "each player" in text:
+        target = EACH_PLAYER
+    elif "each opponent" in text:
+        target = EACH_OPPONENT
+    elif "target opponent" in text:
+        target = TARGET_OPPONENT
+    elif "target player" in text:
+        target = TARGET_PLAYER
+    else:
+        target = SELF
+    return Discard(count="all", target=target, chosen_by="discarder")
 
 
 # ---- Mill / scry / surveil ----
@@ -643,6 +667,49 @@ def _each_player_gain(m):
     return GainLife(amount=_life_amount(m.group(1)), target=EACH_PLAYER)
 
 
+# ---- Each player/opponent sacrifices ----
+@rule(r"^each (?:player|opponent) sacrifices (" + _NUM_RE + r") ([^.]+?)(?:\.|$)")
+def _each_sacrifices(m):
+    n = _NUM_WORDS.get(m.group(1), m.group(1))
+    if isinstance(n, str) and n.isdigit():
+        n = int(n)
+    query = parse_filter(m.group(2)) or Filter(base="permanent")
+    actor = "each_opponent" if "opponent" in m.string[:15] else "each_player"
+    return Sacrifice(query=query, actor=actor)
+
+
+# ---- Each player/opponent discards N cards ----
+@rule(r"^each (?:player|opponent) discards (" + _NUM_RE + r") cards?(?:\.|$)")
+def _each_discards(m):
+    n = _NUM_WORDS.get(m.group(1), m.group(1))
+    if isinstance(n, str) and n.isdigit():
+        n = int(n)
+    target = EACH_OPPONENT if "opponent" in m.string[:15] else EACH_PLAYER
+    return Discard(count=n, target=target, chosen_by="discarder")
+
+
+# ---- Each player/opponent discards their hand ----
+@rule(r"^each (?:player|opponent) discards their hand(?:\.|$)")
+def _each_discards_hand(m):
+    target = EACH_OPPONENT if "opponent" in m.string[:15] else EACH_PLAYER
+    return Discard(count="all", target=target, chosen_by="discarder")
+
+
+# ---- Each player draws N cards (Timetwister, Windfall, etc.) ----
+@rule(r"^each (?:player|opponent) draws (" + _NUM_RE + r") cards?(?:\.|$)")
+def _each_draws(m):
+    n = _NUM_WORDS.get(m.group(1), m.group(1))
+    if isinstance(n, str) and n.isdigit():
+        n = int(n)
+    return Draw(count=n, target=EACH_PLAYER if "player" in m.string[:15] else EACH_OPPONENT)
+
+
+# ---- Each player shuffles ----
+@rule(r"^each player shuffles their (?:hand and graveyard|hand|graveyard) into their library(?:\.|$)")
+def _each_shuffles(m):
+    return Shuffle(target=EACH_PLAYER)
+
+
 # ---- Mana production ----
 @rule(r"^add (\{[^}]+\}(?:\{[^}]+\})*)(?:\.|$)")
 def _add_mana(m):
@@ -704,6 +771,47 @@ def _anthem(m):
                 duration="permanent")
 
 
+# ---- Each creature gets +/-N/+/-N until end of turn (board-wide buff/debuff) ----
+@rule(r"^(?:each|all) creatures? gets? ([+-]\d+)/([+-]\d+) until end of turn(?:\.|$)")
+def _each_creature_buff_eot(m):
+    return Buff(power=int(m.group(1)), toughness=int(m.group(2)),
+                target=Filter(base="creature", quantifier="all"),
+                duration="until_end_of_turn")
+
+
+# ---- Creatures you control get +N/+N until end of turn (tempo anthem) ----
+@rule(r"^creatures you control get \+(\d+)/\+(\d+) until end of turn(?:\.|$)")
+def _anthem_eot(m):
+    return Buff(power=int(m.group(1)), toughness=int(m.group(2)),
+                target=Filter(base="creature", quantifier="all", you_control=True),
+                duration="until_end_of_turn")
+
+
+# ---- Other creatures you control get +N/+N (lord anthem) ----
+@rule(r"^other creatures you control get \+(\d+)/\+(\d+)(?:\.|$)")
+def _other_anthem(m):
+    return Buff(power=int(m.group(1)), toughness=int(m.group(2)),
+                target=Filter(base="creature", quantifier="all", you_control=True,
+                              extra=("other",)),
+                duration="permanent")
+
+
+# ---- Creatures you control gain [keyword] until end of turn ----
+@rule(r"^creatures you control gain ([a-z ]+?) until end of turn(?:\.|$)")
+def _anthem_keyword_eot(m):
+    return GrantAbility(ability_name=m.group(1).strip(),
+                        target=Filter(base="creature", quantifier="all", you_control=True),
+                        duration="until_end_of_turn")
+
+
+# ---- Target creature gains [keyword] until end of turn ----
+@rule(r"^target creature gains ([a-z ]+?) until end of turn(?:\.|$)")
+def _grant_kw_target_eot(m):
+    return GrantAbility(ability_name=m.group(1).strip(),
+                        target=TARGET_CREATURE,
+                        duration="until_end_of_turn")
+
+
 # ---- Token creation ----
 @rule(r"^create (a|one|two|three|x|\d+) (\d+)/(\d+) ([a-z ]+?) creature tokens?(?:\.|$)")
 def _token(m):
@@ -762,7 +870,15 @@ def _tap_that(m):
 # ---- Goad it / goad that creature ----
 @rule(r"^goad (?:it|that creature|target creature)(?:\.|$)")
 def _goad_pronoun(m):
-    return UnknownEffect(raw_text="goad pronoun")
+    text_low = m.group(0).lower()
+    if "target" in text_low:
+        target = TARGET_CREATURE
+    elif "that" in text_low:
+        target = Filter(base="that_creature", targeted=False)
+    else:
+        target = Filter(base="that_creature", targeted=False)
+    return GrantAbility(ability_name="goad", target=target,
+                        duration="until_next_turn")
 
 
 # ---- Self-exile ----
@@ -2355,6 +2471,20 @@ def parse_quoted_ability(inner_text: str) -> Optional[object]:
         return None
 
 
+def _spell_effect_kind(e) -> str:
+    """Choose the Modification kind for a spell-effect wrapper.
+
+    When the inner effect `e` is a fully typed AST leaf (Damage, Draw, etc.)
+    or a composite (Sequence, Choice, Optional_) that contains at least one
+    typed leaf, use ``"typed_spell_effect"`` so the coverage tool counts the
+    ability as structural. Otherwise fall back to the legacy ``"spell_effect"``
+    stub kind for effects that are still strings or UnknownEffect/
+    parsed_effect_residual placeholders."""
+    if e is not None and _has_typed_node(e):
+        return "typed_spell_effect"
+    return "spell_effect"
+
+
 def parse_ability(text: str) -> Optional[object]:
     """Try the ability-shape parsers in order. Returns one of
     Keyword/Triggered/Activated/Static, or a Static-wrapped spell-effect
@@ -2375,6 +2505,37 @@ def parse_ability(text: str) -> Optional[object]:
     # 4. Static (known patterns)
     s = parse_static(text)
     if s:
+        # 4b. If parse_static returned a spell_effect with a string arg (not a
+        # typed Effect node), try parse_effect first. Many extension-supplied
+        # static patterns (p_tail_promoter) catch "~ deals 3 damage to any
+        # target" and stash the raw text as a string, but the EFFECT_RULES
+        # table can produce a typed Damage/Sequence/Choice/etc. node for
+        # the same text. Prefer the typed result when available.
+        if (isinstance(s, Static)
+                and s.modification is not None
+                and s.modification.kind == "spell_effect"
+                and s.modification.args
+                and isinstance(s.modification.args[0], str)):
+            e = parse_effect(text)
+            if e is not None and _has_typed_node(e):
+                return Static(
+                    modification=Modification(kind="typed_spell_effect", args=(e,)),
+                    raw=text,
+                )
+        # 4c. Promote existing typed spell_effect args: if parse_static already
+        # wrapped a typed Effect node in spell_effect (from the step-5 fallback
+        # of a previous parse path), re-tag with typed_spell_effect.
+        if (isinstance(s, Static)
+                and s.modification is not None
+                and s.modification.kind == "spell_effect"
+                and s.modification.args
+                and not isinstance(s.modification.args[0], str)
+                and _has_typed_node(s.modification.args[0])):
+            return Static(
+                modification=Modification(
+                    kind="typed_spell_effect", args=s.modification.args),
+                raw=s.raw,
+            )
         return s
     # 5. Spell-ability fallback — for instants/sorceries, the oracle text IS
     # the effect. Try parse_effect; if it produces ANYTHING (including an
@@ -2385,7 +2546,8 @@ def parse_ability(text: str) -> Optional[object]:
     # to count the ability as parsed for coverage purposes.
     e = parse_effect(text)
     if e is not None:
-        return Static(modification=Modification(kind="spell_effect", args=(e,)),
+        kind = _spell_effect_kind(e)
+        return Static(modification=Modification(kind=kind, args=(e,)),
                       raw=text)
     return None
 

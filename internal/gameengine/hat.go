@@ -312,6 +312,20 @@ type Hat interface {
 	ObserveEvent(gs *GameState, seatIdx int, event *Event)
 }
 
+// DamageDistributor is an optional interface that Hats can implement to
+// control how "distribute N damage among targets" effects divide damage.
+// CR §601.2d: when a spell says "distribute N damage", the caster divides
+// at cast time and each target must receive at least 1.
+//
+// Hats that don't implement this interface get the default even-split
+// heuristic in distributeDamage.
+type DamageDistributor interface {
+	// ChooseDamageDistribution returns an int slice of the same length as
+	// targets, where amounts[i] is the damage to deal to targets[i].
+	// Each value must be >= 1 and the sum must equal total.
+	ChooseDamageDistribution(gs *GameState, seatIdx int, targets []Target, total int) []int
+}
+
 // ConcedeGame marks a seat as having conceded. CR §104.3a.
 func ConcedeGame(gs *GameState, seatIdx int) {
 	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {

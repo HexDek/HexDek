@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Panel, Tag, Btn, Tape } from '../components/chrome'
+import { Panel, Tag, Btn, Tape, ConfidenceDots } from '../components/chrome'
 import { api, cardArtUrl } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useLiveSocket } from '../hooks/useLiveSocket'
@@ -91,6 +91,10 @@ export default function DeckList() {
             {filtered.slice(0, 60).map((d) => {
               const deckKey = `${d.owner}/${d.id}`
               const deckElo = eloByDeckId[deckKey] || eloByDeckId[d.id]
+              const wbs = d.wbs || d.bracket || '?'
+              const wbsLabel = d.wbs_label || ''
+              const pls = d.pls || null
+              const plsLabel = d.pls_label || ''
               return (
                 <div
                   key={deckKey}
@@ -100,7 +104,7 @@ export default function DeckList() {
                 >
                   <div className="panel-hd">
                     <span className="t-xs">{d.owner?.toUpperCase()}</span>
-                    <span className="t-xs">{deckElo ? `ELO ${Math.round(deckElo.rating)}` : `B${d.bracket}`}</span>
+                    {deckElo && <ConfidenceDots games={deckElo.games} />}
                   </div>
                   <div style={{ aspectRatio: '1.4/1', borderBottom: '1px solid var(--rule-2)', position: 'relative', overflow: 'hidden' }} className={(d.commander_card || d.commander) ? '' : 'hatch'}>
                     {(d.commander_card || d.commander) ? (
@@ -115,22 +119,29 @@ export default function DeckList() {
                       <span style={{ position: 'absolute', top: 4, left: 6, fontSize: 9, letterSpacing: '0.1em', color: 'var(--ink-3)' }}>CMDR</span>
                     )}
                   </div>
-                  <div style={{ padding: '8px 10px' }}>
-                    <div className="t-md" style={{ fontWeight: 700, lineHeight: 1.2, minHeight: 20 }}>{d.name || d.commander}</div>
+                  <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--rule-2)', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span className="t-xs" style={{ fontWeight: 700, letterSpacing: '0.06em' }}>
+                      {pls ? `B${pls}` : `B${wbs}`}
+                      <span className="muted" style={{ fontWeight: 400 }}>{pls ? ` (B${wbs})` : ''}</span>
+                    </span>
+                    <span className="t-xs" style={{ fontWeight: 700, letterSpacing: '0.06em' }}>
+                      {deckElo ? Math.round(deckElo.rating) : '—'}
+                    </span>
+                  </div>
+                  <div style={{ padding: '6px 10px' }}>
+                    <div className="t-sm" style={{ fontWeight: 700, lineHeight: 1.2, minHeight: 16 }}>{d.name || d.commander}</div>
                     {d.commander_card && d.commander_card.toUpperCase() !== (d.name || '').toUpperCase() && (
-                      <div className="t-xs" style={{ marginTop: 2, color: 'var(--ink-2)', lineHeight: 1.2 }}>{d.commander_card}</div>
+                      <div style={{ fontSize: 9, marginTop: 2, color: 'var(--ink-2)', lineHeight: 1.2 }}>{d.commander_card}</div>
                     )}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, alignItems: 'center' }}>
-                      <span className="t-xs muted">{d.card_count || d.cardCount} CARDS</span>
-                      {deckElo && deckElo.games > 0 && (
-                        <span className="t-xs">
-                          <span style={{ color: 'var(--ok)' }}>{deckElo.wins}W</span>
-                          <span style={{ color: 'var(--ink-2)' }}>-</span>
-                          <span style={{ color: 'var(--danger)' }}>{deckElo.losses}L</span>
-                          <span style={{ color: 'var(--ink-2)' }}> ({deckElo.win_rate}%)</span>
-                        </span>
-                      )}
-                    </div>
+                    <div className="t-xs muted" style={{ marginTop: 3 }}>{d.card_count || d.cardCount} CARDS</div>
+                    {deckElo && deckElo.games > 0 && (
+                      <div className="t-xs" style={{ marginTop: 4, borderTop: '1px dotted var(--rule)', paddingTop: 4 }}>
+                        <span style={{ color: 'var(--ok)' }}>{deckElo.wins}W</span>
+                        <span style={{ color: 'var(--ink-2)' }}> — </span>
+                        <span style={{ color: 'var(--danger)' }}>{deckElo.losses}L</span>
+                        <span style={{ color: 'var(--ink-2)' }}> ({deckElo.win_rate}%)</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )

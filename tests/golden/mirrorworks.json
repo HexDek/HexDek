@@ -5,7 +5,7 @@
         "trig:another_typed_enters",
         "optional",
         "conditional",
-        "create_token"
+        "copy_permanent"
       ],
       "index": 0,
       "kind": "triggered"
