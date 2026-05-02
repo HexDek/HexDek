@@ -40,7 +40,18 @@ const (
 
 	rawObsFile          = "raw_observations.json"
 	learnedFile         = "learned_interactions.json"
+	tier3FreyaFile      = "tier3_for_freya.json"
 )
+
+// FreyaInteraction is a confirmed interaction exported for Freya's
+// combo/synergy detection. Written when a pattern graduates to Tier 3.
+type FreyaInteraction struct {
+	CardA      string  `json:"card_a"`
+	CardB      string  `json:"card_b"`
+	Pattern    string  `json:"pattern"`
+	AvgImpact  float64 `json:"avg_impact"`
+	Confidence int     `json:"observation_count"`
+}
 
 // RawObservation is a single co-trigger observation persisted from a
 // tournament run. Mirrors analytics.CoTriggerObservation with deck context.
@@ -108,6 +119,19 @@ func PersistRawObservations(dir string, analyses []*analytics.GameAnalysis, comm
 	}
 
 	return atomicWriteJSON(filepath.Join(dir, rawObsFile), existing)
+}
+
+// PersistRawObservationsRaw writes pre-built raw observations to disk.
+// Used by the Huginn adapter when observations are already in the
+// RawObservation format (e.g., converted from Heimdall's CoTriggerPair).
+func PersistRawObservationsRaw(dir string, observations []RawObservation) error {
+	if len(observations) == 0 {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("huginn: mkdir %s: %w", dir, err)
+	}
+	return atomicWriteJSON(filepath.Join(dir, rawObsFile), observations)
 }
 
 // ReadRawObservations reads the raw observations file.
@@ -276,6 +300,13 @@ func Ingest(dir string, gamesSinceRun int) (promotions []LearnedInteraction, err
 		return nil, fmt.Errorf("huginn: write learned: %w", err)
 	}
 
+	// Export all tier 3 patterns to tier3_for_freya.json so Freya can
+	// incorporate confirmed emergent interactions into combo detection.
+	if err := exportTier3ForFreya(dir, result); err != nil {
+		// Non-fatal: log but don't fail ingestion.
+		fmt.Fprintf(os.Stderr, "huginn: export tier3 for freya: %v\n", err)
+	}
+
 	return promotions, nil
 }
 
@@ -355,6 +386,47 @@ func Stats(dir string) (tier1, tier2, tier3, total int, err error) {
 	}
 	total = len(interactions)
 	return
+}
+
+// exportTier3ForFreya writes all tier 3 (confirmed) interactions to
+// tier3_for_freya.json. Each interaction is expanded: one FreyaInteraction
+// per example card pair, so Freya can match against deck contents directly.
+func exportTier3ForFreya(dir string, interactions []LearnedInteraction) error {
+	var exports []FreyaInteraction
+	for _, li := range interactions {
+		if li.Tier < TierConfirmed {
+			continue
+		}
+		for _, example := range li.ExampleCards {
+			parts := strings.SplitN(example, " + ", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			exports = append(exports, FreyaInteraction{
+				CardA:      parts[0],
+				CardB:      parts[1],
+				Pattern:    li.Pattern,
+				AvgImpact:  li.AvgImpactScore,
+				Confidence: li.ObservationCount,
+			})
+		}
+	}
+	if len(exports) == 0 {
+		// Don't write an empty file; remove stale file if it exists.
+		os.Remove(filepath.Join(dir, tier3FreyaFile))
+		return nil
+	}
+	return atomicWriteJSON(filepath.Join(dir, tier3FreyaFile), exports)
+}
+
+// ReadTier3ForFreya reads the tier 3 Freya export file. Returns nil
+// (not an error) if the file does not exist.
+func ReadTier3ForFreya(dir string) ([]FreyaInteraction, error) {
+	var out []FreyaInteraction
+	if err := readJSON(filepath.Join(dir, tier3FreyaFile), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // atomicWriteJSON writes data as indented JSON via temp file + rename.

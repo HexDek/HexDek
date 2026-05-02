@@ -34,6 +34,13 @@ type YggdrasilHat struct {
 
 	noiseRNG *rand.Rand
 
+	// Combo sequencer: evaluates whether a combo win is available.
+	// nil when the deck has no combo lines (from Freya).
+	comboSeq *ComboSequencer
+
+	// Plan state machine: tracks strategic intent and transitions.
+	planState PlanState
+
 	// UCB1 tracking (turn-scoped keys).
 	actionStats  map[string]*actionStat
 	totalVisits  int
@@ -82,6 +89,30 @@ type YggdrasilHat struct {
 	// to us. Used for détente: opponents who leave us alone get left alone.
 	lastAttackedUsTurn []int
 
+	// poisonReceivedFrom tracks cumulative poison counters received from
+	// each opponent seat. Mirrors damageReceivedFrom but for infect/toxic.
+	poisonReceivedFrom []int
+
+	// -- 3rd Eye: Shannon Entropy Hand Tracking --
+
+	// opponentHandEntropy is a heuristic [0,1] estimate of how much we
+	// know about each opponent's hand. 0 = fully known, 1 = total unknown.
+	opponentHandEntropy []float64
+
+	// opponentHeldMana tracks consecutive turns where an opponent passed
+	// with 2+ mana untapped. High values in interactive colors (U/B)
+	// strongly suggest they're holding instant-speed answers.
+	opponentHeldMana []int
+
+	// opponentTutored records whether each opponent has tutored this game.
+	// After a tutor resolves they almost certainly have a specific answer
+	// or combo piece — near-zero entropy for one hand slot.
+	opponentTutored []bool
+
+	// opponentKnownCards tracks cards we know are in an opponent's hand
+	// (from reveal effects). These are zero-entropy slots.
+	opponentKnownCards []map[string]bool
+
 	// Pre-computed lookup sets for O(1) card relevance checks.
 	comboPieceSet    map[string]bool
 	valueEngineSet   map[string]bool
@@ -104,6 +135,19 @@ type YggdrasilHat struct {
 	convictionScores [convictionWindowSize]float64
 	convictionCount  int
 	convictionFull   bool
+
+	// DNA — optional Amiibo personality parameters that nudge weights,
+	// attack thresholds, combo patience, and political behavior.
+	// nil means no DNA influence (default behavior).
+	DNA *AmiiboDNA
+
+	// confidenceThreshold controls how picky the hat is about which
+	// action to take. Set from StrategyProfile.Bracket:
+	//   B1=0.30 (casual, "good enough"), B5=0.90 (near-optimal only).
+	// When the gap between best and second-best candidate is less than
+	// (1 - confidenceThreshold), the hat picks randomly among top
+	// candidates. Higher threshold = more deterministic selection.
+	confidenceThreshold float64
 
 	// Diagnostic: track the lowest relative position ever seen.
 	MinRelPos float64
@@ -182,9 +226,86 @@ func NewYggdrasilHatWithNoise(strategy *StrategyProfile, budget int, noise float
 		noiseRNG:      rand.New(rand.NewSource(rand.Int63())),
 		actionStats:   make(map[string]*actionStat),
 		availablePool: make(map[string]bool, 32),
+		comboSeq:      NewComboSequencer(strategy),
 	}
+	h.applyBracketDial(strategy)
 	h.buildLookupSets()
 	return h
+}
+
+// NewYggdrasilHatWithDNA creates a YggdrasilHat whose behavior is nudged
+// by Amiibo DNA parameters. DNA values are [0,1] floats centered at 0.5
+// (neutral); values above/below 0.5 push the hat's personality in the
+// corresponding direction without replacing the archetype-tuned baseline.
+//
+// Mapping:
+//   - Aggression → lowers attack thresholds (stored as DNA, read in ChooseAttackers)
+//   - ComboPat   → increases pass/hold combo patience (stored as DNA, read in priority decisions)
+//   - ThreatParanoia → scales ThreatExposure eval weight (+/- 40% from center)
+//   - ResourceGreed  → shifts CardAdvantage up and BoardPresence down (or vice versa)
+//   - PoliticalMemory → slows détente discount decay (stored as DNA, read in targeting)
+func NewYggdrasilHatWithDNA(dna *AmiiboDNA, sp *StrategyProfile, budget int) *YggdrasilHat {
+	h := NewYggdrasilHatWithNoise(sp, budget, 0.2)
+	if dna == nil {
+		return h
+	}
+	h.DNA = dna
+
+	// --- Weight nudges ---
+	// DNA values are [0,1]; 0.5 is neutral. We compute a signed offset
+	// in [-0.5, +0.5] and use it to scale the baseline weight.
+
+	// ThreatParanoia: high → increase ThreatExposure weight by up to 40%.
+	threatShift := (dna.ThreatParanoia - 0.5) * 0.8 // [-0.4, +0.4]
+	h.Evaluator.Weights.ThreatExposure *= 1.0 + threatShift
+
+	// ResourceGreed: high → favor CardAdvantage over BoardPresence.
+	// Low → favor BoardPresence over CardAdvantage. Max swing +/- 30%.
+	greedShift := (dna.ResourceGreed - 0.5) * 0.6 // [-0.3, +0.3]
+	h.Evaluator.Weights.CardAdvantage *= 1.0 + greedShift
+	h.Evaluator.Weights.BoardPresence *= 1.0 - greedShift
+
+	// DNA Aggression nudges confidence threshold: aggressive DNA lowers
+	// the threshold (more impulsive play), cautious DNA raises it.
+	// Max swing: +/- 0.10 from the bracket baseline.
+	aggroShift := (dna.Aggression - 0.5) * 0.2 // [-0.10, +0.10]
+	h.confidenceThreshold -= aggroShift
+	if h.confidenceThreshold < 0.1 {
+		h.confidenceThreshold = 0.1
+	}
+	if h.confidenceThreshold > 0.95 {
+		h.confidenceThreshold = 0.95
+	}
+
+	return h
+}
+
+// applyBracketDial sets the confidence threshold and noise based on the
+// strategy profile's power bracket. This is the Watts dial — same code
+// path, different sensitivity. Low brackets produce warm, varied play;
+// high brackets produce cold, precise play.
+func (h *YggdrasilHat) applyBracketDial(sp *StrategyProfile) {
+	// Confidence threshold: how picky when picking among candidates.
+	switch {
+	case sp != nil && sp.Bracket >= 5:
+		h.confidenceThreshold = 0.9
+	case sp != nil && sp.Bracket >= 4:
+		h.confidenceThreshold = 0.75
+	case sp != nil && sp.Bracket >= 3:
+		h.confidenceThreshold = 0.6
+	case sp != nil && sp.Bracket >= 2:
+		h.confidenceThreshold = 0.45
+	default:
+		h.confidenceThreshold = 0.3
+	}
+
+	// Noise override: bracket-scaled noise replaces the caller-provided
+	// value when a bracket is known. Lower brackets get more noise
+	// (varied, natural play), higher brackets get less (deterministic).
+	if sp != nil && sp.Bracket >= 1 && sp.Bracket <= 5 {
+		bracketNoise := [6]float64{0, 0.35, 0.25, 0.15, 0.10, 0.05}
+		h.Noise = bracketNoise[sp.Bracket]
+	}
 }
 
 func (h *YggdrasilHat) buildLookupSets() {
@@ -301,6 +422,19 @@ type seatThreat struct {
 	IsKingmaker     bool    // dangerously close to winning
 	PoliticalEnemy  int     // seat they're most likely to retaliate against (-1 = none)
 	TurnsToKill     int     // estimated turns until this seat kills us (0 = unknown, 1 = imminent)
+
+	// Alt-wincon threat fields (poison, PW loyalty, mill, commander damage).
+	HasInfect        bool    // controls creatures with infect or toxic
+	PoisonToUs       int     // cumulative poison counters dealt to us
+	PWLoyaltyThreat  float64 // max planeswalker-ultimate proximity [0,1]
+	MillThreat       float64 // threat from library depletion [0,1]
+	CmdrDmgToUs      int     // max commander damage from this seat to us
+
+	// Shannon entropy hand-tracking fields.
+	HandEntropy      float64 // heuristic [0,1]: 0=fully known, 1=total unknown
+	HeldManaTurns    int     // consecutive turns with 2+ mana untapped
+	Tutored          bool    // did they tutor this game?
+	LikelyHasAnswer  bool    // composite flag: tutored + held mana + interactive colors
 }
 
 func (h *YggdrasilHat) assessAllThreats(gs *gameengine.GameState, seatIdx int) []seatThreat {
@@ -349,6 +483,40 @@ func (h *YggdrasilHat) assessAllThreats(gs *gameengine.GameState, seatIdx int) [
 		st.IsKingmaker = h.isKingmaker(gs, i)
 		st.PoliticalEnemy = h.tablePoliticalEnemy(i)
 
+		// 3rd Eye: Shannon entropy hand tracking.
+		if i < len(h.opponentHandEntropy) {
+			st.HandEntropy = h.opponentHandEntropy[i]
+		} else {
+			st.HandEntropy = 1.0
+		}
+		if i < len(h.opponentHeldMana) {
+			st.HeldManaTurns = h.opponentHeldMana[i]
+		}
+		if i < len(h.opponentTutored) {
+			st.Tutored = h.opponentTutored[i]
+		}
+
+		// Composite "likely has answer" flag: tutored recently AND holding
+		// mana open for 2+ turns AND in interactive colors (U or B).
+		hasInteractiveColors := false
+		if i < len(h.opponentColors) {
+			hasInteractiveColors = h.opponentColors[i]["U"] || h.opponentColors[i]["B"]
+		}
+		st.LikelyHasAnswer = st.Tutored && st.HeldManaTurns >= 2 && hasInteractiveColors
+
+		// Entropy-based threat adjustment: opponents who tutored and are
+		// sitting on mana get a threat boost — they are loaded and waiting.
+		if st.Tutored && st.HeldManaTurns >= 3 && hasInteractiveColors {
+			st.EvalScore += 0.15
+		} else if st.Tutored && st.HeldManaTurns >= 2 {
+			st.EvalScore += 0.08
+		}
+		// High held-mana turns in interactive colors (even without tutor)
+		// suggest sandbagging with countermagic or removal.
+		if st.HeldManaTurns >= 4 && hasInteractiveColors {
+			st.EvalScore += 0.10
+		}
+
 		// Threat timeline: estimate turns until this opponent kills us.
 		myLife := gs.Seats[seatIdx].Life
 		if st.BoardPower > 0 && myLife > 0 {
@@ -362,11 +530,184 @@ func (h *YggdrasilHat) assessAllThreats(gs *gameengine.GameState, seatIdx int) [
 			}
 		}
 
+		// -- Alt-wincon threat assessment --
+
+		// Poison: check if opponent controls infect/toxic creatures.
+		myPoison := gs.Seats[seatIdx].PoisonCounters
+		for _, p := range s.Battlefield {
+			if p == nil {
+				continue
+			}
+			if p.HasKeyword("infect") || p.HasKeyword("toxic") {
+				st.HasInfect = true
+				break
+			}
+		}
+		if i < len(h.poisonReceivedFrom) {
+			st.PoisonToUs = h.poisonReceivedFrom[i]
+		}
+		// Poison proximity: boost threat score when we're close to 10.
+		if st.HasInfect && myPoison >= 7 {
+			// Any infect creature is lethal — treat like TurnsToKill=1.
+			st.EvalScore += 0.4
+		} else if st.HasInfect && myPoison >= 5 {
+			st.EvalScore += 0.2
+		}
+
+		// Planeswalker loyalty: scan for PWs approaching ultimate.
+		for _, p := range s.Battlefield {
+			if p == nil || p.Card == nil || !p.IsPlaneswalker() {
+				continue
+			}
+			loyalty := 0
+			if p.Counters != nil {
+				loyalty = p.Counters["loyalty"]
+			}
+			// Estimate ultimate cost from oracle text. Typical pattern:
+			// "−7:" or "−8:". Heuristic: scan for largest negative number.
+			ultimateCost := estimatePWUltimateCost(p.Card)
+			if ultimateCost > 0 && loyalty > 0 {
+				// How close are they? 1.0 = can ult this turn.
+				proximity := float64(loyalty) / float64(ultimateCost)
+				if proximity > 1.0 {
+					proximity = 1.0
+				}
+				if proximity > st.PWLoyaltyThreat {
+					st.PWLoyaltyThreat = proximity
+				}
+			}
+		}
+		// PWs within 1-2 activations of ultimate are high threat.
+		if st.PWLoyaltyThreat >= 0.8 {
+			st.EvalScore += 0.3
+		} else if st.PWLoyaltyThreat >= 0.6 {
+			st.EvalScore += 0.15
+		}
+
+		// Mill threat: check opponent for mill permanents + our library depth.
+		myLibSize := len(gs.Seats[seatIdx].Library)
+		hasMill := false
+		for _, p := range s.Battlefield {
+			if p == nil || p.Card == nil {
+				continue
+			}
+			ot := gameengine.OracleTextLower(p.Card)
+			if (strings.Contains(ot, "mill") || strings.Contains(ot, "cards from the top of") ||
+				(strings.Contains(ot, "library") && strings.Contains(ot, "graveyard"))) &&
+				(strings.Contains(ot, "opponent") || strings.Contains(ot, "target player") || strings.Contains(ot, "each player")) {
+				hasMill = true
+				break
+			}
+		}
+		if hasMill && myLibSize > 0 {
+			// Threat scales inversely with library size.
+			if myLibSize < 10 {
+				st.MillThreat = 1.0
+			} else if myLibSize < 20 {
+				st.MillThreat = 0.7
+			} else if myLibSize < 40 {
+				st.MillThreat = 0.3
+			}
+			st.EvalScore += st.MillThreat * 0.3
+		}
+
+		// Commander damage: check if this seat's commanders have dealt
+		// significant combat damage to us (21 = lethal per §704.6c).
+		if gs.CommanderFormat {
+			mySeat := gs.Seats[seatIdx]
+			if mySeat.CommanderDamage != nil {
+				if cmdMap, ok := mySeat.CommanderDamage[i]; ok {
+					for _, dmg := range cmdMap {
+						if dmg > st.CmdrDmgToUs {
+							st.CmdrDmgToUs = dmg
+						}
+					}
+				}
+			}
+			if st.CmdrDmgToUs >= 15 {
+				st.EvalScore += 0.3
+			} else if st.CmdrDmgToUs >= 10 {
+				st.EvalScore += 0.15
+			}
+		}
+
 		threats = append(threats, st)
 	}
 	h.threatCache = threats
 	h.threatCacheTurn = gs.Turn
 	return threats
+}
+
+// selectAmongTop picks from the top N candidates using the confidence
+// threshold. scores must be sorted descending. Returns the selected index.
+//
+// When the gap between best and second-best is large relative to the
+// threshold, the best is chosen deterministically. When scores are close
+// (gap < 1 - threshold), we pick randomly among candidates within that
+// gap — producing varied, natural-looking play at low thresholds and
+// precise play at high thresholds.
+func (h *YggdrasilHat) selectAmongTop(scores []float64) int {
+	if len(scores) <= 1 {
+		return 0
+	}
+	best := scores[0]
+
+	// How close does a candidate need to be to qualify? The margin
+	// shrinks as confidence rises: B1 (0.3) → margin 0.7, B5 (0.9) → margin 0.1.
+	margin := 1.0 - h.confidenceThreshold
+	if margin < 0.05 {
+		margin = 0.05
+	}
+
+	// Count how many candidates fall within the margin of the best.
+	topN := 1
+	for i := 1; i < len(scores); i++ {
+		if best-scores[i] <= margin {
+			topN = i + 1
+		} else {
+			break
+		}
+	}
+	if topN == 1 {
+		return 0
+	}
+	return h.noiseRNG.Intn(topN)
+}
+
+// estimatePWUltimateCost scans a planeswalker's oracle text for its ultimate
+// cost. Looks for the largest "−N:" pattern (loyalty cost). Returns 0 if no
+// pattern found, meaning we can't estimate.
+func estimatePWUltimateCost(card *gameengine.Card) int {
+	ot := gameengine.OracleTextLower(card)
+	// Scan for patterns like "−7:", "−8:", "-12:" etc.
+	// The ultimate is typically the largest negative loyalty ability.
+	maxCost := 0
+	for i := 0; i < len(ot); i++ {
+		// Match '−' (unicode minus U+2212) or '-' (ASCII hyphen).
+		isNeg := false
+		if ot[i] == '-' {
+			isNeg = true
+		} else if i+2 < len(ot) && ot[i] == '\xe2' && ot[i+1] == '\x88' && ot[i+2] == '\x92' {
+			// UTF-8 for U+2212 MINUS SIGN
+			isNeg = true
+			i += 2
+		}
+		if !isNeg {
+			continue
+		}
+		// Parse following digits.
+		j := i + 1
+		num := 0
+		for j < len(ot) && ot[j] >= '0' && ot[j] <= '9' {
+			num = num*10 + int(ot[j]-'0')
+			j++
+		}
+		// Must be followed by ':' (loyalty ability pattern).
+		if num > 0 && j < len(ot) && ot[j] == ':' && num > maxCost {
+			maxCost = num
+		}
+	}
+	return maxCost
 }
 
 // applyNoise adds gaussian noise (Box-Muller) scaled by h.Noise to a score.
@@ -481,14 +822,33 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 
 		// 6b. Détente: opponents who haven't attacked us in 4+ turns get a
 		// targeting discount. Mutual non-aggression emerges organically.
+		// DNA PoliticalMemory: high memory → grudges persist longer (shorter
+		// peace window before détente kicks in, and slower discount growth).
+		// Low memory → quick forgiveness (détente kicks in sooner and grows
+		// faster). Neutral (0.5) = default 4-turn window, 0.15 per turn.
 		if gs != nil && def < len(h.lastAttackedUsTurn) && !threat.IsKingmaker {
 			lastHit := h.lastAttackedUsTurn[def]
 			peaceTurns := gs.Turn - lastHit
 			if lastHit == 0 {
 				peaceTurns = gs.Turn
 			}
-			if peaceTurns >= 4 {
-				discount := float64(peaceTurns-3) * 0.15
+			peaceThreshold := 4
+			discountRate := 0.15
+			if h.DNA != nil {
+				// High memory (1.0) → threshold 6, rate 0.08 (slow to forgive)
+				// Low memory (0.0) → threshold 2, rate 0.25 (quick to forgive)
+				memShift := (h.DNA.PoliticalMemory - 0.5) * 2.0 // [-1.0, +1.0]
+				peaceThreshold = 4 + int(memShift*2.0)
+				if peaceThreshold < 1 {
+					peaceThreshold = 1
+				}
+				discountRate = 0.15 - memShift*0.07 // [0.08, 0.22]
+				if discountRate < 0.05 {
+					discountRate = 0.05
+				}
+			}
+			if peaceTurns >= peaceThreshold {
+				discount := float64(peaceTurns-peaceThreshold+1) * discountRate
 				if discount > 1.0 {
 					discount = 1.0
 				}
@@ -556,7 +916,15 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 	sort.SliceStable(candidates, func(i, j int) bool {
 		return candidates[i].score > candidates[j].score
 	})
-	return candidates[0].seat
+
+	// Confidence threshold: at low brackets, pick randomly among
+	// similarly-scored targets for less predictable attack patterns.
+	tgtScores := make([]float64, len(candidates))
+	for i, c := range candidates {
+		tgtScores[i] = c.score
+	}
+	pick := h.selectAmongTop(tgtScores)
+	return candidates[pick].seat
 }
 
 // -- Evaluation helpers --
@@ -723,6 +1091,25 @@ func (h *YggdrasilHat) cardHeuristic(gs *gameengine.GameState, seatIdx int, c *g
 		}
 	}
 
+	// Lovelace Composer Intent: boost cards matching commander themes.
+	if h.Strategy != nil {
+		cName := c.DisplayName()
+		if h.starCardSet[cName] {
+			base += 0.20
+		}
+		if len(h.Strategy.CommanderThemes) > 0 {
+			ot := gameengine.OracleTextLower(c)
+			tl := strings.ToLower(c.TypeLine)
+			for _, theme := range h.Strategy.CommanderThemes {
+				lt := strings.ToLower(theme)
+				if strings.Contains(ot, lt) || strings.Contains(tl, lt) {
+					base += 0.12
+					break
+				}
+			}
+		}
+	}
+
 	// Partner commander priority: when a partner pair is in the command zone,
 	// deploying the second partner is high-value — it unlocks the deck's full
 	// identity. Boost if the other partner is already on the battlefield.
@@ -841,6 +1228,21 @@ func (h *YggdrasilHat) cardHeuristic(gs *gameengine.GameState, seatIdx int, c *g
 		isHighValue := h.isComboRelevant(c) || h.isValueEngineKey(c) || h.isStarCard(c)
 		if isHighValue && intRisk > 0.4 {
 			base -= (intRisk - 0.3) * 0.25
+		}
+		// 3rd Eye: Entropy-enhanced caution — if any opponent has the
+		// LikelyHasAnswer flag (tutored + held mana + interactive colors),
+		// apply extra downweight on combo pieces. They almost certainly
+		// have a counterspell or removal spell waiting.
+		if isHighValue && h.isComboRelevant(c) {
+			for i := range gs.Seats {
+				if i == seatIdx {
+					continue
+				}
+				if h.opponentLikelyHasAnswer(i) {
+					base -= 0.15
+					break
+				}
+			}
 		}
 	}
 
@@ -1674,6 +2076,50 @@ func (h *YggdrasilHat) ChooseCastFromHand(gs *gameengine.GameState, seatIdx int,
 		return nil
 	}
 
+	// Combo sequencer override: if a combo is executable this turn,
+	// skip normal evaluation and cast the next combo piece immediately.
+	// 3rd Eye: Entropy-gated combo — if an opponent with interactive
+	// colors has tutored and is holding mana open, delay the combo
+	// attempt unless we're in a must-win situation (low life / kingmaker
+	// pressure). Jamming into a known counterspell is worse than waiting.
+	if h.comboSeq != nil {
+		assessment := h.comboSeq.Evaluate(gs, seatIdx)
+		if assessment.Executable && assessment.NextAction != "" {
+			entropyBlocked := false
+			if gs != nil {
+				myLife := 40
+				if seatIdx >= 0 && seatIdx < len(gs.Seats) && gs.Seats[seatIdx] != nil {
+					myLife = gs.Seats[seatIdx].Life
+				}
+				mustWin := myLife <= 10 || h.relativePosition(gs, seatIdx) < -0.5
+				if !mustWin {
+					for i := range gs.Seats {
+						if i == seatIdx {
+							continue
+						}
+						if h.opponentLikelyHasAnswer(i) {
+							h.logf("%s COMBO-DELAY seat=%d (opponent %d likely has answer: tutored=%v heldMana=%d)",
+								roundTag(gs, seatIdx), seatIdx, i,
+								h.opponentTutored[i], h.opponentHeldMana[i])
+							entropyBlocked = true
+							break
+						}
+					}
+				}
+			}
+			if !entropyBlocked {
+				for _, c := range pool {
+					if c.DisplayName() == assessment.NextAction {
+						h.logf("%s COMBO-CAST seat=%d %s (line: %s)",
+							roundTag(gs, seatIdx), seatIdx, c.DisplayName(),
+							assessment.BestLine.Name)
+						return c
+					}
+				}
+			}
+		}
+	}
+
 	if h.effectiveBudget(gs) == 0 {
 		return h.castHeuristic(gs, seatIdx, pool)
 	}
@@ -1709,6 +2155,12 @@ func (h *YggdrasilHat) ChooseCastFromHand(gs *gameengine.GameState, seatIdx int,
 			}
 		case ArchetypeControl, ArchetypeStax:
 			comboMul = 0.4
+		}
+		// DNA ComboPat: high patience → larger comboMul (hold for combo),
+		// low patience → smaller (play pieces for tempo). Max nudge: +/- 40%.
+		if h.DNA != nil {
+			patShift := (h.DNA.ComboPat - 0.5) * 0.8 // [-0.4, +0.4]
+			comboMul *= 1.0 + patShift
 		}
 		passBoost = comboRatio * comboMul
 	}
@@ -1855,19 +2307,30 @@ func (h *YggdrasilHat) ChooseCastFromHand(gs *gameengine.GameState, seatIdx int,
 	sort.SliceStable(candidates, func(i, j int) bool {
 		return candidates[i].ucb > candidates[j].ucb
 	})
-	best := candidates[0]
 
-	if best.ucb <= passUCB {
-		h.logf("  → PASS (pass ucb=%.3f beats best=%.3f)", passUCB, best.ucb)
+	if candidates[0].ucb <= passUCB {
+		h.logf("  → PASS (pass ucb=%.3f beats best=%.3f)", passUCB, candidates[0].ucb)
 		h.recordAction(passKey, pos)
 		return nil
 	}
 
+	// Confidence threshold selection: at low thresholds (B1), pick
+	// randomly among close candidates for varied play. At high
+	// thresholds (B5), almost always pick the best.
+	ucbs := make([]float64, len(candidates))
+	for i, c := range candidates {
+		ucbs[i] = c.ucb
+	}
+	pick := h.selectAmongTop(ucbs)
+	best := candidates[pick]
+
 	bestKey := prefix + "cast:" + best.card.DisplayName()
 	if canRollout {
-		h.logf("  → CAST %s (ucb=%.3f, beat pass by %.3f)", best.card.DisplayName(), best.ucb, best.ucb-passUCB)
+		h.logf("  → CAST %s (ucb=%.3f, beat pass by %.3f, pick=%d/%d)",
+			best.card.DisplayName(), best.ucb, best.ucb-passUCB, pick, len(candidates))
 	} else {
-		h.logf("  → CAST %s (ucb=%.3f)", best.card.DisplayName(), best.ucb)
+		h.logf("  → CAST %s (ucb=%.3f, pick=%d/%d)",
+			best.card.DisplayName(), best.ucb, pick, len(candidates))
 	}
 	h.recordAction(bestKey, pos+h.cardHeuristic(gs, seatIdx, best.card))
 	return best.card
@@ -1994,6 +2457,26 @@ func (h *YggdrasilHat) ChooseActivation(gs *gameengine.GameState, seatIdx int, o
 	if len(options) == 0 {
 		return nil
 	}
+
+	// Combo sequencer override: if a combo is executable and the next
+	// action matches an activation (already on battlefield), prefer it.
+	if h.comboSeq != nil {
+		assessment := h.comboSeq.Evaluate(gs, seatIdx)
+		if assessment.Executable && assessment.NextAction != "" {
+			for i := range options {
+				opt := &options[i]
+				if opt.Permanent != nil && opt.Permanent.Card != nil &&
+					opt.Permanent.Card.DisplayName() == assessment.NextAction {
+					h.logf("%s COMBO-ACTIVATE seat=%d %s (line: %s)",
+						roundTag(gs, seatIdx), seatIdx,
+						opt.Permanent.Card.DisplayName(),
+						assessment.BestLine.Name)
+					return opt
+				}
+			}
+		}
+	}
+
 	if h.effectiveBudget(gs) == 0 {
 		return &options[0]
 	}
@@ -2005,9 +2488,12 @@ func (h *YggdrasilHat) ChooseActivation(gs *gameengine.GameState, seatIdx int, o
 	passKey := prefix + "act_pass"
 	passUCB := h.ucb1(passKey, pos)
 
-	var best *gameengine.Activation
-	bestUCB := passUCB
-
+	type scoredAct struct {
+		opt *gameengine.Activation
+		ucb float64
+		key string
+	}
+	acts := make([]scoredAct, 0, len(options))
 	for i := range options {
 		opt := &options[i]
 		name := "?"
@@ -2017,24 +2503,31 @@ func (h *YggdrasilHat) ChooseActivation(gs *gameengine.GameState, seatIdx int, o
 		heurVal := h.activationHeuristic(gs, seatIdx, &options[i])
 		key := prefix + fmt.Sprintf("act:%s:%d", name, opt.Ability)
 		ucb := h.ucb1(key, pos+heurVal)
-		if ucb > bestUCB {
-			bestUCB = ucb
-			best = opt
+		if ucb > passUCB {
+			acts = append(acts, scoredAct{opt, ucb, key})
 		}
 	}
 
-	if best != nil {
-		name := "?"
-		if best.Permanent != nil && best.Permanent.Card != nil {
-			name = best.Permanent.Card.DisplayName()
-		}
-		heurVal := h.activationHeuristic(gs, seatIdx, best)
-		key := prefix + fmt.Sprintf("act:%s:%d", name, best.Ability)
-		h.recordAction(key, pos+heurVal)
-	} else {
+	if len(acts) == 0 {
 		h.recordAction(passKey, pos)
+		return nil
 	}
-	return best
+
+	sort.SliceStable(acts, func(i, j int) bool {
+		return acts[i].ucb > acts[j].ucb
+	})
+
+	// Confidence threshold selection among qualifying activations.
+	actUCBs := make([]float64, len(acts))
+	for i, a := range acts {
+		actUCBs[i] = a.ucb
+	}
+	pick := h.selectAmongTop(actUCBs)
+	chosen := acts[pick]
+
+	heurVal := h.activationHeuristic(gs, seatIdx, chosen.opt)
+	h.recordAction(chosen.key, pos+heurVal)
+	return chosen.opt
 }
 
 func (h *YggdrasilHat) activationHeuristic(gs *gameengine.GameState, seatIdx int, opt *gameengine.Activation) float64 {
@@ -2261,6 +2754,16 @@ func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, le
 				behindVal = 0.15
 			}
 		}
+	}
+	// DNA Aggression: high aggression lowers the thresholds for attacking
+	// (more willing to swing), low aggression raises them (more cautious).
+	// Neutral (0.5) = no change. Max nudge: +/- 0.15 on thresholds.
+	if h.DNA != nil {
+		aggroShift := (h.DNA.Aggression - 0.5) * 0.3 // [-0.15, +0.15]
+		aheadThresh -= aggroShift                     // high aggro → lower threshold to trigger "ahead" attacks
+		behindThresh -= aggroShift                    // high aggro → lower threshold to trigger "behind" selectivity
+		aheadVal -= aggroShift * 0.5                  // high aggro → attack with less advantage needed
+		behindVal -= aggroShift * 0.5                 // high aggro → less cautious when behind
 	}
 	threshold := 0.0
 	stance := "neutral"
@@ -2827,6 +3330,24 @@ func (h *YggdrasilHat) ChooseTarget(gs *gameengine.GameState, seatIdx int, filte
 		return legal[0]
 	}
 
+	// Combo sequencer tutor override: if we're assembling a combo and
+	// this is a tutor resolving, prefer the missing piece above all else.
+	if h.comboSeq != nil {
+		assessment := h.comboSeq.Evaluate(gs, seatIdx)
+		if assessment.Assembling && assessment.MissingPiece != "" {
+			for _, t := range legal {
+				if t.Kind == gameengine.TargetKindCard && t.Card != nil &&
+					t.Card.DisplayName() == assessment.MissingPiece {
+					h.logf("%s COMBO-TUTOR seat=%d → %s (assembling: %s)",
+						roundTag(gs, seatIdx), seatIdx,
+						assessment.MissingPiece,
+						assessment.BestLine.Name)
+					return t
+				}
+			}
+		}
+	}
+
 	// Strategy-aware tutor selection — context-dependent, not just first match.
 	if h.Strategy != nil {
 		type tutorCandidate struct {
@@ -2892,7 +3413,24 @@ func (h *YggdrasilHat) ChooseTarget(gs *gameengine.GameState, seatIdx int, filte
 					sc += 1.5
 				}
 				if typeLineContains(p.Card, "planeswalker") {
-					sc += 2.0
+					// Scale PW removal priority by loyalty proximity to ultimate.
+					loyalty := 0
+					if p.Counters != nil {
+						loyalty = p.Counters["loyalty"]
+					}
+					ultCost := estimatePWUltimateCost(p.Card)
+					if ultCost > 0 && loyalty > 0 {
+						proximity := float64(loyalty) / float64(ultCost)
+						if proximity >= 1.0 {
+							sc += 5.0 // can ult NOW — critical removal target
+						} else if proximity >= 0.7 {
+							sc += 3.5 // 1-2 activations away
+						} else {
+							sc += 2.0 // base PW removal value
+						}
+					} else {
+						sc += 2.0 // fallback: can't estimate, use flat bonus
+					}
 				}
 				if typeLineContains(p.Card, "commander") {
 					sc += 1.0
@@ -2928,7 +3466,13 @@ func (h *YggdrasilHat) ChooseTarget(gs *gameengine.GameState, seatIdx int, filte
 			sort.SliceStable(candidates, func(i, j int) bool {
 				return candidates[i].score > candidates[j].score
 			})
-			return candidates[0].target
+			// Confidence threshold: vary removal targets at low brackets.
+			permScores := make([]float64, len(candidates))
+			for i, c := range candidates {
+				permScores[i] = c.score
+			}
+			pick := h.selectAmongTop(permScores)
+			return candidates[pick].target
 		}
 	}
 
@@ -2947,7 +3491,13 @@ func (h *YggdrasilHat) ChooseTarget(gs *gameengine.GameState, seatIdx int, filte
 			sort.SliceStable(nt, func(i, j int) bool {
 				return nt[i].score > nt[j].score
 			})
-			bestSeat := nt[0].seat
+			// Confidence threshold: vary player targets at low brackets.
+			ntScores := make([]float64, len(nt))
+			for i, n := range nt {
+				ntScores[i] = n.score
+			}
+			pickIdx := h.selectAmongTop(ntScores)
+			bestSeat := nt[pickIdx].seat
 			for _, t := range legal {
 				if t.Kind == gameengine.TargetKindSeat && t.Seat == bestSeat {
 					return t
@@ -2970,18 +3520,27 @@ func (h *YggdrasilHat) ChooseMode(gs *gameengine.GameState, seatIdx int, modes [
 		return 0
 	}
 
-	bestIdx := 0
-	bestScore := -1.0
 	pos := h.evalPosition(gs, seatIdx)
 
-	for i, m := range modes {
-		score := h.scoreModeEffect(gs, seatIdx, m, pos)
-		if score > bestScore {
-			bestScore = score
-			bestIdx = i
-		}
+	type scoredMode struct {
+		idx   int
+		score float64
 	}
-	return bestIdx
+	scored := make([]scoredMode, len(modes))
+	for i, m := range modes {
+		scored[i] = scoredMode{i, h.scoreModeEffect(gs, seatIdx, m, pos)}
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		return scored[i].score > scored[j].score
+	})
+
+	// Confidence threshold: vary mode selection at low brackets.
+	modeScores := make([]float64, len(scored))
+	for i, s := range scored {
+		modeScores[i] = s.score
+	}
+	pick := h.selectAmongTop(modeScores)
+	return scored[pick].idx
 }
 
 func (h *YggdrasilHat) scoreModeEffect(gs *gameengine.GameState, seatIdx int, eff gameast.Effect, pos float64) float64 {
@@ -3457,10 +4016,17 @@ func (h *YggdrasilHat) ObserveEvent(gs *gameengine.GameState, seatIdx int, event
 		h.opponentColors = make([]map[string]bool, h.seatCount)
 		h.kingmakerTurn = make([]int, h.seatCount)
 		h.lastAttackedUsTurn = make([]int, h.seatCount)
+		h.poisonReceivedFrom = make([]int, h.seatCount)
+		h.opponentHandEntropy = make([]float64, h.seatCount)
+		h.opponentHeldMana = make([]int, h.seatCount)
+		h.opponentTutored = make([]bool, h.seatCount)
+		h.opponentKnownCards = make([]map[string]bool, h.seatCount)
 		for i := 0; i < h.seatCount; i++ {
 			h.cardsSeen[i] = make(map[string]int)
 			h.politicalGraph[i] = make([]int, h.seatCount)
 			h.opponentColors[i] = make(map[string]bool)
+			h.opponentHandEntropy[i] = 1.0 // start fully unknown
+			h.opponentKnownCards[i] = make(map[string]bool)
 		}
 	}
 
@@ -3468,6 +4034,8 @@ func (h *YggdrasilHat) ObserveEvent(gs *gameengine.GameState, seatIdx int, event
 	if event.Kind == "game_start" {
 		h.actionStats = make(map[string]*actionStat)
 		h.totalVisits = 0
+		h.planState = PlanState{}
+		h.Evaluator.PlanMultiplier = nil
 		for i := range h.damageDealtTo {
 			h.damageDealtTo[i] = 0
 			h.damageReceivedFrom[i] = 0
@@ -3479,6 +4047,21 @@ func (h *YggdrasilHat) ObserveEvent(gs *gameengine.GameState, seatIdx int, event
 			h.lastTurnBoardPower[i] = 0
 			h.kingmakerTurn[i] = 0
 			h.lastAttackedUsTurn[i] = 0
+			if i < len(h.poisonReceivedFrom) {
+				h.poisonReceivedFrom[i] = 0
+			}
+			if i < len(h.opponentHandEntropy) {
+				h.opponentHandEntropy[i] = 1.0
+			}
+			if i < len(h.opponentHeldMana) {
+				h.opponentHeldMana[i] = 0
+			}
+			if i < len(h.opponentTutored) {
+				h.opponentTutored[i] = false
+			}
+			if i < len(h.opponentKnownCards) {
+				h.opponentKnownCards[i] = make(map[string]bool)
+			}
 		}
 		return
 	}
@@ -3498,6 +4081,13 @@ func (h *YggdrasilHat) ObserveEvent(gs *gameengine.GameState, seatIdx int, event
 		if event.Seat >= 0 && event.Seat < h.seatCount &&
 			event.Target >= 0 && event.Target < h.seatCount {
 			h.politicalGraph[event.Seat][event.Target] += event.Amount
+		}
+	}
+
+	// 3rd Eye: Track poison counters received per opponent.
+	if event.Kind == "poison" && event.Amount > 0 {
+		if event.Target == seatIdx && event.Seat >= 0 && event.Seat < len(h.poisonReceivedFrom) {
+			h.poisonReceivedFrom[event.Seat] += event.Amount
 		}
 	}
 
@@ -3527,6 +4117,87 @@ func (h *YggdrasilHat) ObserveEvent(gs *gameengine.GameState, seatIdx int, event
 		}
 	}
 
+	// -- 3rd Eye: Shannon entropy hand tracking --
+
+	// Tutor/search_library resolved → near-zero entropy for one slot.
+	// They found exactly what they wanted.
+	if (event.Kind == "tutor" || event.Kind == "search_library") &&
+		event.Seat >= 0 && event.Seat < h.seatCount && event.Seat != seatIdx {
+		if event.Seat < len(h.opponentTutored) {
+			h.opponentTutored[event.Seat] = true
+		}
+		// Reduce entropy: they now hold a known-purpose card.
+		if event.Seat < len(h.opponentHandEntropy) {
+			h.opponentHandEntropy[event.Seat] *= 0.6
+			if h.opponentHandEntropy[event.Seat] < 0.1 {
+				h.opponentHandEntropy[event.Seat] = 0.1
+			}
+		}
+	}
+
+	// Draw events → increase entropy (more unknown cards in hand).
+	if event.Kind == "draw" && event.Seat >= 0 && event.Seat < h.seatCount && event.Seat != seatIdx {
+		if event.Seat < len(h.opponentHandEntropy) {
+			drawn := event.Amount
+			if drawn < 1 {
+				drawn = 1
+			}
+			// Each draw adds uncertainty. Scale: 1 card = +0.08, 3 cards = +0.24.
+			increase := float64(drawn) * 0.08
+			h.opponentHandEntropy[event.Seat] += increase
+			if h.opponentHandEntropy[event.Seat] > 1.0 {
+				h.opponentHandEntropy[event.Seat] = 1.0
+			}
+		}
+	}
+
+	// Reveal events → zero entropy for those specific cards (known).
+	if event.Kind == "reveal" && event.Source != "" &&
+		event.Seat >= 0 && event.Seat < h.seatCount && event.Seat != seatIdx {
+		if event.Seat < len(h.opponentKnownCards) {
+			h.opponentKnownCards[event.Seat][event.Source] = true
+		}
+		// Knowing cards reduces overall hand entropy.
+		if event.Seat < len(h.opponentHandEntropy) {
+			h.opponentHandEntropy[event.Seat] -= 0.15
+			if h.opponentHandEntropy[event.Seat] < 0.0 {
+				h.opponentHandEntropy[event.Seat] = 0.0
+			}
+		}
+	}
+
+	// Cast events from opponents → remove from known cards if it was known,
+	// and reset held-mana counter (they used their mana).
+	if event.Kind == "cast" && event.Source != "" &&
+		event.Seat >= 0 && event.Seat < h.seatCount && event.Seat != seatIdx {
+		if event.Seat < len(h.opponentKnownCards) {
+			delete(h.opponentKnownCards[event.Seat], event.Source)
+		}
+		if event.Seat < len(h.opponentHeldMana) {
+			h.opponentHeldMana[event.Seat] = 0
+		}
+	}
+
+	// Upkeep: check if opponents passed the previous turn with mana open.
+	// We piggyback on the upkeep event (already used for trajectory snapshots)
+	// to evaluate each opponent's mana state at the start of a new turn cycle.
+	if event.Kind == "upkeep" && gs != nil {
+		for i, s := range gs.Seats {
+			if i == seatIdx || s == nil || s.Lost || s.LeftGame {
+				continue
+			}
+			if i >= len(h.opponentHeldMana) {
+				continue
+			}
+			openMana := gameengine.AvailableManaEstimate(gs, s)
+			if openMana >= 2 {
+				h.opponentHeldMana[i]++
+			} else {
+				h.opponentHeldMana[i] = 0
+			}
+		}
+	}
+
 	// Per-turn threat trajectory snapshot.
 	if event.Kind == "upkeep" && gs != nil {
 		for i, s := range gs.Seats {
@@ -3545,6 +4216,35 @@ func (h *YggdrasilHat) ObserveEvent(gs *gameengine.GameState, seatIdx int, event
 				}
 			}
 		}
+
+		// Plan state machine: evaluate combo status and threat level,
+		// then transition if conditions warrant.
+		var comboAssess *ComboAssessment
+		if h.comboSeq != nil {
+			ca := h.comboSeq.Evaluate(gs, seatIdx)
+			comboAssess = &ca
+		}
+		maxThreat := 0.0
+		threats := h.assessAllThreats(gs, seatIdx)
+		for _, t := range threats {
+			if t.EvalScore > maxThreat {
+				maxThreat = t.EvalScore
+			}
+		}
+		prevPlan := h.planState.Current
+		h.planState.Evaluate(comboAssess, maxThreat)
+		if h.planState.Current != prevPlan {
+			h.logf("%s PLAN seat=%d %s → %s (combo=%d/%d threat=%.2f)",
+				roundTag(gs, seatIdx), seatIdx,
+				prevPlan, h.planState.Current,
+				h.planState.ComboReady, h.planState.ComboTotal, maxThreat)
+		}
+
+		// Apply plan weight multipliers to the evaluator for this turn.
+		// PlanDevelop returns all-1.0 multipliers (no-op), so we can
+		// always set it — no special-case needed.
+		pm := h.planState.PlanWeightMultipliers()
+		h.Evaluator.PlanMultiplier = &pm
 	}
 }
 
@@ -3571,9 +4271,46 @@ func (h *YggdrasilHat) inferColorsFromCard(gs *gameengine.GameState, seat int, c
 
 // -- 3rd Eye query methods --
 
+// opponentLikelyHasAnswer returns the composite "loaded and waiting" flag
+// for a given seat. True when they tutored, held mana for 2+ turns, and
+// are in interactive colors (U/B).
+func (h *YggdrasilHat) opponentLikelyHasAnswer(oppSeat int) bool {
+	if oppSeat < 0 || oppSeat >= h.seatCount {
+		return false
+	}
+	tutored := oppSeat < len(h.opponentTutored) && h.opponentTutored[oppSeat]
+	heldMana := 0
+	if oppSeat < len(h.opponentHeldMana) {
+		heldMana = h.opponentHeldMana[oppSeat]
+	}
+	hasInteractiveColors := false
+	if oppSeat < len(h.opponentColors) {
+		hasInteractiveColors = h.opponentColors[oppSeat]["U"] || h.opponentColors[oppSeat]["B"]
+	}
+	return tutored && heldMana >= 2 && hasInteractiveColors
+}
+
+// handEntropy returns the heuristic [0,1] entropy estimate for an opponent.
+// 0 = we know everything, 1 = total mystery.
+func (h *YggdrasilHat) handEntropy(oppSeat int) float64 {
+	if oppSeat < 0 || oppSeat >= len(h.opponentHandEntropy) {
+		return 1.0
+	}
+	return h.opponentHandEntropy[oppSeat]
+}
+
+// knownCardsInHand returns the set of card names we know are in an
+// opponent's hand (from reveal effects).
+func (h *YggdrasilHat) knownCardsInHand(oppSeat int) map[string]bool {
+	if oppSeat < 0 || oppSeat >= len(h.opponentKnownCards) {
+		return nil
+	}
+	return h.opponentKnownCards[oppSeat]
+}
+
 // opponentHasInteraction estimates whether an opponent seat is likely
 // holding instant-speed interaction based on: open mana, known colors
-// (blue/black = counters/removal), and hand size.
+// (blue/black = counters/removal), hand size, and entropy signals.
 func (h *YggdrasilHat) opponentHasInteraction(gs *gameengine.GameState, oppSeat int) float64 {
 	if gs == nil || oppSeat < 0 || oppSeat >= len(gs.Seats) {
 		return 0
@@ -3603,8 +4340,35 @@ func (h *YggdrasilHat) opponentHasInteraction(gs *gameengine.GameState, oppSeat 
 		handFactor = 1.0
 	}
 	prob *= handFactor
-	if prob > 0.9 {
-		prob = 0.9
+
+	// Shannon entropy enrichment: tutored opponents with held mana are
+	// far more likely to have a specific answer ready.
+	if oppSeat < len(h.opponentTutored) && h.opponentTutored[oppSeat] {
+		prob += 0.15
+	}
+	if oppSeat < len(h.opponentHeldMana) && h.opponentHeldMana[oppSeat] >= 3 {
+		prob += 0.10
+	}
+	// Known cards: if we've seen interaction via reveal, boost confidence.
+	if oppSeat < len(h.opponentKnownCards) {
+		for name := range h.opponentKnownCards[oppSeat] {
+			nameLower := strings.ToLower(name)
+			if strings.Contains(nameLower, "counter") ||
+				strings.Contains(nameLower, "negate") ||
+				strings.Contains(nameLower, "swan song") ||
+				strings.Contains(nameLower, "force of") ||
+				strings.Contains(nameLower, "pact of negation") ||
+				strings.Contains(nameLower, "swords to plowshares") ||
+				strings.Contains(nameLower, "path to exile") ||
+				strings.Contains(nameLower, "fatal push") {
+				prob += 0.25
+				break
+			}
+		}
+	}
+
+	if prob > 0.95 {
+		prob = 0.95
 	}
 	return prob
 }

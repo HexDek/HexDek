@@ -26,7 +26,10 @@ import (
 	"github.com/hexdek/hexdek/internal/deckparser"
 	"github.com/hexdek/hexdek/internal/gameengine"
 	"github.com/hexdek/hexdek/internal/hat"
+	"github.com/hexdek/hexdek/internal/heimdall"
 	"github.com/hexdek/hexdek/internal/matchmaking"
+	"github.com/hexdek/hexdek/internal/muninn"
+	"github.com/hexdek/hexdek/internal/telemetry"
 	"github.com/hexdek/hexdek/internal/tournament"
 	"github.com/hexdek/hexdek/internal/trueskill"
 )
@@ -191,6 +194,11 @@ type Showmatch struct {
 	speedMultiplier float64
 	sqlDB           *sql.DB
 	persistCh       chan persistJob
+	heimdall        *heimdall.Observer
+
+	amiiboMu   sync.Mutex
+	amiiboPool map[string]*hat.AmiiboPool // deck key → genetic population
+	amiiboDir  string
 
 	specMu     sync.RWMutex
 	spectators map[*spectatorConn]struct{}
@@ -235,13 +243,30 @@ func NewShowmatch(astPath, oraclePath, decksDir string, database *sql.DB) *Showm
 		persistCh:       make(chan persistJob, 512),
 		spectators:      make(map[*spectatorConn]struct{}),
 		gauntlets:       make(map[string]*GauntletResult),
+		heimdall:        heimdall.New("data", &huginnAdapter{dataDir: "data"}, &muninnAdapter{dataDir: "data"}, newTelemetrySink()),
+		amiiboPool:      make(map[string]*hat.AmiiboPool),
+		amiiboDir:       "data/amiibo",
 	}
 	if database != nil {
 		sm.loadPersistedState()
 		go sm.persistWorker()
 	}
+	if loaded, err := hat.LoadAllPools(sm.amiiboDir, rand.New(rand.NewSource(42))); err == nil && len(loaded) > 0 {
+		sm.amiiboPool = loaded
+		log.Printf("amiibo: loaded %d deck pools from %s", len(loaded), sm.amiiboDir)
+	}
 	go sm.loadAndRun(astPath, oraclePath, decksDir)
 	return sm
+}
+
+// newTelemetrySink returns a TelemetrySink backed by GA4 if env vars are set,
+// or nil if GA4 is not configured.
+func newTelemetrySink() heimdall.TelemetrySink {
+	ga4 := telemetry.NewGA4Client()
+	if ga4 == nil {
+		return nil
+	}
+	return &telemetryAdapter{ga4: ga4}
 }
 
 func (sm *Showmatch) persistWorker() {
@@ -425,6 +450,7 @@ func (sm *Showmatch) loadAndRun(astPath, oraclePath, decksDir string) {
 	log.Printf("showmatch: ready — %d decks in pool, starting fishtank + background grinder", len(decks))
 	go sm.runGrinder()
 	go sm.runStatsBroadcaster()
+	go sm.runHealthPulse()
 	sm.runLoop()
 }
 
@@ -494,6 +520,41 @@ func (sm *Showmatch) runStatsBroadcaster() {
 	defer ticker.Stop()
 	for range ticker.C {
 		sm.broadcastToSpectators(wsEnvelope{Type: "stats", Payload: sm.GetStats()})
+	}
+}
+
+// runHealthPulse sends a periodic health pulse to GA4 via Heimdall every 60s.
+func (sm *Showmatch) runHealthPulse() {
+	if sm.heimdall == nil {
+		return
+	}
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		sm.mu.RLock()
+		gamesPlayed := sm.stats.historicGames + sm.stats.gamesPlayed
+		sm.mu.RUnlock()
+
+		// Read Muninn data for gap/crash/dead-trigger counts.
+		parserGaps, _ := muninn.ReadParserGaps("data/muninn")
+		crashLogs, _ := muninn.ReadCrashLogs("data/muninn")
+		deadTriggers, _ := muninn.ReadDeadTriggers("data/muninn")
+
+		// Top 5 gap cards by count.
+		sorted := muninn.SortedParserGaps(parserGaps)
+		var topGaps []string
+		for i := 0; i < len(sorted) && i < 5; i++ {
+			topGaps = append(topGaps, sorted[i].Snippet)
+		}
+
+		sm.heimdall.Pulse(heimdall.HealthPulse{
+			GamesPlayed:   gamesPlayed,
+			ParserGaps:    len(parserGaps),
+			Crashes:       len(crashLogs),
+			DeadTriggers:  len(deadTriggers),
+			TopGapCards:   topGaps,
+			EngineVersion: "0.1.0",
+		})
 	}
 }
 
@@ -580,7 +641,8 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 			}
 		}
 
-		gameRng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(g)*37))
+		gameSeed := time.Now().UnixNano() + int64(g)*37
+		gameRng := rand.New(rand.NewSource(gameSeed))
 		gs := gameengine.NewGameState(showmatchSeats, gameRng, sm.corpus)
 		gs.RetainEvents = false
 
@@ -603,9 +665,19 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 		}
 
 		gameengine.SetupCommanderGame(gs, cmdDecks)
+
+		// Amiibo: select DNA for gauntlet seats.
+		var gauntDnaIdxes [showmatchSeats]int
 		for i := 0; i < showmatchSeats; i++ {
-			gs.Seats[i].Hat = hat.NewYggdrasilHatWithNoise(nil, 50, 0.2)
+			pool := sm.getOrCreateAmiiboPool(deckKeys[i], rng)
+			sm.amiiboMu.Lock()
+			dna, dnaIdx := pool.SelectForGame()
+			dnaCopy := *dna
+			sm.amiiboMu.Unlock()
+			gauntDnaIdxes[i] = dnaIdx
+			gs.Seats[i].Hat = hat.NewYggdrasilHatWithDNA(&dnaCopy, nil, 50)
 		}
+
 		for i := 0; i < showmatchSeats; i++ {
 			tournament.RunLondonMulligan(gs, i)
 		}
@@ -639,6 +711,23 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 			}
 		}
 
+		// Amiibo: record results for gauntlet seats.
+		sm.amiiboMu.Lock()
+		var gauntEvolved []*hat.AmiiboPool
+		for i := 0; i < showmatchSeats; i++ {
+			if pool, ok := sm.amiiboPool[deckKeys[i]]; ok {
+				prevCount := pool.GameCount
+				pool.RecordResult(gauntDnaIdxes[i], i == winner)
+				if pool.GameCount < prevCount {
+					gauntEvolved = append(gauntEvolved, pool)
+				}
+			}
+		}
+		sm.amiiboMu.Unlock()
+		for _, pool := range gauntEvolved {
+			go hat.SavePool(sm.amiiboDir, pool)
+		}
+
 		totalTurns += gs.Turn
 
 		sm.mu.Lock()
@@ -646,6 +735,16 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 		sm.stats.totalTurns += gs.Turn
 		sm.updateELO(deckKeys, commanders, pickedDecks, winner)
 		sm.mu.Unlock()
+
+		if sm.heimdall != nil {
+			sm.heimdall.RecordSeed(heimdall.GameSeed{
+				RNGSeed:    gameSeed,
+				DeckKeys:   [4]string{deckKeys[0], deckKeys[1], deckKeys[2], deckKeys[3]},
+				Winner:     winner,
+				Turns:      gs.Turn,
+				KillMethod: heimdall.ClassifyKillWithMaxTurns(gs, winner, showmatchMaxTurn),
+			})
+		}
 
 		if winner == 0 {
 			result.Wins++
@@ -764,18 +863,54 @@ func (sm *Showmatch) flushELO() {
 	sm.sqlDB.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)")
 }
 
+// Shutdown flushes all buffered state to disk. Call on graceful shutdown.
+func (sm *Showmatch) Shutdown() {
+	sm.flushELO()
+	if sm.heimdall != nil {
+		sm.heimdall.Flush()
+	}
+	sm.amiiboMu.Lock()
+	pools := sm.amiiboPool
+	sm.amiiboMu.Unlock()
+	if len(pools) > 0 {
+		if err := hat.SaveAllPools(sm.amiiboDir, pools); err != nil {
+			log.Printf("amiibo: save error: %v", err)
+		} else {
+			log.Printf("amiibo: saved %d pools to %s", len(pools), sm.amiiboDir)
+		}
+	}
+}
+
 func (sm *Showmatch) eloSize() int {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	return len(sm.elo)
 }
 
+// getOrCreateAmiiboPool returns the genetic pool for a deck, creating one lazily.
+// Thread-safe; the returned pool's internal rng is set from the provided rng.
+func (sm *Showmatch) getOrCreateAmiiboPool(deckKey string, rng *rand.Rand) *hat.AmiiboPool {
+	sm.amiiboMu.Lock()
+	defer sm.amiiboMu.Unlock()
+	if pool, ok := sm.amiiboPool[deckKey]; ok {
+		return pool
+	}
+	poolRng := rand.New(rand.NewSource(rng.Int63()))
+	p := hat.InitPool(deckKey, poolRng)
+	sm.amiiboPool[deckKey] = &p
+	return &p
+}
+
 func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
+	var deckKeys []string // declared here so crash recovery can access it
 	defer func() {
 		if r := recover(); r != nil {
 			buf := make([]byte, 4096)
 			n := runtime.Stack(buf, false)
 			log.Printf("grinder: game crashed: %v\n%s", r, buf[:n])
+			if sm.heimdall != nil {
+				sm.heimdall.RecordCrash(fmt.Sprintf("%v", r), buf[:n], deckKeys)
+			}
 		}
 	}()
 
@@ -812,7 +947,7 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 	indices := matchmaking.AssembleBracketPod(rng, pool, showmatchSeats)
 	pickedDecks := make([]*deckparser.TournamentDeck, showmatchSeats)
 	commanders := make([]string, showmatchSeats)
-	deckKeys := make([]string, showmatchSeats)
+	deckKeys = make([]string, showmatchSeats)
 	for i, idx := range indices {
 		pickedDecks[i] = sm.deckPool[idx]
 		commanders[i] = pickedDecks[i].CommanderName
@@ -843,9 +978,19 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 	}
 
 	gameengine.SetupCommanderGame(gs, cmdDecks)
+
+	// Amiibo: select DNA for each seat's hat.
+	var dnaIdxes [showmatchSeats]int
 	for i := 0; i < showmatchSeats; i++ {
-		gs.Seats[i].Hat = hat.NewYggdrasilHatWithNoise(nil, 50, 0.2)
+		pool := sm.getOrCreateAmiiboPool(deckKeys[i], rng)
+		sm.amiiboMu.Lock()
+		dna, dnaIdx := pool.SelectForGame()
+		dnaCopy := *dna // snapshot — evolve() may mutate the original later
+		sm.amiiboMu.Unlock()
+		dnaIdxes[i] = dnaIdx
+		gs.Seats[i].Hat = hat.NewYggdrasilHatWithDNA(&dnaCopy, nil, 50)
 	}
+
 	for i := 0; i < showmatchSeats; i++ {
 		tournament.RunLondonMulligan(gs, i)
 	}
@@ -880,19 +1025,50 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 		}
 	}
 
+	// Amiibo: record results for each seat's DNA variant.
+	sm.amiiboMu.Lock()
+	var evolved []*hat.AmiiboPool
+	for i := 0; i < showmatchSeats; i++ {
+		if pool, ok := sm.amiiboPool[deckKeys[i]]; ok {
+			prevCount := pool.GameCount
+			pool.RecordResult(dnaIdxes[i], i == winner)
+			if pool.GameCount < prevCount {
+				evolved = append(evolved, pool)
+			}
+		}
+	}
+	sm.amiiboMu.Unlock()
+	for _, pool := range evolved {
+		go hat.SavePool(sm.amiiboDir, pool)
+	}
+
 	sm.mu.Lock()
 	sm.stats.gamesPlayed++
 	sm.stats.totalTurns += gs.Turn
 	sm.updateELO(deckKeys, commanders, pickedDecks, winner)
 	sm.mu.Unlock()
+
+	if sm.heimdall != nil {
+		sm.heimdall.RecordSeed(heimdall.GameSeed{
+			RNGSeed:    gameSeed,
+			DeckKeys:   [4]string{deckKeys[0], deckKeys[1], deckKeys[2], deckKeys[3]},
+			Winner:     winner,
+			Turns:      gs.Turn,
+			KillMethod: heimdall.ClassifyKillWithMaxTurns(gs, winner, showmatchMaxTurn),
+		})
+	}
 }
 
 func (sm *Showmatch) runOneGame(rng *rand.Rand) {
+	var deckKeys []string // declared here so crash recovery can access it
 	defer func() {
 		if r := recover(); r != nil {
 			buf := make([]byte, 4096)
 			n := runtime.Stack(buf, false)
 			log.Printf("showmatch: game crashed: %v\n%s", r, buf[:n])
+			if sm.heimdall != nil {
+				sm.heimdall.RecordCrash(fmt.Sprintf("%v", r), buf[:n], deckKeys)
+			}
 		}
 	}()
 
@@ -910,7 +1086,7 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 	indices := rng.Perm(poolSize)[:showmatchSeats]
 	pickedDecks := make([]*deckparser.TournamentDeck, showmatchSeats)
 	commanders := make([]string, showmatchSeats)
-	deckKeys := make([]string, showmatchSeats)
+	deckKeys = make([]string, showmatchSeats)
 	for i, idx := range indices {
 		pickedDecks[i] = sm.deckPool[idx]
 		commanders[i] = pickedDecks[i].CommanderName
@@ -942,9 +1118,16 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 
 	gameengine.SetupCommanderGame(gs, cmdDecks)
 
-	// Attach Yggdrasil hats.
+	// Attach Yggdrasil hats with Amiibo DNA.
+	var showDnaIdxes [showmatchSeats]int
 	for i := 0; i < showmatchSeats; i++ {
-		gs.Seats[i].Hat = hat.NewYggdrasilHatWithNoise(nil, 50, 0.2)
+		pool := sm.getOrCreateAmiiboPool(deckKeys[i], rng)
+		sm.amiiboMu.Lock()
+		dna, dnaIdx := pool.SelectForGame()
+		dnaCopy := *dna
+		sm.amiiboMu.Unlock()
+		showDnaIdxes[i] = dnaIdx
+		gs.Seats[i].Hat = hat.NewYggdrasilHatWithDNA(&dnaCopy, nil, 50)
 	}
 
 	// Mulligan.
@@ -1060,6 +1243,23 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 		}
 	}
 
+	// Amiibo: record results for showmatch seats.
+	sm.amiiboMu.Lock()
+	var showEvolved []*hat.AmiiboPool
+	for i := 0; i < showmatchSeats; i++ {
+		if pool, ok := sm.amiiboPool[deckKeys[i]]; ok {
+			prevCount := pool.GameCount
+			pool.RecordResult(showDnaIdxes[i], i == winner)
+			if pool.GameCount < prevCount {
+				showEvolved = append(showEvolved, pool)
+			}
+		}
+	}
+	sm.amiiboMu.Unlock()
+	for _, pool := range showEvolved {
+		go hat.SavePool(sm.amiiboDir, pool)
+	}
+
 	// Final snapshot.
 	finalSnap := sm.captureSnapshot(gs, commanders, gameNum, startedAt)
 	finalSnap.Finished = true
@@ -1089,6 +1289,16 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 	}
 
 	sm.mu.Unlock()
+
+	if sm.heimdall != nil {
+		sm.heimdall.RecordSeed(heimdall.GameSeed{
+			RNGSeed:    gameSeed,
+			DeckKeys:   [4]string{deckKeys[0], deckKeys[1], deckKeys[2], deckKeys[3]},
+			Winner:     winner,
+			Turns:      gs.Turn,
+			KillMethod: heimdall.ClassifyKillWithMaxTurns(gs, winner, showmatchMaxTurn),
+		})
+	}
 
 	select {
 	case sm.persistCh <- persistJob{game: completed}:
@@ -1652,6 +1862,7 @@ func (sm *Showmatch) RegisterShowmatch(mux *http.ServeMux) {
 	mux.HandleFunc("GET /ws/live", sm.handleSpectatorWS)
 	mux.HandleFunc("POST /api/gauntlet/{owner}/{id}", sm.handleStartGauntlet)
 	mux.HandleFunc("GET /api/gauntlet/{owner}/{id}", sm.handleGetGauntlet)
+	mux.HandleFunc("GET /api/decks/{owner}/{id}/amiibo", sm.handleDeckAmiibo)
 }
 
 var gauntletSem = make(chan struct{}, 2)
@@ -1703,6 +1914,59 @@ func (sm *Showmatch) handleGetGauntlet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, result)
+}
+
+// AmiiboResponse is the JSON payload for GET /api/decks/{owner}/{id}/amiibo.
+type AmiiboResponse struct {
+	DeckKey    string            `json:"deck_key"`
+	GameCount  int               `json:"game_count"`
+	Population []AmiiboMemberDTO `json:"population"`
+}
+
+// AmiiboMemberDTO is one member of the Amiibo genetic population.
+type AmiiboMemberDTO struct {
+	Generation      int     `json:"generation"`
+	GamesPlayed     int     `json:"games_played"`
+	Fitness         float64 `json:"fitness"`
+	Aggression      float64 `json:"aggression"`
+	ComboPatience   float64 `json:"combo_patience"`
+	ThreatParanoia  float64 `json:"threat_paranoia"`
+	ResourceGreed   float64 `json:"resource_greed"`
+	PoliticalMemory float64 `json:"political_memory"`
+}
+
+func (sm *Showmatch) handleDeckAmiibo(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	id := r.PathValue("id")
+	deckKey := owner + "/" + id
+
+	sm.amiiboMu.Lock()
+	pool := sm.amiiboPool[deckKey]
+	if pool == nil {
+		sm.amiiboMu.Unlock()
+		http.Error(w, "no amiibo pool for deck", http.StatusNotFound)
+		return
+	}
+	// Snapshot under lock to avoid data races.
+	resp := AmiiboResponse{
+		DeckKey:   pool.DeckKey,
+		GameCount: pool.GameCount,
+	}
+	for _, dna := range pool.Population {
+		resp.Population = append(resp.Population, AmiiboMemberDTO{
+			Generation:      dna.Generation,
+			GamesPlayed:     dna.GamesPlayed,
+			Fitness:         dna.Fitness,
+			Aggression:      dna.Aggression,
+			ComboPatience:   dna.ComboPat,
+			ThreatParanoia:  dna.ThreatParanoia,
+			ResourceGreed:   dna.ResourceGreed,
+			PoliticalMemory: dna.PoliticalMemory,
+		})
+	}
+	sm.amiiboMu.Unlock()
+
+	writeJSON(w, resp)
 }
 
 func (sm *Showmatch) handleLiveGame(w http.ResponseWriter, r *http.Request) {

@@ -64,15 +64,35 @@ type ConcessionRecord struct {
 	Timestamp  string `json:"timestamp"`
 }
 
+// InvariantViolation records an Odin-detected invariant violation during a game.
+type InvariantViolation struct {
+	Rule      string `json:"rule"`
+	Message   string `json:"message"`
+	GameSeed  int64  `json:"game_seed"`
+	Turn      int    `json:"turn"`
+	Timestamp string `json:"timestamp"`
+}
+
+// RegressionFailure records a parity test failure.
+type RegressionFailure struct {
+	TestName  string `json:"test_name"`
+	Expected  string `json:"expected"`
+	Got       string `json:"got"`
+	GameSeed  int64  `json:"game_seed"`
+	Timestamp string `json:"timestamp"`
+}
+
 // --------------------------------------------------------------------
 // File names
 // --------------------------------------------------------------------
 
 const (
-	parserGapsFile   = "parser_gaps.json"
-	crashesFile      = "crashes.json"
-	deadTriggersFile = "dead_triggers.json"
-	concessionsFile  = "concessions.json"
+	parserGapsFile            = "parser_gaps.json"
+	crashesFile               = "crashes.json"
+	deadTriggersFile          = "dead_triggers.json"
+	concessionsFile           = "concessions.json"
+	invariantViolationsFile   = "invariant_violations.json"
+	regressionFailuresFile    = "regression_failures.json"
 )
 
 // --------------------------------------------------------------------
@@ -262,6 +282,68 @@ func PersistConcessions(dir string, records []ConcessionRecord) error {
 	return atomicWriteJSON(filepath.Join(dir, concessionsFile), existing)
 }
 
+// PersistDeadTriggersRaw writes a pre-formed slice of DeadTrigger records
+// to dead_triggers.json. Used by adapters that bridge from other subsystems
+// (e.g. Heimdall) where the triggers have already been merged.
+func PersistDeadTriggersRaw(dir string, triggers []DeadTrigger) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("muninn: mkdir %s: %w", dir, err)
+	}
+	return atomicWriteJSON(filepath.Join(dir, deadTriggersFile), triggers)
+}
+
+// PersistInvariantViolations appends new Odin-detected invariant
+// violations to the persistent invariant_violations.json file.
+func PersistInvariantViolations(dir string, violations []InvariantViolation) error {
+	if len(violations) == 0 {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("muninn: mkdir %s: %w", dir, err)
+	}
+
+	existing, err := ReadInvariantViolations(dir)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	for i := range violations {
+		if violations[i].Timestamp == "" {
+			violations[i].Timestamp = now
+		}
+	}
+
+	existing = append(existing, violations...)
+	return atomicWriteJSON(filepath.Join(dir, invariantViolationsFile), existing)
+}
+
+// PersistRegressionFailures appends new parity test failures to the
+// persistent regression_failures.json file.
+func PersistRegressionFailures(dir string, failures []RegressionFailure) error {
+	if len(failures) == 0 {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("muninn: mkdir %s: %w", dir, err)
+	}
+
+	existing, err := ReadRegressionFailures(dir)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	for i := range failures {
+		if failures[i].Timestamp == "" {
+			failures[i].Timestamp = now
+		}
+	}
+
+	existing = append(existing, failures...)
+	return atomicWriteJSON(filepath.Join(dir, regressionFailuresFile), existing)
+}
+
 // --------------------------------------------------------------------
 // Read functions
 // --------------------------------------------------------------------
@@ -311,6 +393,30 @@ func ReadDeadTriggers(dir string) ([]DeadTrigger, error) {
 	}
 	if out == nil {
 		out = []DeadTrigger{}
+	}
+	return out, nil
+}
+
+// ReadInvariantViolations reads the persistent invariant_violations.json file.
+func ReadInvariantViolations(dir string) ([]InvariantViolation, error) {
+	var out []InvariantViolation
+	if err := readJSON(filepath.Join(dir, invariantViolationsFile), &out); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []InvariantViolation{}
+	}
+	return out, nil
+}
+
+// ReadRegressionFailures reads the persistent regression_failures.json file.
+func ReadRegressionFailures(dir string) ([]RegressionFailure, error) {
+	var out []RegressionFailure
+	if err := readJSON(filepath.Join(dir, regressionFailuresFile), &out); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []RegressionFailure{}
 	}
 	return out, nil
 }

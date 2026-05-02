@@ -170,6 +170,21 @@ func ResolveEffect(gs *GameState, src *Permanent, effect gameast.Effect) {
 				"raw": e.RawText,
 			},
 		})
+		// Flag the permanent so Heimdall can extract parser gaps at game end.
+		if src != nil {
+			if src.Flags == nil {
+				src.Flags = map[string]int{}
+			}
+			src.Flags["parser_gap"]++
+		}
+		gs.LogEvent(Event{
+			Kind:   "parser_gap",
+			Source: sourceName(src),
+			Details: map[string]interface{}{
+				"snippet": e.RawText,
+				"reason":  "unknown_effect",
+			},
+		})
 	default:
 		// A kind we haven't wired. Log it so the dev who added a new
 		// gameast type gets an obvious signal in tests.
@@ -178,6 +193,21 @@ func ResolveEffect(gs *GameState, src *Permanent, effect gameast.Effect) {
 			Source: sourceName(src),
 			Details: map[string]interface{}{
 				"kind": effect.Kind(),
+			},
+		})
+		// Flag the permanent so Heimdall can extract parser gaps at game end.
+		if src != nil {
+			if src.Flags == nil {
+				src.Flags = map[string]int{}
+			}
+			src.Flags["parser_gap"]++
+		}
+		gs.LogEvent(Event{
+			Kind:   "parser_gap",
+			Source: sourceName(src),
+			Details: map[string]interface{}{
+				"snippet": effect.Kind(),
+				"reason":  "unhandled_effect",
 			},
 		})
 	}

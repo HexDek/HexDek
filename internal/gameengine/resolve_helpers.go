@@ -2106,6 +2106,22 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 				"raw": raw,
 			},
 		})
+		// Flag the permanent so Heimdall can extract parser gaps at game end.
+		if src != nil {
+			if src.Flags == nil {
+				src.Flags = map[string]int{}
+			}
+			src.Flags["parser_gap"]++
+		}
+		gs.LogEvent(Event{
+			Kind:   "parser_gap",
+			Seat:   controllerSeat(src),
+			Source: sourceName(src),
+			Details: map[string]interface{}{
+				"snippet": raw,
+				"reason":  "unhandled_conditional_effect",
+			},
+		})
 
 	// -----------------------------------------------------------------
 	// parsed_tail — trailing text after the main effect that the parser
@@ -4429,6 +4445,22 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 			Details: map[string]interface{}{
 				"mod_kind": e.ModKind,
 				"args":     e.Args,
+			},
+		})
+		// Flag the permanent so Heimdall can extract parser gaps at game end.
+		if src != nil {
+			if src.Flags == nil {
+				src.Flags = map[string]int{}
+			}
+			src.Flags["parser_gap"]++
+		}
+		gs.LogEvent(Event{
+			Kind:   "parser_gap",
+			Seat:   controllerSeat(src),
+			Source: sourceName(src),
+			Details: map[string]interface{}{
+				"snippet": e.ModKind,
+				"reason":  "unhandled_modification_effect",
 			},
 		})
 	}

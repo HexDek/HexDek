@@ -12,12 +12,7 @@ kanban-plugin: board
 ## High Priority — Engine
 
 - [ ] **Remaining 276 commander handlers** — coverage at 447/652 files (681 registered names). Most remaining are 1-2 deck count. Template generator (`cmd/gen-handlers/main.go`) handles simple patterns. #engine #per_card
-- [ ] **BUG: Ajani Nacatl Pariah 74% WR** — transform loop + cat token cascade + -4 mass sacrifice is unchecked. Likely: hat doesn't prioritize removing planeswalkers building toward ultimates, and the cat-dies-transform loop runs free. Investigate and fix. #engine #bug #hat
-- [ ] **BUG: Rosnakht 2.5% WR** — near-zero winrate outlier. 0-power Kobold commander likely can't deal meaningful damage. Check if handler exists and if hat has any viable line. #engine #bug
-- [ ] **BUG: Tazri 13% WR** — severely underperforming. Party mechanic may not be modeled. Check handler + Freya profile. #engine #bug
-- [ ] **Hat: Poison/infect threat awareness** — Yggdrasil threat scoring ignores poison counters. Fynn/Skithiryx at 8 poison should be priority-1 threat but hat only evaluates board power + life totals. Add poison_counters to 3rd Eye + threat scoring. #engine #hat #evaluator
-- [ ] **Hat: Planeswalker threat scoring** — no logic for "opponent PW building toward ultimate." Ajani ticking +2/turn is invisible to threat trajectory. Add loyalty-based threat weight to evaluator. #engine #hat #evaluator
-- [ ] **Hat: Alternate wincon awareness** — hat optimizes for combat damage / life total. Needs awareness of: poison (10 = lethal), mill (library = 0), commander damage (21), infect. Weight threats by proximity to alt wincon. #engine #hat #evaluator
+- [ ] **BUG: Ajani Nacatl Pariah 74% WR** — handler is correct; high WR was because opponents couldn't deal with PW. PW threat scoring fix (below) should normalize this. Re-check after grinder reset. #engine #bug #hat
 
 
 ## High Priority — Platform
@@ -35,30 +30,30 @@ kanban-plugin: board
 
 ### Phase 1: Heimdall Package + Seed Capture (1 week) — BLOCKER for all below
 
-- [ ] **Extract Heimdall to `internal/heimdall`** — move from CLI-only tool to importable package. Define `Observer` struct, `GameSeed`, `Observation`, sink interfaces (`HuginnSink`, `MuninnSink`, `TelemetrySink`). #engine #heimdall
-- [ ] **Seed ring buffer + disk flush** — `RecordSeed()` appends to ring buffer (1000 entries), flushes to `data/heimdall/seeds.bin`. 28 bytes/game. Zero-alloc fast path. *Blocks: batch replay* #engine #heimdall
-- [ ] **Wire Heimdall into grinder** — `runOneGameFast()` calls `RecordSeed()` after ELO update (showmatch.go ~line 882). Pass gameSeed (already captured line 822), deckKeys, winner, turns, kill method. *Depends: Heimdall package* #engine #heimdall
-- [ ] **Wire Heimdall into fishtank** — `runOneGame()` calls `RecordSeed()` after game end. Same pattern as grinder hook. *Depends: Heimdall package* #engine #heimdall
-- [ ] **Wire Heimdall into gauntlet** — `RunGauntlet()` calls `RecordSeed()` post-game. *Depends: Heimdall package* #engine #heimdall
-- [ ] **Wire crash recovery into Heimdall** — `RecordCrash()` in grinder panic recovery (showmatch.go ~line 773), fishtank, and gauntlet. Routes to Muninn immediately. *Depends: Heimdall package* #engine #heimdall
-- [ ] **`classifyKill()` helper** — determine kill method from game state (combat, commander, combo, mill, poison, timeout). Used by seed capture. #engine #heimdall
-- [ ] **Parser gap flag in engine** — when card ability hits unhandled path, set `card.Flags["parser_gap"] = true`. Heimdall reads at game end. *Depends: Heimdall package* #engine #heimdall
+- [x] **Extract Heimdall to `internal/heimdall`** — Observer struct, GameSeed, Observation, DeadTrigger, CoTriggerPair, PivotEvent, HealthPulse types. HuginnSink/MuninnSink/TelemetrySink interfaces. Nil-safe (2026-05-02) #engine #heimdall
+- [x] **Seed ring buffer + disk flush** — `RecordSeed()` ring buffer (1000 cap), flushes to `data/heimdall/seeds.jsonl`. `RecordObservation()` routes to Huginn/Muninn. `RecordCrash()` immediate. `Flush()` for graceful shutdown (2026-05-02) #engine #heimdall
+- [x] **Wire Heimdall into grinder** — `runOneGameFast()` calls `RecordSeed()` after ELO update, outside mutex. Uses `ClassifyKillWithMaxTurns`. Hoisted deckKeys for crash recovery access (2026-05-02) #engine #heimdall
+- [x] **Wire Heimdall into fishtank** — `runOneGame()` calls `RecordSeed()` after game end, before persist channel send (2026-05-02) #engine #heimdall
+- [x] **Wire Heimdall into gauntlet** — `RunGauntlet()` calls `RecordSeed()` after ELO update. Extracted gameSeed as named variable (2026-05-02) #engine #heimdall
+- [x] **Wire crash recovery into Heimdall** — `RecordCrash()` in all three panic recovery blocks (grinder, fishtank, gauntlet). `Shutdown()` method calls `Flush()` for graceful shutdown (2026-05-02) #engine #heimdall
+- [x] **`ClassifyKill()` helper** — reads `Seat.LossReason` first, falls back to heuristic (poison counters, commander damage map, life, mill). `ClassifyKillWithMaxTurns` variant for timeout detection (2026-05-02) #engine #heimdall
+- [x] **Parser gap flag in engine** — `parser_gap` event + Flags counter at 4 unhandled paths: UnknownEffect, default effect, conditional_effect, modification_effect in resolve.go/resolve_helpers.go. `emitPartial` in per_card/helpers.go also emits parser_gap. Feeds into Muninn via tournament runner (2026-05-02) #engine #heimdall
 
 ### Phase 2: Muninn + Huginn Wiring (3-4 days) — Depends: Phase 1
 
-- [ ] **Muninn: RecordParserGaps()** — extend `internal/muninn` to accept parser gap card names from Heimdall. Batched writes, flush every 60s to `data/muninn/parser_gaps.json`. *Depends: Heimdall package + parser gap flag* #engine #muninn
-- [ ] **Muninn: RecordDeadTriggers()** — accept dead trigger info (registered but never fired). Batched writes. *Depends: Heimdall package* #engine #muninn
-- [ ] **Muninn: RecordCrash() wiring** — accept crash data with full stack trace + deck keys. Immediate write (crashes are rare and critical). *Depends: crash recovery hook* #engine #muninn
-- [ ] **Muninn: invariant_violations.json** — new category for Odin-detected violations routed through Heimdall. #engine #muninn
-- [ ] **Muninn: regression_failures.json** — new category for parity test failures. #engine #muninn
-- [ ] **Huginn: IngestCoTriggers()** — extend `internal/huginn` to accept co-trigger pairs from Heimdall observation. Batched accumulate, flush calls `Ingest()`. *Depends: Heimdall observation mode* #engine #huginn
-- [ ] **Batch replay system** — replay N seeds with full observation hooks. Load seeds from disk, re-run deterministically, populate `Observation` struct, route to Huginn/Muninn/Analytics. *Depends: seed ring buffer* #engine #heimdall
+- [x] **Muninn: RecordParserGaps()** — `muninnAdapter` converts gaps to count map, delegates to `PersistParserGaps`. Wired as real Heimdall sink in NewShowmatch (2026-05-02) #engine #muninn
+- [x] **Muninn: RecordDeadTriggers()** — adapter converts heimdall.DeadTrigger to muninn format, new `PersistDeadTriggersRaw()` for direct writes (2026-05-02) #engine #muninn
+- [x] **Muninn: RecordCrash() wiring** — adapter delegates to `PersistCrashLogs` with stack trace + deck keys. Immediate write (2026-05-02) #engine #muninn
+- [x] **Muninn: invariant_violations.json** — `InvariantViolation` struct (rule, message, game_seed, turn, timestamp), `PersistInvariantViolations()` + reader. Atomic append-write pattern (2026-05-02) #engine #muninn
+- [x] **Muninn: regression_failures.json** — `RegressionFailure` struct (test_name, expected, got, game_seed, timestamp), `PersistRegressionFailures()` + reader. Same pattern (2026-05-02) #engine #muninn
+- [x] **Huginn: IngestCoTriggers()** — `huginnAdapter` converts heimdall.CoTriggerPair to huginn.RawObservation, `PersistRawObservationsRaw()` for direct writes. Wired as real Heimdall sink in NewShowmatch (2026-05-02) #engine #huginn
+- [x] **Batch replay system** — `ReadSeeds()` from JSONL, `ReplayWithObservation()` mirrors runOneGameFast setup (deterministic RNG, deck loading, TakeTurn loop), extracts ParserGaps + CoTriggers, routes to Observer. `BatchReplay()` with per-game panic recovery. `ReplayContext` with lazy deck cache (2026-05-02) #engine #heimdall
 
 ### Phase 3: Huginn → Freya Pipe (2-3 days) — Depends: Phase 2
 
-- [ ] **Huginn Tier 3 export** — when Huginn promotes a pattern to Tier 3 (confirmed), write `FreyaInteraction` to `data/huginn/tier3_for_freya.json`. Fields: CardA, CardB, Pattern, AvgImpact, Confidence. *Depends: Huginn wiring* #engine #huginn
-- [ ] **Freya reads Tier 3 file** — on startup / analysis pass, Freya checks `tier3_for_freya.json` for interactions the parser didn't catch. If CardA + CardB in same deck, add to that deck's combo packages. *Depends: Tier 3 export* #engine #freya
-- [ ] **Validate loop closure** — end-to-end test: run games → Heimdall observes → Huginn graduates → Freya incorporates → hat uses updated profile. *Depends: both above* #engine #integration
+- [x] **Huginn Tier 3 export** — `FreyaInteraction` type, `exportTier3ForFreya()` called at end of `Ingest()`, writes all Tier 3 patterns expanded by card pairs to `data/huginn/tier3_for_freya.json`. `ReadTier3ForFreya()` exported reader (2026-05-02) #engine #huginn
+- [x] **Freya reads Tier 3 file** — `findEmergentSynergies()` in hexdek-freya reads `tier3_for_freya.json` first (highest confidence), then learned interactions. Deduped by sorted card pair keys (2026-05-02) #engine #freya
+- [ ] **Validate loop closure** — end-to-end test: run games → Heimdall observes → Huginn graduates → Freya incorporates → hat uses updated profile. *Depends: grinder run with live data* #engine #integration
 
 
 ## High Priority — Hat Intelligence
@@ -67,42 +62,45 @@ kanban-plugin: board
 
 ### Level 2: Combo Sequencer (2-4 weeks) — Depends: Freya combo packages exist (DONE)
 
-- [ ] **ComboConstraint struct** — define `PiecesNeeded`, `ZonesAccepted`, `ManaRequired`, `SequenceOrder`, `ProtectionHeld`. Translates Freya combo packages into executable constraints. #engine #hat #combo
-- [ ] **Combo line scanner** — scan hand + battlefield + graveyard for combo pieces against all constraint sets simultaneously. O(combos × zones) per check. #engine #hat #combo
-- [ ] **Mana feasibility check** — for each executable combo line, verify total mana available >= `ManaRequired`. Account for mana rocks, ritual effects. #engine #hat #combo
-- [ ] **Combo sequencer integration** — wire into YggdrasilHat decision pipeline. Before candidate scoring: if combo executable → return NextAction (skip eval). If assembling → bias toward tutors/draw. #engine #hat #combo
-- [ ] **Tutor-to-combo targeting** — when in Assemble plan and tutor resolves, automatically target the missing combo piece (not generic "best card"). *Depends: combo line scanner* #engine #hat #combo
-- [ ] **Combo execution loop** — when in Execute plan, sequence cast/activate order per `SequenceOrder`. Handle priority passes, protection holding. *Depends: mana check + sequencer integration* #engine #hat #combo
+- [x] **ComboConstraint struct** — `PiecesNeeded`, `ZonesAccepted` (string zones matching engine convention), `ManaRequired`, `SequenceOrder`, `NeedsProtection`. `ComboAssessment` result type with Executable/Assembling/BestLine/NextAction/MissingPiece (2026-05-02) #engine #hat #combo
+- [x] **Combo line scanner** — `ComboSequencer.Evaluate()` builds zone index (hand/battlefield/graveyard), checks each piece against accepted zones, selects best line by completion ratio. 13 tests (2026-05-02) #engine #hat #combo
+- [x] **Mana feasibility check** — sums `ManaCostOf` for uncast pieces, checks against `AvailableManaEstimate`. Rejects lines where mana insufficient (2026-05-02) #engine #hat #combo
+- [x] **Combo sequencer integration** — wired into ChooseCastFromHand (COMBO-CAST short-circuit), ChooseActivation (COMBO-ACTIVATE), ChooseTarget (COMBO-TUTOR for MissingPiece). All constructors init from StrategyProfile (2026-05-02) #engine #hat #combo
+- [x] **Tutor-to-combo targeting** — Assembling state detects tutor in hand (oracle text "search your library" or AST `tutor` effect), `MissingPiece` field populated for tutor targeting (2026-05-02) #engine #hat #combo
+- [x] **Combo execution loop** — Execute plan combo-casts bypass normal eval, SequenceOrder via NextAction, activation support for battlefield pieces (2026-05-02) #engine #hat #combo
 
 ### Level 2.5: Hat State Machine (2-3 weeks) — Depends: Combo Sequencer
 
-- [ ] **GamePlan enum + PlanState struct** — 6 states (Develop/Assemble/Execute/Disrupt/Pivot/Defend). Track ComboReady, ComboTotal, ThreatLevel, TurnsSincePlan. #engine #hat #statemachine
-- [ ] **Transition logic** — `PlanState.Evaluate()`: combo ready → Execute, combo-1 + tutor → Assemble, opponent combo visible → Disrupt, key piece exiled → Pivot, 2+ opponents targeting → Defend. *Depends: GamePlan enum* #engine #hat #statemachine
-- [ ] **Plan-biased evaluation weights** — each plan adjusts evaluator weights. Execute: only combo-advancing actions. Disrupt: +counterspell hold. Pivot: beatdown weights. Defend: +lifegain/removal. *Depends: transition logic* #engine #hat #statemachine
-- [ ] **Wire PlanState into YggdrasilHat** — check `PlanState.Current` before every decision. Replace static heuristic with plan-aware play. *Depends: plan biases* #engine #hat #statemachine
+- [x] **GamePlan enum + PlanState struct** — 6 states (Develop/Assemble/Execute/Disrupt/Pivot/Defend) with `String()`. PlanState tracks ComboReady, ComboTotal, ThreatLevel, TurnsSincePlan (2026-05-02) #engine #hat #statemachine
+- [x] **Transition logic** — `PlanState.Evaluate()`: Execute on combo ready, Assemble on combo-1+tutor, Disrupt on threat>0.7, Pivot after 5 turns assembling, Defend/Pivot timeout to Develop after 3 turns (2026-05-02) #engine #hat #statemachine
+- [x] **Plan-biased evaluation weights** — `PlanWeightMultipliers()` returns per-dimension multipliers: Execute=ComboProximity 2.5x, Assemble=CardAdvantage 1.6x, Disrupt=ThreatExposure 1.8x, Defend=LifeResource 1.8x, Pivot=BoardPresence 1.6x. Applied in `rescaleWeights` via `PlanMultiplier` field (2026-05-02) #engine #hat #statemachine
+- [x] **Wire PlanState into YggdrasilHat** — evaluated on upkeep via ObserveEvent, combo assessment + threat level fed in, plan transitions logged, evaluator PlanMultiplier set per turn. Reset on game_start (2026-05-02) #engine #hat #statemachine
 
 ### Level 3: Genetic Amiibo (2-3 weeks) — Depends: Heimdall seed capture
 
-- [ ] **AmiiboDNA struct** — 5 evolvable floats (Aggression, ComboPat, ThreatParanoia, ResourceGreed, PoliticalMemory) + DeckKey, Generation, GamesPlayed, Fitness. #engine #hat #amiibo
-- [ ] **AmiiboPool per deck** — population of 8, fitness-proportional selection, JSON persistence at `data/amiibo/{deck_key}.json`. #engine #hat #amiibo
-- [ ] **Evolution step** — every 100 games per deck: kill bottom 2, clone top 2, mutate clones (±0.05 gaussian), clamp [0,1]. *Depends: AmiiboPool* #engine #hat #amiibo
-- [ ] **NewYggdrasilHatWithDNA()** — constructor that maps DNA floats to hat parameters (aggression→attack threshold, combo_patience→urgency timing, etc). *Depends: AmiiboDNA struct* #engine #hat #amiibo
-- [ ] **Wire Amiibo into grinder** — in `runOneGameFast`, after deck selection: `dna := pool.SelectForGame(rng)`, pass to hat constructor. After game: `pool.RecordResult(idx, won)`. *Depends: evolution step + constructor* #engine #hat #amiibo
-- [ ] **Amiibo API endpoints** — `/api/decks/{id}/amiibo` returns current population + fitness history. Spectator/drilldown can show evolution progress. *Depends: AmiiboPool persistence* #api #amiibo
+- [x] **AmiiboDNA struct** — 5 evolvable floats (Aggression, ComboPat, ThreatParanoia, ResourceGreed, PoliticalMemory) + DeckKey, Generation, GamesPlayed, Fitness (2026-05-02) #engine #hat #amiibo
+- [x] **AmiiboPool per deck** — population of 8, fitness-proportional roulette `SelectForGame()`, EMA fitness update in `RecordResult()`, `InitPool()` with random params + 0.25 baseline fitness. Stored `*rand.Rand` with `SetRNG()` for deserialization (2026-05-02) #engine #hat #amiibo
+- [x] **Evolution step** — `evolve()`: sort by fitness, kill bottom 2, clone top 2, gaussian mutate (σ=0.05), clamp [0,1], reset game counter. Auto-triggers at 100 games per deck (2026-05-02) #engine #hat #amiibo
+- [x] **NewYggdrasilHatWithDNA()** — DNA field on YggdrasilHat, constructor maps 5 params: Aggression→attack thresholds (±0.15), ComboPat→combo hold multiplier (±40%), ThreatParanoia→ThreatExposure weight (±40%), ResourceGreed→CardAdvantage/BoardPresence balance (±30%), PoliticalMemory→detente threshold + grudge decay (2-6 turns, 0.08-0.22 rate). DNA [0,1] centered at 0.5=neutral (2026-05-02) #engine #hat #amiibo
+- [x] **Wire Amiibo into grinder** — all 3 game paths (grinder/fishtank/gauntlet): lazy pool creation via `getOrCreateAmiiboPool()`, `SelectForGame()` → DNA copy → `NewYggdrasilHatWithDNA()`, `RecordResult()` post-game. Dedicated `amiiboMu` mutex, no deadlock with `sm.mu` (2026-05-02) #engine #hat #amiibo
+- [x] **Amiibo API endpoints** — `GET /api/decks/{owner}/{id}/amiibo` returns deck_key, game_count, population array (8 members with generation, games_played, fitness, 5 personality traits). Snapshot under amiiboMu, 404 if no pool (2026-05-02) #api #amiibo
+- [x] **Amiibo persistence** — `SavePool`/`LoadPool`/`SaveAllPools`/`LoadAllPools` in `amiibo.go`. Pools loaded at startup, saved on shutdown + after each evolution step (goroutine, no hot-path blocking). `data/amiibo/{deck_key}.json` (2026-05-02) #engine #hat #amiibo
+- [x] **Amiibo test suite** — 10 tests: init, selection, fitness update, evolution trigger, clamp, save/load single, save/load all, empty dir, nonexistent dir (2026-05-02) #engine #test #amiibo
+- [x] **Heimdall test suite** — 11 tests: seed buffer + flush, auto-flush at capacity, observation routing (Huginn/Muninn sinks), crash recording, nil sinks, ClassifyKill (LossReason + heuristic fallback + nil gs + timeout), concurrent seed recording (2026-05-02) #engine #test #heimdall
 
 
 ## High Priority — Telemetry
 
 ### Phase 6: GA4 Health Pulse (2-3 days) — Depends: Heimdall package
 
-- [ ] **GA4 client** — `internal/telemetry` package. Measurement Protocol POST to google-analytics.com/mp/collect. Dedicated HexDek property. #infra #telemetry
-- [ ] **Health pulse every 60s** — Heimdall aggregates: games_played, parser_gaps, crashes, dead_triggers, top_gap_cards, engine_version, throughput_gpm. Fires via GA4 client. *Depends: GA4 client + Heimdall wiring* #infra #telemetry
-- [ ] **Client-side gtag.js** — add to hexdek.dev for spectator/upload/amiibo user-facing events. #ui #telemetry
+- [x] **GA4 client** — `internal/telemetry` package. Env-gated (`HEXDEK_GA4_MEASUREMENT_ID` + `HEXDEK_GA4_API_SECRET`), nil-safe, fire-and-forget POST, 5s timeout (2026-05-02) #infra #telemetry
+- [x] **Health pulse every 60s** — `telemetryAdapter` implements TelemetrySink, `Pulse()` on Observer forwards. `runHealthPulse()` goroutine reads sm.stats + Muninn data files for gap/crash/trigger counts, sends top 5 gap cards (2026-05-02) #infra #telemetry
+- [x] **Client-side gtag.js** — added to all 4 HTML pages (index, leaderboard, drilldown, import). Custom events: device_register, deck_import (premade/paste), game_start. Measurement ID placeholder `G-HEXDEK` (2026-05-02) #ui #telemetry
 
 
 ## High Priority — Calibration
 
-- [ ] **Floor calibration decks** — create 99-land + 1 commander test decks (multiple commanders). Run through grinder, establish statistical baseline (~sub-5% expected WR). Validate TrueSkill convergence within 50 games. #rating #calibration
+- [x] **Floor calibration decks** — 3 decks at `data/decks/calibration/`: Golos 5c (99 basics), Child of Alara 5c (99 basics), Isamaru mono-W (99 Plains). Ready for grinder baseline run (2026-05-02) #rating #calibration
 - [ ] **Ceiling calibration** — after Amiibo ships: identify best B5 combo deck after 10K+ generations. This is the upper bound reference point. *Depends: Amiibo* #rating #calibration
 
 
@@ -113,8 +111,8 @@ kanban-plugin: board
 ### Level 4: Staged Decision Architecture (1-2 months) — Depends: Combo Sequencer + State Machine
 
 - [ ] **Mjolnir/Gungnir/Ragnarok routing** — formalize 3-tier decision dispatch. Mjolnir (budget-0 heuristic, 90%), Gungnir (SAT+eval+UCB1, 9%), Ragnarok (MCTS, 1%). Route based on decision complexity + confidence. #engine #hat #staged
-- [ ] **Watts confidence threshold dial** — bracket-aware: B1=0.3 (first good-enough), B3=0.6 (moderate), B5=0.9 (near-optimal only). Same code path, different sensitivity. #engine #hat #staged
-- [ ] **Shannon entropy tracking** — model opponent hands as probability distributions. Tutor=near-zero entropy. 3-card draw=high entropy. Held mana=interaction probability. Feed into threat assessment. #engine #hat #staged
+- [x] **Watts confidence threshold dial** — bracket-aware: B1=0.3 (first good-enough), B3=0.6 (moderate), B5=0.9 (near-optimal only). Same code path, different sensitivity. #engine #hat #staged
+- [x] **Shannon entropy tracking** — model opponent hands as probability distributions. Tutor=near-zero entropy. 3-card draw=high entropy. Held mana=interaction probability. Feed into threat assessment. #engine #hat #staged
 
 ### Level 5: Information-Set MCTS (1-2 months) — Depends: Staged Architecture
 
@@ -155,9 +153,9 @@ kanban-plugin: board
 
 - [ ] **Tesla Causal Graphs** — extract causal pivot per game (the turn/action that decided outcome). Train on "pivot distance" not just win/loss. *Depends: Heimdall observation* #research #skunkworks
 - [ ] **Feynman Oracle** — slow provably-correct rules engine, spot-check 1-in-1000 games. When oracle disagrees with fast engine = bug. Probabilistic formal verification. #research #skunkworks
-- [ ] **Lovelace Composer Intent** — deck identity → signature card weighting → thematic play priority. Dino tribal PLAYS like dino tribal, not generic midrange. *Depends: Freya deck identity* #research #skunkworks
+- [x] **Lovelace Composer Intent** — star card +0.20 boost, commander theme keyword matching +0.12 (oracle text + type line). Deck identity → signature card weighting → thematic play priority (2026-05-02) #research #skunkworks
 - [ ] **Ive Three-Act Spectator** — narrative arc rendering (setup/conflict/resolution) from Tesla causal pivots. Makes watching games compelling. *Depends: Tesla causal graphs* #research #skunkworks #ui
-- [ ] **Watts Soul Layer** — bracket-aware confidence threshold. B1=warm/casual, B5=cold/optimal. Already partially designed in Level 4 staged architecture. *Depends: staged architecture* #research #skunkworks
+- [x] **Watts Soul Layer** — bracket-aware confidence threshold. B1=warm/casual, B5=cold/optimal. Implemented via applyBracketDial() + selectAmongTop(). #research #skunkworks
 
 
 ## Low Priority
@@ -206,6 +204,11 @@ kanban-plugin: board
 - [x] **Graveyard-leave observer hook** — `graveyard_leave` event fires from MoveCard when fromZone=="graveyard". Tormod creates 2/2 Zombie, Imotekh creates 2x 2/2 Necron Warriors on artifact leave (2026-05-01) #engine
 - [x] **Land-tap hook** — `land_tapped_for_mana` event fires from AddManaFromPermanent when source is land. Caged Sun doubles controller's mana, Gauntlet of Power doubles all players' mana (2026-05-01) #engine
 - [x] **Cast observer → Door of Destinies** — `spell_cast` already fires; wired Door of Destinies charge counter increment on controller cast (2026-05-01) #engine
+- [x] **Hat: Poison/infect threat awareness** — `poisonReceivedFrom` 3rd Eye tracking, `poisonPenalty` in ThreatExposure evaluator (9 counters=0.8, 7=0.5, 5=0.2), infect/toxic creature detection boosts threat score, assessAllThreats poison proximity (2026-05-02) #engine #hat #evaluator
+- [x] **Hat: Planeswalker threat scoring** — `estimatePWUltimateCost()` parses oracle text for ultimate, `PWLoyaltyThreat` in seatThreat struct, loyalty-scaled removal scoring (can-ult=+5.0, 1-2 away=+3.5, base=+2.0), assessAllThreats PW proximity (2026-05-02) #engine #hat #evaluator
+- [x] **Hat: Alternate wincon awareness** — poison/mill/commander damage penalties in ThreatExposure. Mill: library<10=0.8 penalty when opponent has mill permanents. Commander: 18+ damage=0.6, 15+=0.3. Feeds state machine Disrupt transitions (2026-05-02) #engine #hat #evaluator
+- [x] **BUG: Rosnakht 2.5% WR** — battle cry keyword flag in ETB handler (ensures ApplyBattleCry recognition), heroic trigger via OnTrigger("spell_cast") creating 0/1 Kobold tokens (2026-05-02) #engine #bug
+- [x] **BUG: Tazri 13% WR** — cost reduction via CountParty() in ScanCostModifiers (0-4 reduction), activated ability: top 6, reveal up to 2 Cleric/Rogue/Warrior/Wizard/Ally, hand, rest to bottom (2026-05-02) #engine #bug
 - [x] **Bracket-aware tournament grinder** — switched AssemblePod → AssembleBracketPod in showmatch, populates Bracket field from ELO cache (2026-05-01) #engine #matchmaking
 - [x] **Keyword stubs audit** — CONFIDENCE_MATRIX reconciled 2026-04-30, all 30+ keywords now SOLID. Only Soulshift remains (rare). Stale TODO cleaned (2026-05-01) #engine #keywords
 - [x] **Cleanup: internal/rules/** — removed empty package, test goldens item stale (no files exist) (2026-05-01) #cleanup

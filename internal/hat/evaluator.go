@@ -13,6 +13,13 @@ import (
 type GameStateEvaluator struct {
 	Weights  EvalWeights
 	Strategy *StrategyProfile
+
+	// PlanMultiplier is set by the hat's plan state machine each turn.
+	// When non-nil, rescaleWeights multiplies each dimension weight by
+	// the corresponding multiplier value. This is the mechanism for plan
+	// biases (Execute boosts ComboProximity, Disrupt boosts ThreatExposure,
+	// etc.) without permanently altering the archetype baseline.
+	PlanMultiplier *EvalWeights
 }
 
 // EvalResult holds the per-dimension breakdown alongside the final score.
@@ -406,7 +413,86 @@ func (e *GameStateEvaluator) scoreThreat(gs *gameengine.GameState, seatIdx int) 
 	if lethalRatio >= 1.0 {
 		return -1.0
 	}
-	return -lethalRatio*0.8 - dangerousPermanents*0.3 - hoserPenalty
+
+	// Poison threat: high poison counters are an existential threat
+	// regardless of combat board state. 10 = lethal per §704.5c.
+	poisonPenalty := 0.0
+	if seat.PoisonCounters >= 9 {
+		poisonPenalty = 0.8 // one more counter = death
+	} else if seat.PoisonCounters >= 7 {
+		poisonPenalty = 0.5
+	} else if seat.PoisonCounters >= 5 {
+		poisonPenalty = 0.2
+	}
+	// Check if any opponent controls infect/toxic creatures — amplifies
+	// the urgency when we already have poison counters.
+	if seat.PoisonCounters > 0 {
+		for i, s := range gs.Seats {
+			if i == seatIdx || s.Lost || s.LeftGame {
+				continue
+			}
+			for _, p := range s.Battlefield {
+				if p == nil {
+					continue
+				}
+				if p.HasKeyword("infect") || p.HasKeyword("toxic") {
+					poisonPenalty += 0.15
+					break // one infect source per opponent is enough
+				}
+			}
+		}
+		if poisonPenalty > 1.0 {
+			poisonPenalty = 1.0
+		}
+	}
+
+	// Mill threat: low library is dangerous if opponents have mill effects.
+	millPenalty := 0.0
+	myLibSize := len(seat.Library)
+	if myLibSize < 15 {
+		for i, s := range gs.Seats {
+			if i == seatIdx || s.Lost || s.LeftGame {
+				continue
+			}
+			for _, p := range s.Battlefield {
+				if p == nil || p.Card == nil {
+					continue
+				}
+				ot := gameengine.OracleTextLower(p.Card)
+				if (strings.Contains(ot, "mill") || strings.Contains(ot, "cards from the top of") ||
+					(strings.Contains(ot, "library") && strings.Contains(ot, "graveyard"))) &&
+					(strings.Contains(ot, "opponent") || strings.Contains(ot, "target player") || strings.Contains(ot, "each player")) {
+					if myLibSize < 5 {
+						millPenalty = 0.8
+					} else if myLibSize < 10 {
+						millPenalty = 0.4
+					} else {
+						millPenalty = 0.2
+					}
+					break
+				}
+			}
+			if millPenalty > 0 {
+				break
+			}
+		}
+	}
+
+	// Commander damage proximity: §704.6c lethal at 21.
+	cmdrPenalty := 0.0
+	if gs.CommanderFormat && seat.CommanderDamage != nil {
+		for _, cmdMap := range seat.CommanderDamage {
+			for _, dmg := range cmdMap {
+				if dmg >= 18 {
+					cmdrPenalty = 0.6
+				} else if dmg >= 15 && cmdrPenalty < 0.3 {
+					cmdrPenalty = 0.3
+				}
+			}
+		}
+	}
+
+	return -lethalRatio*0.8 - dangerousPermanents*0.3 - hoserPenalty - poisonPenalty - millPenalty - cmdrPenalty
 }
 
 // scoreCommander: commander combat damage dealt + commander zone status.
@@ -1162,6 +1248,28 @@ func (e *GameStateEvaluator) rescaleWeights(gs *gameengine.GameState, seatIdx in
 		w.CardAdvantage *= 1.0 + aheadFactor*0.3
 		w.ManaAdvantage *= 1.0 + aheadFactor*0.2
 		w.LifeResource *= 1.0 + aheadFactor*0.2
+	}
+
+	// Plan bias: apply plan-state multipliers when set by the hat's
+	// state machine. These layer ON TOP of stage/position adjustments.
+	if e.PlanMultiplier != nil {
+		pm := e.PlanMultiplier
+		w.BoardPresence *= pm.BoardPresence
+		w.CardAdvantage *= pm.CardAdvantage
+		w.ManaAdvantage *= pm.ManaAdvantage
+		w.LifeResource *= pm.LifeResource
+		w.ComboProximity *= pm.ComboProximity
+		w.ThreatExposure *= pm.ThreatExposure
+		w.CommanderProgress *= pm.CommanderProgress
+		w.GraveyardValue *= pm.GraveyardValue
+		w.DrainEngine *= pm.DrainEngine
+		w.ArtifactSynergy *= pm.ArtifactSynergy
+		w.EnchantmentSynergy *= pm.EnchantmentSynergy
+		w.OpponentGraveyardThreat *= pm.OpponentGraveyardThreat
+		w.PartnerSynergy *= pm.PartnerSynergy
+		w.ActivationTempo *= pm.ActivationTempo
+		w.ToolboxBreadth *= pm.ToolboxBreadth
+		w.ThreatTrajectory *= pm.ThreatTrajectory
 	}
 
 	return w

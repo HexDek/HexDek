@@ -417,6 +417,10 @@
     $('event-log').prepend(li);
   }
 
+  function trackEvent(name, params) {
+    if (typeof gtag === 'function') gtag('event', name, params || {});
+  }
+
   // ---------- setup actions ----------
   $('btn-register').addEventListener('click', async () => {
     try {
@@ -427,6 +431,7 @@
       saveIdentity(state.deviceId, state.sessionToken, name);
       $('device-info').textContent = `device id: ${state.deviceId} (sticky)`;
       logEvent('registered ' + state.deviceId.slice(0, 8) + ' (saved to local storage)');
+      trackEvent('device_register');
       loadMyDecks();
     } catch (e) { logEvent(e.message); }
   });
@@ -564,6 +569,7 @@
       saveIdentity(null, null, null, r.ID);
       $('deck-info').textContent = `imported "${displayName}" → ${r.ID.slice(0, 12)}…`;
       logEvent('imported premade ' + displayName);
+      trackEvent('deck_import', { method: 'premade', deck_name: displayName });
     } catch (e) { logEvent('premade import: ' + e.message); }
   });
 
@@ -590,6 +596,7 @@
         (r.unresolved?.length ? `, ${r.unresolved.length} unresolved` : '') + `) → ${r.ID.slice(0, 8)}…`;
       $('deck-info').textContent = msg;
       logEvent(msg);
+      trackEvent('deck_import', { method: 'paste', card_count: r.card_count });
       if (r.unresolved?.length) {
         logEvent('unresolved: ' + r.unresolved.slice(0, 5).join(', ') + (r.unresolved.length > 5 ? '…' : ''));
       }
@@ -659,6 +666,7 @@
       const r = await postJSON(`/api/party/${state.partyId}/start_game`, null);
       state.gameId = r.id;
       logEvent('game started: ' + state.gameId.slice(0, 8));
+      trackEvent('game_start');
       // request snapshot
       setTimeout(() => send('game.snapshot', null), 200);
     } catch (e) { logEvent(e.message); }

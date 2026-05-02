@@ -41,6 +41,7 @@ func emitFail(gs *gameengine.GameState, slug, cardName, reason string, details m
 }
 
 // emitPartial writes a "handler worked but clause N is unimplemented" event.
+// Also emits a parser_gap event so Heimdall/Muninn can track runtime gaps.
 func emitPartial(gs *gameengine.GameState, slug, cardName, missing string) {
 	if gs == nil {
 		return
@@ -52,6 +53,15 @@ func emitPartial(gs *gameengine.GameState, slug, cardName, missing string) {
 			"slug":    slug,
 			"card":    cardName,
 			"missing": missing,
+		},
+	})
+	gs.LogEvent(gameengine.Event{
+		Kind:   "parser_gap",
+		Source: cardName,
+		Details: map[string]interface{}{
+			"snippet": cardName + ": " + missing,
+			"reason":  "per_card_partial",
+			"slug":    slug,
 		},
 	})
 }

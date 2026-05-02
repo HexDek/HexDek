@@ -678,6 +678,21 @@ func ScanCostModifiers(gs *GameState, card *Card, seatIdx int) []CostModifier {
 		}
 	}
 
+	// Tazri, Beacon of Unity — "This spell costs {1} less to cast for
+	// each creature in your party." Party = up to 4 unique roles among
+	// creatures you control (Cleric, Rogue, Warrior, Wizard). Checked on
+	// the CARD being cast (self-modifier), like affinity/convoke.
+	if strings.EqualFold(card.DisplayName(), "Tazri, Beacon of Unity") {
+		partyCount := CountParty(gs, seatIdx)
+		if partyCount > 0 {
+			mods = append(mods, CostModifier{
+				Kind:   CostModReduction,
+				Amount: partyCount,
+				Source: "Tazri, Beacon of Unity (party)",
+			})
+		}
+	}
+
 	// Combat-file cost modifiers: improvise, undaunted.
 	mods = AppendCombatCostModifiers(gs, card, seatIdx, mods)
 

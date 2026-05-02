@@ -846,17 +846,48 @@ func saveStrategyJSON(path string, report *FreyaReport) {
 // tier 2+ patterns against the deck's card profiles. Returns matches where
 // the deck contains example cards from a learned interaction.
 func findEmergentSynergies(report *FreyaReport) []strategyEmergentSynergy {
-	interactions, err := huginn.ReadLearnedInteractions("data/huginn")
-	if err != nil || len(interactions) == 0 {
-		return nil
-	}
-
 	deckCards := make(map[string]bool, len(report.Profiles))
 	for _, p := range report.Profiles {
 		deckCards[p.Name] = true
 	}
 
+	// Track seen card pairs to avoid duplicates between tier3_for_freya
+	// and learned_interactions sources.
+	type pairKey struct{ a, b string }
+	seen := make(map[pairKey]bool)
 	var synergies []strategyEmergentSynergy
+
+	// First pass: tier 3 confirmed interactions from Huginn's Freya export.
+	// These are highest confidence and take priority.
+	tier3, _ := huginn.ReadTier3ForFreya("data/huginn")
+	for _, fi := range tier3 {
+		if deckCards[fi.CardA] && deckCards[fi.CardB] {
+			a, b := fi.CardA, fi.CardB
+			if a > b {
+				a, b = b, a
+			}
+			k := pairKey{a, b}
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			synergies = append(synergies, strategyEmergentSynergy{
+				Cards:            []string{fi.CardA, fi.CardB},
+				EffectPattern:    fi.Pattern,
+				Tier:             huginn.TierConfirmed,
+				ObservationCount: fi.Confidence,
+				AvgImpact:        fi.AvgImpact,
+			})
+		}
+	}
+
+	// Second pass: tier 2+ from full learned interactions (catches recurring
+	// patterns that haven't been promoted to tier 3 yet).
+	interactions, err := huginn.ReadLearnedInteractions("data/huginn")
+	if err != nil || len(interactions) == 0 {
+		return synergies
+	}
+
 	for _, li := range interactions {
 		if li.Tier < huginn.TierRecurring {
 			continue
@@ -867,6 +898,15 @@ func findEmergentSynergies(report *FreyaReport) []strategyEmergentSynergy {
 				continue
 			}
 			if deckCards[parts[0]] && deckCards[parts[1]] {
+				a, b := parts[0], parts[1]
+				if a > b {
+					a, b = b, a
+				}
+				k := pairKey{a, b}
+				if seen[k] {
+					continue
+				}
+				seen[k] = true
 				synergies = append(synergies, strategyEmergentSynergy{
 					Cards:            []string{parts[0], parts[1]},
 					EffectPattern:    li.Pattern,
