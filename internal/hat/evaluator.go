@@ -39,8 +39,24 @@ type EvalResult struct {
 	OpponentGraveyardThreat float64
 	PartnerSynergy     float64
 	ActivationTempo    float64
-	ToolboxBreadth     float64
-	ThreatTrajectory   float64
+	ToolboxBreadth        float64
+	ThreatTrajectory      float64
+	StackInteraction      float64
+	PlaneswalkerProgress  float64
+	ExileZoneAssets       float64
+	StaxLockProgress      float64
+}
+
+func (r EvalResult) AsArray() [NumDimensions]float64 {
+	return [NumDimensions]float64{
+		r.BoardPresence, r.CardAdvantage, r.ManaAdvantage,
+		r.LifeResource, r.ComboProximity, r.ThreatExposure,
+		r.CommanderProgress, r.GraveyardValue, r.DrainEngine,
+		r.ArtifactSynergy, r.EnchantmentSynergy, r.OpponentGraveyardThreat,
+		r.PartnerSynergy, r.ActivationTempo, r.ToolboxBreadth,
+		r.ThreatTrajectory, r.StackInteraction, r.PlaneswalkerProgress,
+		r.ExileZoneAssets, r.StaxLockProgress,
+	}
 }
 
 // NewEvaluator constructs an evaluator from a strategy profile. If sp is
@@ -90,6 +106,10 @@ func (e *GameStateEvaluator) EvaluateDetailed(gs *gameengine.GameState, seatIdx 
 	r.ActivationTempo = e.scoreActivationTempo(gs, seatIdx)
 	r.ToolboxBreadth = e.scoreToolboxBreadth(gs, seatIdx)
 	r.ThreatTrajectory = e.scoreThreatTrajectory(gs, seatIdx)
+	r.StackInteraction = e.scoreStackInteraction(gs, seatIdx)
+	r.PlaneswalkerProgress = e.scorePlaneswalkerProgress(gs, seatIdx)
+	r.ExileZoneAssets = e.scoreExileAssets(gs, seatIdx)
+	r.StaxLockProgress = e.scoreStaxLock(gs, seatIdx)
 
 	w := e.rescaleWeights(gs, seatIdx)
 
@@ -108,7 +128,11 @@ func (e *GameStateEvaluator) EvaluateDetailed(gs *gameengine.GameState, seatIdx 
 		w.PartnerSynergy*r.PartnerSynergy +
 		w.ActivationTempo*r.ActivationTempo +
 		w.ToolboxBreadth*r.ToolboxBreadth +
-		w.ThreatTrajectory*r.ThreatTrajectory
+		w.ThreatTrajectory*r.ThreatTrajectory +
+		w.StackInteraction*r.StackInteraction +
+		w.PlaneswalkerProgress*r.PlaneswalkerProgress +
+		w.ExileZoneAssets*r.ExileZoneAssets +
+		w.StaxLockProgress*r.StaxLockProgress
 
 	if e.Strategy != nil && e.Strategy.Weakness != nil {
 		wk := e.Strategy.Weakness
@@ -121,6 +145,13 @@ func (e *GameStateEvaluator) EvaluateDetailed(gs *gameengine.GameState, seatIdx 
 		}
 		if wk.SlowToClose > 0.3 {
 			raw += r.ComboProximity * wk.SlowToClose * 0.3
+		}
+		if wk.ManaScrew > 0.3 {
+			raw += r.ManaAdvantage * wk.ManaScrew * 0.4
+		}
+		if wk.VulnerableToCounter > 0.3 {
+			raw += r.ToolboxBreadth * wk.VulnerableToCounter * 0.3
+			raw += r.ActivationTempo * wk.VulnerableToCounter * 0.2
 		}
 	}
 
@@ -1182,6 +1213,168 @@ func (e *GameStateEvaluator) scoreThreatTrajectory(gs *gameengine.GameState, sea
 	return threat
 }
 
+func (e *GameStateEvaluator) scoreStackInteraction(gs *gameengine.GameState, seatIdx int) float64 {
+	seat := gs.Seats[seatIdx]
+	avail := gameengine.AvailableManaEstimate(gs, seat)
+
+	var score float64
+	for _, c := range seat.Hand {
+		if c == nil {
+			continue
+		}
+		isInstant := false
+		for _, t := range c.Types {
+			if t == "instant" {
+				isInstant = true
+				break
+			}
+		}
+		ot := gameengine.OracleTextLower(c)
+		hasFlash := !isInstant && strings.Contains(ot, "flash")
+		if !isInstant && !hasFlash {
+			continue
+		}
+
+		cmc := gameengine.ManaCostOf(c)
+		castable := cmc <= avail
+
+		value := 0.0
+		switch {
+		case strings.Contains(ot, "counter target"):
+			value = 1.0
+		case strings.Contains(ot, "destroy target") || strings.Contains(ot, "exile target"):
+			value = 0.8
+		case strings.Contains(ot, "return target") && strings.Contains(ot, "owner"):
+			value = 0.6
+		case isInstant && (strings.Contains(ot, "damage to") || strings.Contains(ot, "-x/-x") || strings.Contains(ot, "gets -")):
+			value = 0.5
+		case hasFlash:
+			value = 0.3
+		case isInstant:
+			value = 0.15
+		}
+		if value == 0 {
+			continue
+		}
+		if castable {
+			score += value
+		} else {
+			score += value * 0.3
+		}
+	}
+	return score / 2.0
+}
+
+func (e *GameStateEvaluator) scorePlaneswalkerProgress(gs *gameengine.GameState, seatIdx int) float64 {
+	seat := gs.Seats[seatIdx]
+	var score float64
+	for _, p := range seat.Battlefield {
+		if p == nil || !p.IsPlaneswalker() {
+			continue
+		}
+		loyalty := 0
+		if p.Counters != nil {
+			loyalty = p.Counters["loyalty"]
+		}
+		if loyalty <= 0 {
+			continue
+		}
+		score += float64(loyalty) / 6.0
+	}
+	oppPW := 0.0
+	for i, s := range gs.Seats {
+		if i == seatIdx || s.Lost || s.LeftGame {
+			continue
+		}
+		for _, p := range s.Battlefield {
+			if p != nil && p.IsPlaneswalker() {
+				loy := 0
+				if p.Counters != nil {
+					loy = p.Counters["loyalty"]
+				}
+				oppPW += float64(loy) / 6.0
+			}
+		}
+	}
+	oppN := 0
+	for i, s := range gs.Seats {
+		if i != seatIdx && !s.Lost && !s.LeftGame {
+			oppN++
+		}
+	}
+	if oppN > 0 {
+		score -= oppPW / float64(oppN) * 0.5
+	}
+	return score
+}
+
+func (e *GameStateEvaluator) scoreExileAssets(gs *gameengine.GameState, seatIdx int) float64 {
+	seat := gs.Seats[seatIdx]
+	if len(seat.Exile) == 0 {
+		return 0
+	}
+	hasEnabler := false
+	for _, p := range seat.Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		ot := gameengine.OracleTextLower(p.Card)
+		if (strings.Contains(ot, "exile") && (strings.Contains(ot, "you may play") || strings.Contains(ot, "you may cast"))) ||
+			strings.Contains(ot, "play cards from exile") ||
+			strings.Contains(ot, "cast spells from exile") ||
+			strings.Contains(ot, "play lands from exile") {
+			hasEnabler = true
+			break
+		}
+	}
+	selfPlayable := 0
+	for _, c := range seat.Exile {
+		if c == nil {
+			continue
+		}
+		ot := gameengine.OracleTextLower(c)
+		if strings.Contains(ot, "foretell") || strings.Contains(ot, "adventure") ||
+			strings.Contains(ot, "suspend") {
+			selfPlayable++
+		}
+	}
+	score := float64(selfPlayable) / 3.0
+	if hasEnabler {
+		score += float64(len(seat.Exile)) / 5.0
+	}
+	return score
+}
+
+func (e *GameStateEvaluator) scoreStaxLock(gs *gameengine.GameState, seatIdx int) float64 {
+	seat := gs.Seats[seatIdx]
+	var score float64
+	for _, p := range seat.Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		ot := gameengine.OracleTextLower(p.Card)
+		value := 0.0
+		switch {
+		case strings.Contains(ot, "nonland permanents") && strings.Contains(ot, "don't untap"):
+			value = 1.5
+		case strings.Contains(ot, "can't cast") || (strings.Contains(ot, "each opponent") && strings.Contains(ot, "can't")):
+			value = 1.2
+		case strings.Contains(ot, "additional") && strings.Contains(ot, "cost") && strings.Contains(ot, "pay"):
+			value = 1.0
+		case strings.Contains(ot, "enters the battlefield tapped") && strings.Contains(ot, "opponents"):
+			value = 0.8
+		case strings.Contains(ot, "whenever") && strings.Contains(ot, "opponent") && (strings.Contains(ot, "loses") || strings.Contains(ot, "damage")):
+			value = 0.6
+		case strings.Contains(ot, "sacrifice") && strings.Contains(ot, "each") && strings.Contains(ot, "opponent"):
+			value = 0.8
+		}
+		if value > 0 {
+			score += value
+		}
+	}
+	return score / 2.0
+}
+
 // rescaleWeights adjusts evaluator dimension weights based on game state:
 // game stage (early/mid/late) and relative board position (ahead/behind).
 func (e *GameStateEvaluator) rescaleWeights(gs *gameengine.GameState, seatIdx int) EvalWeights {
@@ -1227,12 +1420,27 @@ func (e *GameStateEvaluator) rescaleWeights(gs *gameengine.GameState, seatIdx in
 	earlyFactor := math.Max(0, 1-stage*2)
 	w.ManaAdvantage *= 1.0 + earlyFactor*0.3
 	w.CardAdvantage *= 1.0 + earlyFactor*0.2
+	w.PartnerSynergy *= 1.0 + earlyFactor*0.15
 
 	// Late game: closing power matters more.
 	lateFactor := math.Max(0, stage*2-1)
 	w.ComboProximity *= 1.0 + lateFactor*0.3
 	w.ThreatExposure *= 1.0 + lateFactor*0.2
 	w.BoardPresence *= 1.0 + lateFactor*0.15
+	w.DrainEngine *= 1.0 + lateFactor*0.25
+	w.GraveyardValue *= 1.0 + lateFactor*0.2
+	w.CommanderProgress *= 1.0 + lateFactor*0.15
+	w.ThreatTrajectory *= 1.0 + lateFactor*0.15
+	w.OpponentGraveyardThreat *= 1.0 + lateFactor*0.2
+	w.StackInteraction *= 1.0 + lateFactor*0.25
+
+	// Mid-game: activated abilities, synergy engines, and lock pieces peak.
+	midFactor := 1.0 - math.Abs(stage-0.5)*2
+	w.ActivationTempo *= 1.0 + midFactor*0.2
+	w.ArtifactSynergy *= 1.0 + midFactor*0.15
+	w.EnchantmentSynergy *= 1.0 + midFactor*0.15
+	w.PlaneswalkerProgress *= 1.0 + midFactor*0.2
+	w.StaxLockProgress *= 1.0 + midFactor*0.25
 
 	// Behind: need to find answers or combos.
 	if positionSignal < -0.3 {
@@ -1240,6 +1448,10 @@ func (e *GameStateEvaluator) rescaleWeights(gs *gameengine.GameState, seatIdx in
 		w.ComboProximity *= 1.0 + behindFactor*0.4
 		w.ThreatExposure *= 1.0 + behindFactor*0.3
 		w.ToolboxBreadth *= 1.0 + behindFactor*0.3
+		w.DrainEngine *= 1.0 + behindFactor*0.2
+		w.GraveyardValue *= 1.0 + behindFactor*0.15
+		w.StackInteraction *= 1.0 + behindFactor*0.25
+		w.StaxLockProgress *= 1.0 + behindFactor*0.15
 	}
 
 	// Ahead: consolidate advantage.
@@ -1248,6 +1460,9 @@ func (e *GameStateEvaluator) rescaleWeights(gs *gameengine.GameState, seatIdx in
 		w.CardAdvantage *= 1.0 + aheadFactor*0.3
 		w.ManaAdvantage *= 1.0 + aheadFactor*0.2
 		w.LifeResource *= 1.0 + aheadFactor*0.2
+		w.ActivationTempo *= 1.0 + aheadFactor*0.15
+		w.ArtifactSynergy *= 1.0 + aheadFactor*0.1
+		w.EnchantmentSynergy *= 1.0 + aheadFactor*0.1
 	}
 
 	// Plan bias: apply plan-state multipliers when set by the hat's
@@ -1270,6 +1485,10 @@ func (e *GameStateEvaluator) rescaleWeights(gs *gameengine.GameState, seatIdx in
 		w.ActivationTempo *= pm.ActivationTempo
 		w.ToolboxBreadth *= pm.ToolboxBreadth
 		w.ThreatTrajectory *= pm.ThreatTrajectory
+		w.StackInteraction *= pm.StackInteraction
+		w.PlaneswalkerProgress *= pm.PlaneswalkerProgress
+		w.ExileZoneAssets *= pm.ExileZoneAssets
+		w.StaxLockProgress *= pm.StaxLockProgress
 	}
 
 	return w

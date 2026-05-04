@@ -623,6 +623,7 @@ type strategyJSON struct {
 	PlaysLike        int               `json:"plays_like"`
 	PlaysLikeLabel   string            `json:"plays_like_label"`
 	GameChangerCount int               `json:"game_changer_count"`
+	GameChangerCards []string          `json:"game_changer_cards,omitempty"`
 	GameplanSummary  string            `json:"gameplan_summary"`
 	WinLines        []strategyWinLine `json:"win_lines"`
 	ValueEngineKeys []string          `json:"value_engine_keys,omitempty"`
@@ -646,6 +647,11 @@ type strategyJSON struct {
 	EmergentSynergies  []strategyEmergentSynergy `json:"emergent_synergies,omitempty"`
 	ManaCurve          *jsonManaCurve            `json:"mana_curve,omitempty"`
 	ColorBalance       *jsonColors               `json:"color_balance,omitempty"`
+
+	Legality       *LegalityReport `json:"legality,omitempty"`
+	CurveWarnings  []string        `json:"curve_warnings,omitempty"`
+	ColorMismatch  []string        `json:"color_mismatch,omitempty"`
+	ComboNotes     []string        `json:"combo_notes,omitempty"`
 }
 
 type strategyEmergentSynergy struct {
@@ -659,6 +665,7 @@ type strategyEmergentSynergy struct {
 type strategyMatchup struct {
 	Archetype string `json:"archetype"`
 	Rating    string `json:"rating"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 type strategyWinLine struct {
@@ -677,6 +684,7 @@ func saveStrategyJSON(path string, report *FreyaReport) {
 		sj.PlaysLike = report.Profile.PlaysLike
 		sj.PlaysLikeLabel = report.Profile.PlaysLikeLabel
 		sj.GameChangerCount = report.Profile.GameChangerCount
+		sj.GameChangerCards = report.Profile.GameChangerCards
 		sj.GameplanSummary = report.Profile.GameplanSummary
 	} else if report.Archetype != nil {
 		sj.Archetype = strings.ToLower(report.Archetype.Primary)
@@ -685,6 +693,7 @@ func saveStrategyJSON(path string, report *FreyaReport) {
 		sj.PlaysLike = report.Archetype.PlaysLike
 		sj.PlaysLikeLabel = report.Archetype.PlaysLikeLabel
 		sj.GameChangerCount = report.Archetype.GameChangerCount
+		sj.GameChangerCards = report.Archetype.GameChangerCards
 	}
 
 	if report.WinLines != nil {
@@ -797,9 +806,16 @@ func saveStrategyJSON(path string, report *FreyaReport) {
 			sj.MetaMatchups = append(sj.MetaMatchups, strategyMatchup{
 				Archetype: mm.Archetype,
 				Rating:    mm.Rating,
+				Reason:    mm.Reason,
 			})
 		}
 	}
+
+	// Legality, curve warnings, color mismatch, combo notes.
+	sj.Legality = report.Legality
+	sj.CurveWarnings = report.CurveWarnings
+	sj.ColorMismatch = report.ColorMismatch
+	sj.ComboNotes = report.ComboNotes
 
 	// Emergent synergies from Huginn learned interactions.
 	sj.EmergentSynergies = findEmergentSynergies(report)

@@ -1147,7 +1147,7 @@ func DealCombatDamageStep(gs *GameState, attackers []*Permanent, blockerMap map[
 		if !dealsInStep(atk, isFirstStrike) {
 			continue
 		}
-		dmg := atk.Power()
+		dmg := gs.PowerOf(atk)
 		if dmg <= 0 {
 			continue
 		}
@@ -1191,8 +1191,8 @@ func DealCombatDamageStep(gs *GameState, attackers []*Permanent, blockerMap map[
 		ordered := append([]*Permanent{}, liveBlockers...)
 		for i := 0; i < len(ordered)-1; i++ {
 			for j := i + 1; j < len(ordered); j++ {
-				if ordered[j].Toughness()-ordered[j].MarkedDamage <
-					ordered[i].Toughness()-ordered[i].MarkedDamage {
+				if gs.ToughnessOf(ordered[j])-ordered[j].MarkedDamage <
+					gs.ToughnessOf(ordered[i])-ordered[i].MarkedDamage {
 					ordered[i], ordered[j] = ordered[j], ordered[i]
 				}
 			}
@@ -1203,7 +1203,7 @@ func DealCombatDamageStep(gs *GameState, attackers []*Permanent, blockerMap map[
 			if remaining <= 0 {
 				break
 			}
-			need := lethalAmount(atk, b)
+			need := lethalAmountGS(gs, atk, b)
 			give := remaining
 			if give > need {
 				give = need
@@ -1225,7 +1225,7 @@ func DealCombatDamageStep(gs *GameState, attackers []*Permanent, blockerMap map[
 			if !dealsInStep(b, isFirstStrike) {
 				continue
 			}
-			dmg := b.Power()
+			dmg := gs.PowerOf(b)
 			if dmg <= 0 {
 				continue
 			}
@@ -1269,6 +1269,18 @@ func lethalAmount(attacker, blocker *Permanent) int {
 		return 1
 	}
 	need := blocker.Toughness() - blocker.MarkedDamage
+	if need < 1 {
+		return 1
+	}
+	return need
+}
+
+// lethalAmountGS is the layer-aware variant used by DealCombatDamageStep.
+func lethalAmountGS(gs *GameState, attacker, blocker *Permanent) int {
+	if attacker.HasKeyword("deathtouch") {
+		return 1
+	}
+	need := gs.ToughnessOf(blocker) - blocker.MarkedDamage
 	if need < 1 {
 		return 1
 	}
@@ -1418,8 +1430,8 @@ func applyCombatDamageToCreature(gs *GameState, src *Permanent, amount int, targ
 	target.MarkedDamage += amount
 	if src.HasKeyword("deathtouch") && amount > 0 {
 		// Any nonzero damage from a deathtouch source is lethal (§702.2b).
-		if target.MarkedDamage < target.Toughness() {
-			target.MarkedDamage = target.Toughness()
+		if target.MarkedDamage < gs.ToughnessOf(target) {
+			target.MarkedDamage = gs.ToughnessOf(target)
 		}
 		// Flag for §704.5h SBA — deathtouch sub-lethal damage kill.
 		if target.Flags == nil {

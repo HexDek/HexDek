@@ -200,6 +200,10 @@ type Showmatch struct {
 	amiiboPool map[string]*hat.AmiiboPool // deck key → genetic population
 	amiiboDir  string
 
+	trainingDir string             // neural evaluator training data output
+	neuralEval  *hat.NeuralEvaluator // shared neural model (nil = not trained yet)
+	selfPlay    *hat.SelfPlayManager // Level 6 self-play training loop
+
 	specMu     sync.RWMutex
 	spectators map[*spectatorConn]struct{}
 
@@ -246,10 +250,24 @@ func NewShowmatch(astPath, oraclePath, decksDir string, database *sql.DB) *Showm
 		heimdall:        heimdall.New("data", &huginnAdapter{dataDir: "data"}, &muninnAdapter{dataDir: "data"}, newTelemetrySink()),
 		amiiboPool:      make(map[string]*hat.AmiiboPool),
 		amiiboDir:       "data/amiibo",
+		trainingDir:     "data/training",
 	}
 	if database != nil {
 		sm.loadPersistedState()
 		go sm.persistWorker()
+	}
+	os.MkdirAll(sm.trainingDir, 0755)
+	sm.neuralEval = hat.TryLoadNeuralEvaluator(filepath.Join(sm.trainingDir, "model.json"))
+	if sm.neuralEval != nil {
+		log.Printf("neural: loaded trained model from %s/model.json", sm.trainingDir)
+	}
+	spCfg := hat.DefaultSelfPlayConfig(".")
+	sm.selfPlay = hat.NewSelfPlayManager(spCfg)
+	sm.selfPlay.OnModelLoad = func(ne *hat.NeuralEvaluator) {
+		sm.mu.Lock()
+		sm.neuralEval = ne
+		sm.mu.Unlock()
+		log.Printf("selfplay: hot-reloaded neural model (gen %d)", sm.selfPlay.Generation())
 	}
 	if loaded, err := hat.LoadAllPools(sm.amiiboDir, rand.New(rand.NewSource(42))); err == nil && len(loaded) > 0 {
 		sm.amiiboPool = loaded
@@ -668,14 +686,19 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 
 		// Amiibo: select DNA for gauntlet seats.
 		var gauntDnaIdxes [showmatchSeats]int
+		var gauntHats [showmatchSeats]*hat.YggdrasilHat
 		for i := 0; i < showmatchSeats; i++ {
 			pool := sm.getOrCreateAmiiboPool(deckKeys[i], rng)
 			sm.amiiboMu.Lock()
 			dna, dnaIdx := pool.SelectForGame()
 			dnaCopy := *dna
+			dimStats := pool.DimStats
 			sm.amiiboMu.Unlock()
 			gauntDnaIdxes[i] = dnaIdx
-			gs.Seats[i].Hat = hat.NewYggdrasilHatWithDNA(&dnaCopy, nil, 50)
+			h := hat.NewYggdrasilHatWithPool(&dnaCopy, nil, 50, &dimStats)
+			h.NeuralEval = sm.neuralEval
+			gs.Seats[i].Hat = h
+			gauntHats[i] = h
 		}
 
 		for i := 0; i < showmatchSeats; i++ {
@@ -685,10 +708,27 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 		gs.Active = gameRng.Intn(showmatchSeats)
 		gs.Turn = 1
 
+		var collectors [showmatchSeats]*hat.TrainingCollector
+		for i := 0; i < showmatchSeats; i++ {
+			collectors[i] = hat.NewTrainingCollector(5)
+		}
+		evalCollector := hat.NewEvalSnapshotCollector()
+
+		turnETBs := make(map[int][]string)
 		for turn := 1; turn <= showmatchMaxTurn; turn++ {
 			gs.Turn = turn
+			preBF := heimdall.SnapshotBattlefieldNames(gs)
 			tournament.TakeTurn(gs)
 			gameengine.StateBasedActions(gs)
+			for i := 0; i < showmatchSeats; i++ {
+				collectors[i].Snapshot(gs, i)
+			}
+			if turn%5 == 0 || turn == 1 {
+				evalCollector.Record(turn, extractEvalScores(gs))
+			}
+			if newCards := heimdall.DiffBattlefield(preBF, heimdall.SnapshotBattlefieldNames(gs)); len(newCards) > 0 {
+				turnETBs[turn] = newCards
+			}
 			if gs.CheckEnd() {
 				break
 			}
@@ -711,13 +751,17 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 			}
 		}
 
-		// Amiibo: record results for gauntlet seats.
+		// Amiibo: record results + dimension stats for gauntlet seats.
 		sm.amiiboMu.Lock()
 		var gauntEvolved []*hat.AmiiboPool
 		for i := 0; i < showmatchSeats; i++ {
 			if pool, ok := sm.amiiboPool[deckKeys[i]]; ok {
+				score := hat.PlacementScore(seatPlacement(gs, i, winner), showmatchSeats)
 				prevCount := pool.GameCount
-				pool.RecordResult(gauntDnaIdxes[i], i == winner)
+				pool.RecordResult(gauntDnaIdxes[i], score)
+				if gauntHats[i] != nil {
+					pool.DimStats.RecordGame(gauntHats[i].DimensionMeans(), score)
+				}
 				if pool.GameCount < prevCount {
 					gauntEvolved = append(gauntEvolved, pool)
 				}
@@ -736,14 +780,40 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 		sm.updateELO(deckKeys, commanders, pickedDecks, winner)
 		sm.mu.Unlock()
 
+		gauntSeed := heimdall.GameSeed{
+			RNGSeed:    gameSeed,
+			DeckKeys:   [4]string{deckKeys[0], deckKeys[1], deckKeys[2], deckKeys[3]},
+			Winner:     winner,
+			Turns:      gs.Turn,
+			KillMethod: heimdall.ClassifyKillWithMaxTurns(gs, winner, showmatchMaxTurn),
+		}
 		if sm.heimdall != nil {
-			sm.heimdall.RecordSeed(heimdall.GameSeed{
-				RNGSeed:    gameSeed,
-				DeckKeys:   [4]string{deckKeys[0], deckKeys[1], deckKeys[2], deckKeys[3]},
-				Winner:     winner,
-				Turns:      gs.Turn,
-				KillMethod: heimdall.ClassifyKillWithMaxTurns(gs, winner, showmatchMaxTurn),
+			sm.heimdall.RecordSeed(gauntSeed)
+			sm.heimdall.RecordObservation(heimdall.Observation{
+				Seed:       gauntSeed,
+				ParserGaps: heimdall.ExtractParserGaps(gs),
+				CoTriggers: heimdall.ExtractCoTriggers(turnETBs),
 			})
+		}
+
+		// Tesla: extract causal pivot and enrich training samples.
+		pivot := hat.ExtractPivot(evalCollector.History(), winner, gs.Turn)
+		for i := 0; i < showmatchSeats; i++ {
+			placement := hat.PlacementScore(seatPlacement(gs, i, winner), showmatchSeats)
+			samples := collectors[i].Finalize(placement, gs.Turn)
+			if len(samples) > 0 {
+				labels := hat.LabelSamplesWithPivot(samples, pivot)
+				enriched := hat.EnrichSamples(samples, labels)
+				_ = sm.selfPlay.WriteEnrichedSamples(
+					filepath.Join(sm.trainingDir, "samples.jsonl"), enriched)
+			}
+		}
+
+		// Feynman: post-game invariant check.
+		oracleResult := hat.CheckGame(gs)
+		if !oracleResult.Clean() {
+			log.Printf("feynman: grinder game violations: %s",
+				hat.FormatViolations(oracleResult.Violations))
 		}
 
 		if winner == 0 {
@@ -887,6 +957,91 @@ func (sm *Showmatch) eloSize() int {
 	return len(sm.elo)
 }
 
+func convertEngineEvents(gs *gameengine.GameState, fromIdx int, turn int) []hat.GameEvent {
+	var out []hat.GameEvent
+	for i := fromIdx; i < len(gs.EventLog); i++ {
+		ev := gs.EventLog[i]
+		switch ev.Kind {
+		case "damage":
+			out = append(out, hat.GameEvent{
+				Turn: turn, Seat: ev.Seat, Kind: "damage",
+				Source: ev.Source, Amount: ev.Amount,
+			})
+		case "seat_eliminated":
+			out = append(out, hat.GameEvent{
+				Turn: turn, Seat: ev.Seat, Kind: "player_lost",
+			})
+		case "cast":
+			out = append(out, hat.GameEvent{
+				Turn: turn, Seat: ev.Seat, Kind: "cast_spell",
+				Source: ev.Source,
+			})
+		case "zone_change":
+			if ev.Source != "" && strings.Contains(strings.ToLower(ev.Source), "land") {
+				out = append(out, hat.GameEvent{
+					Turn: turn, Seat: ev.Seat, Kind: "enter_battlefield",
+					Source: ev.Source,
+				})
+			}
+		}
+	}
+	return out
+}
+
+func extractEvalScores(gs *gameengine.GameState) []float64 {
+	scores := make([]float64, len(gs.Seats))
+	for i, s := range gs.Seats {
+		if s == nil {
+			continue
+		}
+		if ygg, ok := s.Hat.(*hat.YggdrasilHat); ok && ygg.Evaluator != nil {
+			scores[i] = ygg.Evaluator.Evaluate(gs, i)
+		}
+	}
+	return scores
+}
+
+// seatPlacement derives a 1-based finish position for a seat from game state.
+// Winner = 1st. Remaining seats ranked by life total (higher = better).
+func seatPlacement(gs *gameengine.GameState, seatIdx, winner int) int {
+	if seatIdx == winner {
+		return 1
+	}
+	if gs == nil {
+		return 4
+	}
+	seat := gs.Seats[seatIdx]
+	if seat == nil || seat.Lost || seat.LeftGame {
+		// Lost seats: rank by life (all ≤0). Dead earlier = worse.
+		rank := 2 // start at 2nd (winner is 1st)
+		for i, s := range gs.Seats {
+			if i == seatIdx || i == winner || s == nil {
+				continue
+			}
+			if !s.Lost && !s.LeftGame {
+				rank++ // surviving non-winners beat us
+			} else if s.Life > seat.Life {
+				rank++ // dead players with more life beat us
+			}
+		}
+		if rank > len(gs.Seats) {
+			rank = len(gs.Seats)
+		}
+		return rank
+	}
+	// Alive non-winner: rank by life among survivors.
+	rank := 2
+	for i, s := range gs.Seats {
+		if i == seatIdx || i == winner || s == nil || s.Lost || s.LeftGame {
+			continue
+		}
+		if s.Life > seat.Life {
+			rank++
+		}
+	}
+	return rank
+}
+
 // getOrCreateAmiiboPool returns the genetic pool for a deck, creating one lazily.
 // Thread-safe; the returned pool's internal rng is set from the provided rng.
 func (sm *Showmatch) getOrCreateAmiiboPool(deckKey string, rng *rand.Rand) *hat.AmiiboPool {
@@ -981,14 +1136,19 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 
 	// Amiibo: select DNA for each seat's hat.
 	var dnaIdxes [showmatchSeats]int
+	var bracketHats [showmatchSeats]*hat.YggdrasilHat
 	for i := 0; i < showmatchSeats; i++ {
 		pool := sm.getOrCreateAmiiboPool(deckKeys[i], rng)
 		sm.amiiboMu.Lock()
 		dna, dnaIdx := pool.SelectForGame()
-		dnaCopy := *dna // snapshot — evolve() may mutate the original later
+		dnaCopy := *dna
+		dimStats := pool.DimStats
 		sm.amiiboMu.Unlock()
 		dnaIdxes[i] = dnaIdx
-		gs.Seats[i].Hat = hat.NewYggdrasilHatWithDNA(&dnaCopy, nil, 50)
+		h := hat.NewYggdrasilHatWithPool(&dnaCopy, nil, 50, &dimStats)
+		h.NeuralEval = sm.neuralEval
+		gs.Seats[i].Hat = h
+		bracketHats[i] = h
 	}
 
 	for i := 0; i < showmatchSeats; i++ {
@@ -998,10 +1158,27 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 	gs.Active = gameRng.Intn(showmatchSeats)
 	gs.Turn = 1
 
+	var bracketCollectors [showmatchSeats]*hat.TrainingCollector
+	for i := 0; i < showmatchSeats; i++ {
+		bracketCollectors[i] = hat.NewTrainingCollector(5)
+	}
+	bracketEvalCollector := hat.NewEvalSnapshotCollector()
+
+	bracketETBs := make(map[int][]string)
 	for turn := 1; turn <= showmatchMaxTurn; turn++ {
 		gs.Turn = turn
+		preBF := heimdall.SnapshotBattlefieldNames(gs)
 		tournament.TakeTurn(gs)
 		gameengine.StateBasedActions(gs)
+		for i := 0; i < showmatchSeats; i++ {
+			bracketCollectors[i].Snapshot(gs, i)
+		}
+		if turn%5 == 0 || turn == 1 {
+			bracketEvalCollector.Record(turn, extractEvalScores(gs))
+		}
+		if newCards := heimdall.DiffBattlefield(preBF, heimdall.SnapshotBattlefieldNames(gs)); len(newCards) > 0 {
+			bracketETBs[turn] = newCards
+		}
 
 		if gs.CheckEnd() {
 			break
@@ -1025,13 +1202,17 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 		}
 	}
 
-	// Amiibo: record results for each seat's DNA variant.
+	// Amiibo: record results + dimension stats for each seat's DNA variant.
 	sm.amiiboMu.Lock()
 	var evolved []*hat.AmiiboPool
 	for i := 0; i < showmatchSeats; i++ {
 		if pool, ok := sm.amiiboPool[deckKeys[i]]; ok {
+			score := hat.PlacementScore(seatPlacement(gs, i, winner), showmatchSeats)
 			prevCount := pool.GameCount
-			pool.RecordResult(dnaIdxes[i], i == winner)
+			pool.RecordResult(dnaIdxes[i], score)
+			if bracketHats[i] != nil {
+				pool.DimStats.RecordGame(bracketHats[i].DimensionMeans(), score)
+			}
 			if pool.GameCount < prevCount {
 				evolved = append(evolved, pool)
 			}
@@ -1048,14 +1229,40 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 	sm.updateELO(deckKeys, commanders, pickedDecks, winner)
 	sm.mu.Unlock()
 
+	bracketSeed := heimdall.GameSeed{
+		RNGSeed:    gameSeed,
+		DeckKeys:   [4]string{deckKeys[0], deckKeys[1], deckKeys[2], deckKeys[3]},
+		Winner:     winner,
+		Turns:      gs.Turn,
+		KillMethod: heimdall.ClassifyKillWithMaxTurns(gs, winner, showmatchMaxTurn),
+	}
 	if sm.heimdall != nil {
-		sm.heimdall.RecordSeed(heimdall.GameSeed{
-			RNGSeed:    gameSeed,
-			DeckKeys:   [4]string{deckKeys[0], deckKeys[1], deckKeys[2], deckKeys[3]},
-			Winner:     winner,
-			Turns:      gs.Turn,
-			KillMethod: heimdall.ClassifyKillWithMaxTurns(gs, winner, showmatchMaxTurn),
+		sm.heimdall.RecordSeed(bracketSeed)
+		sm.heimdall.RecordObservation(heimdall.Observation{
+			Seed:       bracketSeed,
+			ParserGaps: heimdall.ExtractParserGaps(gs),
+			CoTriggers: heimdall.ExtractCoTriggers(bracketETBs),
 		})
+	}
+
+	// Tesla: extract causal pivot and enrich training samples.
+	bracketPivot := hat.ExtractPivot(bracketEvalCollector.History(), winner, gs.Turn)
+	for i := 0; i < showmatchSeats; i++ {
+		placement := hat.PlacementScore(seatPlacement(gs, i, winner), showmatchSeats)
+		samples := bracketCollectors[i].Finalize(placement, gs.Turn)
+		if len(samples) > 0 {
+			labels := hat.LabelSamplesWithPivot(samples, bracketPivot)
+			enriched := hat.EnrichSamples(samples, labels)
+			_ = sm.selfPlay.WriteEnrichedSamples(
+				filepath.Join(sm.trainingDir, "samples.jsonl"), enriched)
+		}
+	}
+
+	// Feynman: post-game invariant check.
+	bracketOracle := hat.CheckGame(gs)
+	if !bracketOracle.Clean() {
+		log.Printf("feynman: bracket game violations: %s",
+			hat.FormatViolations(bracketOracle.Violations))
 	}
 }
 
@@ -1118,16 +1325,21 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 
 	gameengine.SetupCommanderGame(gs, cmdDecks)
 
-	// Attach Yggdrasil hats with Amiibo DNA.
+	// Attach Yggdrasil hats with Amiibo DNA + learned dimension corrections.
 	var showDnaIdxes [showmatchSeats]int
+	var showHats [showmatchSeats]*hat.YggdrasilHat
 	for i := 0; i < showmatchSeats; i++ {
 		pool := sm.getOrCreateAmiiboPool(deckKeys[i], rng)
 		sm.amiiboMu.Lock()
 		dna, dnaIdx := pool.SelectForGame()
 		dnaCopy := *dna
+		dimStats := pool.DimStats
 		sm.amiiboMu.Unlock()
 		showDnaIdxes[i] = dnaIdx
-		gs.Seats[i].Hat = hat.NewYggdrasilHatWithDNA(&dnaCopy, nil, 50)
+		h := hat.NewYggdrasilHatWithPool(&dnaCopy, nil, 50, &dimStats)
+		h.NeuralEval = sm.neuralEval
+		gs.Seats[i].Hat = h
+		showHats[i] = h
 	}
 
 	// Mulligan.
@@ -1181,12 +1393,30 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 	}
 
 	// Turn loop with per-phase pacing via hook.
+	var showCollectors [showmatchSeats]*hat.TrainingCollector
+	for i := 0; i < showmatchSeats; i++ {
+		showCollectors[i] = hat.NewTrainingCollector(5)
+	}
+	showEvalCollector := hat.NewEvalSnapshotCollector()
+	var showGameEvents []hat.GameEvent
+	showETBs := make(map[int][]string)
 	for turn := 1; turn <= showmatchMaxTurn; turn++ {
 		gs.Turn = turn
 
+		preBF := heimdall.SnapshotBattlefieldNames(gs)
 		tournament.TakeTurnWithHook(gs, phaseHook)
 		gameengine.StateBasedActions(gs)
+		if newCards := heimdall.DiffBattlefield(preBF, heimdall.SnapshotBattlefieldNames(gs)); len(newCards) > 0 {
+			showETBs[turn] = newCards
+		}
+		for i := 0; i < showmatchSeats; i++ {
+			showCollectors[i].Snapshot(gs, i)
+		}
+		if turn%5 == 0 || turn == 1 {
+			showEvalCollector.Record(turn, extractEvalScores(gs))
+		}
 
+		showGameEvents = append(showGameEvents, convertEngineEvents(gs, lastEventIdx, turn)...)
 		newEntries := sm.extractEvents(gs, lastEventIdx, commanders, turn)
 		lastEventIdx = len(gs.EventLog)
 
@@ -1243,13 +1473,17 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 		}
 	}
 
-	// Amiibo: record results for showmatch seats.
+	// Amiibo: record results + dimension stats for showmatch seats.
 	sm.amiiboMu.Lock()
 	var showEvolved []*hat.AmiiboPool
 	for i := 0; i < showmatchSeats; i++ {
 		if pool, ok := sm.amiiboPool[deckKeys[i]]; ok {
+			score := hat.PlacementScore(seatPlacement(gs, i, winner), showmatchSeats)
 			prevCount := pool.GameCount
-			pool.RecordResult(showDnaIdxes[i], i == winner)
+			pool.RecordResult(showDnaIdxes[i], score)
+			if showHats[i] != nil {
+				pool.DimStats.RecordGame(showHats[i].DimensionMeans(), score)
+			}
 			if pool.GameCount < prevCount {
 				showEvolved = append(showEvolved, pool)
 			}
@@ -1290,23 +1524,54 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 
 	sm.mu.Unlock()
 
+	showSeed := heimdall.GameSeed{
+		RNGSeed:    gameSeed,
+		DeckKeys:   [4]string{deckKeys[0], deckKeys[1], deckKeys[2], deckKeys[3]},
+		Winner:     winner,
+		Turns:      gs.Turn,
+		KillMethod: heimdall.ClassifyKillWithMaxTurns(gs, winner, showmatchMaxTurn),
+	}
 	if sm.heimdall != nil {
-		sm.heimdall.RecordSeed(heimdall.GameSeed{
-			RNGSeed:    gameSeed,
-			DeckKeys:   [4]string{deckKeys[0], deckKeys[1], deckKeys[2], deckKeys[3]},
-			Winner:     winner,
-			Turns:      gs.Turn,
-			KillMethod: heimdall.ClassifyKillWithMaxTurns(gs, winner, showmatchMaxTurn),
+		sm.heimdall.RecordSeed(showSeed)
+		sm.heimdall.RecordObservation(heimdall.Observation{
+			Seed:       showSeed,
+			ParserGaps: heimdall.ExtractParserGaps(gs),
+			CoTriggers: heimdall.ExtractCoTriggers(showETBs),
 		})
 	}
+
+	// Tesla: extract causal pivot and enrich training samples.
+	showPivot := hat.ExtractPivot(showEvalCollector.History(), winner, gs.Turn)
+	for i := 0; i < showmatchSeats; i++ {
+		placement := hat.PlacementScore(seatPlacement(gs, i, winner), showmatchSeats)
+		samples := showCollectors[i].Finalize(placement, gs.Turn)
+		if len(samples) > 0 {
+			labels := hat.LabelSamplesWithPivot(samples, showPivot)
+			enriched := hat.EnrichSamples(samples, labels)
+			_ = sm.selfPlay.WriteEnrichedSamples(
+				filepath.Join(sm.trainingDir, "samples.jsonl"), enriched)
+		}
+	}
+
+	// Feynman: post-game invariant check.
+	showOracle := hat.CheckGame(gs)
+	if !showOracle.Clean() {
+		log.Printf("feynman: showmatch game %d violations: %s",
+			gameNum, hat.FormatViolations(showOracle.Violations))
+	}
+
+	// Ive: compose three-act narrative for spectators.
+	narrative := hat.ComposeNarrative(showPivot, showGameEvents, commanders, winner, gs.Turn)
+	sm.broadcastToSpectators(wsEnvelope{Type: "narrative", Payload: narrative})
 
 	select {
 	case sm.persistCh <- persistJob{game: completed}:
 	default:
 	}
 
-	log.Printf("showmatch: game %d finished — turn %d, winner: %s (%s)",
-		gameNum, gs.Turn, safeCommander(commanders, winner), endReason)
+	log.Printf("showmatch: game %d finished — turn %d, winner: %s (%s), pivot: t%d (Δ%.2f)",
+		gameNum, gs.Turn, safeCommander(commanders, winner), endReason,
+		showPivot.Turn, showPivot.DeltaScore)
 
 	sm.broadcastToSpectators(wsEnvelope{Type: "game", Payload: finalSnap})
 	sm.broadcastToSpectators(wsEnvelope{Type: "stats", Payload: sm.GetStats()})

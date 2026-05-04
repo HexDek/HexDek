@@ -2,6 +2,7 @@ package hat
 
 import (
 	"encoding/json"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -21,6 +22,8 @@ type AmiiboDNA struct {
 	ThreatParanoia  float64 `json:"threat_paranoia"`    // opponent threat weighting [0,1]
 	ResourceGreed   float64 `json:"resource_greed"`     // card advantage vs tempo [0,1]
 	PoliticalMemory float64 `json:"political_memory"`   // grudge/gratitude decay rate [0,1]
+	DrainAffinity   float64 `json:"drain_affinity"`     // aristocrats drain engine weighting [0,1]
+	ArtifactAffinity float64 `json:"artifact_affinity"` // artifact synergy weighting [0,1]
 }
 
 const (
@@ -28,13 +31,90 @@ const (
 	AmiiboEvolveAt   = 100  // games per deck before evolution step
 	AmiiboMutationSD = 0.05 // gaussian mutation standard deviation
 	AmiiboKillCount  = 2    // bottom N killed per evolution
+	amiiboImmigrationInterval = 10 // every N generations, inject fresh random DNA
+	dimStatsAlpha    = 0.04 // EMA decay for dimension stats (~25-game half-life)
+	dimStatsMinN     = 20   // minimum games before applying corrections
 )
+
+// DimensionStats tracks EMA correlations between evaluator dimension scores
+// and game outcomes. After enough games, WeightCorrections returns per-dimension
+// multiplicative adjustments to bias the evaluator toward dimensions that
+// actually predict wins for this deck.
+type DimensionStats struct {
+	MeanDim  [NumDimensions]float64 `json:"mean_dim"`
+	MeanSqDim [NumDimensions]float64 `json:"mean_sq_dim"`
+	CrossDim [NumDimensions]float64 `json:"cross_dim"`
+	MeanScore float64               `json:"mean_score"`
+	MeanSqScore float64             `json:"mean_sq_score"`
+	N         int                    `json:"n"`
+}
+
+// RecordGame updates the running EMA statistics with one game's data.
+func (ds *DimensionStats) RecordGame(dimMeans [NumDimensions]float64, outcome float64) {
+	ds.N++
+	alpha := dimStatsAlpha
+	if ds.N <= 1 {
+		for d := 0; d < NumDimensions; d++ {
+			ds.MeanDim[d] = dimMeans[d]
+			ds.MeanSqDim[d] = dimMeans[d] * dimMeans[d]
+			ds.CrossDim[d] = dimMeans[d] * outcome
+		}
+		ds.MeanScore = outcome
+		ds.MeanSqScore = outcome * outcome
+		return
+	}
+	for d := 0; d < NumDimensions; d++ {
+		ds.MeanDim[d] += alpha * (dimMeans[d] - ds.MeanDim[d])
+		ds.MeanSqDim[d] += alpha * (dimMeans[d]*dimMeans[d] - ds.MeanSqDim[d])
+		ds.CrossDim[d] += alpha * (dimMeans[d]*outcome - ds.CrossDim[d])
+	}
+	ds.MeanScore += alpha * (outcome - ds.MeanScore)
+	ds.MeanSqScore += alpha * (outcome*outcome - ds.MeanSqScore)
+}
+
+// Correlation returns Pearson's r for dimension d versus game outcome.
+func (ds *DimensionStats) Correlation(d int) float64 {
+	if ds.N < dimStatsMinN || d < 0 || d >= NumDimensions {
+		return 0
+	}
+	varD := ds.MeanSqDim[d] - ds.MeanDim[d]*ds.MeanDim[d]
+	varO := ds.MeanSqScore - ds.MeanScore*ds.MeanScore
+	if varD < 1e-10 || varO < 1e-10 {
+		return 0
+	}
+	cov := ds.CrossDim[d] - ds.MeanDim[d]*ds.MeanScore
+	r := cov / math.Sqrt(varD*varO)
+	if r < -1 {
+		r = -1
+	}
+	if r > 1 {
+		r = 1
+	}
+	return r
+}
+
+// WeightCorrections returns per-dimension multiplicative corrections
+// derived from outcome correlations. Positive correlation → boost weight,
+// negative → suppress. Max swing: ±20%.
+func (ds *DimensionStats) WeightCorrections() [NumDimensions]float64 {
+	var corr [NumDimensions]float64
+	for d := 0; d < NumDimensions; d++ {
+		corr[d] = 1.0
+		if ds.N >= dimStatsMinN {
+			corr[d] = 1.0 + ds.Correlation(d)*0.20
+		}
+	}
+	return corr
+}
 
 // AmiiboPool maintains a population of DNA variants for a single deck.
 type AmiiboPool struct {
 	DeckKey    string                      `json:"deck_key"`
 	Population [AmiiboPopSize]AmiiboDNA    `json:"population"`
 	GameCount  int                         `json:"game_count"`
+	Bracket    int                         `json:"bracket"`    // power bracket (1-5) for fitness normalization
+	GenCount   int                         `json:"gen_count"`  // total generations evolved
+	DimStats   DimensionStats              `json:"dim_stats"`  // T3.2 outcome-correlated dimension learning
 	rng        *rand.Rand // not serialized; caller injects via InitPool or SetRNG
 }
 
@@ -69,22 +149,41 @@ func (pool *AmiiboPool) SelectForGame() (dna *AmiiboDNA, idx int) {
 	return &pool.Population[AmiiboPopSize-1], AmiiboPopSize - 1
 }
 
+// PlacementScore converts a 4-player finish position to a fitness value.
+// 1st=1.0, 2nd=0.5, 3rd=0.2, 4th=0.0. Reduces noise vs binary win/loss.
+func PlacementScore(placement, totalPlayers int) float64 {
+	if totalPlayers <= 1 || placement <= 0 {
+		return 0.5
+	}
+	return 1.0 - float64(placement-1)/float64(totalPlayers-1)
+}
+
 // RecordResult updates fitness after a game and possibly triggers evolution.
-func (pool *AmiiboPool) RecordResult(idx int, won bool) {
+// score is a [0,1] fitness value — use PlacementScore() for 4-player games
+// instead of binary 0/1 to reduce variance.
+func (pool *AmiiboPool) RecordResult(idx int, score float64) {
 	dna := &pool.Population[idx]
 	dna.GamesPlayed++
 	pool.GameCount++
 
-	// Rolling average fitness (EMA).
-	result := 0.0
-	if won {
-		result = 1.0
+	// Bracket-normalize: compare against expected performance for this bracket.
+	normalized := score
+	if pool.Bracket > 0 {
+		expected := expectedBracketScore(pool.Bracket)
+		if expected > 0 {
+			normalized = score / expected
+			if normalized > 2.0 {
+				normalized = 2.0
+			}
+		}
 	}
+
+	// Rolling average fitness (EMA).
 	if dna.GamesPlayed <= 1 {
-		dna.Fitness = result
+		dna.Fitness = normalized
 	} else {
 		alpha := 2.0 / (float64(min(dna.GamesPlayed, 50)) + 1.0)
-		dna.Fitness = dna.Fitness*(1-alpha) + result*alpha
+		dna.Fitness = dna.Fitness*(1-alpha) + normalized*alpha
 	}
 
 	if pool.GameCount >= AmiiboEvolveAt {
@@ -92,10 +191,33 @@ func (pool *AmiiboPool) RecordResult(idx int, won bool) {
 	}
 }
 
+// expectedBracketScore returns the expected average placement score for a
+// bracket tier. Derived from grinder data: B1 WR≈28.9%, B5 WR≈19.3%.
+func expectedBracketScore(bracket int) float64 {
+	switch bracket {
+	case 1:
+		return 0.58
+	case 2:
+		return 0.52
+	case 3:
+		return 0.48
+	case 4:
+		return 0.44
+	case 5:
+		return 0.39
+	default:
+		return 0.50
+	}
+}
+
 // evolve runs one generation of genetic selection on the population.
 // Sort by fitness, kill bottom AmiiboKillCount, clone top AmiiboKillCount
 // into those slots, mutate clones, clamp, reset game counter.
+// Every amiiboImmigrationInterval generations, inject fresh random DNA
+// to prevent convergent collapse.
 func (pool *AmiiboPool) evolve() {
+	pool.GenCount++
+
 	// Build index sorted by fitness (ascending).
 	indices := make([]int, AmiiboPopSize)
 	for i := range indices {
@@ -120,8 +242,27 @@ func (pool *AmiiboPool) evolve() {
 		clone.ThreatParanoia = clampUnit(clone.ThreatParanoia + pool.rng.NormFloat64()*AmiiboMutationSD)
 		clone.ResourceGreed = clampUnit(clone.ResourceGreed + pool.rng.NormFloat64()*AmiiboMutationSD)
 		clone.PoliticalMemory = clampUnit(clone.PoliticalMemory + pool.rng.NormFloat64()*AmiiboMutationSD)
+		clone.DrainAffinity = clampUnit(clone.DrainAffinity + pool.rng.NormFloat64()*AmiiboMutationSD)
+		clone.ArtifactAffinity = clampUnit(clone.ArtifactAffinity + pool.rng.NormFloat64()*AmiiboMutationSD)
 
 		pool.Population[loserIdx] = clone
+	}
+
+	// Immigration: every N generations, replace one mid-tier individual
+	// with fresh random DNA. Prevents convergent collapse.
+	if pool.GenCount%amiiboImmigrationInterval == 0 {
+		immigrantIdx := indices[AmiiboKillCount] // lowest non-killed slot
+		pool.Population[immigrantIdx] = AmiiboDNA{
+			DeckKey:          pool.DeckKey,
+			Aggression:       pool.rng.Float64(),
+			ComboPat:         pool.rng.Float64(),
+			ThreatParanoia:   pool.rng.Float64(),
+			ResourceGreed:    pool.rng.Float64(),
+			PoliticalMemory:  pool.rng.Float64(),
+			DrainAffinity:    pool.rng.Float64(),
+			ArtifactAffinity: pool.rng.Float64(),
+			Fitness:          0.25,
+		}
 	}
 
 	pool.GameCount = 0
@@ -132,15 +273,24 @@ func InitPool(deckKey string, rng *rand.Rand) AmiiboPool {
 	pool := AmiiboPool{DeckKey: deckKey, rng: rng}
 	for i := range pool.Population {
 		pool.Population[i] = AmiiboDNA{
-			DeckKey:         deckKey,
-			Aggression:      rng.Float64(),
-			ComboPat:        rng.Float64(),
-			ThreatParanoia:  rng.Float64(),
-			ResourceGreed:   rng.Float64(),
-			PoliticalMemory: rng.Float64(),
-			Fitness:         0.25, // baseline expected winrate in 4-player
+			DeckKey:          deckKey,
+			Aggression:       rng.Float64(),
+			ComboPat:         rng.Float64(),
+			ThreatParanoia:   rng.Float64(),
+			ResourceGreed:    rng.Float64(),
+			PoliticalMemory:  rng.Float64(),
+			DrainAffinity:    rng.Float64(),
+			ArtifactAffinity: rng.Float64(),
+			Fitness:          0.25, // baseline expected winrate in 4-player
 		}
 	}
+	return pool
+}
+
+// InitPoolWithBracket creates a fresh population with bracket info for normalization.
+func InitPoolWithBracket(deckKey string, bracket int, rng *rand.Rand) AmiiboPool {
+	pool := InitPool(deckKey, rng)
+	pool.Bracket = bracket
 	return pool
 }
 

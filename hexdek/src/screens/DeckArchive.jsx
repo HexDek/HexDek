@@ -121,6 +121,24 @@ export default function DeckArchive() {
   const valueKeys = analysis?.value_engine_keys || []
   const evalWeights = analysis?.eval_weights || {}
   const cards = deck?.cards || []
+  const manaBaseGrade = analysis?.mana_base_grade || null
+  const keepableHandPct = analysis?.keepable_hand_pct ?? null
+  const powerPercentile = analysis?.power_percentile ?? null
+  const commanderSynergy = analysis?.commander_synergy ?? null
+  const commanderThemes = analysis?.commander_themes || []
+  const starCards = analysis?.star_cards || []
+  const cuttableCards = analysis?.cuttable_cards || []
+  const vulnerableTo = analysis?.vulnerable_to || []
+  const finisherCards = analysis?.finisher_cards || []
+  const comboNotes = analysis?.combo_notes || []
+  const curveWarnings = analysis?.curve_warnings || []
+  const colorMismatch = analysis?.color_mismatch || []
+  const legality = analysis?.legality || null
+  const gameChangerCards = analysis?.game_changer_cards || []
+  const interactionAvgCmc = analysis?.interaction_avg_cmc ?? null
+  const cheapInteraction = analysis?.cheap_interaction ?? null
+  const emergentSynergies = analysis?.emergent_synergies || []
+  const metaMatchups = analysis?.meta_matchups || []
 
   const clientCurve = (() => {
     if (!cards.length) return null
@@ -220,7 +238,19 @@ export default function DeckArchive() {
               ['PLAYS LIKE', pls ? `B${pls}${plsLabel ? ' ' + plsLabel : ''}${pls != wbs ? ' ⬆' : ''}` : '—'],
               ['GAME CHANGERS', gameChangers != null ? `${gameChangers}` : '—'],
               ['ARCHETYPE', archetype],
+              ...(legality ? [['LEGALITY', <span style={{ color: legality.valid ? 'var(--ok)' : 'var(--danger)', fontWeight: 700 }}>{legality.valid ? 'LEGAL' : 'ILLEGAL'}</span>]] : []),
+              ...(manaBaseGrade ? [['MANA BASE', manaBaseGrade]] : []),
+              ...(powerPercentile != null ? [['POWER', `TOP ${powerPercentile}%`]] : []),
+              ...(commanderSynergy != null ? [['CMDR SYNERGY', `${Math.round(commanderSynergy * 100)}%`]] : []),
+              ...(keepableHandPct != null ? [['KEEPABLE HANDS', `${Math.round(keepableHandPct)}%`]] : []),
+              ...(interactionAvgCmc != null ? [['INTERACTION CMC', `AVG ${Math.round(interactionAvgCmc * 10) / 10}`]] : []),
+              ...(cheapInteraction != null ? [['CHEAP REMOVAL', `${cheapInteraction} AT ≤2 CMC`]] : []),
             ]} />
+            {commanderThemes.length > 0 && (
+              <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {commanderThemes.map((t, i) => <Tag key={i}>{t.toUpperCase()}</Tag>)}
+              </div>
+            )}
             {deckElo && (
               <>
                 <div className="hr" style={{ margin: '10px 0' }} />
@@ -470,12 +500,133 @@ export default function DeckArchive() {
             </Panel>
           )}
 
+          {/* Legality violations */}
+          {legality && !legality.valid && (
+            <Panel code="04.L" title="LEGALITY VIOLATIONS" right={<Tag kind="bad" solid>ILLEGAL</Tag>}>
+              {legality.errors?.map((e, i) => (
+                <div key={i} className="t-xs" style={{ color: 'var(--danger)', padding: '2px 0' }}>&gt; {e}</div>
+              ))}
+              {legality.warnings?.map((w, i) => (
+                <div key={i} className="t-xs" style={{ color: 'var(--warn)', padding: '2px 0' }}>&gt; {w}</div>
+              ))}
+            </Panel>
+          )}
+
+          {/* Warnings: curve, color, combo */}
+          {(curveWarnings.length > 0 || colorMismatch.length > 0 || comboNotes.length > 0) && (
+            <Panel code="04.W" title="WARNINGS" right={<Tag kind="warn" solid>{curveWarnings.length + colorMismatch.length + comboNotes.length}</Tag>}>
+              {curveWarnings.map((w, i) => (
+                <div key={`c${i}`} className="t-xs" style={{ color: 'var(--warn)', padding: '2px 0' }}>&gt; CURVE: {w}</div>
+              ))}
+              {colorMismatch.map((w, i) => (
+                <div key={`m${i}`} className="t-xs" style={{ color: 'var(--warn)', padding: '2px 0' }}>&gt; COLOR: {w}</div>
+              ))}
+              {comboNotes.map((w, i) => (
+                <div key={`n${i}`} className="t-xs" style={{ color: 'var(--ink-2)', padding: '2px 0' }}>&gt; COMBO: {w}</div>
+              ))}
+            </Panel>
+          )}
+
+          {/* Meta matchups */}
+          {metaMatchups.length > 0 && (
+            <Panel code="04.MM" title={`META POSITIONING / / ${archetype}`}>
+              <div style={{ display: 'grid', gap: 0 }}>
+                {metaMatchups.map((m, i) => {
+                  const ratingColor = m.rating === 'favored' ? 'var(--ok)' : m.rating === 'unfavored' ? 'var(--danger)' : 'var(--ink-2)'
+                  const ratingSymbol = m.rating === 'favored' ? '▲' : m.rating === 'unfavored' ? '▼' : '—'
+                  return (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: i < metaMatchups.length - 1 ? '1px dotted var(--rule)' : 'none' }}>
+                      <div>
+                        <span className="t-xs" style={{ fontWeight: 700 }}>vs {m.archetype?.toUpperCase()}</span>
+                        {m.reason && <div className="t-xs muted" style={{ marginTop: 1 }}>{m.reason}</div>}
+                      </div>
+                      <Tag solid kind={m.rating === 'favored' ? 'ok' : m.rating === 'unfavored' ? 'bad' : null}>
+                        {ratingSymbol} {m.rating?.toUpperCase()}
+                      </Tag>
+                    </div>
+                  )
+                })}
+              </div>
+            </Panel>
+          )}
+
+          {/* Vulnerable to */}
+          {vulnerableTo.length > 0 && (
+            <Panel code="04.V" title="VULNERABLE TO">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {vulnerableTo.map((v, i) => <Tag key={i} kind="warn" solid>{v.toUpperCase()}</Tag>)}
+              </div>
+            </Panel>
+          )}
+
+          {/* Star cards */}
+          {starCards.length > 0 && (
+            <Panel code="04.S" title={`STAR CARDS / / ${starCards.length}`}>
+              <div className="grid col-5 gap-2">
+                {starCards.slice(0, 10).map((name, i) => (
+                  <CardThumb key={i} name={name} score="★" />
+                ))}
+              </div>
+            </Panel>
+          )}
+
+          {/* Finisher cards */}
+          {finisherCards.length > 0 && (
+            <Panel code="04.K" title={`WIN CONDITIONS / / ${finisherCards.length}`}>
+              <div className="grid col-5 gap-2">
+                {finisherCards.slice(0, 10).map((name, i) => (
+                  <CardThumb key={i} name={name} />
+                ))}
+              </div>
+            </Panel>
+          )}
+
           {/* Value engine keys */}
           {valueKeys.length > 0 && (
             <Panel code="04.E" title={`VALUE ENGINE / / ${valueKeys.length} KEY CARDS`}>
               <div className="grid col-5 gap-2">
                 {valueKeys.slice(0, 10).map((name, i) => (
                   <CardThumb key={i} name={name} />
+                ))}
+              </div>
+            </Panel>
+          )}
+
+          {/* Game Changer cards */}
+          {gameChangerCards.length > 0 && (
+            <Panel code="04.GC" title={`GAME CHANGERS / / ${gameChangerCards.length}`} right={<Tag kind="bad" solid>B4+</Tag>}>
+              <div className="grid col-5 gap-2">
+                {gameChangerCards.map((name, i) => (
+                  <CardThumb key={i} name={name} />
+                ))}
+              </div>
+            </Panel>
+          )}
+
+          {/* Emergent synergies */}
+          {emergentSynergies.length > 0 && (
+            <Panel code="04.H" title={`EMERGENT SYNERGIES / / ${emergentSynergies.length} DISCOVERED`}>
+              {emergentSynergies.slice(0, 12).map((syn, i) => (
+                <div key={i} style={{ padding: '6px 0', borderBottom: i < emergentSynergies.length - 1 ? '1px dashed var(--rule-2)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div className="t-md" style={{ fontWeight: 700 }}>{syn.cards?.join(' + ')}</div>
+                    {syn.effect_pattern && <div className="t-xs muted" style={{ marginTop: 2 }}>{syn.effect_pattern}</div>}
+                  </div>
+                  <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <Tag solid kind={syn.tier >= 3 ? 'ok' : null}>T{syn.tier}</Tag>
+                    {syn.observation_count > 0 && <span className="t-xs muted" style={{ marginLeft: 6 }}>{syn.observation_count}× seen</span>}
+                  </div>
+                </div>
+              ))}
+            </Panel>
+          )}
+
+          {/* Cuttable cards */}
+          {cuttableCards.length > 0 && (
+            <Panel code="04.Q" title="CONSIDER CUTTING">
+              <div className="grid col-5 gap-2">
+                {cuttableCards.slice(0, 10).map((name, i) => (
+                  <CardThumb key={i} name={name} compact />
                 ))}
               </div>
             </Panel>

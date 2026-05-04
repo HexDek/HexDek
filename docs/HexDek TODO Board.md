@@ -21,14 +21,14 @@ kanban-plugin: board
 - [ ] Operator platform page/tab (operator profile, deck management, analytics dashboard) #ui #platform
 - [ ] Friends system + player profiles — lightweight "pub" model: see each other's decks/ELO, no feed/notifications. Add via search or deck page #ui #social
 - [ ] Bracket-stratified leaderboard tabs — filter by B1-B5, separate rankings per bracket #ui
-- [ ] Game Changer cards list on deck page — show which specific GC cards the deck runs #ui
+- [x] Game Changer cards list on deck page — GC card names persisted to strategy.json + "GAME CHANGERS" panel with art thumbnails on deck drilldown (2026-05-04) #ui
 
 ### Legality Flag (7174n1c — 2026-05-02)
 
-- [ ] **Persist legality in strategy JSON** — Freya already runs 5 checks (card count, color identity, singleton, banned list, commander legality) but doesn't write `LegalityReport` to `.strategy.json`. Add `legality` field to output #engine #freya
-- [ ] **Legality badge on deck cards** — DeckList card tiles: green check if legal, red flag if violations. Tooltip or expandable with specific errors (e.g. "Banned: Dockside Extortionist", "Color identity: Expressive Iteration outside Boros") #ui #legality
-- [ ] **Legality section on deck info panel** — DeckArchive sidebar: new KV row `LEGALITY` with LEGAL/ILLEGAL status. If illegal, expandable violation list below #ui #legality
-- [ ] **Legality filter on deck browse** — filter/sort decks by legal/illegal status on the DECKS page #ui #legality
+- [x] **Persist legality in strategy JSON** — Freya already runs 5 checks (card count, color identity, singleton, banned list, commander legality) but doesn't write `LegalityReport` to `.strategy.json`. Add `legality` field to output (2026-05-04) #engine #freya
+- [x] **Legality badge on deck cards** — DeckList card tiles: green ✓ / red ✗ next to bracket. Legality read from strategy.json via enrichDeckSummary (2026-05-04) #ui #legality
+- [x] **Legality section on deck info panel** — DeckArchive sidebar: new KV row `LEGALITY` with LEGAL/ILLEGAL status. If illegal, expandable violation list panel (2026-05-04) #ui #legality
+- [x] **Legality filter on deck browse** — ALL/✓LEGAL/✗ILLEGAL filter tags on DECKS page, reads `d.legal` from API (2026-05-04) #ui #legality
 - [ ] **Fix Meglin phantom metadata** — 3 Meglin decks (`brudiclad`, `lich_jarads_rats`, `sisay_trix`) missing commander card + bracket. Re-import with COMMANDER: header or manual fix #data
 
 ### Freya → UI Wiring Pass (2026-05-02 audit)
@@ -36,32 +36,32 @@ kanban-plugin: board
 *14 fields computed by Freya, written to strategy.json, but never displayed by the frontend.*
 
 **Deck identity & strength:**
-- [ ] **Star cards display** — `star_cards`: deck's best cards (Lovelace Composer scoring). Show as highlighted cards on deck page, gold border or star icon #ui #wiring
-- [ ] **Cuttable cards display** — `cuttable_cards`: weakest cards / upgrade candidates. Show in a "Consider Cutting" section, subtle styling #ui #wiring
-- [ ] **Power percentile badge** — `power_percentile`: power ranking vs all analyzed decks. Show as "Top X%" badge on deck card and info panel #ui #wiring
-- [ ] **Commander synergy score** — `commander_synergy`: 0-1 float, how well the 99 supports the commander. Show as percentage or bar in deck info #ui #wiring
-- [ ] **Commander themes** — `commander_themes`: keyword themes the commander cares about. Display as tags on deck page #ui #wiring
+- [x] **Star cards display** — `star_cards`: deck's best cards (Lovelace Composer scoring). Show as highlighted cards on deck page, art thumbnails with ★ score (2026-05-04) #ui #wiring
+- [x] **Cuttable cards display** — `cuttable_cards`: weakest cards / upgrade candidates. Show in a "Consider Cutting" section, compact thumbnails (2026-05-04) #ui #wiring
+- [x] **Power percentile badge** — `power_percentile`: power ranking vs all analyzed decks. Show as "Top X%" in deck info KV row (2026-05-04) #ui #wiring
+- [x] **Commander synergy score** — `commander_synergy`: 0-1 float, how well the 99 supports the commander. Show as percentage in deck info KV row (2026-05-04) #ui #wiring
+- [x] **Commander themes** — `commander_themes`: keyword themes the commander cares about. Display as tags on deck page (2026-05-04) #ui #wiring
 
 **Tactical intel:**
-- [ ] **Vulnerable-to warnings** — `vulnerable_to`: deck weaknesses (e.g. "graveyard hate", "board wipes"). Show in strategy section as caution tags #ui #wiring
-- [ ] **Meta matchups** — `meta_matchups`: archetype matchup ratings. Show as mini matchup chart (favored/even/unfavored vs aggro/combo/control/etc) #ui #wiring
-- [ ] **Mana base grade** — `mana_base_grade`: letter grade for mana base quality. Show in deck info panel KV row #ui #wiring
-- [ ] **Keepable hand %** — `keepable_hand_pct`: estimated % of opening hands worth keeping. Show in deck info or stats section #ui #wiring
-- [ ] **Interaction profile** — `interaction_avg_cmc` + `cheap_interaction`: average interaction cost + count at ≤2 CMC. Show in strategy section #ui #wiring
+- [x] **Vulnerable-to warnings** — `vulnerable_to`: deck weaknesses (e.g. "graveyard hate", "board wipes"). Show in strategy section as caution tags (2026-05-04) #ui #wiring
+- [x] **Meta matchups** — `meta_matchups`: archetype matchup grid with favored/neutral/unfavored ratings + reason tooltips. Reason field added to strategy JSON (2026-05-04) #ui #wiring
+- [x] **Mana base grade** — `mana_base_grade`: letter grade for mana base quality. Show in deck info panel KV row (2026-05-04) #ui #wiring
+- [x] **Keepable hand %** — `keepable_hand_pct`: estimated % of opening hands worth keeping. Show in deck info KV row (2026-05-04) #ui #wiring
+- [x] **Interaction profile** — `interaction_avg_cmc` + `cheap_interaction`: KV rows for avg CMC + count at ≤2 CMC in deck info sidebar (2026-05-04) #ui #wiring
 
 **Card-level data:**
 - [ ] **Card roles grid** — `card_roles`: per-card role tag (ramp/draw/removal/combo/etc). Powers the Ive card grid grouped by Freya role #ui #wiring #design
-- [ ] **Finisher cards callout** — `finisher_cards`: the actual win-condition cards. Highlight in deck list or dedicated "Win Conditions" section #ui #wiring
-- [ ] **Color demand heatmap** — `color_demand`: per-color pip demand map. Show alongside color balance chart for demand vs supply #ui #wiring
+- [x] **Finisher cards callout** — `finisher_cards`: the actual win-condition cards. "Win Conditions" panel with art thumbnails (2026-05-04) #ui #wiring
+- [x] **Color demand heatmap** — already implemented: Color Balance panel shows production vs demand bars reading `color_demand` from strategy.json (2026-05-04) #ui #wiring
 
 **Discovery data:**
-- [ ] **Emergent synergies display** — `emergent_synergies`: Huginn-discovered card interactions (tier, observation count, impact). Show in Freya analysis section as discovered combos/synergies #ui #wiring
+- [x] **Emergent synergies display** — `emergent_synergies`: Huginn-discovered card interactions, tier badges, observation count. Panel with card pairs + effect patterns (2026-05-04) #ui #wiring
 
 **Freya output gaps (compute exists, not written to strategy.json):**
-- [ ] **Persist legality report** — already tracked above in Legality Flag section #engine #freya
-- [ ] **Persist curve warnings** — `CurveWarnings` from FreyaReport, structural mana curve issues #engine #freya
-- [ ] **Persist color mismatch warnings** — `ColorMismatch` from FreyaReport, under/over-represented colors #engine #freya
-- [ ] **Persist combo notes** — `ComboNotes` from FreyaReport, partial combo piece warnings #engine #freya
+- [x] **Persist legality report** — already tracked above in Legality Flag section (2026-05-04) #engine #freya
+- [x] **Persist curve warnings** — `CurveWarnings` from FreyaReport, structural mana curve issues (2026-05-04) #engine #freya
+- [x] **Persist color mismatch warnings** — `ColorMismatch` from FreyaReport, under/over-represented colors (2026-05-04) #engine #freya
+- [x] **Persist combo notes** — `ComboNotes` from FreyaReport, partial combo piece warnings (2026-05-04) #engine #freya
 
 ### UX Overhaul (Ive/Jobs/Watts Quorum — 2026-05-02)
 

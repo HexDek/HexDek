@@ -235,3 +235,83 @@ func TestParseDeckFile_RealPartnerDecks(t *testing.T) {
 		}
 	}
 }
+
+func TestParseDeckReader_BareCardNames(t *testing.T) {
+	meta := &MetaDB{byName: map[string]*CardMeta{}}
+	for _, n := range []string{"Tinybones, the Pickpocket", "Sol Ring", "Dark Ritual", "Swamp"} {
+		meta.byName[normalizeName(n)] = &CardMeta{
+			Name: n, TypeLine: "Legendary Creature", Types: []string{"legendary", "creature"}, CMC: 1,
+		}
+	}
+	text := `COMMANDER: Tinybones, the Pickpocket
+Sol Ring
+Dark Ritual
+Swamp
+`
+	td, err := ParseDeckReader(strings.NewReader(text), nil, meta)
+	if err != nil {
+		t.Fatalf("parse bare names: %v", err)
+	}
+	if td.CommanderName != "Tinybones, the Pickpocket" {
+		t.Fatalf("commander want Tinybones, got %q", td.CommanderName)
+	}
+	if len(td.Library) != 3 {
+		t.Fatalf("library want 3 cards, got %d", len(td.Library))
+	}
+}
+
+func TestParseDeckReader_SideboardDropped(t *testing.T) {
+	meta := &MetaDB{byName: map[string]*CardMeta{}}
+	for _, n := range []string{"Tinybones, the Pickpocket", "Sol Ring", "Dark Ritual", "Swamp", "Lightning Greaves", "Feed the Swarm"} {
+		meta.byName[normalizeName(n)] = &CardMeta{
+			Name: n, TypeLine: "Legendary Creature", Types: []string{"legendary", "creature"}, CMC: 1,
+		}
+	}
+	text := `COMMANDER: Tinybones, the Pickpocket
+1 Sol Ring
+1 Dark Ritual
+1 Swamp
+
+Sideboard
+1 Lightning Greaves
+1 Feed the Swarm
+`
+	td, err := ParseDeckReader(strings.NewReader(text), nil, meta)
+	if err != nil {
+		t.Fatalf("parse sideboard: %v", err)
+	}
+	if len(td.Library) != 3 {
+		t.Fatalf("library want 3 (sideboard dropped), got %d", len(td.Library))
+	}
+	for _, c := range td.Library {
+		if c.Name == "Lightning Greaves" || c.Name == "Feed the Swarm" {
+			t.Fatalf("sideboard card %q leaked into library", c.Name)
+		}
+	}
+}
+
+func TestParseDeckReader_SectionHeaderVariants(t *testing.T) {
+	meta := &MetaDB{byName: map[string]*CardMeta{}}
+	for _, n := range []string{"Tinybones, the Pickpocket", "Sol Ring", "Mana Crypt", "Dark Ritual"} {
+		meta.byName[normalizeName(n)] = &CardMeta{
+			Name: n, TypeLine: "Legendary Creature", Types: []string{"legendary", "creature"}, CMC: 1,
+		}
+	}
+	text := `COMMANDER: Tinybones, the Pickpocket
+Deck
+1 Sol Ring
+
+Sideboard
+1 Mana Crypt
+
+Maybeboard
+Dark Ritual
+`
+	td, err := ParseDeckReader(strings.NewReader(text), nil, meta)
+	if err != nil {
+		t.Fatalf("parse sections: %v", err)
+	}
+	if len(td.Library) != 1 {
+		t.Fatalf("library want 1 (only Sol Ring from Deck section), got %d", len(td.Library))
+	}
+}

@@ -20,7 +20,25 @@ type EvalWeights struct {
 	PartnerSynergy     float64 `json:"partner_synergy"`
 	ActivationTempo    float64 `json:"activation_tempo"`
 	ToolboxBreadth     float64 `json:"toolbox_breadth"`
-	ThreatTrajectory   float64 `json:"threat_trajectory"`
+	ThreatTrajectory      float64 `json:"threat_trajectory"`
+	StackInteraction      float64 `json:"stack_interaction"`
+	PlaneswalkerProgress  float64 `json:"planeswalker_progress"`
+	ExileZoneAssets       float64 `json:"exile_zone_assets"`
+	StaxLockProgress      float64 `json:"stax_lock_progress"`
+}
+
+const NumDimensions = 20
+
+func (w EvalWeights) AsArray() [NumDimensions]float64 {
+	return [NumDimensions]float64{
+		w.BoardPresence, w.CardAdvantage, w.ManaAdvantage,
+		w.LifeResource, w.ComboProximity, w.ThreatExposure,
+		w.CommanderProgress, w.GraveyardValue, w.DrainEngine,
+		w.ArtifactSynergy, w.EnchantmentSynergy, w.OpponentGraveyardThreat,
+		w.PartnerSynergy, w.ActivationTempo, w.ToolboxBreadth,
+		w.ThreatTrajectory, w.StackInteraction, w.PlaneswalkerProgress,
+		w.ExileZoneAssets, w.StaxLockProgress,
+	}
 }
 
 var archetypeWeights = map[string]EvalWeights{
@@ -41,6 +59,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ActivationTempo:        0.2,
 		ToolboxBreadth:         0.2,
 		ThreatTrajectory:       0.3,
+		StackInteraction:       0.2,
+		PlaneswalkerProgress:   0.4,
+		ExileZoneAssets:        0.6,
+		StaxLockProgress:       0.1,
 	},
 	ArchetypeCombo: {
 		BoardPresence:          0.4,
@@ -59,6 +81,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ActivationTempo:        0.3,
 		ToolboxBreadth:         0.6,
 		ThreatTrajectory:       0.5,
+		StackInteraction:       0.6,
+		PlaneswalkerProgress:   0.3,
+		ExileZoneAssets:        0.4,
+		StaxLockProgress:       0.3,
 	},
 	ArchetypeControl: {
 		BoardPresence:          0.5,
@@ -77,6 +103,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ActivationTempo:        0.7,
 		ToolboxBreadth:         0.7,
 		ThreatTrajectory:       0.8,
+		StackInteraction:       1.5,
+		PlaneswalkerProgress:   0.8,
+		ExileZoneAssets:        0.4,
+		StaxLockProgress:       0.6,
 	},
 	ArchetypeMidrange: {
 		BoardPresence:          1.0,
@@ -95,6 +125,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ActivationTempo:        0.4,
 		ToolboxBreadth:         0.5,
 		ThreatTrajectory:       0.5,
+		StackInteraction:       0.7,
+		PlaneswalkerProgress:   0.6,
+		ExileZoneAssets:        0.5,
+		StaxLockProgress:       0.2,
 	},
 	ArchetypeRamp: {
 		BoardPresence:          0.6,
@@ -113,6 +147,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ActivationTempo:        0.4,
 		ToolboxBreadth:         0.3,
 		ThreatTrajectory:       0.4,
+		StackInteraction:       0.3,
+		PlaneswalkerProgress:   0.5,
+		ExileZoneAssets:        0.3,
+		StaxLockProgress:       0.1,
 	},
 	ArchetypeStax: {
 		BoardPresence:          0.7,
@@ -131,6 +169,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ActivationTempo:        0.5,
 		ToolboxBreadth:         0.4,
 		ThreatTrajectory:       0.7,
+		StackInteraction:       0.8,
+		PlaneswalkerProgress:   0.5,
+		ExileZoneAssets:        0.2,
+		StaxLockProgress:       2.0,
 	},
 	ArchetypeReanimator: {
 		BoardPresence:          0.8,
@@ -149,6 +191,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ActivationTempo:        0.3,
 		ToolboxBreadth:         0.4,
 		ThreatTrajectory:       0.5,
+		StackInteraction:       0.4,
+		PlaneswalkerProgress:   0.3,
+		ExileZoneAssets:        0.2,
+		StaxLockProgress:       0.2,
 	},
 	ArchetypeSpellslinger: {
 		BoardPresence:          0.4,
@@ -167,6 +213,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ActivationTempo:        0.3,
 		ToolboxBreadth:         0.6,
 		ThreatTrajectory:       0.5,
+		StackInteraction:       1.0,
+		PlaneswalkerProgress:   0.4,
+		ExileZoneAssets:        0.6,
+		StaxLockProgress:       0.2,
 	},
 	ArchetypeTribal: {
 		BoardPresence:          1.4,
@@ -185,6 +235,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ActivationTempo:        0.3,
 		ToolboxBreadth:         0.3,
 		ThreatTrajectory:       0.4,
+		StackInteraction:       0.3,
+		PlaneswalkerProgress:   0.3,
+		ExileZoneAssets:        0.3,
+		StaxLockProgress:       0.1,
 	},
 	ArchetypeAristocrats: {
 		BoardPresence:          0.6,
@@ -203,6 +257,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ActivationTempo:        0.5,
 		ToolboxBreadth:         0.3,
 		ThreatTrajectory:       0.4,
+		StackInteraction:       0.4,
+		PlaneswalkerProgress:   0.3,
+		ExileZoneAssets:        0.3,
+		StaxLockProgress:       0.2,
 	},
 	ArchetypeSelfmill: {
 		BoardPresence:          0.5,
@@ -221,6 +279,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ActivationTempo:        0.3,
 		ToolboxBreadth:         0.3,
 		ThreatTrajectory:       0.4,
+		StackInteraction:       0.3,
+		PlaneswalkerProgress:   0.2,
+		ExileZoneAssets:        0.2,
+		StaxLockProgress:       0.1,
 	},
 	ArchetypeEnchantress: {
 		BoardPresence:          0.5,
@@ -239,6 +301,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ActivationTempo:        0.4,
 		ToolboxBreadth:         0.4,
 		ThreatTrajectory:       0.5,
+		StackInteraction:       0.4,
+		PlaneswalkerProgress:   0.3,
+		ExileZoneAssets:        0.3,
+		StaxLockProgress:       0.4,
 	},
 	ArchetypeArtifacts: {
 		BoardPresence:          0.7,
@@ -257,6 +323,10 @@ var archetypeWeights = map[string]EvalWeights{
 		ActivationTempo:        0.6,
 		ToolboxBreadth:         0.4,
 		ThreatTrajectory:       0.5,
+		StackInteraction:       0.5,
+		PlaneswalkerProgress:   0.3,
+		ExileZoneAssets:        0.3,
+		StaxLockProgress:       0.5,
 	},
 }
 

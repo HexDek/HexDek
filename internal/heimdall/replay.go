@@ -197,14 +197,14 @@ func ReplayWithObservation(rc *ReplayContext, seed GameSeed, obs *Observer) erro
 		gs.Turn = turn
 
 		// Snapshot battlefield before turn to detect new permanents.
-		preBF := snapshotBattlefieldNames(gs)
+		preBF := SnapshotBattlefieldNames(gs)
 
 		tournament.TakeTurn(gs)
 		gameengine.StateBasedActions(gs)
 
 		// Detect new permanents this turn.
-		postBF := snapshotBattlefieldNames(gs)
-		newCards := diffBattlefield(preBF, postBF)
+		postBF := SnapshotBattlefieldNames(gs)
+		newCards := DiffBattlefield(preBF, postBF)
 		if len(newCards) > 0 {
 			turnETBs[turn] = newCards
 		}
@@ -238,11 +238,11 @@ func ReplayWithObservation(rc *ReplayContext, seed GameSeed, obs *Observer) erro
 	}
 
 	// 1. Parser gaps: scan all permanents for the parser_gap flag.
-	observation.ParserGaps = extractParserGaps(gs)
+	observation.ParserGaps = ExtractParserGaps(gs)
 
 	// 2. Co-triggers: cards that entered the battlefield within the same
 	//    or adjacent turns. Simplified version of Huginn's full analysis.
-	observation.CoTriggers = extractCoTriggers(turnETBs)
+	observation.CoTriggers = ExtractCoTriggers(turnETBs)
 
 	// 3. Combo detection: TODO — requires Freya integration to know what
 	//    the deck's intended combo line is and whether pieces were
@@ -304,10 +304,10 @@ func replayWithRecovery(rc *ReplayContext, seed GameSeed, obs *Observer) (retErr
 // Observation extraction helpers
 // ---------------------------------------------------------------------------
 
-// extractParserGaps scans all permanents across all seats for the
+// ExtractParserGaps scans all permanents across all seats for the
 // "parser_gap" flag, which the engine's resolver sets when it encounters
 // an unhandled ability kind.
-func extractParserGaps(gs *gameengine.GameState) []string {
+func ExtractParserGaps(gs *gameengine.GameState) []string {
 	if gs == nil {
 		return nil
 	}
@@ -341,11 +341,11 @@ func extractParserGaps(gs *gameengine.GameState) []string {
 	return gaps
 }
 
-// extractCoTriggers finds pairs of cards that entered the battlefield
+// ExtractCoTriggers finds pairs of cards that entered the battlefield
 // within the same or adjacent turns. This is a simplified approximation
 // of Huginn's full synergy analysis — real co-trigger scoring requires
 // causal chain tracking, which lives in Huginn proper.
-func extractCoTriggers(turnETBs map[int][]string) []CoTriggerPair {
+func ExtractCoTriggers(turnETBs map[int][]string) []CoTriggerPair {
 	if len(turnETBs) == 0 {
 		return nil
 	}
@@ -394,9 +394,9 @@ func extractCoTriggers(turnETBs map[int][]string) []CoTriggerPair {
 	return pairs
 }
 
-// snapshotBattlefieldNames returns a multiset (name -> count) of all
+// SnapshotBattlefieldNames returns a multiset (name -> count) of all
 // permanent names currently on the battlefield.
-func snapshotBattlefieldNames(gs *gameengine.GameState) map[string]int {
+func SnapshotBattlefieldNames(gs *gameengine.GameState) map[string]int {
 	counts := make(map[string]int)
 	for _, seat := range gs.Seats {
 		if seat == nil {
@@ -412,9 +412,9 @@ func snapshotBattlefieldNames(gs *gameengine.GameState) map[string]int {
 	return counts
 }
 
-// diffBattlefield returns names of permanents that are new in post
+// DiffBattlefield returns names of permanents that are new in post
 // relative to pre (accounting for counts).
-func diffBattlefield(pre, post map[string]int) []string {
+func DiffBattlefield(pre, post map[string]int) []string {
 	var newCards []string
 	for name, postCount := range post {
 		preCount := pre[name]

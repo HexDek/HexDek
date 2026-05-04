@@ -1,0 +1,91 @@
+package per_card
+
+import (
+	"github.com/hexdek/hexdek/internal/gameengine"
+)
+
+// registerBurakosPartyLeader wires Burakos, Party Leader.
+//
+// Oracle text:
+//
+//	Burakos is also a Cleric, Rogue, Warrior, and Wizard.
+//	Whenever Burakos attacks, defending player loses X life and you
+//	create X Treasure tokens, where X is the number of creatures in
+//	your party.
+//
+// Party = up to one Cleric, Rogue, Warrior, and Wizard you control. Max
+// X = 4.
+func registerBurakosPartyLeader(r *Registry) {
+	r.OnTrigger("Burakos, Party Leader", "attacks", burakosAttacks)
+}
+
+func burakosAttacks(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	const slug = "burakos_party_attack"
+	if gs == nil || perm == nil || ctx == nil {
+		return
+	}
+	attackerSeat, _ := ctx["seat"].(int)
+	if attackerSeat != perm.Controller {
+		return
+	}
+	defenderSeat, _ := ctx["defender_seat"].(int)
+	if defenderSeat < 0 || defenderSeat >= len(gs.Seats) {
+		return
+	}
+	seat := gs.Seats[perm.Controller]
+	if seat == nil {
+		return
+	}
+	hasCleric, hasRogue, hasWarrior, hasWizard := false, false, false, false
+	for _, p := range seat.Battlefield {
+		if p == nil || !p.IsCreature() || p.Card == nil {
+			continue
+		}
+		if cardHasType(p.Card, "cleric") {
+			hasCleric = true
+		}
+		if cardHasType(p.Card, "rogue") {
+			hasRogue = true
+		}
+		if cardHasType(p.Card, "warrior") {
+			hasWarrior = true
+		}
+		if cardHasType(p.Card, "wizard") {
+			hasWizard = true
+		}
+	}
+	x := 0
+	for _, b := range []bool{hasCleric, hasRogue, hasWarrior, hasWizard} {
+		if b {
+			x++
+		}
+	}
+	if x <= 0 {
+		emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
+			"seat":    perm.Controller,
+			"party":   0,
+			"life":    0,
+			"tokens":  0,
+		})
+		return
+	}
+	def := gs.Seats[defenderSeat]
+	if def != nil {
+		def.Life -= x
+		gs.LogEvent(gameengine.Event{
+			Kind:   "life_lost",
+			Seat:   defenderSeat,
+			Source: perm.Card.DisplayName(),
+			Amount: x,
+		})
+	}
+	for i := 0; i < x; i++ {
+		gameengine.CreateTreasureToken(gs, perm.Controller)
+	}
+	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
+		"seat":   perm.Controller,
+		"party":  x,
+		"life":   x,
+		"tokens": x,
+	})
+}

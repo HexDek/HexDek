@@ -93,8 +93,8 @@ const ImportModal = ({ onClose, onImported }) => {
             />
           </div>
           <div className="t-xs muted-2">
-            FORMAT: "COMMANDER: Card Name" ON FIRST LINE, THEN "1 Card Name" PER LINE.
-            COMMENTS (#) AND BLANK LINES ARE IGNORED.
+            FORMAT: "COMMANDER: Card Name" ON FIRST LINE, THEN "1 Card Name" OR JUST "Card Name" PER LINE.
+            SIDEBOARD/MAYBEBOARD SECTIONS ARE IGNORED. COMMENTS (#) AND BLANK LINES IGNORED.
           </div>
           {error && <div className="t-xs" style={{ color: 'var(--danger)' }}>&gt; ERROR: {error}</div>}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -225,7 +225,7 @@ const NewSlot = ({ slot, onImport }) => (
 
 /* ─── Main Dashboard ─────────────────────────────────────────── */
 export default function Dashboard() {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const { data: profile } = useProfile()
   const { data: decks, refetch: refetchDecks } = useDecks()
   const { data: games } = useGames()
@@ -294,6 +294,17 @@ export default function Dashboard() {
   const kpiGames = activeDeckELO ? activeDeckELO.games : profile.gamesPlayed
   const kpiWinRate = activeDeckELO ? activeDeckELO.win_rate : profile.winRate
   const kpiLabel = activeDeckData ? activeDeckData.name : 'ALL DECKS'
+
+  if (authLoading) {
+    return (
+      <>
+        <Tape left="DASHBOARD / / DOC HX-301" mid="AUTHENTICATING" right="STANDBY" />
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+          <div className="t-xs muted">VERIFYING CREDENTIALS . . .</div>
+        </div>
+      </>
+    )
+  }
 
   return (
     <>

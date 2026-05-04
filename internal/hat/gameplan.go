@@ -38,6 +38,7 @@ type PlanState struct {
 	ComboTotal     int     // total pieces needed (from Freya)
 	ThreatLevel    float64 // highest opponent threat score
 	TurnsSincePlan int     // turns in current plan (for timeout transitions)
+	ComboPatience  int     // Amiibo-tuned Assemble→Pivot timeout (0 = use default 5)
 }
 
 // Evaluate updates the plan state based on the current game situation and
@@ -81,7 +82,7 @@ func (ps *PlanState) Evaluate(combo *ComboAssessment, threatLevel float64) {
 		ps.Current = PlanDevelop
 		ps.TurnsSincePlan = 0
 
-	case ps.Current == PlanAssemble && ps.TurnsSincePlan > 5:
+	case ps.Current == PlanAssemble && ps.TurnsSincePlan > ps.assembleTimeout():
 		// Been assembling too long — pivot.
 		ps.Current = PlanPivot
 		ps.TurnsSincePlan = 0
@@ -116,6 +117,10 @@ func (ps *PlanState) PlanWeightMultipliers() EvalWeights {
 		ActivationTempo:         1.0,
 		ToolboxBreadth:          1.0,
 		ThreatTrajectory:        1.0,
+		StackInteraction:        1.0,
+		PlaneswalkerProgress:    1.0,
+		ExileZoneAssets:         1.0,
+		StaxLockProgress:        1.0,
 	}
 
 	switch ps.Current {
@@ -128,6 +133,10 @@ func (ps *PlanState) PlanWeightMultipliers() EvalWeights {
 		m.ManaAdvantage = 0.5
 		m.LifeResource = 0.3
 		m.ThreatExposure = 0.3
+		m.StackInteraction = 0.3
+		m.PlaneswalkerProgress = 0.3
+		m.ExileZoneAssets = 0.5
+		m.StaxLockProgress = 0.3
 
 	case PlanAssemble:
 		// Draw + tutors to find pieces. Boost card advantage and toolbox.
@@ -143,6 +152,8 @@ func (ps *PlanState) PlanWeightMultipliers() EvalWeights {
 		m.CardAdvantage = 1.2
 		m.BoardPresence = 0.6
 		m.ComboProximity = 0.5
+		m.StackInteraction = 2.0
+		m.StaxLockProgress = 1.5
 
 	case PlanDefend:
 		// Survival mode — life and board presence matter most.
@@ -150,6 +161,9 @@ func (ps *PlanState) PlanWeightMultipliers() EvalWeights {
 		m.BoardPresence = 1.4
 		m.ThreatExposure = 1.3
 		m.ComboProximity = 0.4
+		m.StackInteraction = 1.5
+		m.PlaneswalkerProgress = 0.5
+		m.StaxLockProgress = 1.3
 
 	case PlanPivot:
 		// Primary plan failed — switch to beatdown.
@@ -157,10 +171,21 @@ func (ps *PlanState) PlanWeightMultipliers() EvalWeights {
 		m.CommanderProgress = 1.4
 		m.ComboProximity = 0.3
 		m.ToolboxBreadth = 0.7
+		m.StackInteraction = 0.5
 
 	case PlanDevelop:
 		// Default — no adjustment, use archetype weights as-is.
 	}
 
 	return m
+}
+
+// assembleTimeout returns the number of turns to wait in PlanAssemble
+// before pivoting to beatdown. Modulated by Amiibo ComboPat DNA:
+// high patience → longer wait (up to 8 turns), low → shorter (3 turns).
+func (ps *PlanState) assembleTimeout() int {
+	if ps.ComboPatience > 0 {
+		return ps.ComboPatience
+	}
+	return 5
 }

@@ -11,6 +11,7 @@ export default function DeckList() {
   const [decks, setDecks] = useState([])
   const [filter, setFilter] = useState(searchParams.get('q') || '')
   const [tab, setTab] = useState('mine')
+  const [legalFilter, setLegalFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -35,7 +36,10 @@ export default function DeckList() {
   const hasMyDecks = myDecks.length > 0
 
   const baseDecks = (tab === 'mine' && hasMyDecks) ? myDecks : decks
+  const hasLegalityData = decks.some(d => d.legal != null)
   const filtered = baseDecks.filter(d => {
+    if (legalFilter === 'legal' && d.legal === false) return false
+    if (legalFilter === 'illegal' && d.legal !== false) return false
     if (!filter) return true
     const q = filter.toLowerCase()
     const haystack = `${d.name} ${d.commander_card || ''} ${d.commander || ''} ${d.owner || ''}`.toLowerCase()
@@ -57,6 +61,14 @@ export default function DeckList() {
             <>
               <Tag solid={tab === 'mine'} onClick={() => setTab('mine')} style={{ cursor: 'pointer' }}>MY DECKS</Tag>
               <Tag solid={tab === 'all'} onClick={() => setTab('all')} style={{ cursor: 'pointer' }}>ALL DECKS</Tag>
+              <div style={{ width: 1, height: 16, background: 'var(--rule-2)' }} />
+            </>
+          )}
+          {hasLegalityData && (
+            <>
+              <Tag solid={legalFilter === 'all'} onClick={() => setLegalFilter('all')} style={{ cursor: 'pointer' }}>ALL</Tag>
+              <Tag solid={legalFilter === 'legal'} onClick={() => setLegalFilter('legal')} style={{ cursor: 'pointer', color: legalFilter === 'legal' ? undefined : 'var(--ok)' }}>✓ LEGAL</Tag>
+              <Tag solid={legalFilter === 'illegal'} onClick={() => setLegalFilter('illegal')} style={{ cursor: 'pointer', color: legalFilter === 'illegal' ? undefined : 'var(--danger)' }}>✗ ILLEGAL</Tag>
               <div style={{ width: 1, height: 16, background: 'var(--rule-2)' }} />
             </>
           )}
@@ -123,6 +135,9 @@ export default function DeckList() {
                     <span className="t-xs" style={{ fontWeight: 700, letterSpacing: '0.06em' }}>
                       {pls ? `B${pls}` : `B${wbs}`}
                       <span className="muted" style={{ fontWeight: 400 }}>{pls ? ` (B${wbs})` : ''}</span>
+                      {d.legal != null && (
+                        <span style={{ marginLeft: 6, color: d.legal ? 'var(--ok)' : 'var(--danger)', fontSize: 9 }}>{d.legal ? '✓' : '✗'}</span>
+                      )}
                     </span>
                     <span className="t-xs" style={{ fontWeight: 700, letterSpacing: '0.06em' }}>
                       {deckElo ? Math.round(deckElo.rating) : '—'}

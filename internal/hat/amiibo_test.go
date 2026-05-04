@@ -49,14 +49,26 @@ func TestRecordResult_UpdatesFitness(t *testing.T) {
 	rng := rand.New(rand.NewSource(42))
 	pool := InitPool("test", rng)
 
-	pool.RecordResult(0, true)
+	pool.RecordResult(0, 1.0) // 1st place
 	if pool.Population[0].Fitness != 1.0 {
 		t.Errorf("fitness after first win = %f, want 1.0", pool.Population[0].Fitness)
 	}
 
-	pool.RecordResult(0, false)
+	pool.RecordResult(0, 0.0) // 4th place
 	if pool.Population[0].Fitness >= 1.0 {
 		t.Errorf("fitness should decrease after loss, got %f", pool.Population[0].Fitness)
+	}
+}
+
+func TestPlacementScore(t *testing.T) {
+	if s := PlacementScore(1, 4); s != 1.0 {
+		t.Errorf("1st of 4 = %f, want 1.0", s)
+	}
+	if s := PlacementScore(4, 4); s != 0.0 {
+		t.Errorf("4th of 4 = %f, want 0.0", s)
+	}
+	if s := PlacementScore(2, 4); s < 0.3 || s > 0.7 {
+		t.Errorf("2nd of 4 = %f, want ~0.67", s)
 	}
 }
 
@@ -71,7 +83,11 @@ func TestEvolution_TriggersAt100(t *testing.T) {
 
 	// Record 100 games to trigger evolution.
 	for i := 0; i < AmiiboEvolveAt; i++ {
-		pool.RecordResult(i%AmiiboPopSize, i%2 == 0)
+		score := 0.0
+		if i%2 == 0 {
+			score = 1.0
+		}
+		pool.RecordResult(i%AmiiboPopSize, score)
 	}
 
 	if pool.GameCount != 0 {
@@ -177,5 +193,58 @@ func TestLoadAllPools_NonexistentDir(t *testing.T) {
 	}
 	if len(pools) != 0 {
 		t.Errorf("expected 0 pools, got %d", len(pools))
+	}
+}
+
+func TestDimensionStats_RecordAndCorrelation(t *testing.T) {
+	var ds DimensionStats
+
+	for i := 0; i < 50; i++ {
+		var dims [NumDimensions]float64
+		outcome := 0.0
+		if i%2 == 0 {
+			dims[0] = 1.0 // high board presence on wins
+			outcome = 1.0
+		} else {
+			dims[0] = 0.0
+			outcome = 0.0
+		}
+		dims[1] = 0.5 // card advantage always neutral
+		ds.RecordGame(dims, outcome)
+	}
+
+	if ds.N != 50 {
+		t.Errorf("expected N=50, got %d", ds.N)
+	}
+
+	corrBoard := ds.Correlation(0)
+	if corrBoard < 0.5 {
+		t.Errorf("expected strong positive correlation for dim 0, got %f", corrBoard)
+	}
+
+	corrCards := ds.Correlation(1)
+	if corrCards > 0.3 || corrCards < -0.3 {
+		t.Errorf("expected near-zero correlation for dim 1, got %f", corrCards)
+	}
+
+	corrections := ds.WeightCorrections()
+	if corrections[0] <= 1.0 {
+		t.Errorf("expected positive correction for dim 0, got %f", corrections[0])
+	}
+}
+
+func TestDimensionStats_MinN(t *testing.T) {
+	var ds DimensionStats
+	for i := 0; i < 5; i++ {
+		var dims [NumDimensions]float64
+		ds.RecordGame(dims, 1.0)
+	}
+	corr := ds.Correlation(0)
+	if corr != 0 {
+		t.Errorf("expected 0 correlation before minN, got %f", corr)
+	}
+	corrections := ds.WeightCorrections()
+	if corrections[0] != 1.0 {
+		t.Errorf("expected no correction before minN, got %f", corrections[0])
 	}
 }

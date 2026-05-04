@@ -110,6 +110,7 @@ type DeckSummary struct {
 	PLSLabel         string    `json:"pls_label,omitempty"`
 	GameChangerCount int       `json:"game_changer_count,omitempty"`
 	Archetype        string    `json:"archetype,omitempty"`
+	Legal            *bool     `json:"legal,omitempty"`
 }
 
 func (h *Handler) handleListDecks(w http.ResponseWriter, r *http.Request) {
@@ -195,6 +196,9 @@ func enrichDeckSummary(decksDir string, ds *DeckSummary) {
 		PlaysLikeLabel   string `json:"plays_like_label"`
 		GameChangerCount int    `json:"game_changer_count"`
 		Archetype        string `json:"archetype"`
+		Legality         *struct {
+			Valid bool `json:"valid"`
+		} `json:"legality"`
 	}
 	if json.Unmarshal(data, &strat) != nil {
 		return
@@ -210,6 +214,10 @@ func enrichDeckSummary(decksDir string, ds *DeckSummary) {
 	ds.GameChangerCount = strat.GameChangerCount
 	if strat.Archetype != "" {
 		ds.Archetype = strat.Archetype
+	}
+	if strat.Legality != nil {
+		v := strat.Legality.Valid
+		ds.Legal = &v
 	}
 }
 

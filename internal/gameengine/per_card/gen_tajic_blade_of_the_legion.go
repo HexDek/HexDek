@@ -11,15 +11,46 @@ import (
 //   Indestructible
 //   Battalion — Whenever Tajic and at least two other creatures attack, Tajic gets +5/+5 until end of turn.
 //
-// Auto-generated static ability stub (partial — engine handles most statics via AST).
+// Implementation: on Tajic attacking, count total attackers controlled
+// by Tajic's controller. If 3+, grant +5/+5 UEOT.
 func registerTajicBladeOfTheLegion(r *Registry) {
-	r.OnETB("Tajic, Blade of the Legion", tajicBladeOfTheLegionStaticETB)
+	r.OnTrigger("Tajic, Blade of the Legion", "attacks", tajicBattalion)
 }
 
-func tajicBladeOfTheLegionStaticETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
-	const slug = "tajic_blade_of_the_legion_static"
-	if gs == nil || perm == nil {
+func tajicBattalion(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	const slug = "tajic_battalion"
+	if gs == nil || perm == nil || ctx == nil {
 		return
 	}
-	emitPartial(gs, slug, perm.Card.DisplayName(), "static abilities handled by AST engine; per_card stub for registration tracking")
+	attackerSeat, _ := ctx["seat"].(int)
+	if attackerSeat != perm.Controller {
+		return
+	}
+	seat := gs.Seats[perm.Controller]
+	if seat == nil {
+		return
+	}
+	atkCount := 0
+	for _, p := range seat.Battlefield {
+		if p == nil || !p.IsCreature() {
+			continue
+		}
+		if p.IsAttacking() {
+			atkCount++
+		}
+	}
+	if atkCount < 3 {
+		return
+	}
+	perm.Modifications = append(perm.Modifications, gameengine.Modification{
+		Power:     5,
+		Toughness: 5,
+		Duration:  "until_end_of_turn",
+		Timestamp: gs.NextTimestamp(),
+	})
+	gs.InvalidateCharacteristicsCache()
+	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
+		"seat":      perm.Controller,
+		"attackers": atkCount,
+	})
 }

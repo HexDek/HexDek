@@ -11,22 +11,19 @@ import (
 //   Flying
 //   Pay 2 life: Return Selenia to its owner's hand.
 //
-// Auto-generated activated ability handler.
+// Implementation: bounce Selenia to her owner's hand. The 2-life cost
+// is presumed paid by the activation pipeline.
 func registerSeleniaDarkAngel(r *Registry) {
 	r.OnActivated("Selenia, Dark Angel", seleniaDarkAngelActivate)
 }
 
 func seleniaDarkAngelActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilityIdx int, ctx map[string]interface{}) {
-	const slug = "selenia_dark_angel_activate"
+	const slug = "selenia_dark_angel_bounce"
 	if gs == nil || src == nil {
 		return
 	}
-	seat := src.Controller
-	if seat < 0 || seat >= len(gs.Seats) {
-		return
-	}
-	emitPartial(gs, slug, src.Card.DisplayName(), "auto-gen: activated effect not parsed from oracle text")
+	gameengine.BouncePermanent(gs, src, src, "hand")
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
-		"seat": seat,
+		"seat": src.Controller,
 	})
 }

@@ -1634,16 +1634,268 @@ func RegisterDoranSiegeTower(gs *GameState, p *Permanent) {
 }
 
 // -----------------------------------------------------------------------------
+// Generic anthem / static P/T registration (layer 7c).
+// -----------------------------------------------------------------------------
+
+// registerAnthemPT registers a layer 7c continuous effect that modifies P/T
+// for all permanents matching pred. Used by the AST-driven auto-registration
+// path for anthem static abilities.
+func registerAnthemPT(gs *GameState, src *Permanent, pow, tough int, disc string,
+	pred func(*GameState, *Permanent) bool) {
+	applyFn := func(_ *GameState, _ *Permanent, chars *Characteristics) {
+		if !charsHaveType(chars.Types, "creature") {
+			return
+		}
+		chars.Power += pow
+		chars.Toughness += tough
+	}
+	gs.RegisterContinuousEffect(&ContinuousEffect{
+		Layer: LayerPT, Sublayer: "c",
+		Timestamp:      src.Timestamp,
+		SourcePerm:     src,
+		SourceCardName: src.Card.DisplayName(),
+		ControllerSeat: src.Controller,
+		HandlerID:      layerHandlerKey(disc, src),
+		Predicate:      pred,
+		ApplyFn:        applyFn,
+	})
+}
+
+// registerAnthemSetPT registers a layer 7b continuous effect that sets base P/T.
+func registerAnthemSetPT(gs *GameState, src *Permanent, pow, tough int, disc string,
+	pred func(*GameState, *Permanent) bool) {
+	applyFn := func(_ *GameState, _ *Permanent, chars *Characteristics) {
+		if !charsHaveType(chars.Types, "creature") {
+			return
+		}
+		chars.Power = pow
+		chars.Toughness = tough
+		chars.BasePower = pow
+		chars.BaseToughness = tough
+	}
+	gs.RegisterContinuousEffect(&ContinuousEffect{
+		Layer: LayerPT, Sublayer: "b",
+		Timestamp:      src.Timestamp,
+		SourcePerm:     src,
+		SourceCardName: src.Card.DisplayName(),
+		ControllerSeat: src.Controller,
+		HandlerID:      layerHandlerKey(disc, src),
+		Predicate:      pred,
+		ApplyFn:        applyFn,
+	})
+}
+
+// registerKeywordGrant registers a layer 6 continuous effect that grants a
+// keyword to matching permanents.
+func registerKeywordGrant(gs *GameState, src *Permanent, kw string, disc string,
+	pred func(*GameState, *Permanent) bool) {
+	applyFn := func(_ *GameState, _ *Permanent, chars *Characteristics) {
+		if !charsHaveType(chars.Types, "creature") {
+			return
+		}
+		for _, existing := range chars.Keywords {
+			if strings.EqualFold(existing, kw) {
+				return
+			}
+		}
+		chars.Keywords = append(chars.Keywords, kw)
+	}
+	gs.RegisterContinuousEffect(&ContinuousEffect{
+		Layer:          LayerAbility,
+		Timestamp:      src.Timestamp,
+		SourcePerm:     src,
+		SourceCardName: src.Card.DisplayName(),
+		ControllerSeat: src.Controller,
+		HandlerID:      layerHandlerKey(disc, src),
+		Predicate:      pred,
+		ApplyFn:        applyFn,
+	})
+}
+
+// registerASTStaticEffects scans the card's AST Static abilities and auto-
+// registers continuous effects for known anthem/buff/grant patterns. This
+// handles the long tail of lord effects without per-card handlers.
+func registerASTStaticEffects(gs *GameState, p *Permanent) {
+	if p.Card.AST == nil {
+		return
+	}
+	for _, ab := range p.Card.AST.Abilities {
+		st, ok := ab.(*gameast.Static)
+		if !ok || st.Modification == nil || st.Modification.Layer == "" {
+			continue
+		}
+		mod := st.Modification
+		switch mod.ModKind {
+
+		case "other_yours_anthem":
+			pow, tough := extractPT(mod.Args, 1, 1)
+			src := p
+			registerAnthemPT(gs, p, pow, tough, "ast-other-yours", func(_ *GameState, t *Permanent) bool {
+				return t != src && t.Controller == src.Controller
+			})
+
+		case "your_creatures_anthem_bare":
+			pow, tough := extractPT(mod.Args, 1, 1)
+			src := p
+			registerAnthemPT(gs, p, pow, tough, "ast-yours-bare", func(_ *GameState, t *Permanent) bool {
+				return t.Controller == src.Controller
+			})
+
+		case "nontoken_yours_anthem":
+			pow, tough := extractPT(mod.Args, 1, 1)
+			src := p
+			registerAnthemPT(gs, p, pow, tough, "ast-nontoken-yours", func(_ *GameState, t *Permanent) bool {
+				return t.Controller == src.Controller && !t.IsToken()
+			})
+
+		case "other_creatures_global_pt":
+			pow, tough := extractPT(mod.Args, 0, 0)
+			src := p
+			registerAnthemPT(gs, p, pow, tough, "ast-other-global", func(_ *GameState, t *Permanent) bool {
+				return t != src
+			})
+
+		case "opp_creatures_pt":
+			pow, tough := extractPT(mod.Args, 0, 0)
+			src := p
+			registerAnthemPT(gs, p, pow, tough, "ast-opp-creatures", func(_ *GameState, t *Permanent) bool {
+				return t.Controller != src.Controller
+			})
+
+		case "other_tribe_anthem":
+			pow, tough, tribe := extractPTTribe(mod.Args)
+			src := p
+			registerAnthemPT(gs, p, pow, tough, "ast-tribe-"+tribe, func(_ *GameState, t *Permanent) bool {
+				return t != src && t.Controller == src.Controller && permanentHasSubtype(t, tribe)
+			})
+
+		case "tri_tribe_anthem":
+			pow, tough, tribe := extractPTTribe(mod.Args)
+			src := p
+			registerAnthemPT(gs, p, pow, tough, "ast-tri-tribe-"+tribe, func(_ *GameState, t *Permanent) bool {
+				return t.Controller == src.Controller && permanentHasSubtype(t, tribe)
+			})
+
+		case "tribe_global_pt":
+			pow, tough, tribe := extractPTTribe(mod.Args)
+			registerAnthemPT(gs, p, pow, tough, "ast-tribe-global-"+tribe, func(_ *GameState, t *Permanent) bool {
+				return permanentHasSubtype(t, tribe)
+			})
+
+		case "non_type_global_pt":
+			pow, tough, excludeType := extractPTTribe(mod.Args)
+			registerAnthemPT(gs, p, pow, tough, "ast-non-type-global", func(_ *GameState, t *Permanent) bool {
+				return !permanentHasSubtype(t, excludeType)
+			})
+
+		case "opp_creatures_base_pt":
+			pow, tough := extractPT(mod.Args, 1, 1)
+			src := p
+			registerAnthemSetPT(gs, p, pow, tough, "ast-opp-base-pt", func(_ *GameState, t *Permanent) bool {
+				return t.Controller != src.Controller
+			})
+
+		case "commander_anthem":
+			pow, tough := extractPT(mod.Args, 1, 1)
+			src := p
+			registerAnthemPT(gs, p, pow, tough, "ast-cmdr-anthem", func(_ *GameState, t *Permanent) bool {
+				return t.Controller == src.Controller
+			})
+
+		case "tribe_anthem_have", "tribe_yours_anthem_have":
+			if len(mod.Args) >= 1 {
+				kw, _ := mod.Args[0].(string)
+				if kw == "" {
+					continue
+				}
+				src := p
+				tribe := ""
+				if len(mod.Args) >= 2 {
+					tribe, _ = mod.Args[1].(string)
+				}
+				if tribe != "" {
+					registerKeywordGrant(gs, p, kw, "ast-tribe-kw-"+kw, func(_ *GameState, t *Permanent) bool {
+						return t.Controller == src.Controller && permanentHasSubtype(t, tribe)
+					})
+				} else {
+					registerKeywordGrant(gs, p, kw, "ast-yours-kw-"+kw, func(_ *GameState, t *Permanent) bool {
+						return t.Controller == src.Controller
+					})
+				}
+			}
+
+		case "enchanted_creature_pt":
+			pow, tough := extractPT(mod.Args, 0, 0)
+			src := p
+			registerAnthemPT(gs, p, pow, tough, "ast-enchanted-pt", func(_ *GameState, t *Permanent) bool {
+				return src.AttachedTo != nil && t == src.AttachedTo
+			})
+		}
+	}
+}
+
+func extractPT(args []interface{}, defaultP, defaultT int) (int, int) {
+	pow, tough := defaultP, defaultT
+	if len(args) >= 2 {
+		if p, ok := asIntLayer(args[0]); ok {
+			pow = p
+		}
+		if t, ok := asIntLayer(args[1]); ok {
+			tough = t
+		}
+	}
+	return pow, tough
+}
+
+func extractPTTribe(args []interface{}) (int, int, string) {
+	pow, tough := 1, 1
+	tribe := ""
+	if len(args) >= 2 {
+		if p, ok := asIntLayer(args[0]); ok {
+			pow = p
+		}
+		if t, ok := asIntLayer(args[1]); ok {
+			tough = t
+		}
+	}
+	if len(args) >= 3 {
+		tribe, _ = args[2].(string)
+	}
+	return pow, tough, tribe
+}
+
+func asIntLayer(v interface{}) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case float64:
+		return int(n), true
+	case int64:
+		return int(n), true
+	}
+	return 0, false
+}
+
+func permanentHasSubtype(p *Permanent, sub string) bool {
+	if p == nil || p.Card == nil {
+		return false
+	}
+	tl := strings.ToLower(p.Card.TypeLine)
+	return strings.Contains(tl, strings.ToLower(sub))
+}
+
+// -----------------------------------------------------------------------------
 // Dispatcher — RegisterContinuousEffectsForPermanent keys off card name.
 // -----------------------------------------------------------------------------
 
 // RegisterContinuousEffectsForPermanent inspects p.Card.DisplayName
-// and invokes the matching Register<Card> helper. ETB hooks call this;
-// unknown cards are no-ops (matches replacement.go convention).
+// and invokes the matching Register<Card> helper for complex paradox
+// cases, then scans the AST for generic anthem/buff statics.
 func RegisterContinuousEffectsForPermanent(gs *GameState, p *Permanent) {
 	if p == nil || p.Card == nil {
 		return
 	}
+	// Named handlers for complex layer interactions (paradoxes, dependencies).
 	switch p.Card.DisplayName() {
 	case "Humility":
 		RegisterHumility(gs, p)
@@ -1670,6 +1922,8 @@ func RegisterContinuousEffectsForPermanent(gs *GameState, p *Permanent) {
 	case "Doran, the Siege Tower":
 		RegisterDoranSiegeTower(gs, p)
 	}
+	// Generic AST-driven registration for anthems and keyword grants.
+	registerASTStaticEffects(gs, p)
 }
 
 // -----------------------------------------------------------------------------

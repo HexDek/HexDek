@@ -30,6 +30,7 @@ type DeckProfile struct {
 	PlaysLike           int
 	PlaysLikeLabel      string
 	GameChangerCount    int
+	GameChangerCards    []string
 	Intent              string
 
 	PrimaryWinLine    string
@@ -148,6 +149,7 @@ func BuildDeckProfile(report *FreyaReport, oracle *oracleDB) *DeckProfile {
 		dp.PlaysLike = report.Archetype.PlaysLike
 		dp.PlaysLikeLabel = report.Archetype.PlaysLikeLabel
 		dp.GameChangerCount = report.Archetype.GameChangerCount
+		dp.GameChangerCards = report.Archetype.GameChangerCards
 		dp.Intent = report.Archetype.Intent
 	}
 

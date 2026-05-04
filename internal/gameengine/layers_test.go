@@ -20,6 +20,8 @@ package gameengine
 
 import (
 	"testing"
+
+	"github.com/hexdek/hexdek/internal/gameast"
 )
 
 // layerAt is a convenience: add battlefield perm + register its
@@ -1102,5 +1104,195 @@ func TestLayer_CopyPermanentLayered_EOTDuration(t *testing.T) {
 	chars2 := GetEffectiveCharacteristics(gs, target)
 	if chars2.Power != 3 || chars2.Toughness != 3 {
 		t.Errorf("After EOT: copy should expire, restoring 3/3; got %d/%d", chars2.Power, chars2.Toughness)
+	}
+}
+
+// -----------------------------------------------------------------------------
+// AST-driven anthem registration (layer 7c).
+// -----------------------------------------------------------------------------
+
+// addBattlefieldWithAST is like addBattlefield but attaches an AST.
+func addBattlefieldWithAST(gs *GameState, seat int, name string, pow, tough int, ast *gameast.CardAST, types ...string) *Permanent {
+	p := addBattlefield(gs, seat, name, pow, tough, types...)
+	p.Card.AST = ast
+	return p
+}
+
+func TestLayer_Anthem_OtherYoursCreatures(t *testing.T) {
+	gs := newFixtureGame(t)
+
+	// Lord with "Other creatures you control get +1/+1".
+	lordAST := &gameast.CardAST{
+		Name: "Glorious Anthem Lord",
+		Abilities: []gameast.Ability{
+			&gameast.Static{Modification: &gameast.Modification{
+				ModKind: "other_yours_anthem",
+				Args:    []interface{}{1, 1},
+				Layer:   "7c",
+			}},
+		},
+	}
+	lord := addBattlefieldWithAST(gs, 0, "Glorious Anthem Lord", 2, 2, lordAST, "creature")
+	RegisterContinuousEffectsForPermanent(gs, lord)
+
+	bear := addBattlefield(gs, 0, "Grizzly Bears", 2, 2, "creature")
+	oppBear := addBattlefield(gs, 1, "Opp Bears", 3, 3, "creature")
+
+	// Lord doesn't buff itself ("other").
+	lordChars := GetEffectiveCharacteristics(gs, lord)
+	if lordChars.Power != 2 || lordChars.Toughness != 2 {
+		t.Errorf("lord should stay 2/2, got %d/%d", lordChars.Power, lordChars.Toughness)
+	}
+
+	// Friendly creature gets +1/+1.
+	bearChars := GetEffectiveCharacteristics(gs, bear)
+	if bearChars.Power != 3 || bearChars.Toughness != 3 {
+		t.Errorf("friendly bear should be 3/3, got %d/%d", bearChars.Power, bearChars.Toughness)
+	}
+
+	// Opponent creature NOT buffed.
+	oppChars := GetEffectiveCharacteristics(gs, oppBear)
+	if oppChars.Power != 3 || oppChars.Toughness != 3 {
+		t.Errorf("opp bear should stay 3/3, got %d/%d", oppChars.Power, oppChars.Toughness)
+	}
+}
+
+func TestLayer_Anthem_NewCreatureBenefits(t *testing.T) {
+	gs := newFixtureGame(t)
+
+	lordAST := &gameast.CardAST{
+		Name: "Lord of the Unreal",
+		Abilities: []gameast.Ability{
+			&gameast.Static{Modification: &gameast.Modification{
+				ModKind: "other_yours_anthem",
+				Args:    []interface{}{1, 1},
+				Layer:   "7c",
+			}},
+		},
+	}
+	lord := addBattlefieldWithAST(gs, 0, "Lord of the Unreal", 2, 2, lordAST, "creature")
+	RegisterContinuousEffectsForPermanent(gs, lord)
+
+	// Creature entering AFTER the lord should still get the buff.
+	lateCreature := addBattlefield(gs, 0, "Late Arrival", 1, 1, "creature")
+	chars := GetEffectiveCharacteristics(gs, lateCreature)
+	if chars.Power != 2 || chars.Toughness != 2 {
+		t.Errorf("late creature should be 2/2 (1/1 + 1/1 anthem), got %d/%d", chars.Power, chars.Toughness)
+	}
+}
+
+func TestLayer_Anthem_LordLeavesRemovesBuff(t *testing.T) {
+	gs := newFixtureGame(t)
+
+	lordAST := &gameast.CardAST{
+		Name: "Anthem Lord",
+		Abilities: []gameast.Ability{
+			&gameast.Static{Modification: &gameast.Modification{
+				ModKind: "other_yours_anthem",
+				Args:    []interface{}{2, 2},
+				Layer:   "7c",
+			}},
+		},
+	}
+	lord := addBattlefieldWithAST(gs, 0, "Anthem Lord", 3, 3, lordAST, "creature")
+	RegisterContinuousEffectsForPermanent(gs, lord)
+
+	bear := addBattlefield(gs, 0, "Bear", 2, 2, "creature")
+
+	// Buffed: 2+2 = 4.
+	chars := GetEffectiveCharacteristics(gs, bear)
+	if chars.Power != 4 {
+		t.Fatalf("before: bear should be 4/4, got %d/%d", chars.Power, chars.Toughness)
+	}
+
+	// Remove lord → unregister effects → buff gone.
+	gs.UnregisterContinuousEffectsForPermanent(lord)
+
+	chars2 := GetEffectiveCharacteristics(gs, bear)
+	if chars2.Power != 2 || chars2.Toughness != 2 {
+		t.Errorf("after lord leaves: bear should revert to 2/2, got %d/%d", chars2.Power, chars2.Toughness)
+	}
+}
+
+func TestLayer_Anthem_OppDebuff(t *testing.T) {
+	gs := newFixtureGame(t)
+
+	// Elesh Norn style: opponent creatures get -2/-2.
+	nornAST := &gameast.CardAST{
+		Name: "Elesh Norn",
+		Abilities: []gameast.Ability{
+			&gameast.Static{Modification: &gameast.Modification{
+				ModKind: "opp_creatures_pt",
+				Args:    []interface{}{-2, -2},
+				Layer:   "7c",
+			}},
+		},
+	}
+	norn := addBattlefieldWithAST(gs, 0, "Elesh Norn", 4, 7, nornAST, "creature")
+	RegisterContinuousEffectsForPermanent(gs, norn)
+
+	oppCreature := addBattlefield(gs, 1, "Opp Elf", 1, 1, "creature")
+	ownCreature := addBattlefield(gs, 0, "Own Soldier", 2, 2, "creature")
+
+	oppChars := GetEffectiveCharacteristics(gs, oppCreature)
+	if oppChars.Power != -1 || oppChars.Toughness != -1 {
+		t.Errorf("opp creature should be -1/-1 (1-2), got %d/%d", oppChars.Power, oppChars.Toughness)
+	}
+
+	ownChars := GetEffectiveCharacteristics(gs, ownCreature)
+	if ownChars.Power != 2 || ownChars.Toughness != 2 {
+		t.Errorf("own creature should stay 2/2, got %d/%d", ownChars.Power, ownChars.Toughness)
+	}
+}
+
+func TestLayer_Anthem_DoesNotAffectNonCreatures(t *testing.T) {
+	gs := newFixtureGame(t)
+
+	lordAST := &gameast.CardAST{
+		Name: "Anthem",
+		Abilities: []gameast.Ability{
+			&gameast.Static{Modification: &gameast.Modification{
+				ModKind: "your_creatures_anthem_bare",
+				Args:    []interface{}{1, 1},
+				Layer:   "7c",
+			}},
+		},
+	}
+	lord := addBattlefieldWithAST(gs, 0, "Anthem", 0, 0, lordAST, "enchantment")
+	RegisterContinuousEffectsForPermanent(gs, lord)
+
+	artifact := addBattlefield(gs, 0, "Sol Ring", 0, 0, "artifact")
+	chars := GetEffectiveCharacteristics(gs, artifact)
+	if chars.Power != 0 || chars.Toughness != 0 {
+		t.Errorf("non-creature should not be buffed, got %d/%d", chars.Power, chars.Toughness)
+	}
+}
+
+func TestLayer_Anthem_StacksWithHumility(t *testing.T) {
+	gs := newFixtureGame(t)
+
+	// Anthem (+2/+2) enters first.
+	lordAST := &gameast.CardAST{
+		Name: "Big Anthem",
+		Abilities: []gameast.Ability{
+			&gameast.Static{Modification: &gameast.Modification{
+				ModKind: "your_creatures_anthem_bare",
+				Args:    []interface{}{2, 2},
+				Layer:   "7c",
+			}},
+		},
+	}
+	anthem := addBattlefieldWithAST(gs, 0, "Big Anthem", 0, 0, lordAST, "enchantment")
+	RegisterContinuousEffectsForPermanent(gs, anthem)
+
+	// Humility enters second: layer 7b sets base to 1/1, layer 7c anthem adds +2/+2.
+	humility := layerAt(gs, 0, "Humility", 0, 0, "enchantment")
+	_ = humility
+
+	bear := addBattlefield(gs, 0, "Bear", 5, 5, "creature")
+	chars := GetEffectiveCharacteristics(gs, bear)
+	// Humility sets to 1/1 (layer 7b), then anthem adds +2/+2 (layer 7c) = 3/3.
+	if chars.Power != 3 || chars.Toughness != 3 {
+		t.Errorf("Humility(1/1) + anthem(+2/+2) should give 3/3, got %d/%d", chars.Power, chars.Toughness)
 	}
 }

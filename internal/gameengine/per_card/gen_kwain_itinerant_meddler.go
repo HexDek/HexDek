@@ -10,7 +10,8 @@ import (
 //
 //   {T}: Each player may draw a card, then each player who drew a card this way gains 1 life.
 //
-// Auto-generated activated ability handler.
+// Implementation: each non-eliminated player draws (heuristic: always
+// take the optional draw) and gains 1 life if they drew.
 func registerKwainItinerantMeddler(r *Registry) {
 	r.OnActivated("Kwain, Itinerant Meddler", kwainItinerantMeddlerActivate)
 }
@@ -20,13 +21,19 @@ func kwainItinerantMeddlerActivate(gs *gameengine.GameState, src *gameengine.Per
 	if gs == nil || src == nil {
 		return
 	}
-	seat := src.Controller
-	if seat < 0 || seat >= len(gs.Seats) {
-		return
+	drew := 0
+	for i := range gs.Seats {
+		s := gs.Seats[i]
+		if s == nil || s.Lost {
+			continue
+		}
+		if drawOne(gs, i, src.Card.DisplayName()) != nil {
+			gameengine.GainLife(gs, i, 1, src.Card.DisplayName())
+			drew++
+		}
 	}
-	drawOne(gs, src.Controller, src.Card.DisplayName())
-	gameengine.GainLife(gs, src.Controller, 1, src.Card.DisplayName())
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
-		"seat": seat,
+		"seat":     src.Controller,
+		"drew":     drew,
 	})
 }

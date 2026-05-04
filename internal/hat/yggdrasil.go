@@ -25,6 +25,7 @@ var _ gameengine.Hat = (*YggdrasilHat)(nil)
 // YggdrasilHat implements gameengine.Hat.
 type YggdrasilHat struct {
 	Evaluator  *GameStateEvaluator
+	NeuralEval *NeuralEvaluator // optional neural position evaluator (Level 5)
 	Strategy   *StrategyProfile
 	Budget     int     // 0=heuristic, 1-199=evaluator-guided, 200+=rollout
 	Noise      float64 // gaussian σ applied to targeting scores (0=deterministic, 0.2=default)
@@ -152,6 +153,11 @@ type YggdrasilHat struct {
 	// Diagnostic: track the lowest relative position ever seen.
 	MinRelPos float64
 
+	// T3.2: per-game dimension accumulator. Updated on each Evaluate call,
+	// exposed via DimensionMeans() for post-game outcome correlation.
+	dimAccum [NumDimensions]float64
+	dimCount int
+
 	// Cached exploration factor for UCB1 — recomputed per turn.
 	explorationC     float64
 	explorationCTurn int
@@ -277,6 +283,53 @@ func NewYggdrasilHatWithDNA(dna *AmiiboDNA, sp *StrategyProfile, budget int) *Yg
 		h.confidenceThreshold = 0.95
 	}
 
+	// ComboPat: high patience → longer Assemble before Pivot (3-8 turns).
+	h.planState.ComboPatience = 3 + int(dna.ComboPat*5)
+
+	// DrainAffinity: high → increase DrainEngine weight by up to 40%.
+	drainShift := (dna.DrainAffinity - 0.5) * 0.8
+	h.Evaluator.Weights.DrainEngine *= 1.0 + drainShift
+
+	// ArtifactAffinity: high → increase ArtifactSynergy weight by up to 40%.
+	artifactShift := (dna.ArtifactAffinity - 0.5) * 0.8
+	h.Evaluator.Weights.ArtifactSynergy *= 1.0 + artifactShift
+
+	return h
+}
+
+// NewYggdrasilHatWithPool creates a hat using DNA + learned dimension
+// corrections from the pool's outcome-correlation statistics (T3.2).
+func NewYggdrasilHatWithPool(dna *AmiiboDNA, sp *StrategyProfile, budget int, ds *DimensionStats) *YggdrasilHat {
+	h := NewYggdrasilHatWithDNA(dna, sp, budget)
+	if ds == nil || ds.N < dimStatsMinN {
+		return h
+	}
+	corr := ds.WeightCorrections()
+	w := &h.Evaluator.Weights
+	arr := w.AsArray()
+	for d := 0; d < NumDimensions; d++ {
+		arr[d] *= corr[d]
+	}
+	w.BoardPresence = arr[0]
+	w.CardAdvantage = arr[1]
+	w.ManaAdvantage = arr[2]
+	w.LifeResource = arr[3]
+	w.ComboProximity = arr[4]
+	w.ThreatExposure = arr[5]
+	w.CommanderProgress = arr[6]
+	w.GraveyardValue = arr[7]
+	w.DrainEngine = arr[8]
+	w.ArtifactSynergy = arr[9]
+	w.EnchantmentSynergy = arr[10]
+	w.OpponentGraveyardThreat = arr[11]
+	w.PartnerSynergy = arr[12]
+	w.ActivationTempo = arr[13]
+	w.ToolboxBreadth = arr[14]
+	w.ThreatTrajectory = arr[15]
+	w.StackInteraction = arr[16]
+	w.PlaneswalkerProgress = arr[17]
+	w.ExileZoneAssets = arr[18]
+	w.StaxLockProgress = arr[19]
 	return h
 }
 
@@ -435,6 +488,9 @@ type seatThreat struct {
 	HeldManaTurns    int     // consecutive turns with 2+ mana untapped
 	Tutored          bool    // did they tutor this game?
 	LikelyHasAnswer  bool    // composite flag: tutored + held mana + interactive colors
+
+	// Wrath risk: probability [0,1] that this opponent is holding a board wipe.
+	WrathRisk float64
 }
 
 func (h *YggdrasilHat) assessAllThreats(gs *gameengine.GameState, seatIdx int) []seatThreat {
@@ -468,12 +524,24 @@ func (h *YggdrasilHat) assessAllThreats(gs *gameengine.GameState, seatIdx int) [
 			st.RetaliationRisk = 2.0
 		}
 		// Grudge factor: opponents we've already hit are more likely
-		// to retaliate. Decay-weighted: recent damage (from politicalGraph)
-		// matters more than ancient grudges.
+		// to retaliate. Decay rate modulated by Amiibo PoliticalMemory:
+		// high memory (→1) = slow decay (long grudge), low (→0) = fast decay.
 		if i < len(h.damageDealtTo) {
 			dealt := h.damageDealtTo[i]
 			if dealt > 0 && s.Life > 0 {
-				st.RetaliationRisk += float64(dealt) / float64(s.Life) * 0.5
+				grudge := float64(dealt) / float64(s.Life) * 0.5
+				if h.DNA != nil && gs != nil {
+					lastHitTurn := 0
+					if i < len(h.lastAttackedUsTurn) {
+						lastHitTurn = h.lastAttackedUsTurn[i]
+					}
+					turnsSince := gs.Turn - lastHitTurn
+					if turnsSince > 0 {
+						decayRate := 0.85 + h.DNA.PoliticalMemory*0.14
+						grudge *= math.Pow(decayRate, float64(turnsSince))
+					}
+				}
+				st.RetaliationRisk += grudge
 			}
 		}
 
@@ -630,6 +698,9 @@ func (h *YggdrasilHat) assessAllThreats(gs *gameengine.GameState, seatIdx int) [
 				st.EvalScore += 0.15
 			}
 		}
+
+		// Wrath risk: probability opponent is holding a board wipe.
+		st.WrathRisk = h.opponentLikelyHasWrath(gs, i)
 
 		threats = append(threats, st)
 	}
@@ -939,12 +1010,38 @@ func (h *YggdrasilHat) evalPosition(gs *gameengine.GameState, seatIdx int) float
 		return v
 	}
 	v := h.Evaluator.Evaluate(gs, seatIdx)
+	if h.NeuralEval != nil {
+		nv := h.NeuralEval.Evaluate(EncodeState(gs, seatIdx))
+		v = v*0.8 + nv*0.2
+	}
 	h.evalCache[key] = v
 	return v
 }
 
 func (h *YggdrasilHat) evalDetailed(gs *gameengine.GameState, seatIdx int) EvalResult {
-	return h.Evaluator.EvaluateDetailed(gs, seatIdx)
+	r := h.Evaluator.EvaluateDetailed(gs, seatIdx)
+	h.accumulateDims(r)
+	return r
+}
+
+func (h *YggdrasilHat) accumulateDims(r EvalResult) {
+	arr := r.AsArray()
+	h.dimCount++
+	for d := 0; d < NumDimensions; d++ {
+		h.dimAccum[d] += arr[d]
+	}
+}
+
+func (h *YggdrasilHat) DimensionMeans() [NumDimensions]float64 {
+	var means [NumDimensions]float64
+	if h.dimCount == 0 {
+		return means
+	}
+	n := float64(h.dimCount)
+	for d := 0; d < NumDimensions; d++ {
+		means[d] = h.dimAccum[d] / n
+	}
+	return means
 }
 
 // effectiveBudget returns the budget to use for this decision, degrading
@@ -1515,53 +1612,85 @@ func (h *YggdrasilHat) ucb1(key string, baseValue float64) float64 {
 	return avg + exploration
 }
 
-// refreshExplorationFactor recomputes the UCB1 exploration constant C when
-// the turn changes. Archetype, turn count, and game stage all influence the
-// balance between exploration and exploitation.
-func (h *YggdrasilHat) refreshExplorationFactor(gs *gameengine.GameState) {
+// explorationFactor returns the UCB1 exploration constant C for this turn,
+// tuned by archetype, game stage, and current plan. The result is cached
+// per-turn via h.explorationC / h.explorationCTurn.
+//
+// Archetype base values:
+//
+//	Aggro/Tribal  1.0  — execute the beatdown, don't get cute
+//	Stax          1.2  — lock pieces are clear, minimal exploration
+//	Ramp          1.3  — ramp targets are known
+//	Midrange      1.4  — balanced
+//	Control       1.5  — need to find the right answers
+//	Combo         1.8  — explore lines early, converge once assembling
+//	Others        sqrt(2) — standard UCB1 default
+//
+// Modulated by game stage (multiplicative):
+//
+//	Turn <= 5   +20%  — still learning the board
+//	Turn > 12   -20%  — time to execute
+//
+// Modulated by current plan (multiplicative):
+//
+//	PlanExecute  x0.5  — near-zero exploration, just win
+//	PlanAssemble x0.8  — focused but still some exploration
+//	PlanDisrupt  x1.2  — explore to find the right answer
+func (h *YggdrasilHat) explorationFactor(gs *gameengine.GameState, seatIdx int) float64 {
+	_ = seatIdx // reserved for future per-seat tuning
+
 	turn := 0
 	if gs != nil {
 		turn = gs.Turn
 	}
 	if turn == h.explorationCTurn && h.explorationC > 0 {
-		return
+		return h.explorationC
 	}
 	h.explorationCTurn = turn
 
+	// --- Archetype base C ---
 	base := math.Sqrt(2.0)
 	if h.Strategy != nil {
 		switch h.Strategy.Archetype {
 		case ArchetypeAggro, ArchetypeTribal:
 			base = 1.0
-		case ArchetypeCombo:
-			base = 1.8
-		case ArchetypeControl:
-			base = 1.6
 		case ArchetypeStax:
 			base = 1.2
-		case ArchetypeRamp:
+		case ArchetypeRamp, ArchetypeAristocrats:
 			base = 1.3
 		case ArchetypeMidrange:
 			base = 1.4
-		case ArchetypeAristocrats:
-			base = 1.3
-		case ArchetypeReanimator:
+		case ArchetypeControl, ArchetypeReanimator, ArchetypeSpellslinger:
 			base = 1.5
-		case ArchetypeSpellslinger:
-			base = 1.5
+		case ArchetypeCombo:
+			base = 1.8
 		}
 	}
 
+	// --- Game stage modulation (multiplicative) ---
 	if turn <= 5 {
-		base += 0.3
-	} else if turn >= 15 {
-		base -= math.Min(0.3, float64(turn-14)*0.02)
+		base *= 1.2
+	} else if turn > 12 {
+		base *= 0.8
 	}
 
-	if base < 0.5 {
-		base = 0.5
+	// --- Plan modulation (multiplicative) ---
+	switch h.planState.Current {
+	case PlanExecute:
+		base *= 0.5
+	case PlanAssemble:
+		base *= 0.8
+	case PlanDisrupt:
+		base *= 1.2
 	}
+
+	// Floor: never let exploration collapse completely.
+	if base < 0.3 {
+		base = 0.3
+	}
+
 	h.explorationC = base
+	return base
 }
 
 func (h *YggdrasilHat) recordAction(key string, value float64) {
@@ -2063,7 +2192,7 @@ func (h *YggdrasilHat) ChooseLandToPlay(gs *gameengine.GameState, seatIdx int, l
 // -- Interface: ChooseCastFromHand --
 
 func (h *YggdrasilHat) ChooseCastFromHand(gs *gameengine.GameState, seatIdx int, castable []*gameengine.Card) *gameengine.Card {
-	h.refreshExplorationFactor(gs)
+	h.explorationFactor(gs, seatIdx)
 
 	pool := make([]*gameengine.Card, 0, len(castable))
 	for _, c := range castable {
@@ -2277,6 +2406,8 @@ func (h *YggdrasilHat) ChooseCastFromHand(gs *gameengine.GameState, seatIdx int,
 	candidates := make([]scored, 0, len(pool))
 
 	eb := h.effectiveBudget(gs)
+	canISRollout := eb >= isRolloutBudgetGe && h.TurnRunner != nil &&
+		h.turnRemaining(gs) >= isRolloutCost
 	canRollout := eb >= rolloutBudgetGe && h.TurnRunner != nil &&
 		h.turnRemaining(gs) >= rolloutEvalCost
 
@@ -2284,7 +2415,15 @@ func (h *YggdrasilHat) ChooseCastFromHand(gs *gameengine.GameState, seatIdx int,
 		cardKey := prefix + "cast:" + c.DisplayName()
 		heurVal := h.cardHeuristic(gs, seatIdx, c)
 
-		if canRollout && h.turnRemaining(gs) >= rolloutEvalCost {
+		if canISRollout && h.turnRemaining(gs) >= isRolloutCost {
+			h.spendTurnBudget(gs, isRolloutCost)
+			rollVal := h.multiRolloutForCard(gs, seatIdx, c, isRolloutsPerCandidate)
+			blended := rollVal*0.6 + heurVal*0.4
+			ucb := h.ucb1(cardKey, blended)
+			info := fmt.Sprintf("  candidate: %-35s is-rollout=%.3f heuristic=%.3f blended=%.3f ucb=%.3f",
+				c.DisplayName(), rollVal, heurVal, blended, ucb)
+			candidates = append(candidates, scored{c, ucb, info})
+		} else if canRollout && h.turnRemaining(gs) >= rolloutEvalCost {
 			h.spendTurnBudget(gs, rolloutEvalCost)
 			rollVal := h.simulateRolloutForCard(gs, seatIdx, c)
 			blended := rollVal*0.5 + heurVal*0.5
@@ -2325,7 +2464,10 @@ func (h *YggdrasilHat) ChooseCastFromHand(gs *gameengine.GameState, seatIdx int,
 	best := candidates[pick]
 
 	bestKey := prefix + "cast:" + best.card.DisplayName()
-	if canRollout {
+	if canISRollout {
+		h.logf("  → CAST %s (ucb=%.3f, beat pass by %.3f, IS-MCTS, pick=%d/%d)",
+			best.card.DisplayName(), best.ucb, best.ucb-passUCB, pick, len(candidates))
+	} else if canRollout {
 		h.logf("  → CAST %s (ucb=%.3f, beat pass by %.3f, pick=%d/%d)",
 			best.card.DisplayName(), best.ucb, best.ucb-passUCB, pick, len(candidates))
 	} else {
@@ -2452,7 +2594,7 @@ func (h *YggdrasilHat) simulateRolloutForCard(gs *gameengine.GameState, seatIdx 
 // -- Interface: ChooseActivation --
 
 func (h *YggdrasilHat) ChooseActivation(gs *gameengine.GameState, seatIdx int, options []gameengine.Activation) *gameengine.Activation {
-	h.refreshExplorationFactor(gs)
+	h.explorationFactor(gs, seatIdx)
 
 	if len(options) == 0 {
 		return nil
@@ -2683,7 +2825,7 @@ func (h *YggdrasilHat) activationHeuristic(gs *gameengine.GameState, seatIdx int
 // -- Interface: ChooseAttackers --
 
 func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, legal []*gameengine.Permanent) []*gameengine.Permanent {
-	h.refreshExplorationFactor(gs)
+	h.explorationFactor(gs, seatIdx)
 
 	if len(legal) == 0 {
 		return nil
@@ -2816,7 +2958,7 @@ func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, le
 	// raise the attack threshold for value creatures (don't over-commit).
 	wrathSuspected := false
 	for i := range gs.Seats {
-		if i != seatIdx && h.opponentLikelyHasWrath(gs, i) {
+		if i != seatIdx && h.opponentLikelyHasWrath(gs, i) > 0.35 {
 			wrathSuspected = true
 			break
 		}
@@ -4679,12 +4821,12 @@ func (h *YggdrasilHat) inferOpponentArchetype(gs *gameengine.GameState, oppSeat 
 	return arch
 }
 
-// opponentLikelyHasWrath estimates wrath probability for an opponent
-// using hand size, cast cadence, mana availability, color signals, and
-// inferred archetype. Returns a probability [0, 1] rather than bool so
-// callers can make graded decisions.
-func (h *YggdrasilHat) opponentLikelyHasWrath(gs *gameengine.GameState, oppSeat int) bool {
-	return h.wrathProbability(gs, oppSeat) > 0.35
+// opponentLikelyHasWrath returns a probability [0, 1] that an opponent is
+// holding a sorcery-speed board wipe. Factors: mana availability (4+),
+// hand size, W/B/R color signals, inferred archetype, cast cadence,
+// known cards in hand, board-state asymmetry, and prior wrath history.
+func (h *YggdrasilHat) opponentLikelyHasWrath(gs *gameengine.GameState, oppSeat int) float64 {
+	return h.wrathProbability(gs, oppSeat)
 }
 
 func (h *YggdrasilHat) wrathProbability(gs *gameengine.GameState, oppSeat int) float64 {
@@ -4746,6 +4888,25 @@ func (h *YggdrasilHat) wrathProbability(gs *gameengine.GameState, oppSeat int) f
 		prob += 0.05 // two turns of nothing with cards = holding
 	}
 
+	// Known cards in hand: if we've seen a wrath via reveal effects,
+	// that's near-certain information (only reduced by possible discard).
+	if oppSeat < len(h.opponentKnownCards) {
+		for name := range h.opponentKnownCards[oppSeat] {
+			nl := strings.ToLower(name)
+			if strings.Contains(nl, "wrath") || strings.Contains(nl, "damnation") ||
+				strings.Contains(nl, "day of judgment") || strings.Contains(nl, "farewell") ||
+				strings.Contains(nl, "blasphemous act") || strings.Contains(nl, "toxic deluge") ||
+				strings.Contains(nl, "cyclonic rift") || strings.Contains(nl, "supreme verdict") ||
+				strings.Contains(nl, "vanquish the horde") || strings.Contains(nl, "chain reaction") ||
+				strings.Contains(nl, "kindred dominance") || strings.Contains(nl, "merciless eviction") ||
+				strings.Contains(nl, "austere command") || strings.Contains(nl, "terminus") ||
+				strings.Contains(nl, "living death") || strings.Contains(nl, "decree of pain") {
+				prob += 0.45 // known wrath in hand — near certain
+				break
+			}
+		}
+	}
+
 	// Prior wrath history: check if we've seen board wipes from this
 	// opponent via the event stream (cardsSeen set).
 	if oppSeat < len(h.cardsSeen) {
@@ -4761,6 +4922,19 @@ func (h *YggdrasilHat) wrathProbability(gs *gameengine.GameState, oppSeat int) f
 				break
 			}
 		}
+	}
+
+	// Board-state asymmetry: opponents with few creatures but a full hand
+	// and plenty of mana are more likely holding wraths — they're not
+	// developing board presence because they plan to reset it.
+	oppCreatures := 0
+	for _, p := range s.Battlefield {
+		if p != nil && p.IsCreature() {
+			oppCreatures++
+		}
+	}
+	if oppCreatures <= 1 && handSize >= 4 && avail >= 4 {
+		prob += 0.10
 	}
 
 	if prob > 0.95 {

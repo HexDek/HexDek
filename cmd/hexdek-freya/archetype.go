@@ -18,6 +18,7 @@ type ArchetypeClassification struct {
 	PlaysLike         int
 	PlaysLikeLabel    string
 	GameChangerCount  int
+	GameChangerCards  []string
 	Signals           []string
 }
 
@@ -52,8 +53,9 @@ type classifyContext struct {
 	planeswalkerCount int
 	millOppCount   int // opponent-targeting mill
 	discardForceCount int
-	bannedCount    int
+	bannedCount      int
 	gameChangerCount int
+	gameChangerNames []string
 	profiles       []CardProfile
 	qtyProfiles    []CardProfileQty
 	oracle         *oracleDB
@@ -341,6 +343,7 @@ func ClassifyArchetype(report *FreyaReport, qtyProfiles []CardProfileQty, oracle
 	ac.Bracket, ac.BracketLabel = estimateBracket(ctx, report)
 	ac.PlaysLike, ac.PlaysLikeLabel = estimatePlaysLike(ctx, report)
 	ac.GameChangerCount = ctx.gameChangerCount
+	ac.GameChangerCards = ctx.gameChangerNames
 
 	return ac
 }
@@ -380,6 +383,7 @@ func buildClassifyContext(report *FreyaReport, qtyProfiles []CardProfileQty, ora
 		}
 		if gameChangersList[nameLower] {
 			ctx.gameChangerCount += qp.Qty
+			ctx.gameChangerNames = append(ctx.gameChangerNames, qp.Profile.Name)
 		}
 		nonlandTotal += qp.Qty
 		tl := strings.ToLower(qp.Profile.TypeLine)

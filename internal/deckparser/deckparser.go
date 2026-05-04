@@ -387,6 +387,7 @@ func ParseDeckReader(r io.Reader, corpus *astload.Corpus, meta *MetaDB) (*Tourna
 	var explicitCommander string
 	var explicitPartner string
 	var lines []lineEntry
+	inMainSection := true
 
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 1024), 1024*1024)
@@ -410,23 +411,37 @@ func ParseDeckReader(r io.Reader, corpus *astload.Corpus, meta *MetaDB) (*Tourna
 			explicitPartner = strings.TrimSpace(m[1])
 			continue
 		}
+		// Section headers: Sideboard, Maybeboard, Companion, etc.
+		// Commander doesn't use sideboards — drop non-main sections.
+		if sm := sectionHeaderRE.FindStringSubmatch(raw); sm != nil {
+			section := strings.ToLower(sm[1])
+			inMainSection = section == "deck" || section == "mainboard" || strings.HasPrefix(section, "main")
+			continue
+		}
+		if !inMainSection {
+			continue
+		}
 		// Strip "(SET) 123" suffix.
 		if idx := strings.Index(raw, "("); idx > 0 {
 			raw = strings.TrimSpace(raw[:idx])
 		}
 		m := deckLineRE.FindStringSubmatch(raw)
-		if m == nil {
+		if m != nil {
+			qty, _ := strconv.Atoi(m[1])
+			if qty < 1 {
+				continue
+			}
+			name := strings.TrimSpace(m[2])
+			if name == "" {
+				continue
+			}
+			lines = append(lines, lineEntry{qty, name})
 			continue
 		}
-		qty, _ := strconv.Atoi(m[1])
-		if qty < 1 {
-			continue
+		// Bare card name (no quantity prefix) — default to 1.
+		if raw != "" {
+			lines = append(lines, lineEntry{1, raw})
 		}
-		name := strings.TrimSpace(m[2])
-		if name == "" {
-			continue
-		}
-		lines = append(lines, lineEntry{qty, name})
 	}
 	if err := sc.Err(); err != nil {
 		return nil, fmt.Errorf("deckparser: scan: %w", err)
@@ -682,6 +697,7 @@ func CloneCards(src []*gameengine.Card) []*gameengine.Card {
 var deckLineRE = regexp.MustCompile(`^\s*(\d+)\s*[xX]?\s+(.+?)\s*$`)
 var commanderLineRE = regexp.MustCompile(`(?i)^\s*COMMANDER\s*:\s*(.+?)\s*$`)
 var partnerLineRE = regexp.MustCompile(`(?i)^\s*PARTNER\s*:\s*(.+?)\s*$`)
+var sectionHeaderRE = regexp.MustCompile(`(?i)^\s*(Sideboard|Maybeboard|Companion|Considering|Deck|Main\s*Deck|Mainboard)\s*:?\s*$`)
 
 // parseTypes splits a Scryfall type_line into the engine's lower-case
 // type tokens. "Legendary Creature — Human Ninja" becomes

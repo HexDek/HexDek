@@ -1,6 +1,7 @@
 package hat
 
 import (
+	"math/rand"
 	"testing"
 
 	"github.com/hexdek/hexdek/internal/gameengine"
@@ -249,6 +250,102 @@ func TestMCTSHat_RolloutWithMockTurnRunner(t *testing.T) {
 	// 3 candidates (Bolt, Bears, pass) × up to rolloutDepth turns each.
 	if turnRunnerCalled < 3 {
 		t.Errorf("expected at least 3 TurnRunner calls (3 candidates), got %d", turnRunnerCalled)
+	}
+}
+
+func TestDeterminize_ShufflesOpponentHand(t *testing.T) {
+	gs := newTestGame(t, 2)
+	gs.Seats[0].Life = 40
+	gs.Seats[0].StartingLife = 40
+	gs.Seats[1].Life = 40
+	gs.Seats[1].StartingLife = 40
+
+	// Give opponent (seat 1) a known hand + library.
+	hand := []*gameengine.Card{
+		newTestCardMinimal("Spell A", []string{"instant"}, 1, nil),
+		newTestCardMinimal("Spell B", []string{"sorcery"}, 2, nil),
+	}
+	lib := []*gameengine.Card{
+		newTestCardMinimal("Lib C", []string{"creature"}, 3, nil),
+		newTestCardMinimal("Lib D", []string{"creature"}, 4, nil),
+		newTestCardMinimal("Lib E", []string{"land"}, 0, nil),
+	}
+	gs.Seats[1].Hand = hand
+	gs.Seats[1].Library = lib
+
+	rng := rand.New(rand.NewSource(42))
+	clone := gs.CloneForRollout(rng)
+	determinize(clone, 0, rng)
+
+	// Hand size must be preserved.
+	if len(clone.Seats[1].Hand) != 2 {
+		t.Fatalf("hand size should be 2, got %d", len(clone.Seats[1].Hand))
+	}
+	// Library size must be preserved.
+	if len(clone.Seats[1].Library) != 3 {
+		t.Fatalf("library size should be 3, got %d", len(clone.Seats[1].Library))
+	}
+	// Total pool should contain all original cards.
+	allNames := make(map[string]bool)
+	for _, c := range clone.Seats[1].Hand {
+		allNames[c.DisplayName()] = true
+	}
+	for _, c := range clone.Seats[1].Library {
+		allNames[c.DisplayName()] = true
+	}
+	if len(allNames) != 5 {
+		t.Errorf("expected 5 unique cards in pool, got %d", len(allNames))
+	}
+}
+
+func TestDeterminize_SkipsPerspectiveSeat(t *testing.T) {
+	gs := newTestGame(t, 2)
+	gs.Seats[0].Life = 40
+	gs.Seats[0].StartingLife = 40
+	gs.Seats[1].Life = 40
+	gs.Seats[1].StartingLife = 40
+
+	myHand := []*gameengine.Card{
+		newTestCardMinimal("My Card", []string{"instant"}, 1, nil),
+	}
+	gs.Seats[0].Hand = myHand
+
+	rng := rand.New(rand.NewSource(42))
+	clone := gs.CloneForRollout(rng)
+	determinize(clone, 0, rng)
+
+	// Seat 0 is perspective seat — hand should NOT be shuffled.
+	if len(clone.Seats[0].Hand) != 1 || clone.Seats[0].Hand[0].DisplayName() != "My Card" {
+		t.Error("perspective seat's hand should remain unchanged")
+	}
+}
+
+func TestMultiRolloutForCard_ReturnsScore(t *testing.T) {
+	gs := newTestGame(t, 2)
+	gs.Seats[0].Life = 40
+	gs.Seats[0].StartingLife = 40
+	gs.Seats[1].Life = 40
+	gs.Seats[1].StartingLife = 40
+
+	spell := newTestCardMinimal("Test Spell", []string{"sorcery"}, 2, nil)
+	gs.Seats[0].Hand = []*gameengine.Card{spell}
+	gs.Seats[0].ManaPool = 5
+
+	sp := &StrategyProfile{Archetype: ArchetypeMidrange}
+	h := NewYggdrasilHat(sp, 200)
+	turnRunnerCalled := 0
+	h.TurnRunner = func(gs *gameengine.GameState) { turnRunnerCalled++ }
+	h.Evaluator = NewEvaluator(sp)
+
+	score := h.multiRolloutForCard(gs, 0, spell, 3)
+
+	// Score should be finite.
+	if score != score { // NaN check
+		t.Fatal("score should not be NaN")
+	}
+	// TurnRunner should have been called (3 rollouts × rolloutDepth turns).
+	if turnRunnerCalled < 3 {
+		t.Errorf("expected at least 3 TurnRunner calls, got %d", turnRunnerCalled)
 	}
 }
 
