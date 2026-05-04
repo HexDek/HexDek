@@ -112,7 +112,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}", end="")
     if device.type == "cuda":
-        print(f" ({torch.cuda.get_device_name(0)}, {torch.cuda.get_device_properties(0).total_mem / 1e9:.1f} GB)")
+        print(f" ({torch.cuda.get_device_name(0)}, {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB)")
     else:
         print()
 

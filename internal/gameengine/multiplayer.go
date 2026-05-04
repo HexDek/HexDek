@@ -378,10 +378,17 @@ func HandleSeatElimination(gs *GameState, seatIdx int) {
 	// count OR we leave them as-is (they're still counted). Since we
 	// keep them in the data structures, only battlefield + stack removals
 	// need adjustment.
-	if realCardsLeaving > 0 && gs.Flags != nil {
-		if baseline, ok := gs.Flags["_zone_conservation_total"]; ok {
-			gs.Flags["_zone_conservation_total"] = baseline - realCardsLeaving
+	if realCardsLeaving > 0 {
+		if gs.Flags != nil {
+			if baseline, ok := gs.Flags["_zone_conservation_total"]; ok {
+				gs.Flags["_zone_conservation_total"] = baseline - realCardsLeaving
+			}
 		}
+		// Per-seat tracking so Feynman zone accounting can adjust expected.
+		if seat.Flags == nil {
+			seat.Flags = map[string]int{}
+		}
+		seat.Flags["cards_left_game"] = realCardsLeaving
 	}
 
 	// Step 3: drop §613 continuous effects controlled by this seat

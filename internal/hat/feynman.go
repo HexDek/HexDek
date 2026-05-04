@@ -60,21 +60,44 @@ func CheckGame(gs *gameengine.GameState) OracleResult {
 }
 
 // §704.5a — A player with 0 or less life loses the game.
+// Exception: "can't lose the game" effects (Platinum Angel, Lich's Mastery)
+// prevent the loss via FireLoseGameEvent. The SBA fires but the replacement
+// cancels it, so the player legitimately has ≤0 life without being Lost.
+// We detect this by checking SBA704_5a_emitted: if false and life ≤0, the
+// SBA checked but something prevented the loss → downgrade to info.
 func checkLifeSBA(gs *gameengine.GameState, r *OracleResult) {
 	for i, s := range gs.Seats {
 		if s == nil {
 			continue
 		}
 		if s.Life <= 0 && !s.Lost {
+			severity := "critical"
+			if !s.SBA704_5a_emitted && hasCantLoseEffect(gs, i) {
+				severity = "info"
+			}
 			r.Violations = append(r.Violations, OracleViolation{
 				Rule:        "704.5a",
 				Description: fmt.Sprintf("seat %d has %d life but is not marked lost", i, s.Life),
 				Seat:        i,
-				Severity:    "critical",
+				Severity:    severity,
 				Details:     map[string]interface{}{"life": s.Life},
 			})
 		}
 	}
+}
+
+// hasCantLoseEffect checks if any permanent on the battlefield has a
+// "would_lose_game" replacement registered for the given seat.
+func hasCantLoseEffect(gs *gameengine.GameState, seat int) bool {
+	if gs == nil {
+		return false
+	}
+	for _, repl := range gs.Replacements {
+		if repl != nil && repl.EventType == "would_lose_game" && repl.ControllerSeat == seat {
+			return true
+		}
+	}
+	return false
 }
 
 // §704.5f — A creature with toughness 0 or less is put into its
@@ -177,12 +200,20 @@ func checkZoneAccounting(gs *gameengine.GameState, r *OracleResult) {
 			expected = 99 + len(s.CommanderNames)
 		}
 
+		// §800.4a: when a player leaves the game, objects they own on the
+		// battlefield/stack cease to exist. These cards are not in any zone.
+		if s.Flags != nil {
+			expected -= s.Flags["cards_left_game"]
+		}
+
 		diff := total - expected
 		if diff < -3 || diff > 3 {
 			r.Violations = append(r.Violations, OracleViolation{
 				Rule: "zone_accounting",
-				Description: fmt.Sprintf("seat %d has %d cards (expected ~%d, diff=%d)",
-					i, total, expected, diff),
+				Description: fmt.Sprintf("seat %d has %d cards (expected ~%d, diff=%d) [hand=%d lib=%d gy=%d exile=%d bf=%d tok=%d cmd=%d]",
+					i, total, expected, diff,
+					len(s.Hand), len(s.Library), len(s.Graveyard), len(s.Exile),
+					len(s.Battlefield)-tokens, tokens, len(s.CommandZone)),
 				Seat:     i,
 				Severity: "warning",
 				Details: map[string]interface{}{

@@ -2845,7 +2845,7 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 							Owner:         kaSeat,
 							BasePower:     0,
 							BaseToughness: 0,
-							Types:         []string{"creature"},
+							Types:         []string{"token", "creature"},
 							TypeLine:      "Creature Token — Zombie Army",
 						},
 						Controller:    kaSeat,

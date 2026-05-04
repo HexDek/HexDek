@@ -203,6 +203,7 @@ type Showmatch struct {
 	trainingDir string             // neural evaluator training data output
 	neuralEval  *hat.NeuralEvaluator // shared neural model (nil = not trained yet)
 	selfPlay    *hat.SelfPlayManager // Level 6 self-play training loop
+	strategies  map[string]*hat.StrategyProfile // deck key → Freya strategy profile
 
 	specMu     sync.RWMutex
 	spectators map[*spectatorConn]struct{}
@@ -262,6 +263,9 @@ func NewShowmatch(astPath, oraclePath, decksDir string, database *sql.DB) *Showm
 		log.Printf("neural: loaded trained model from %s/model.json", sm.trainingDir)
 	}
 	spCfg := hat.DefaultSelfPlayConfig(".")
+	if _, err := os.Stat("venv/bin/python3"); err == nil {
+		spCfg.PythonBin = "venv/bin/python3"
+	}
 	sm.selfPlay = hat.NewSelfPlayManager(spCfg)
 	sm.selfPlay.OnModelLoad = func(ne *hat.NeuralEvaluator) {
 		sm.mu.Lock()
@@ -434,15 +438,22 @@ func (sm *Showmatch) loadAndRun(astPath, oraclePath, decksDir string) {
 	}
 
 	bracketMap := make(map[string]int, len(decks))
+	stratMap := make(map[string]*hat.StrategyProfile, len(decks))
 	bracketCounts := [6]int{}
+	stratLoaded := 0
 	for _, d := range decks {
 		key := deckKeyFromPath(d.Path)
 		sp := hat.LoadStrategyFromFreya(d.Path)
-		if sp != nil && sp.Bracket >= 1 && sp.Bracket <= 5 {
-			bracketMap[key] = sp.Bracket
-			bracketCounts[sp.Bracket]++
+		if sp != nil {
+			stratMap[key] = sp
+			stratLoaded++
+			if sp.Bracket >= 1 && sp.Bracket <= 5 {
+				bracketMap[key] = sp.Bracket
+				bracketCounts[sp.Bracket]++
+			}
 		}
 	}
+	log.Printf("showmatch: loaded %d/%d Freya strategy profiles", stratLoaded, len(decks))
 	log.Printf("showmatch: HexELO bracket cache: B1=%d B2=%d B3=%d B4=%d B5=%d (%d unclassified)",
 		bracketCounts[1], bracketCounts[2], bracketCounts[3], bracketCounts[4], bracketCounts[5],
 		len(decks)-bracketCounts[1]-bracketCounts[2]-bracketCounts[3]-bracketCounts[4]-bracketCounts[5])
@@ -452,6 +463,7 @@ func (sm *Showmatch) loadAndRun(astPath, oraclePath, decksDir string) {
 	sm.meta = meta
 	sm.deckPool = decks
 	sm.bracketCache = bracketMap
+	sm.strategies = stratMap
 	for key, e := range sm.elo {
 		if e.bracket == 0 {
 			if b, ok := bracketMap[key]; ok {
@@ -695,7 +707,7 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 			dimStats := pool.DimStats
 			sm.amiiboMu.Unlock()
 			gauntDnaIdxes[i] = dnaIdx
-			h := hat.NewYggdrasilHatWithPool(&dnaCopy, nil, 50, &dimStats)
+			h := hat.NewYggdrasilHatWithPool(&dnaCopy, sm.strategies[deckKeys[i]], 50, &dimStats)
 			h.NeuralEval = sm.neuralEval
 			gs.Seats[i].Hat = h
 			gauntHats[i] = h
@@ -1145,7 +1157,7 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 		dimStats := pool.DimStats
 		sm.amiiboMu.Unlock()
 		dnaIdxes[i] = dnaIdx
-		h := hat.NewYggdrasilHatWithPool(&dnaCopy, nil, 50, &dimStats)
+		h := hat.NewYggdrasilHatWithPool(&dnaCopy, sm.strategies[deckKeys[i]], 50, &dimStats)
 		h.NeuralEval = sm.neuralEval
 		gs.Seats[i].Hat = h
 		bracketHats[i] = h
@@ -1336,7 +1348,7 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 		dimStats := pool.DimStats
 		sm.amiiboMu.Unlock()
 		showDnaIdxes[i] = dnaIdx
-		h := hat.NewYggdrasilHatWithPool(&dnaCopy, nil, 50, &dimStats)
+		h := hat.NewYggdrasilHatWithPool(&dnaCopy, sm.strategies[deckKeys[i]], 50, &dimStats)
 		h.NeuralEval = sm.neuralEval
 		gs.Seats[i].Hat = h
 		showHats[i] = h

@@ -41,12 +41,13 @@ func DefaultSelfPlayConfig(baseDir string) SelfPlayConfig {
 }
 
 type SelfPlayManager struct {
-	config      SelfPlayConfig
-	generation  int32
-	sampleCount int64
-	lastTrained int64
-	training    int32 // atomic flag: 1 = training in progress
-	OnModelLoad func(ne *NeuralEvaluator) // callback to hot-swap model
+	config       SelfPlayConfig
+	generation   int32
+	sampleCount  int64
+	lastTrained  int64
+	training     int32 // atomic flag: 1 = training in progress
+	lastAttempt  int64 // unix timestamp of last training attempt (success or failure)
+	OnModelLoad  func(ne *NeuralEvaluator) // callback to hot-swap model
 }
 
 func NewSelfPlayManager(cfg SelfPlayConfig) *SelfPlayManager {
@@ -70,12 +71,22 @@ func (sp *SelfPlayManager) IsTraining() bool {
 
 // RecordSamples increments the sample counter and triggers training
 // if the threshold is met. Non-blocking: training runs in a goroutine.
+// Enforces a 5-minute cooldown between attempts to avoid spam on failure.
 func (sp *SelfPlayManager) RecordSamples(n int) {
 	newCount := atomic.AddInt64(&sp.sampleCount, int64(n))
 	lastTrained := atomic.LoadInt64(&sp.lastTrained)
 	threshold := int64(sp.config.TrainThreshold)
 
-	if newCount-lastTrained >= threshold && atomic.CompareAndSwapInt32(&sp.training, 0, 1) {
+	if newCount-lastTrained < threshold {
+		return
+	}
+	now := time.Now().Unix()
+	lastAttempt := atomic.LoadInt64(&sp.lastAttempt)
+	if now-lastAttempt < 300 {
+		return
+	}
+	if atomic.CompareAndSwapInt32(&sp.training, 0, 1) {
+		atomic.StoreInt64(&sp.lastAttempt, now)
 		go sp.runTraining(newCount)
 	}
 }
@@ -104,6 +115,9 @@ func (sp *SelfPlayManager) runTraining(sampleCountAtStart int64) {
 	if err != nil {
 		log.Printf("[selfplay] generation %d: training FAILED after %v: %v",
 			gen, elapsed, err)
+		// Advance lastTrained to avoid immediate re-trigger on failure.
+		// Next attempt after another TrainThreshold samples accumulate.
+		atomic.StoreInt64(&sp.lastTrained, sampleCountAtStart)
 		return
 	}
 
