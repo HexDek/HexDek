@@ -12,6 +12,26 @@ const SORT_KEYS = [
   { key: 'delta', label: 'DELTA' },
 ]
 
+const BRACKETS = [
+  { value: null, label: 'ALL' },
+  { value: 1, label: 'B1' },
+  { value: 2, label: 'B2' },
+  { value: 3, label: 'B3' },
+  { value: 4, label: 'B4' },
+  { value: 5, label: 'B5' },
+]
+
+const BRACKET_KIND = { 1: undefined, 2: 'ok', 3: 'info', 4: 'warn', 5: 'danger' }
+
+function BandTag({ band, bracket }) {
+  if (!band) return null
+  return (
+    <Tag kind={BRACKET_KIND[bracket]} style={{ fontSize: 8, padding: '1px 4px', marginLeft: 4 }}>
+      {band}
+    </Tag>
+  )
+}
+
 function DeltaDisplay({ delta }) {
   if (delta == null || delta === 0) return <span className="muted-2">--</span>
   const positive = delta > 0
@@ -36,6 +56,7 @@ export default function Leaderboard() {
   const [filter, setFilter] = useState('')
   const [sortKey, setSortKey] = useState('rating')
   const [sortAsc, setSortAsc] = useState(false)
+  const [bracket, setBracket] = useState(null)
   const navigate = useNavigate()
   const { elo } = useLiveSocket()
 
@@ -50,6 +71,10 @@ export default function Leaderboard() {
 
   const sorted = useMemo(() => {
     let list = [...(elo || [])]
+
+    if (bracket != null) {
+      list = list.filter(e => e.bracket === bracket)
+    }
 
     if (filter) {
       const q = filter.toLowerCase()
@@ -68,7 +93,7 @@ export default function Leaderboard() {
     })
 
     return list
-  }, [elo, filter, sortKey, sortAsc])
+  }, [elo, filter, sortKey, sortAsc, bracket])
 
   const sortArrow = (key) => {
     if (sortKey !== key) return ''
@@ -90,9 +115,11 @@ export default function Leaderboard() {
     }
   }
 
+  const bracketLabel = bracket != null ? `B${bracket}` : 'ALL'
+
   return (
     <>
-      <Tape left="LEADERBOARD / / LIVE RANKINGS" mid={`${sorted.length} DECKS`} right="DOC HX-500" />
+      <Tape left={`LEADERBOARD / ${bracketLabel} / LIVE RANKINGS`} mid={`${sorted.length} DECKS`} right="DOC HX-500" />
 
       <div style={{ padding: 18, flex: 1, display: 'flex', flexDirection: 'column', gap: 14, overflow: 'auto' }}>
         {/* Search + Sort controls */}
@@ -119,6 +146,23 @@ export default function Leaderboard() {
           </div>
           <span className="t-xs muted">{sorted.length} RANKED</span>
         </div>
+
+        {/* Bracket filter */}
+        <div className="lb-sort-bar">
+          {BRACKETS.map(b => (
+            <Tag
+              key={b.label}
+              kind={bracket === b.value ? (BRACKET_KIND[b.value] || 'ok') : undefined}
+              solid={bracket === b.value}
+              onClick={() => setBracket(b.value)}
+              style={{ cursor: 'pointer', fontSize: 9 }}
+            >
+              {b.label}
+            </Tag>
+          ))}
+        </div>
+
+        {/* Sort controls */}
         <div className="lb-sort-bar">
           {SORT_KEYS.map(sk => (
             <Tag
@@ -164,7 +208,10 @@ export default function Leaderboard() {
                   <td className="lb-td lb-td--rank">
                     <span className={i < 3 ? 'lb-medal' : ''}>{i + 1}</span>
                   </td>
-                  <td className="lb-td lb-td--cmdr" style={{ textDecoration: 'underline', textDecorationColor: 'var(--rule-2)' }}>{entry.commander || '--'}</td>
+                  <td className="lb-td lb-td--cmdr" style={{ textDecoration: 'underline', textDecorationColor: 'var(--rule-2)' }}>
+                    {entry.commander || '--'}
+                    <BandTag band={entry.band} bracket={entry.bracket} />
+                  </td>
                   <td className="lb-td lb-td--owner muted">{entry.owner?.toUpperCase() || '--'}</td>
                   <td className="lb-td lb-td--rating">
                     <span style={{ fontWeight: 700 }}>{Math.round(entry.rating || 0)}</span>
@@ -208,7 +255,10 @@ export default function Leaderboard() {
               <div className="panel-hd">
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span className={i < 3 ? 'lb-medal' : ''} style={{ fontWeight: 700, minWidth: 18 }}>#{i + 1}</span>
-                  <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{entry.commander || '--'}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--ink)' }}>
+                    {entry.commander || '--'}
+                    <BandTag band={entry.band} bracket={entry.bracket} />
+                  </span>
                 </span>
                 <span className="t-xs" style={{ fontWeight: 700 }}>
                   HexELO {Math.round(entry.rating || 0)}
