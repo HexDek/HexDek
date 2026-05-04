@@ -46,9 +46,6 @@ type GameOutcome struct {
 	// Concessions is the number of conviction concessions in this game.
 	Concessions int
 
-	// MinRelPos is the lowest relative position any hat saw (for conviction calibration).
-	MinRelPos float64
-
 	// Board density at end of game (for timeout diagnosis).
 	MaxBoardSize   int // largest single-seat battlefield
 	TotalBoardSize int // total permanents across all seats

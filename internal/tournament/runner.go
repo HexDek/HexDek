@@ -506,11 +506,6 @@ func runOneGame(gameIdx int, decks []*deckparser.TournamentDeck, hats []HatFacto
 		if s == nil {
 			continue
 		}
-		if yh, ok := s.Hat.(*hat.YggdrasilHat); ok {
-			if yh.MinRelPos < out.MinRelPos {
-				out.MinRelPos = yh.MinRelPos
-			}
-		}
 	}
 
 	// Count mode-change events + parser-gap snippets.

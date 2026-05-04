@@ -133,9 +133,6 @@ type YggdrasilHat struct {
 	availablePool map[string]bool
 
 	// Conviction concession — sliding window of recent position evals.
-	convictionScores [convictionWindowSize]float64
-	convictionCount  int
-	convictionFull   bool
 
 	// DNA — optional Amiibo personality parameters that nudge weights,
 	// attack thresholds, combo patience, and political behavior.
@@ -149,9 +146,6 @@ type YggdrasilHat struct {
 	// (1 - confidenceThreshold), the hat picks randomly among top
 	// candidates. Higher threshold = more deterministic selection.
 	confidenceThreshold float64
-
-	// Diagnostic: track the lowest relative position ever seen.
-	MinRelPos float64
 
 	// T3.2: per-game dimension accumulator. Updated on each Evaluate call,
 	// exposed via DimensionMeans() for post-game outcome correlation.
@@ -172,10 +166,6 @@ type YggdrasilHat struct {
 }
 
 const (
-	convictionWindowSize = 4
-	convictionThreshold  = -0.35 // relative to best opponent — consistently worst at the table
-	convictionMinTurn    = 10
-
 	// Adaptive budget: degrade to heuristic when board is too complex.
 	// 60 permanents across 4 seats = ~15 each = a developed mid-game board.
 	adaptiveBudgetComplexityThreshold = 60
@@ -4098,43 +4088,15 @@ func (h *YggdrasilHat) ChoosePutBack(gs *gameengine.GameState, seatIdx int, hand
 	return h.ChooseBottomCards(gs, seatIdx, hand, count)
 }
 
-// -- Interface: ShouldConcede (conviction-based) --
+// -- Interface: ShouldConcede --
+// Disabled: score-based "conviction" concession was too aggressive —
+// hat scooped at 38 life because it felt behind. Concession should only
+// happen for infinite loops / resolver lockups, which the engine handles
+// via SBA cap (infinite_loop_draw) and stack loopDetector.
+// Everyone fights to the death.
 
 func (h *YggdrasilHat) ShouldConcede(gs *gameengine.GameState, seatIdx int) bool {
-	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
-		return false
-	}
-	seat := gs.Seats[seatIdx]
-	if seat == nil || seat.Lost {
-		return false
-	}
-	if gs.Turn < convictionMinTurn {
-		return false
-	}
-
-	// Use relative position (my score - best opponent) not absolute.
-	relScore := h.relativePosition(gs, seatIdx)
-	if relScore < h.MinRelPos {
-		h.MinRelPos = relScore
-	}
-
-	idx := h.convictionCount % convictionWindowSize
-	h.convictionScores[idx] = relScore
-	h.convictionCount++
-	if h.convictionCount >= convictionWindowSize {
-		h.convictionFull = true
-	}
-
-	if !h.convictionFull {
-		return false
-	}
-
-	for _, s := range h.convictionScores {
-		if s > convictionThreshold {
-			return false
-		}
-	}
-	return true
+	return false
 }
 
 // -- Interface: ObserveEvent --
