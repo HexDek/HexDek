@@ -136,10 +136,6 @@ func TestObserver_RecordObservation_RoutesSinks(t *testing.T) {
 		t.Errorf("expected Sol Ring, got %s", hug.pairs[0].CardA)
 	}
 
-	stored := obs.Observations()
-	if len(stored) != 1 {
-		t.Errorf("expected 1 stored observation, got %d", len(stored))
-	}
 }
 
 func TestObserver_RecordCrash(t *testing.T) {

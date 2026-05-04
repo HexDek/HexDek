@@ -18,7 +18,6 @@ const (
 // Muninn, telemetry).
 type Observer struct {
 	seedBuf   []GameSeed
-	obsBuf    []Observation
 	huginn    HuginnSink
 	muninn    MuninnSink
 	telemetry TelemetrySink
@@ -72,9 +71,6 @@ func (o *Observer) RecordObservation(obs Observation) {
 			o.muninn.RecordDeadTriggers(obs.DeadTriggers, gameID)
 		}
 	}
-	o.mu.Lock()
-	o.obsBuf = append(o.obsBuf, obs)
-	o.mu.Unlock()
 }
 
 // RecordCrash is called from panic recovery. Routes to Muninn immediately.
@@ -103,16 +99,6 @@ func (o *Observer) Flush() {
 		return
 	}
 	o.mu.Unlock()
-}
-
-// Observations returns a snapshot of the buffered observations. Safe for
-// concurrent reads -- the caller gets an independent copy.
-func (o *Observer) Observations() []Observation {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	out := make([]Observation, len(o.obsBuf))
-	copy(out, o.obsBuf)
-	return out
 }
 
 func (o *Observer) flushSeeds(seeds []GameSeed) {

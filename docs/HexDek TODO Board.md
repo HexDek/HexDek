@@ -20,7 +20,7 @@ kanban-plugin: board
 - [ ] Negative ELO shame badges — "MID" stamp at 0, escalating tiers for deep negative. Leaderboard bottom-10 wall of shame section #ui #fun
 - [ ] Operator platform page/tab (operator profile, deck management, analytics dashboard) #ui #platform
 - [ ] Friends system + player profiles — lightweight "pub" model: see each other's decks/ELO, no feed/notifications. Add via search or deck page #ui #social
-- [ ] Bracket-stratified leaderboard tabs — filter by B1-B5, separate rankings per bracket #ui
+- [x] Bracket-stratified leaderboard tabs — filter by B1-B5, separate rankings per bracket + band labels (2026-05-04) #ui
 - [x] Game Changer cards list on deck page — GC card names persisted to strategy.json + "GAME CHANGERS" panel with art thumbnails on deck drilldown (2026-05-04) #ui
 
 ### Legality Flag (7174n1c — 2026-05-02)
@@ -240,6 +240,10 @@ kanban-plugin: board
 
 ## Done
 
+- [x] **Grinder memory leak fix** — Heimdall `obsBuf` unbounded growth. Observations were dispatched to Huginn/Muninn sinks then redundantly appended to a buffer that was never read. Removed dead buffer. (2026-05-04) #engine #performance
+- [x] **Depression concession removal** — Score-based conviction concession was too aggressive (hat scooped at 38 life). Removed entirely; everyone fights to the death. Engine's SBA cap + loop detector handles actual infinite loops. (2026-05-04) #engine #hat
+- [x] **Feynman Oracle false positive fixes** — 704.5a: hasCantLoseEffect() for Platinum Angel. Zone accounting: §800.4a cards_left_game tracking. Zombie Army token "token" type fix for IsToken(). (2026-05-04) #engine #hat
+- [x] **Bracket filter leaderboard** — B1-B5 filter tabs + band labels on leaderboard, live via WebSocket. Desktop table + mobile cards. (2026-05-04) #ui
 - [x] **Jhoira of the Ghitu suspend** — proper `OnActivated` handler, picks highest-CMC nonland from hand, calls `SuspendCard(gs, seat, card, 4)`. Removed stub (2026-05-01) #engine
 - [x] **Lich's Mastery life observers** — `OnTrigger("life_gained")` draws cards, `OnTrigger("life_lost")` exiles permanents/hand/graveyard. Added `FireCardTrigger("life_lost")` to `resolveLoseLife` (2026-05-01) #engine
 - [x] **Ulrich transform events** — `FireCardTrigger("transform")` added to `TransformPermanent()`. Back-face fight trigger on transform to Uncontested Alpha, front-face +4/+4 on transform back (2026-05-01) #engine
