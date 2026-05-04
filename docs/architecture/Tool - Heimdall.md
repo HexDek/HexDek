@@ -333,8 +333,12 @@ The `--hat` flag selects greedy / poker / octo (octo is YggdrasilHat under the c
 
 ## Related
 
+- [Learning Loop](Learning%20Loop.md) — the `internal/heimdall` observation routing package (separate from this CLI tool)
 - [Tool - Tournament](Tool%20-%20Tournament.md) — produces the event logs Heimdall consumes
 - [Freya Strategy Analyzer](Freya%20Strategy%20Analyzer.md) — supplies per-deck `ComboPieces` and finisher sets
 - [Engine Architecture](Engine%20Architecture.md) — event log spec
 - [Tournament Runner](Tournament%20Runner.md) — analytics-enabled mode
 - [Invariants Odin](Invariants%20Odin.md) — what spectator's pause-on-anomaly checks
+- [Feynman Oracle](Feynman%20Oracle.md) — post-game invariant validation
+- [Tesla Causal Pivots](Tesla%20Causal%20Pivots.md) — causal pivot extraction
+- [Ive Spectator](Ive%20Spectator.md) — narrative arc generation

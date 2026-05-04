@@ -1,32 +1,48 @@
 # HexDek Architecture
 
-One-page map of how oracle text becomes executable game state.
+One-page map of how oracle text becomes a 4-player Commander game with political AI.
 
 ```
-                 ┌──────────────────────────────────────────────────────────────┐
-                 │  Scryfall bulk dump → data/rules/oracle-cards.json (31,639)  │
-                 └─────────────────────────────┬────────────────────────────────┘
-                                               │
-                                               ▼
-     ┌───────────────────────────────────────────────────────────────────────────┐
-     │  scripts/parser.py                                                        │
-     │    normalize(card) → split_abilities(text) → parse_ability(chunk)         │
-     │           │                                       │                       │
-     │           │                ┌──────────────────────┼────────────────────┐  │
-     │           │                ▼                      ▼                    ▼  │
-     │           │         try Keyword           try Triggered         try Static│
-     │           │         try Activated         spell fallback        (+extensions)
-     │           │                                                               │
-     │           └──────────────────→  typed AST (scripts/mtg_ast.py)            │
-     └───────────────────────────────────────┬───────────────────────────────────┘
-                                             │
-                ┌────────────────────────────┼────────────────────────────┐
-                ▼                            ▼                            ▼
-    ┌───────────────────┐     ┌────────────────────────┐     ┌────────────────────────┐
-    │ coverage_honest.py│     │ layer_harness.py       │     │ runtime engine         │
-    │ dual-metric       │     │ tag Modifications with │     │ internal/game/ (Go)    │
-    │ report            │     │ §613 layers            │     │ (consumes AST; future) │
-    └───────────────────┘     └────────────────────────┘     └────────────────────────┘
+Scryfall bulk (50K+ cards)
+    │
+    ▼
+Parser (Python) ──→ Typed AST (CardAST per card)
+    │                     │
+    ▼                     ▼
+Coverage reports    Go Engine (internal/gameengine)
+                         │
+            ┌────────────┼────────────────┐
+            ▼            ▼                ▼
+    Layer System    Zone System     Trigger Dispatch
+    (§613 L1-7e)   (MoveCard)     (ETB/LTB/cast/dmg)
+            │            │                │
+            └────────────┼────────────────┘
+                         ▼
+               YggdrasilHat (AI)
+               ┌─────────┼──────────┐
+               ▼         ▼          ▼
+          20-dim Eval  IS-MCTS   State Machine
+          + Neural     + Shannon  (6 game plans)
+               │         │          │
+               └─────────┼──────────┘
+                         ▼
+              Tournament Runner (Thor)
+              ┌──────────┼──────────────┐
+              ▼          ▼              ▼
+          Grinder    Bracket Pod    Showmatch
+          (bulk)     (rated)        (spectated)
+              │          │              │
+              └──────────┼──────────────┘
+                         ▼
+              Heimdall (observation routing)
+              ┌──────┬───┼───┬──────────┐
+              ▼      ▼   ▼   ▼          ▼
+          Huginn  Muninn Tesla Feynman  GA4
+          (synergy)(gaps)(pivot)(oracle) (telemetry)
+              │      │    │      │
+              ▼      ▼    ▼      ▼
+            Freya ←─────────── Learning Loop
+          (strategy)      Self-Play + Neural Training
 ```
 
 ---
@@ -35,33 +51,16 @@ One-page map of how oracle text becomes executable game state.
 
 Source: `scripts/parser.py` (~98K lines counting inlined grammar tables).
 
-The parser is a recursive-descent grammar with a registry of regex-keyed effect rules. For each card it runs roughly:
+Recursive-descent parser with ~50 extension modules. For each card:
 
-1. **`normalize(card)`** — pull `oracle_text`, concatenate `card_faces` on DFCs, lowercase, strip reminder text, normalize em-dashes, replace the card's own name with `~`.
-2. **`split_abilities(text)`** — break on canonical delimiters (newlines, known keyword lists, ability words, modal bullets). Emits a list of ability-sized chunks.
-3. **`parse_ability(chunk)`** — try each production in precedence order:
-    - **Keyword** shorthand lookup (`Flying`, `Flashback`, `Cycling`, …). Keywords that expand to full abilities still emit a `Keyword` node; the runtime is responsible for the expansion so the AST stays a stable interface.
-    - **Triggered** — anchored at `When / Whenever / At`. Grammar for trigger event + intervening `if` clause + effect body.
-    - **Activated** — `cost:effect` split at the unescaped colon; cost parsed via `parse_cost`, effect via the effect-rule registry.
-    - **Static** — anything left that matches a `STATIC_PATTERN`. Includes continuous effects, replacement effects, timing restrictions.
-    - **Spell fallback** — instants/sorceries whose body is just an effect clause are wrapped as a single activated-like `Effect` at the card level.
-4. **Unconsumed text is recorded** in `parse_errors` so the coverage report can pinpoint exactly which grammar production is missing. This is what made 100% syntactic coverage tractable — every gap is a concrete, named grammar bug.
+1. **`normalize(card)`** — pull `oracle_text`, concatenate `card_faces` on DFCs, lowercase, strip reminder text, replace card's own name with `~`.
+2. **`split_abilities(text)`** — break on canonical delimiters (newlines, keyword lists, modal bullets).
+3. **`parse_ability(chunk)`** — try each production: Keyword → Triggered → Activated → Static → Spell fallback.
+4. Unconsumed text recorded in `parse_errors` for coverage tracking.
 
-Entry points:
+100% syntactic coverage across all 50K+ Scryfall cards. Zero parse failures.
 
-```bash
-python3 scripts/parser.py                 # full report → data/rules/parser_coverage.md
-python3 scripts/parser.py --card "Snapcaster Mage"   # dump one card's AST
-python3 scripts/parser.py --errors-top 40            # show top-N unconsumed fragments
-```
-
----
-
-## 2. AST schema
-
-Source: `scripts/mtg_ast.py`. All nodes are `@dataclass(frozen=True)` so the AST is hashable, comparable, and safe to cache.
-
-Per comp rules §113, a card's abilities are one of four top-level kinds:
+AST schema (`scripts/mtg_ast.py`): frozen dataclasses implementing CR §113.
 
 | Node | Shape | Example |
 |---|---|---|
@@ -70,234 +69,161 @@ Per comp rules §113, a card's abilities are one of four top-level kinds:
 | **`Triggered`** | `(trigger, effect, intervening_if?, raw)` | `When ~ enters, draw a card` |
 | **`Keyword`** | `(name, args, raw)` | `Flying`, `Flashback {2}{U}` |
 
-Supporting types:
-
-- **`ManaSymbol` / `ManaCost`** — `{U}`, `{2}`, `{U/B}`, `{X}`, `{S}`, `{U/P}`.
-- **`Filter`** — a structural target spec (`target creature you control`, `each opponent`, `a basic Plains card`). Two filters with the same shape compare equal.
-- **`Trigger`** — event slug (`etb`, `die`, `attack`, `cast`, `phase`, …) plus optional actor/target filters and phase.
-- **`Cost`** — a composite (mana, tap, untap, sacrifice, discard, pay-life, exile-self, return-self, counter-removal, extra).
-- **`Condition`** — a typed boolean (`you_control`, `life_threshold`, `card_count_zone`, `tribal`, …).
-
-**Effect nodes** are the recursive part. Control-flow nodes (`Sequence`, `Choice`, `Optional_`, `Conditional`) wrap leaf effects. Every leaf is a comp-rules-defined effect type, each carrying the parameters that structurally distinguish it:
-
-`Damage · Draw · Discard · Mill · Scry · Surveil · CounterSpell · Destroy · Exile · Bounce · Tutor · Reanimate · Recurse · GainLife · LoseLife · SetLife · Sacrifice · CreateToken · CounterMod · Buff · GrantAbility · TapEffect · UntapEffect · AddMana · GainControl · CopySpell · CopyPermanent · Fight · Reveal · LookAt · Shuffle · ExtraTurn · ExtraCombat · WinGame · LoseGame · Replacement · Prevent · UnknownEffect`
-
-**`Modification`** is the static-ability body (anthems, restrictions, type-adds, replacement effects). It carries a `kind` slug, `args`, and a `layer` tag (see §4).
-
-**`CardAST`** is the top-level container: `(name, abilities, parse_errors, fully_parsed)`. `signature(ast)` produces a hashable structural fingerprint used to cluster functionally equivalent cards.
+Extensions in `scripts/extensions/` organized by concern. `per_card.py` handles snowflake cards that defeat any reasonable grammar.
 
 ---
 
-## 3. Extension ecosystem
+## 2. Go game engine
 
-The parser's grammar rules are registered at import time through a module-local decorator plus an auto-loader. Source: `scripts/extensions/` (~50 modules).
+Source: `internal/gameengine/` — the production backbone.
 
-On startup `parser.py` calls `load_extensions()`, which `importlib`-loads every non-underscore `.py` under `scripts/extensions/` and merges four registries:
+Full Commander rules implementation:
 
-| Registry | Where it feeds | Used for |
+- **Turn structure**: untap → upkeep → draw → main1 → combat → main2 → end step → cleanup
+- **Stack & priority**: APNAP ordering (§603), split-second, modal/kicker/X spells
+- **Combat**: 5-step combat, first/double strike, trample, menace, provoke, goad
+- **Zone system**: universal `MoveCard` entry point with replacement effect interception
+- **Layer system**: §613 continuous effects (layers 1–7e), dependency ordering, cache invalidation
+- **Trigger dispatch**: zone-change, ETB/LTB, cast, damage, state-based triggers
+- **State-based actions**: full §704 (lethal damage, 0 toughness, legend rule, poison, commander damage, etc.)
+- **Mana system**: 6-type pool, hybrid/phyrexian, convoke, treasure, restricted mana
+- **Replacement effects**: §614/§616 ordering, shield counters, self-replacement
+- **Per-card handlers**: 750+ named handlers covering all 652 deck-pool commanders
+
+Detailed docs: `docs/architecture/`
+
+---
+
+## 3. AI system — YggdrasilHat
+
+Source: `internal/hat/` — single unified brain, every decision flows through one evaluation pipeline.
+
+### Evolution levels (all implemented)
+
+| Level | System | What it does |
 |---|---|---|
-| `EFFECT_RULES` | effect-rule table | new effect grammars (`@rule(pattern)` decorators) |
-| `STATIC_PATTERNS` | static-ability matcher | anthems, continuous effects, restrictions |
-| `TRIGGER_PATTERNS` | trigger matcher | new trigger events |
-| `PER_CARD_HANDLERS` | per-card table checked first in `parse_card` | 1,079 snowflake cards routed to named handlers |
+| **1** | YggdrasilHat core | 20-dim board evaluator, political multiplayer, budget-controlled search |
+| **2** | Combo Sequencer | SAT constraint solver for multi-card combo execution |
+| **2.5** | Hat State Machine | 6 game plans (Develop/Assemble/Execute/Disrupt/Pivot/Defend) with transitions |
+| **3** | Genetic Amiibo | Per-deck DNA evolution — 7-param genome, population of 8, persisted per deck |
+| **4** | IS-MCTS | Information-Set Monte Carlo tree search with determinization, 3 rollouts/candidate |
+| **5** | Neural Evaluator | 92-dim MLP, trained via self-play, 80/20 heuristic/neural blend |
+| **6** | Self-Play Loop | Auto training: sample threshold → PyTorch → hot-reload Go inference |
 
-The extensions are organized by concern: `replacements.py`, `combat_triggers.py`, `sagas_adventures.py`, `vehicles_mounts.py`, `quoted_abilities.py`, `equipment_aura.py`, `stack_timing.py`, `pronoun_chains.py`, `villainous_choice.py`, and so on. A family of `partial_scrubber_*` and `unparsed_residual*` modules exist specifically to pick up the long tail of grammar variations that the core productions miss.
+Supporting systems:
 
-**Design intent**: the core parser is the stable grammar. Extensions are where new mechanics land when a set introduces them, without having to touch the main parse loop. A contributor adding Bloomburrow's *Offspring* keyword writes a new extension module; they do not edit `parser.py`.
+- **Shannon Entropy**: opponent hand probability model, `LikelyHasAnswer` heuristic
+- **Lovelace Composer**: star card boost + commander theme keyword matching
+- **Watts Soul Layer**: bracket-aware confidence dial (B1=0.3 / B5=0.9)
+- **UCB1**: exploration factor per archetype/turn (Aggro=1.0 → Combo=1.8)
 
-`per_card.py` is the escape hatch for cards that defeat any reasonable grammar (Karn Liberated's ultimate, Shahrazad, cards with nested quoted abilities that mutate across game state). These emit stub `Modification(kind="custom", args=(slug,))` placeholders that the runtime engine must resolve by slug dispatch.
+### 20 evaluator dimensions
+
+BoardPresence, ManaAdvantage, CardAdvantage, LifeTotal, CommanderPresence, GraveyardValue, ComboProgress, ThreatLevel, BoardWipeVulnerability, TempoAdvantage, ManaEfficiency, PoliticalStanding, ResourceDiversity, SynergyDensity, TutorAccess, LandCount, StackInteraction, PlaneswalkerProgress, ExileZoneAssets, StaxLockProgress
+
+Each dimension has per-archetype weights (13 archetypes), stage scaling, and position scaling via `rescaleWeights`.
+
+Detailed docs: [YggdrasilHat](docs/architecture/YggdrasilHat.md), [Hat AI System](docs/architecture/Hat%20AI%20System.md)
 
 ---
 
-## 4. Layer harness
+## 4. Tournament forge
 
-Source: `scripts/layer_harness.py`. Output: `data/rules/layer_harness.md`.
+Source: `internal/tournament/`, `internal/hexapi/`
 
-MTG's continuous-effects system (comp rules §613) resolves effects in a strict layer order:
+Three game paths, all routed through Heimdall observation:
 
-| Layer | Purpose |
+| Path | Purpose | Workers |
+|---|---|---|
+| **Grinder** | Bulk unrated games, maximal throughput | 12 parallel |
+| **Bracket Pod** | Rated 4-player pods, TrueSkill + HexELO updates | On-demand |
+| **Showmatch** | Spectated games, WebSocket broadcast, narrative arc | Single |
+
+Rating systems: TrueSkill (Bayesian μ/σ, bracket-seeded) + HexELO (traditional). Bracket classification (B1–B5) via Freya strategy analysis.
+
+---
+
+## 5. Learning loop
+
+Source: `internal/heimdall/`, `internal/muninn/`, `internal/hat/selfplay.go`
+
+```
+Game completes
+    │
+    ▼
+Heimdall Observer (singleton)
+    ├── Seeds → disk (JSONL, 1000-entry ring buffer)
+    ├── Co-triggers → Huginn (synergy discovery, tier graduation)
+    ├── Parser gaps → Muninn (persistent gap memory)
+    ├── Dead triggers → Muninn (handler audit)
+    ├── Crashes → Muninn (panic recovery)
+    ├── Causal pivot → Tesla (decisive turn extraction)
+    ├── Eval snapshots → TrainingCollector (every 5 turns per seat)
+    └── Health pulse → GA4 telemetry
+
+Huginn graduates Tier 3 patterns → exports to Freya
+Freya reads patterns → refines strategy profiles → feeds back to hat construction
+TrainingCollector → samples.jsonl → PyTorch training → model.json → hot-reload
+```
+
+Post-game validation: **Feynman Oracle** runs 8 invariant checks (§704.5a/c/f/v, zone accounting, winner count, turn bounds, negative counters) on every completed game.
+
+---
+
+## 6. Frontend
+
+Source: `hexdek/` — React + Vite with custom brutalist design system.
+
+- **Splash**: deck import, live stats
+- **Dashboard**: deck library, Freya analysis, mana curves
+- **Spectator**: live game view with turn bar, card reveals, combat animations
+- **Leaderboard**: bracket-filterable ELO rankings with band labels
+- **Deck drilldown**: per-card roles, matchup data, win lines
+
+Communication: WebSocket for live spectating + ELO updates, REST for everything else.
+
+---
+
+## 7. Infrastructure
+
+| Binary | Purpose |
 |---|---|
-| 1 | copy effects |
-| 2 | control-changing |
-| 3 | text-changing |
-| 4 | type / subtype / supertype changes |
-| 5 | color-changing |
-| 6 | ability add / remove |
-| 7a | characteristic-defining P/T |
-| 7b | P/T set ("becomes 1/1") |
-| 7c | P/T modify (anthems, +N/+N) |
-| 7d | counters |
-| 7e | P/T switching |
+| `hexdek-server` | HTTP/WebSocket API, grinder, matchmaking |
+| `hexdek-thor` | Bulk tournament runner |
+| `hexdek-freya` | Deck strategy analyzer |
+| `hexdek-odin` | Invariant fuzz checker |
+| `hexdek-loki` | Chaos/edge-case fuzzer |
+| `hexdek-heimdall` | Analytics tracker |
+| `hexdek-huginn` | Interaction discovery |
+| `hexdek-muninn` | Crash/gap telemetry |
+| `hexdek-judge` | Interactive rules REPL |
+| `hexdek-import` | Bulk deck importer |
+| `hexdek-tournament` | Full tournament orchestrator |
+| `hexdek-valkyrie` | Deploy automation |
+| `hexdek-parity` | Cross-engine parity checker |
+| `gen-handlers` | AST-driven handler code generator |
 
-The layer harness walks every card's AST, inspects every `Static` ability's `Modification`, and assigns a layer label based on the modification's `kind` slug plus, where relevant, the effect node types reachable inside triggered/activated bodies. Non-layered effects (activated costs, stack triggers, one-shot spell effects, timing restrictions) get `layer=None`.
-
-**Why this matters for the runtime**: when the engine resolves continuous effects, it cannot derive layers on the fly — that is quadratic and error-prone. Pre-tagging at parse time means the runtime's continuous-effects resolver sees a layer-labeled stream and can apply effects in the canonical §613 order deterministically. It also surfaces cards that span multiple layers (Humility, Blood Moon, Opalescence) as explicit multi-layer entries rather than edge cases the engine discovers at runtime.
-
-Current distribution is summarized in `data/rules/layer_harness.md`. The biggest cohorts are always layer 6 (ability add/remove) and layer 7c (P/T modification); multi-layer cards (Humility, Blood Moon, Opalescence) are called out explicitly.
-
----
-
-## 5. Engine work owed
-
-From `data/rules/coverage_honest.md` (regenerate for live numbers):
-
-- **~24% of cards are engine-executable today.** Their AST is composed of typed leaf nodes (`Damage`, `Buff`, `Tutor`, `Destroy`, …) and a runtime interpreter can execute them by dispatching on `kind` alone.
-- **~76% parse but carry stubs.** Their AST contains `Modification(kind="custom", args=(slug,))` nodes, or per-card stubs from `extensions/per_card.py`. These are recognized — the parser did not fail — but the runtime cannot execute them until a hand-coded resolver exists for the slug.
-
-The runtime engine (`internal/game/` in Go) therefore has two integration points against the AST:
-
-1. **A typed dispatcher** — one Go function per leaf effect kind (`executeDamage`, `executeBuff`, `executeTutor`, …). This mechanically covers the structural slice.
-2. **A slug registry** — a `map[string]Resolver` keyed by custom-modification slug and by card name for per-card handlers. Adding a resolver to this registry is how engine coverage grows toward 100%.
-
-The parser's job is done. The next build is working through the custom-slug and per-card-handler list in priority order. `scripts/cluster_priority.py` ranks the outstanding work by how frequently each stub appears across real decklists, so effort lands on the slugs that matter for actual play first.
-
----
-
-## 6. Python self-play loop (`scripts/playloop.py`)
-
-A Python-only structural simulator that proves the parser AST can drive an
-end-to-end game. It deliberately duplicates runtime work on the Python side
-(rather than wire Python→Go immediately) so the AST can be exercised against
-live turn state the same day a new effect kind lands in the parser.
-
-**Turn pipeline:** untap → upkeep (triggers) → draw → main1 → **combat** →
-main2 → end. The combat phase runs declare-attackers → declare-blockers →
-first-strike damage → regular damage, with state-based actions between damage
-steps.
-
-**Combat keyword coverage today:** flying, reach, first strike, double strike,
-trample (spillover to player), deathtouch, lifelink, vigilance, menace (2+
-blockers), defender, haste.
-
-**Dispatch pattern:** the loop walks `Activated.effect` / `Triggered.effect`
-bodies and dispatches on Effect node kinds (`Damage`, `Draw`, `Buff`,
-`CreateToken`, `AddMana`, `Tutor`, `Reanimate`, etc.). `UnknownEffect` nodes
-are counted and surfaced in the per-matchup report.
-
-**Report:** `data/rules/playloop_report.md` (per-matchup win rates, turn
-distribution, unknown-node rollup, deck lists). Sample per-matchup games are
-logged to `data/rules/playloop_sample_log.txt` in JSONL form suitable for the
-browser replay viewer.
-
-## 7. Replay viewer (`web/replay/`)
-
-Zero-dependency static HTML/CSS/JS. Consumes the JSONL event stream emitted by
-`playloop.py` and replays it step-by-step (scrub, prev/next, autoplay) against
-a two-seat board visualisation. No game logic runs in the viewer — it only
-applies logged state deltas. Drop-in for humans auditing a self-play session
-or for shipping post-mortems of a bot-vs-bot match.
-
-## 8. Combo detector (`scripts/combo_detector.py`)
-
-Static-analysis scanner over the parsed AST. Surfaces six families of
-candidates — mana-positive engines, untap triggers, storm engines, iterative
-draw engines, doublers (replacement effects on resources), and activated-untap
-permanents — then runs a simple 2-card pair search keyed on untap-trigger ×
-mana-positive to flag infinite-mana candidates.
-
-**Heuristic, not a solver.** Every entry is a candidate for human review; false
-positives are expected. Outputs:
-
-- `data/rules/combo_detections.md` — human-readable tables grouped by family
-- `data/rules/combo_detections.json` — programmatic export
-
-The same static lens is useful during engine buildout: the same AST shapes
-that make a combo detectable are the shapes that make a runtime interpreter
-work.
-
-## 9. AST dataset + finetune pairs
-
-`scripts/export_ast_dataset.py` and `scripts/export_finetune_pairs.py` dump the
-typed AST for every card in two shapes:
-
-- **Raw JSONL** (`data/rules/ast_dataset.jsonl`) — one `{name, oracle_text,
-  type_line, mana_cost, cmc, colors, ast}` row per card. Every dataclass-backed
-  node carries an `__ast_type__` string so consumers can discriminate
-  structurally-similar nodes (e.g. `Damage` vs `Draw` vs `UnknownEffect`) at
-  the dataset layer.
-- **Instruction pairs** (`data/rules/finetune_pairs.jsonl`) — Alpaca-style
-  `{instruction, input, output}` triples for oracle-text → AST-JSON
-  finetuning (LoRA or full-parameter).
-
-These are the entry point for finetuning a model that learns the parser's
-grammar directly and can be used to bootstrap new card-set expansions.
-
-## 10. Test suite (`tests/`)
-
-Pytest with two tiers:
-
-- **Golden regression** (`test_parser_regression.py`) — 201 parametrized tests,
-  one per curated card across 8 mechanic families (cEDH staples, triggers,
-  keywords, layer-7 effects, modal, ramp, removal, vanilla). Each card's AST
-  is compressed to a compact structural signature (`ability_count`,
-  `parse_error_count`, per-ability `kind` + first-5 DFS node kinds) and
-  compared byte-for-byte against `tests/golden/<card>.json`. A regression
-  lights up exactly the failing card(s), not the whole suite. Regenerate
-  intentionally with `python3 tests/generate_golden.py`.
-- **Whole-corpus coverage** (`test_parser_coverage.py`, marked `slow`) — two
-  asserts that run across all 31,639 real cards: `green_count == 31639` and
-  every card parses without raising.
-
-## 11. Runtime engine (today vs. target)
-
-Source: `internal/game/`. Files: `engine.go`, `combat.go`, `types.go`, `storage.go`, `json_helpers.go`.
-
-**Today the engine handles:**
-- Turn structure (untap, upkeep, draw, main, combat, end).
-- Priority passing.
-- Mana pool and payment.
-- Casting basic spells.
-- Basic battlefield state transitions.
-- SQLite-backed ephemeral game state (`internal/db/`).
-- WebSocket hub for multi-client sessions (`internal/ws/`).
-
-**Today the engine does not:**
-- Consume the Python AST directly. AST export to a Go-readable form (JSON / protobuf) is not yet wired.
-- Resolve the stack against AST effects.
-- Apply §613 continuous-effects layers.
-- Handle the custom-slug or per-card-handler registry.
-- Expose an AI-playable surface.
-
-**Target runtime flow** (not yet implemented):
-
-```
-Go engine boot → load AST JSON emitted by parser.py
-             → build (kind → handler) and (slug → resolver) dispatch tables
-             → game loop resolves each stack object by walking its CardAST abilities
-             → continuous-effects pass applies Modifications in §613 layer order
-             → state diffs stream to clients (humans via UI, AI via JSON API)
-```
+Production deployment: DARKSTAR (Ryzen 9 9950X, 64GB) runs the engine. MISTY hosts the frontend via Caddy.
 
 ---
 
 ## Relevant files
 
-| File | Purpose |
+| Path | Purpose |
 |---|---|
 | `scripts/parser.py` | Oracle text → CardAST |
-| `scripts/mtg_ast.py` | Typed frozen-dataclass AST schema (§113) |
-| `scripts/extensions/` | ~50 grammar-extension modules |
-| `scripts/extensions/per_card.py` | 1,079 snowflake per-card handlers |
-| `scripts/layer_harness.py` | §613 layer tagger |
-| `scripts/coverage_honest.py` | Dual-metric coverage reporter |
-| `scripts/rules_coverage.py` | Detailed parser diagnostics |
-| `scripts/cluster_priority.py` | Prioritize engine work by deck-frequency |
-| `scripts/semantic_clusters.py` | AST-signature clustering |
-| `scripts/combo_detector.py` | Static-analysis infinite-combo scanner |
-| `scripts/playloop.py` | Python self-play loop (3 matchups, full combat) |
-| `scripts/export_ast_dataset.py` | Dumps typed AST to JSONL |
-| `scripts/export_finetune_pairs.py` | Alpaca-style instruction pairs |
-| `tests/` | 203-test pytest suite (goldens + whole-corpus coverage) |
-| `web/replay/` | Static browser replay viewer for playloop logs |
-| `data/rules/oracle-cards.json` | Scryfall bulk dump (input) |
-| `data/rules/MagicCompRules-20260227.txt` | Source of truth spec |
-| `data/rules/parser_coverage.md` | Parser report |
-| `data/rules/coverage_honest.md` | Dual-metric report |
-| `data/rules/layer_harness.md` | §613 layer distribution |
-| `data/rules/cluster_priority.md` | Stub work prioritized by usage |
-| `data/rules/combo_detections.{md,json}` | Static combo/loop candidates |
-| `data/rules/playloop_report.md` | Self-play matchup results |
-| `data/rules/ast_dataset.jsonl` | Every card's typed AST (~40 MiB) |
-| `data/rules/finetune_pairs.jsonl` | Alpaca-style instruction pairs |
-| `internal/game/` | Go runtime engine (basic today) |
-| `cmd/hexdek-server/` | HTTP/WebSocket entry point |
+| `scripts/mtg_ast.py` | Typed frozen-dataclass AST schema |
+| `scripts/extensions/` | ~50 grammar extension modules |
+| `internal/gameengine/` | Go game engine (production) |
+| `internal/hat/` | AI system (Yggdrasil, Amiibo, neural eval) |
+| `internal/tournament/` | Tournament runner, round-robin, swiss |
+| `internal/heimdall/` | Observation routing, seed buffering |
+| `internal/muninn/` | Persistent gap/crash memory |
+| `internal/hexapi/` | REST + WebSocket API |
+| `cmd/` | 14 CLI entry points |
+| `hexdek/` | React + Vite frontend |
+| `docs/architecture/` | 39 architecture documents |
+| `data/decks/` | Deck files (owner/deck.json) |
+| `data/rules/` | Scryfall data, comp rules, coverage reports |
+| `data/training/` | Neural evaluator training data + model |
+| `data/amiibo/` | Per-deck Amiibo DNA pools |

@@ -17,6 +17,7 @@ kanban-plugin: board
 
 ## High Priority — Platform
 
+- [ ] **Amiibo display on deck page** — show per-deck DNA pool: generation count, best fitness, 7 personality params (radar chart), 20 DimStats weight corrections (heatmap), fitness sparkline over generations. Force graph or 3D brain visualization for evolved weight topology. (wiedeman/7174n1c 2026-05-04) #ui #amiibo #design
 - [ ] Negative ELO shame badges — "MID" stamp at 0, escalating tiers for deep negative. Leaderboard bottom-10 wall of shame section #ui #fun
 - [ ] Operator platform page/tab (operator profile, deck management, analytics dashboard) #ui #platform
 - [ ] Friends system + player profiles — lightweight "pub" model: see each other's decks/ELO, no feed/notifications. Add via search or deck page #ui #social
@@ -187,12 +188,14 @@ kanban-plugin: board
 
 ### Level 5: Information-Set MCTS (1-2 months) — Depends: Staged Architecture
 
-- [ ] **IS-MCTS implementation** — sample possible hidden states at decision nodes, run MCTS rollouts per sample, aggregate across samples. Pick best-on-average action. #engine #hat #mcts
-- [ ] **MCTS trigger conditions** — only fire at genuine uncertainty points (counter-or-save, combo-timing, attack-target selection). 90% of decisions skip MCTS entirely. #engine #hat #mcts
+- [x] **IS-MCTS implementation** — `determinize()` shuffles opponent hands, `multiRolloutForCard()` runs 3 determinized rollouts per candidate, picks best-on-average. Wired into ChooseCastFromHand. (2026-05-02) #engine #hat #mcts
+- [x] **MCTS trigger conditions** — fires at genuine uncertainty points via budget system. 90% of decisions use heuristic path, IS-MCTS only for high-impact cast decisions. (2026-05-02) #engine #hat #mcts
 
 
 ## Medium Priority — Engine
 
+- [ ] **N-card combo line detection** — Huginn currently tracks pairwise co-triggers. Expand to 3-5 card lines (e.g. Dramatic Reversal + Isochron Scepter + mana rock). Either N-tuple tracking or chained pairwise inference. (7174n1c 2026-05-04) #engine #huginn #combo
+- [ ] **Muninn persist batching** — coalesce per-game read-modify-write (parser_gaps.json, dead_triggers.json) into periodic batch flush. Currently re-reads + re-writes full file per game, expensive as files grow. #engine #performance
 - [ ] **Temporal Pincer** — anon UUID cookie → session tracking → on login stitch all anon device UUIDs to authenticated profile. No PII, all UUIDs. Powers P&R via GraphQL. #infra #platform
 
 
@@ -209,23 +212,23 @@ kanban-plugin: board
 
 *Ref: `docs/architecture-hat-evolution.md` Levels 6-7 + Skunkworks. No timeline — requires Silver tier data.*
 
-### Level 6: Neural Position Evaluator (3-6 months) — Depends: Levels 2-5 producing training data
+### Level 6: Neural Position Evaluator — DONE (2026-05-02)
 
-- [ ] **Game state tensor encoding** — encode board + hands + graveyards + life + mana as tensor for neural input. State representation is the hard research problem. #research #neural
-- [ ] **Value network training pipeline** — 4090 on DARKSTAR. Train state → P(win) per seat on millions of (game_state, winner) pairs from seed replay. #research #neural
-- [ ] **Neural eval integration** — replace heuristic 8-dim evaluator with learned evaluation. CPU inference (~1ms/eval). #research #neural
+- [x] **Game state tensor encoding** — 92-dim StateVector (22 features × 4 seats + 4 global), normalized to [0,1], perspective-rotated. (2026-05-02) #research #neural
+- [x] **Value network training pipeline** — PyTorch script: 92→256→128→64→1 MLP, ReduceLROnPlateau, early stopping, CUDA 4090 + CPU fallback, pivot-weighted MSE loss. (2026-05-02) #research #neural
+- [x] **Neural eval integration** — 80/20 heuristic/neural blend via `evalPosition()`, auto-loads `data/training/model.json`, graceful nil degradation. (2026-05-02) #research #neural
 
-### Level 7: Self-Play Loop (6-12 months) — Depends: Level 6
+### Level 7: Self-Play Loop — DONE (2026-05-02)
 
-- [ ] **Self-play training loop** — current best model plays itself, record outcomes + state traces, train next-gen model, promote if better. Repeat. #research #selfplay
-- [ ] **Genetic→Neural distillation** — Amiibo explores parameter space cheaply, neural net distills into general model, model feeds better Amiibo starting points. #research #selfplay
+- [x] **Self-play training loop** — SelfPlayManager: 10K sample threshold → PyTorch training → hot-reload NeuralEvaluator into running hats. Atomic goroutine safety. 5-minute cooldown. (2026-05-02) #research #selfplay
+- [ ] **Genetic→Neural distillation** — Amiibo explores parameter space cheaply, neural net distills into general model, model feeds better Amiibo starting points. *Deferred — needs more training data first* #research #selfplay
 
-### Skunkworks Named Concepts (backlogged, no timeline)
+### Skunkworks Named Concepts — Mostly DONE
 
-- [ ] **Tesla Causal Graphs** — extract causal pivot per game (the turn/action that decided outcome). Train on "pivot distance" not just win/loss. *Depends: Heimdall observation* #research #skunkworks
-- [ ] **Feynman Oracle** — slow provably-correct rules engine, spot-check 1-in-1000 games. When oracle disagrees with fast engine = bug. Probabilistic formal verification. #research #skunkworks
+- [x] **Tesla Causal Graphs** — `ExtractPivot()` finds max relative swing turn. `LabelSamplesWithPivot()` enriches training data with pivot distance. `EvalSnapshotCollector` in all 3 game paths. (2026-05-02) #research #skunkworks
+- [x] **Feynman Oracle** — 8 invariant checks (§704.5a/c/f/v, zone accounting, winner count, turn bounds, negative counters). Runs post-game in all 3 paths. hasCantLoseEffect() false-positive fix. (2026-05-02) #research #skunkworks
 - [x] **Lovelace Composer Intent** — star card +0.20 boost, commander theme keyword matching +0.12 (oracle text + type line). Deck identity → signature card weighting → thematic play priority (2026-05-02) #research #skunkworks
-- [ ] **Ive Three-Act Spectator** — narrative arc rendering (setup/conflict/resolution) from Tesla causal pivots. Makes watching games compelling. *Depends: Tesla causal graphs* #research #skunkworks #ui
+- [x] **Ive Three-Act Spectator** — narrative arc generation (setup/conflict/resolution from Tesla causal pivots). ComposeNarrative() broadcasts to spectators on showmatch end. (2026-05-02) #research #skunkworks #ui
 - [x] **Watts Soul Layer** — bracket-aware confidence threshold. B1=warm/casual, B5=cold/optimal. Implemented via applyBracketDial() + selectAmongTop(). #research #skunkworks
 
 
@@ -240,6 +243,7 @@ kanban-plugin: board
 
 ## Done
 
+- [x] **Holy documentation pass** — 8 new architecture docs (Genetic Amiibo, Hat State Machine, Neural Evaluator, Self-Play Loop, Shannon Entropy, Tesla Causal Pivots, Feynman Oracle, Ive Spectator) + Learning Loop pipeline doc. Fixed 3 stale docs (ARCHITECTURE.md, YggdrasilHat.md, README.md). Updated TODO board with all skunkworks completions. 47→47 current docs. (2026-05-04) #docs
 - [x] **Grinder memory leak fix** — Heimdall `obsBuf` unbounded growth. Observations were dispatched to Huginn/Muninn sinks then redundantly appended to a buffer that was never read. Removed dead buffer. (2026-05-04) #engine #performance
 - [x] **Depression concession removal** — Score-based conviction concession was too aggressive (hat scooped at 38 life). Removed entirely; everyone fights to the death. Engine's SBA cap + loop detector handles actual infinite loops. (2026-05-04) #engine #hat
 - [x] **Feynman Oracle false positive fixes** — 704.5a: hasCantLoseEffect() for Platinum Angel. Zone accounting: §800.4a cards_left_game tracking. Zombie Army token "token" type fix for IsToken(). (2026-05-04) #engine #hat

@@ -19,7 +19,7 @@ The engine powers a live tournament forge that simulates tens of thousands of ga
 | Cards parsed | **50,000+** (100% of Scryfall bulk, zero parse errors) |
 | Engine throughput | **500+ games/sec** on a single machine |
 | Rating system | TrueSkill (Bayesian μ/σ) + standard ELO |
-| AI | YggdrasilHat — 8-dimensional evaluator, political multiplayer |
+| AI | YggdrasilHat — 20-dim evaluator, genetic Amiibo, neural eval, self-play |
 | Format | Commander (4-player pods), 1v1, Archenemy |
 
 ---
@@ -61,10 +61,16 @@ The engine is written in Go for performance. The frontend is React + Vite with a
 
 | Component | What it does | Docs |
 |-----------|-------------|------|
-| **YggdrasilHat** | Political AI: 8-dim board evaluator, threat scoring, grudge memory, budget system | [YggdrasilHat](docs/architecture/YggdrasilHat.md) |
-| **MCTS** | Monte Carlo tree search with configurable depth and budget | [MCTS and Yggdrasil](docs/architecture/MCTS%20and%20Yggdrasil.md) |
-| **Eval Weights** | Per-archetype tuning: aggro, combo, control, midrange, stax | [Eval Weights](docs/architecture/Eval%20Weights%20and%20Archetypes.md) |
-| **Greedy Hat** | Fast fallback AI for bulk simulation | [Greedy Hat](docs/architecture/Greedy%20Hat.md) |
+| **YggdrasilHat** | Political AI: 20-dim board evaluator, threat scoring, grudge memory, budget system | [YggdrasilHat](docs/architecture/YggdrasilHat.md) |
+| **Hat State Machine** | 6 game plans (Develop/Assemble/Execute/Disrupt/Pivot/Defend) with transition rules | [Hat State Machine](docs/architecture/Hat%20State%20Machine.md) |
+| **Combo Sequencer** | SAT constraint solver for multi-card combo execution | [Hat State Machine](docs/architecture/Hat%20State%20Machine.md) |
+| **Genetic Amiibo** | Per-deck DNA evolution — 7-param genome, population of 8, persisted to disk | [Genetic Amiibo](docs/architecture/Genetic%20Amiibo.md) |
+| **IS-MCTS** | Information-Set Monte Carlo tree search with determinization | [MCTS and Yggdrasil](docs/architecture/MCTS%20and%20Yggdrasil.md) |
+| **Shannon Entropy** | Opponent hand probability model, LikelyHasAnswer heuristic | [Shannon Entropy](docs/architecture/Shannon%20Entropy.md) |
+| **Neural Evaluator** | 92-dim MLP position evaluator, trained via self-play | [Neural Evaluator](docs/architecture/Neural%20Evaluator.md) |
+| **Self-Play Loop** | Automated training: sample collection → PyTorch → hot-reload | [Self-Play Loop](docs/architecture/Self-Play%20Loop.md) |
+| **Eval Weights** | Per-archetype tuning across 20 dimensions, rescaled by stage/position | [Eval Weights](docs/architecture/Eval%20Weights%20and%20Archetypes.md) |
+| **Greedy Hat** | Fast fallback AI for bulk simulation (deprecated) | [Greedy Hat](docs/architecture/Greedy%20Hat.md) |
 
 ### Analytics & tools
 
@@ -76,8 +82,11 @@ The engine is written in Go for performance. The frontend is React + Vite with a
 | **Heimdall** | Game analytics, ELO tracking, card performance | [Tool - Heimdall](docs/architecture/Tool%20-%20Heimdall.md) |
 | **Loki** | Fuzzer, edge-case discovery, chaos testing | [Tool - Loki](docs/architecture/Tool%20-%20Loki.md) |
 | **Valkyrie** | Cross-compile and deploy automation | [Tool - Valkyrie](docs/architecture/Tool%20-%20Valkyrie.md) |
-| **Huginn** | Emergent interaction discovery (parser gap → handler graduation) | [Tool Suite](docs/architecture/Tool%20Suite.md) |
-| **Muninn** | Persistent crash/gap telemetry (append-only memory) | [Tool Suite](docs/architecture/Tool%20Suite.md) |
+| **Huginn** | Emergent interaction discovery (parser gap → handler graduation) | [Tool - Huginn](docs/architecture/Tool%20-%20Huginn.md) |
+| **Muninn** | Persistent crash/gap telemetry (append-only memory) | [Tool - Muninn](docs/architecture/Tool%20-%20Muninn.md) |
+| **Feynman Oracle** | Post-game invariant checker (zone accounting, SBA compliance, winner validation) | [Feynman Oracle](docs/architecture/Feynman%20Oracle.md) |
+| **Tesla** | Causal pivot extraction — identifies the decisive turn/action per game | [Tesla Causal Pivots](docs/architecture/Tesla%20Causal%20Pivots.md) |
+| **Ive** | Three-act narrative spectator (setup/conflict/resolution from causal pivots) | [Ive Spectator](docs/architecture/Ive%20Spectator.md) |
 
 Full tool reference: **[Tool Suite](docs/architecture/Tool%20Suite.md)**
 

@@ -72,7 +72,7 @@ flowchart TB
     Y --> Log[DecisionLog<br/>diagnostic, optional]
     Y --> Lookups[Pre-computed sets:<br/>combo pieces,<br/>value engines,<br/>tutor targets,<br/>finishers]
     Y --> ThirdEye[3rd Eye:<br/>cardsSeen,<br/>threatTrajectory,<br/>politicalGraph,<br/>kingmakerTurn,<br/>lastAttackedUsTurn]
-    Y --> Conviction[Conviction concession<br/>4-turn sliding window]
+    Y --> Amiibo[Genetic Amiibo<br/>per-deck DNA evolution]
 ```
 
 Every field listed here exists on the actual struct (`yggdrasil.go:26-115`). The "3rd Eye" comment in source describes the omniscient-intelligence subsystem that tracks per-opponent history across the whole game.
@@ -288,17 +288,13 @@ Top winrate commanders (Yggdrasil at budget 50):
 
 ## Known Ceilings
 
-**Combo win conditions.** ~90% of Yggdrasil wins are via combat damage even for combo decks. The engine doesn't currently recognize *assembled* combos as wins — there's no "infinite damage" loop resolution, no mill-deck-out kill, no "you win the game" combo terminator.
+**B5 combo execution.** Bracket 5 combo decks still underperform (~19% WR vs 25% expected). The combo sequencer (SAT constraint solver) and state machine are implemented, but the hat struggles to execute multi-step combos that require specific sequencing across multiple turns. This is the primary remaining ceiling.
 
-Combo decks beat down for the win even when they have a live combo. This is the primary remaining ceiling on combo archetype performance, and it's an engine-side gap (not a hat-side gap). Tracked in memory as `project_hexdek_architecture.md` decision 15.
+**Remaining gaps:**
 
-When combo win-condition resolution lands, expect combo-archetype winrates to jump significantly.
-
-**Other gaps:**
-
-- Mulligan intelligence is generic — doesn't read deck-specific signals about "what's a keepable opener for *this* deck."
+- Partner-aware mulligan works but still generic for non-partner decks — doesn't read deck-specific signals about "what's a keepable opener for *this* deck" beyond what Amiibo DNA tunes.
 - Alliance / betrayal politics is one-step. Multi-turn political reasoning ("if I help seat 2 kill seat 1, will seat 2 then win?") is heuristic, not search.
-- Combo execution sequencing is rough. The `comboUrgency()` heuristic prioritizes the "last missing piece" but doesn't always sequence the cast order correctly when multiple legal orderings exist.
+- N-card combo lines: Huginn currently tracks pairwise co-triggers only. 3-5 card combos (e.g., Dramatic Reversal + Isochron Scepter + mana rock) need either N-tuple tracking or chained pairwise inference.
 
 ## Related Docs
 
