@@ -12,9 +12,9 @@ kanban-plugin: board
 ## High Priority — Engine
 
 - [ ] **Remaining 276 commander handlers** — coverage at 447/652 files (681 registered names). Most remaining are 1-2 deck count. Template generator (`cmd/gen-handlers/main.go`) handles simple patterns. #engine #per_card
-- [ ] **BUG: Ajani Nacatl Pariah 74% WR** — handler is correct; high WR was because opponents couldn't deal with PW. PW threat scoring fix (below) should normalize this. Re-check after grinder reset. #engine #bug #hat
+- [x] **BUG: Ajani Nacatl Pariah 74% WR** — PW threat scoring fix shipped: opponent threat assessment now counts planeswalkers, so the hat correctly prioritizes removal against an undefended Ajani (commit 217927f, 2026-05-04) #engine #bug #hat
 - [ ] **BUG: MDFC permanent_types back-face resolution on battlefield entry** — `moveToZone` (state.go) has no `"battlefield"` case so `MoveCard(..., toZone="battlefield", ...)` silently falls through to graveyard; back-face land MDFCs (Fell the Profane // Fell Mire, Valakut Awakening, Sejiri Shelter) carry the front-face instant/sorcery types onto the battlefield via the deck-parser type-line leak. `tryPlayLand` was patched (commit fa018fd) but the broader `MoveCard("battlefield")` fallthrough still corrupts ~80% of zone_accounting Feynman violations. See `docs/zone-accounting-analysis.md` for full trace. #engine #bug #mdfc #zones
-- [ ] **BUG: MDFC permanent_types deep fix** — `MDFCBackFaceIsLand` may not match all MDFC card data shapes; specific cards (Malakir Rebirth // Malakir Mire, Sink into Stupor // Soaked Spireside) still trip the §205 permanent_types invariant after the v1+v2 fixes (commits fa018fd / 29c768d / 13ed4b3) and the adventure stripper (commit fd7f08d). Likely culprits: BackFaceTypeLine substring match misses `"Land — Swamp"` casing variants or the deckparser populates BackFaceTypes inconsistently for some MDFC subsets. Re-audit shape detection against a corpus sweep of `layout=modal_dfc` rows. #engine #bug #mdfc #zones
+- [x] **BUG: MDFC permanent_types deep fix** — parser-side fix shipped: deckparser now extracts back-face metadata regardless of whether the back face has P/T data, so previously-skipped MDFC subsets (Malakir Rebirth // Malakir Mire, Sink into Stupor // Soaked Spireside) populate `BackFaceTypes` correctly and the existing battlefield-entry hooks (SwapToBackFace + StripAdventureHalfTypes) finish the job (commit 26b88ed, 2026-05-04) #engine #bug #mdfc #zones
 
 
 ## High Priority — Platform
@@ -26,8 +26,10 @@ kanban-plugin: board
 - [x] **Achievement badges** — milestone badges (first 10/100/1K users), rare/commendable action badges (first blood, comeback from <5 life, perfect sweep, etc). Beyond trash talk — reward good play. Earned-badge showcase rendered on deck pages via owner achievements (commit ba6db99, 2026-05-04) #ui #badges #design
 - [x] **Volcano map smooth transition** — rAF-based heatmap interpolation, CSS transitions on seat-art opacity/filter for smooth morphing instead of instant swap (2026-05-04) #ui #spectator
 - [x] Operator platform page/tab — `/operator` profile page with deck shelf, match history, friends panel (commit e4d61b1, 2026-05-04) #ui #platform
-- [ ] Friends system + player profiles — lightweight "pub" model: see each other's decks/ELO, no feed/notifications. Add via search or deck page #ui #social
+- [x] Friends system + player profiles — `/friends` pub-model page with search, add, browse; bidirectional friend list; ADD FRIEND button on deck pages; FRIENDS count in DECK SPECS sidebar (commit a609816, 2026-05-04) #ui #social
 - [x] Bracket-stratified leaderboard tabs — filter by B1-B5, separate rankings per bracket + band labels (2026-05-04) #ui
+- [ ] **Deck import flow** — end-to-end UX overhaul of the import path: paste/URL/file inputs unified in a single ImportModal, real-time validation against the AST corpus, inline error surfacing (unresolved cards, illegal counts), Freya analyze-on-import progress indicator, success → DeckArchive redirect with celebratory toast. Replaces the current piecemeal hooks. #ui #import
+- [ ] **Card performance tracking** — per-card win-rate & inclusion-rate analytics: stats served at `/api/card-stats/{commander}` already exist but per-card historical performance across decks needs a dedicated CardPage panel ("appears in N decks at owner X / B-bracket Y, W/L Z"). Scaffolding lives at `internal/db/card_stats.go` + `internal/hexapi/cardstats.go`. #engine #analytics #cards
 - [x] Game Changer cards list on deck page — GC card names persisted to strategy.json + "GAME CHANGERS" panel with art thumbnails on deck drilldown (2026-05-04) #ui
 
 ### Legality Flag (7174n1c — 2026-05-02)
@@ -188,7 +190,7 @@ kanban-plugin: board
 
 ### Level 4: Staged Decision Architecture (1-2 months) — Depends: Combo Sequencer + State Machine
 
-- [ ] **Mjolnir/Gungnir/Ragnarok routing** — formalize 3-tier decision dispatch. Mjolnir (budget-0 heuristic, 90%), Gungnir (SAT+eval+UCB1, 9%), Ragnarok (MCTS, 1%). Route based on decision complexity + confidence. #engine #hat #staged
+- [x] **Mjolnir/Gungnir/Ragnarok routing** — formal 3-tier decision dispatcher shipped. Mjolnir (budget-0 heuristic, ~90%), Gungnir (SAT+eval+UCB1, ~9%), Ragnarok (MCTS, ~1%); routing based on decision complexity + confidence (commit 1fc145f, 2026-05-04) #engine #hat #staged
 - [x] **Watts confidence threshold dial** — bracket-aware: B1=0.3 (first good-enough), B3=0.6 (moderate), B5=0.9 (near-optimal only). Same code path, different sensitivity. #engine #hat #staged
 - [x] **Shannon entropy tracking** — model opponent hands as probability distributions. Tutor=near-zero entropy. 3-card draw=high entropy. Held mana=interaction probability. Feed into threat assessment. #engine #hat #staged
 
@@ -208,10 +210,12 @@ kanban-plugin: board
 ## Medium Priority — Platform
 
 - [ ] BOINC-style distributed compute (desktop client → contribute games → earn credits) #distributed
+- [ ] **Deterministic seed capture (anti-cheat Phase 1)** — surface the existing Heimdall seed ring buffer + JSONL flush as a cryptographic per-game seed contract; sign at game-start, verify on replay; required before spot-check + cauterize phases. Builds on the seed capture work already wired into all 3 game paths #anticheat
 - [ ] Deterministic replay anti-cheat (cryptographic seed, spot-check 2-5%, auto-cauterize bad actors) — *enhanced by seed capture from Phase 1* #anticheat
 - [ ] Statistical anomaly detection (per-contributor distribution tracking, 3σ flagging) #anticheat
 - [ ] Credit economy (contribute compute → earn credits → spend on own deck testing) #economy
 - [ ] Stream/narrator layer (game state → visual renderer → Twitch/OBS output) #stream
+- [ ] **Stream/narrator OBS overlay** — concrete OBS browser-source build of the narrator layer: transparent-background spectator viewport, Ive three-act narrative caption strip, lower-third commander tags, configurable seat order. Targets streamer use over the open spectator feed. #stream #ui
 
 
 ## Low Priority — Hat Research (Bronze tier)
@@ -240,11 +244,11 @@ kanban-plugin: board
 
 ## Low Priority
 
-- [ ] **i18n** — internationalize hexdek.dev for global audience. Scryfall has localized card names for 11 print languages. 500 UI keys, 50 languages, <$200 translation cost. #platform
+- [ ] **i18n — IN PROGRESS** — scaffolding shipped (i18n.js + locales/ + useT() hook + URL/navigator detection across 8 locales, commit 059a9d1, 2026-05-04). Content translation remaining: ~500 UI keys × 8+ languages still need professional translation; Scryfall localized card names integration also pending. #platform
 - [ ] Multi-format support beyond Commander (Modern, Legacy deck ratings) #engine
 - [x] Mobile-friendly leaderboard — 375px responsive pass: column priorities, mobile card view, sort-bar wrapping (commit 136fa58, 2026-05-04) #ui
 - [x] Donations page BOINC/ads buttons — placeholders replaced with real BOINC distributed-compute card + Support Dev card (Ko-fi + GH Sponsors) + FAQ panel (commit 2f45e1a, 2026-05-04) #ui
-- [ ] Report analysis placeholder (`Report.jsx:332`) — feature not fully wired #ui
+- [x] Report analysis placeholder (`Report.jsx:332`) — mocked timeline + sparklines replaced with derived analyses from real game data (commit cc2bf2d, 2026-05-04) #ui
 
 
 ## Done — Session 2026-05-04 Night
