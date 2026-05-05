@@ -44,6 +44,14 @@ type GameState struct {
 	// constructor for reproducible tournament replays.
 	Rng *rand.Rand
 
+	// Seed is the int64 value the caller used to construct gs.Rng. The
+	// engine never reads this — it's an opaque audit trail captured for
+	// the replay / anti-cheat pipeline (Phase 1: capture-only). Callers
+	// who can't surface a seed (e.g. forwarded math/rand.Rand without a
+	// known seed) should leave Seed=0 and consumers must treat 0 as
+	// "unknown" rather than "seeded with 0".
+	Seed int64
+
 	// Turn bookkeeping. Turn is 1-indexed; Phase is "beginning"/"main"/
 	// "combat"/"ending"; Step is the step within the phase ("untap",
 	// "upkeep", "draw", "precombat_main", etc.); Active is the seat whose
@@ -324,6 +332,22 @@ func (gs *GameState) RegisterDelayedTrigger(dt *DelayedTrigger) *DelayedTrigger 
 		},
 	})
 	return dt
+}
+
+// NewGameStateSeeded constructs a GameState from an int64 seed,
+// building the RNG and recording the seed for replay capture in one
+// shot. Equivalent to:
+//
+//	gs := NewGameState(seatCount, rand.New(rand.NewSource(seed)), corpus)
+//	gs.Seed = seed
+//
+// Prefer this helper at call sites that own the seed value (showmatch
+// game runners, tournament drivers, replay seeders) so the seed
+// doesn't get lost on its way to the persistence layer.
+func NewGameStateSeeded(seatCount int, seed int64, corpus *astload.Corpus) *GameState {
+	gs := NewGameState(seatCount, rand.New(rand.NewSource(seed)), corpus)
+	gs.Seed = seed
+	return gs
 }
 
 // NewGameState builds a fresh two-seat game. Caller is expected to

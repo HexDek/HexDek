@@ -196,7 +196,8 @@ CREATE TABLE IF NOT EXISTS showmatch_game (
     turns        INTEGER NOT NULL,
     winner       INTEGER NOT NULL DEFAULT -1,
     winner_name  TEXT NOT NULL DEFAULT 'DRAW',
-    end_reason   TEXT NOT NULL DEFAULT 'unknown'
+    end_reason   TEXT NOT NULL DEFAULT 'unknown',
+    rng_seed     INTEGER NOT NULL DEFAULT 0  -- engine RNG seed; 0 = unknown
 );
 
 CREATE TABLE IF NOT EXISTS showmatch_game_seat (
@@ -300,3 +301,25 @@ CREATE TABLE IF NOT EXISTS session_stitch (
     stitched_at INTEGER NOT NULL,         -- unix epoch milliseconds
     PRIMARY KEY (anon_id, owner)
 );
+
+-- ===== CARD PERFORMANCE =====
+-- One row per card. Updated when a game ends if any seat had the card
+-- in battlefield/hand/graveyard. games_included counts those games;
+-- wins_when_included counts the subset where the holding seat won.
+-- avg_turn_played + avg_battlefield_time are running means; the
+-- internal *_count columns hold the denominators so means stay correct
+-- across thousands of upserts. See internal/db/card_performance.go.
+
+CREATE TABLE IF NOT EXISTS card_performance (
+    card_name             TEXT PRIMARY KEY,
+    games_included        INTEGER NOT NULL DEFAULT 0,
+    wins_when_included    INTEGER NOT NULL DEFAULT 0,
+    avg_turn_played       REAL    NOT NULL DEFAULT 0,
+    avg_battlefield_time  REAL    NOT NULL DEFAULT 0,
+    turn_play_count       INTEGER NOT NULL DEFAULT 0,
+    bf_obs_count          INTEGER NOT NULL DEFAULT 0,
+    updated_at            INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_performance_winrate
+    ON card_performance(wins_when_included, games_included);

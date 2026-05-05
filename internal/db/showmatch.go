@@ -27,6 +27,10 @@ type GameRecord struct {
 	Winner     int
 	WinnerName string
 	EndReason  string
+	// Seed is the engine RNG seed for the game. Captured for replay /
+	// anti-cheat (Phase 1: storage only, no verification yet). 0 means
+	// the seed wasn't surfaced by the runner — treat as "unknown".
+	Seed int64
 }
 
 type GameSeatRecord struct {
@@ -115,9 +119,9 @@ func BatchUpsertELO(ctx context.Context, sqlDB *sql.DB, records []ELORecord) err
 
 func InsertGame(ctx context.Context, db *sql.DB, g GameRecord) (int64, error) {
 	res, err := db.ExecContext(ctx,
-		`INSERT INTO showmatch_game (started_at, finished_at, turns, winner, winner_name, end_reason)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		g.StartedAt, g.FinishedAt, g.Turns, g.Winner, g.WinnerName, g.EndReason)
+		`INSERT INTO showmatch_game (started_at, finished_at, turns, winner, winner_name, end_reason, rng_seed)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		g.StartedAt, g.FinishedAt, g.Turns, g.Winner, g.WinnerName, g.EndReason, g.Seed)
 	if err != nil {
 		return 0, err
 	}
@@ -142,9 +146,9 @@ func PersistGameTx(ctx context.Context, sqlDB *sql.DB, g GameRecord, seats []Gam
 		return 0, err
 	}
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO showmatch_game (started_at, finished_at, turns, winner, winner_name, end_reason)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		g.StartedAt, g.FinishedAt, g.Turns, g.Winner, g.WinnerName, g.EndReason)
+		`INSERT INTO showmatch_game (started_at, finished_at, turns, winner, winner_name, end_reason, rng_seed)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		g.StartedAt, g.FinishedAt, g.Turns, g.Winner, g.WinnerName, g.EndReason, g.Seed)
 	if err != nil {
 		tx.Rollback()
 		return 0, err
@@ -177,7 +181,7 @@ func PersistGameTx(ctx context.Context, sqlDB *sql.DB, g GameRecord, seats []Gam
 
 func LoadRecentGames(ctx context.Context, db *sql.DB, limit int) ([]GameRecord, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT game_id, started_at, finished_at, turns, winner, winner_name, end_reason
+		`SELECT game_id, started_at, finished_at, turns, winner, winner_name, end_reason, rng_seed
 		 FROM showmatch_game ORDER BY finished_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -186,7 +190,7 @@ func LoadRecentGames(ctx context.Context, db *sql.DB, limit int) ([]GameRecord, 
 	var out []GameRecord
 	for rows.Next() {
 		var g GameRecord
-		if err := rows.Scan(&g.GameID, &g.StartedAt, &g.FinishedAt, &g.Turns, &g.Winner, &g.WinnerName, &g.EndReason); err != nil {
+		if err := rows.Scan(&g.GameID, &g.StartedAt, &g.FinishedAt, &g.Turns, &g.Winner, &g.WinnerName, &g.EndReason, &g.Seed); err != nil {
 			return nil, err
 		}
 		out = append(out, g)

@@ -154,10 +154,14 @@ type CompletedGame struct {
 	EndReason  string         `json:"end_reason"`
 	FinishedAt time.Time      `json:"finished_at"`
 	FinalSeats []SeatSnapshot `json:"final_seats"`
+	// RngSeed is the engine seed for this game. Surfaced for replay /
+	// anti-cheat (Phase 1: capture-only). 0 = unknown/not captured.
+	RngSeed int64 `json:"rng_seed"`
 }
 
 type persistJob struct {
-	game CompletedGame
+	game        CompletedGame
+	perfDeltas  []db.CardPerformanceDelta
 }
 
 type GauntletResult struct {
@@ -305,6 +309,11 @@ func newTelemetrySink() heimdall.TelemetrySink {
 func (sm *Showmatch) persistWorker() {
 	for job := range sm.persistCh {
 		sm.persistGame(job.game)
+		if sm.sqlDB != nil && len(job.perfDeltas) > 0 {
+			if err := db.BatchUpsertCardPerformance(context.Background(), sm.sqlDB, job.perfDeltas); err != nil {
+				log.Printf("showmatch: card_performance: %v", err)
+			}
+		}
 	}
 }
 
@@ -365,6 +374,7 @@ func (sm *Showmatch) loadPersistedState() {
 			EndReason:  g.EndReason,
 			FinishedAt: time.Unix(g.FinishedAt, 0),
 			FinalSeats: finalSeats,
+			RngSeed:    g.Seed,
 		})
 	}
 
@@ -685,6 +695,7 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 		gameSeed := time.Now().UnixNano() + int64(g)*37
 		gameRng := rand.New(rand.NewSource(gameSeed))
 		gs := gameengine.NewGameState(showmatchSeats, gameRng, sm.corpus)
+		gs.Seed = gameSeed
 		gs.RetainEvents = false
 
 		cmdDecks := make([]*gameengine.CommanderDeck, showmatchSeats)
@@ -1147,6 +1158,7 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 	gameSeed := time.Now().UnixNano()
 	gameRng := rand.New(rand.NewSource(gameSeed))
 	gs := gameengine.NewGameState(showmatchSeats, gameRng, sm.corpus)
+	gs.Seed = gameSeed
 	gs.RetainEvents = false
 
 	cmdDecks := make([]*gameengine.CommanderDeck, showmatchSeats)
@@ -1386,6 +1398,7 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 	gameSeed := time.Now().UnixNano()
 	gameRng := rand.New(rand.NewSource(gameSeed))
 	gs := gameengine.NewGameState(showmatchSeats, gameRng, sm.corpus)
+	gs.Seed = gameSeed
 	gs.RetainEvents = true
 
 	cmdDecks := make([]*gameengine.CommanderDeck, showmatchSeats)
@@ -1599,6 +1612,7 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 		EndReason:  endReason,
 		FinishedAt: time.Now(),
 		FinalSeats: finalSnap.Seats,
+		RngSeed:    gs.Seed,
 	}
 	sm.gameHistory = append(sm.gameHistory, completed)
 	if len(sm.gameHistory) > 50 {
@@ -1655,7 +1669,7 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 	sm.broadcastToSpectators(wsEnvelope{Type: "narrative", Payload: narrative})
 
 	select {
-	case sm.persistCh <- persistJob{game: completed}:
+	case sm.persistCh <- persistJob{game: completed, perfDeltas: cardPerformanceDeltas(gs, winner)}:
 	default:
 	}
 
@@ -1680,6 +1694,7 @@ func (sm *Showmatch) persistGame(g CompletedGame) {
 		Winner:     g.Winner,
 		WinnerName: g.WinnerName,
 		EndReason:  g.EndReason,
+		Seed:       g.RngSeed,
 	}
 	seats := make([]db.GameSeatRecord, 0, len(g.FinalSeats))
 	var cardStats []db.CardWinStat
@@ -1792,6 +1807,71 @@ func (sm *Showmatch) persistGame(g CompletedGame) {
 			log.Printf("showmatch: card_stats: %v", err)
 		}
 	}
+}
+
+// cardPerformanceDeltas walks each seat's Battlefield, Hand, and
+// Graveyard zones at game end and returns one delta per (seat, card)
+// pair: the card was at least drawn during the game. Win is set when
+// the holding seat won. TurnPlayed comes from gs.CardFirstPlayed (0
+// for cards that were drawn but never cast). BattlefieldTurns
+// approximates "time on the battlefield" as gs.Turn - first-played-turn
+// for cards still on the battlefield at game end; we don't have
+// per-permanent ETB-turn instrumentation yet, so churned permanents
+// don't contribute (intentional underestimate, not a wrong number).
+func cardPerformanceDeltas(gs *gameengine.GameState, winnerSeat int) []db.CardPerformanceDelta {
+	if gs == nil {
+		return nil
+	}
+	var out []db.CardPerformanceDelta
+	for seatIdx, s := range gs.Seats {
+		if s == nil {
+			continue
+		}
+		seen := map[string]bool{}
+		bfNames := map[string]bool{}
+
+		add := func(name string) {
+			if name == "" || seen[name] {
+				return
+			}
+			seen[name] = true
+			d := db.CardPerformanceDelta{CardName: name}
+			if seatIdx == winnerSeat {
+				d.Win = 1
+			}
+			if turn, ok := gs.CardFirstPlayed[name]; ok && turn > 0 {
+				d.TurnPlayed = turn
+				if bfNames[name] && gs.Turn >= turn {
+					d.BattlefieldTurns = gs.Turn - turn
+					if d.BattlefieldTurns == 0 {
+						d.BattlefieldTurns = 1 // ETB this turn → at least 1
+					}
+				}
+			}
+			out = append(out, d)
+		}
+
+		for _, p := range s.Battlefield {
+			if p == nil || p.Card == nil {
+				continue
+			}
+			bfNames[p.Card.DisplayName()] = true
+		}
+		for name := range bfNames {
+			add(name)
+		}
+		for _, c := range s.Hand {
+			if c != nil {
+				add(c.DisplayName())
+			}
+		}
+		for _, c := range s.Graveyard {
+			if c != nil {
+				add(c.DisplayName())
+			}
+		}
+	}
+	return out
 }
 
 // splitDeckKey splits "owner/id" into its parts. Returns ("","") on
