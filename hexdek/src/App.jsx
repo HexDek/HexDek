@@ -24,6 +24,7 @@ import PublicProfile from './screens/PublicProfile'
 import OperatorProfile from './screens/OperatorProfile'
 import Login from './screens/Login'
 import AuthCallback from './screens/AuthCallback'
+import DeckCompare from './screens/DeckCompare'
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth()
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="dash" element={<Dashboard />} />
         <Route path="decks" element={<DeckList />} />
         <Route path="decks/:owner/:id" element={<DeckArchive />} />
+        <Route path="compare/:owner1/:deck1/:owner2/:deck2" element={<DeckCompare />} />
         <Route
           path="cards/:cardName"
           element={

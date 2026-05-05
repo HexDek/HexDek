@@ -11,6 +11,7 @@ import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useAuth } from '../context/AuthContext'
 import { trackEvent } from '../hooks/useAnalytics'
 import { MOCK_DECK_ANALYSIS } from '../services/mock'
+import { DeckPicker } from './DeckCompare'
 
 const CardThumb = ({ name, cmc, score, compact }) => {
   const imgUrl = cardArtUrl(name)
@@ -58,6 +59,7 @@ export default function DeckArchive() {
   const [editText, setEditText] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [comparePickerOpen, setComparePickerOpen] = useState(false)
   const [versions, setVersions] = useState([])
   const [gauntlet, setGauntlet] = useState(null)
   const [amiibo, setAmiibo] = useState(null)
@@ -453,6 +455,12 @@ export default function DeckArchive() {
             <button type="button" className="deck-hero__share" onClick={handleShare} title="Copy shareable link">
               <span>SHARE</span>
               <span className="arr">↗</span>
+            </button>
+          )}
+          {owner && id && (
+            <button type="button" className="deck-hero__share" onClick={() => setComparePickerOpen(true)} title="Compare against another deck">
+              <span>COMPARE</span>
+              <span className="arr">⇄</span>
             </button>
           )}
         </div>
@@ -1134,6 +1142,16 @@ export default function DeckArchive() {
           {owner && <AchievementsPanel owner={owner} />}
         </div>
       </div>
+      {comparePickerOpen && (
+        <DeckPicker
+          excludeKey={`${owner}/${id}`}
+          onClose={() => setComparePickerOpen(false)}
+          onPick={(d) => {
+            setComparePickerOpen(false)
+            navigate(`/compare/${owner}/${id}/${d.owner}/${d.id}`)
+          }}
+        />
+      )}
     </div>
   )
 }
