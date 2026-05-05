@@ -233,6 +233,240 @@ func abs(x int) int {
 	return x
 }
 
+// CoTriggerNTuple records N cards (3-5) that all fired in the same turn
+// window for the same controller. Unlike pairwise observations, no
+// causal-link filter is applied — the empirical co-firing within a single
+// turn is itself the signal. Cards is sorted alphabetically so that
+// identical tuples in different orders normalize to the same key.
+type CoTriggerNTuple struct {
+	Cards          []string `json:"cards"`           // sorted, len in [minN, maxN]
+	ImpactScore    float64  `json:"impact_score"`    // sum of pairwise impacts within tuple
+	TurnWindow     int      `json:"turn_window"`     // turn when co-firing occurred
+	EffectPatterns []string `json:"effect_patterns"` // distinct causal-link patterns observed among any pair in tuple
+	GameID         string   `json:"game_id"`
+}
+
+// DetectCoTriggerNTuples walks the event log and emits all combinations
+// of size minN..maxN of cards that fired events in the same turn for the
+// same seat. Aggregation choice: ImpactScore for a tuple is the sum of
+// per-pair impact contributions within the tuple, where each pair's
+// contribution is the same per-seat per-turn impact used by
+// DetectCoTriggers. Because every pair in a single seat-turn shares the
+// same per-turn impact, this resolves to (numPairs * turnImpact); we use
+// sum (not average) so that larger co-firing groups in high-impact turns
+// rank above small ones in low-impact turns. EffectPatterns collects the
+// distinct causal-link strings found among any pair within the tuple
+// (may be empty if no pair within the tuple has a causal resource link).
+func DetectCoTriggerNTuples(events []gameengine.Event, nSeats int, gameIdx int, minN, maxN int) []CoTriggerNTuple {
+	if len(events) == 0 || nSeats <= 0 {
+		return nil
+	}
+	if minN < 2 {
+		minN = 2
+	}
+	if maxN < minN {
+		maxN = minN
+	}
+
+	gameID := fmt.Sprintf("game-%d", gameIdx)
+
+	snapshots := make([]turnSnapshot, nSeats)
+	currentTurn := 1
+
+	resetSnapshots := func() {
+		for i := range snapshots {
+			snapshots[i] = turnSnapshot{
+				cardEvents: make(map[string][]cardResourceEvent),
+			}
+		}
+	}
+	resetSnapshots()
+
+	var observations []CoTriggerNTuple
+
+	flushTurn := func(turn int) {
+		for seat := 0; seat < nSeats; seat++ {
+			snap := &snapshots[seat]
+			if len(snap.cardEvents) < minN {
+				continue
+			}
+
+			cardNames := make([]string, 0, len(snap.cardEvents))
+			for name := range snap.cardEvents {
+				cardNames = append(cardNames, name)
+			}
+			sort.Strings(cardNames)
+
+			impact := float64(abs(snap.lifeDelta)) +
+				float64(abs(snap.boardDelta)) +
+				float64(snap.manaSpent) +
+				float64(snap.cardsDrawn)
+
+			upper := maxN
+			if upper > len(cardNames) {
+				upper = len(cardNames)
+			}
+			for size := minN; size <= upper; size++ {
+				combinations(cardNames, size, func(combo []string) {
+					patternSet := make(map[string]bool)
+					for i := 0; i < len(combo); i++ {
+						for j := i + 1; j < len(combo); j++ {
+							p := findCausalLink(snap.cardEvents[combo[i]], snap.cardEvents[combo[j]], combo[i], combo[j])
+							if p != "" {
+								patternSet[p] = true
+							}
+						}
+					}
+					patterns := make([]string, 0, len(patternSet))
+					for p := range patternSet {
+						patterns = append(patterns, p)
+					}
+					sort.Strings(patterns)
+					numPairs := len(combo) * (len(combo) - 1) / 2
+					tupleCards := append([]string(nil), combo...)
+					observations = append(observations, CoTriggerNTuple{
+						Cards:          tupleCards,
+						ImpactScore:    impact * float64(numPairs),
+						TurnWindow:     turn,
+						EffectPatterns: patterns,
+						GameID:         gameID,
+					})
+				})
+			}
+		}
+	}
+
+	for idx := range events {
+		ev := &events[idx]
+
+		if ev.Kind == "turn_start" {
+			if t, ok := detailInt(ev, "turn"); ok && t > currentTurn {
+				flushTurn(currentTurn)
+				currentTurn = t
+				resetSnapshots()
+			}
+			continue
+		}
+
+		seat := ev.Seat
+		if seat < 0 || seat >= nSeats {
+			continue
+		}
+		snap := &snapshots[seat]
+
+		switch ev.Kind {
+		case "life_change":
+			snap.lifeDelta += ev.Amount
+		case "enter_battlefield":
+			snap.boardDelta++
+		case "leave_battlefield":
+			snap.boardDelta--
+		case "pay_mana":
+			snap.manaSpent += ev.Amount
+		case "draw_card":
+			snap.cardsDrawn++
+		}
+
+		cardName := ev.Source
+		if cardName == "" {
+			continue
+		}
+
+		switch ev.Kind {
+		case "triggered_ability", "cast", "create_token", "damage",
+			"draw_card", "life_change", "pay_mana", "pool_drain",
+			"enter_battlefield", "leave_battlefield", "play_land",
+			"sacrifice", "destroy":
+		default:
+			continue
+		}
+
+		produces, consumes := EventResources(ev)
+		snap.cardEvents[cardName] = append(snap.cardEvents[cardName], cardResourceEvent{
+			produces: produces,
+			consumes: consumes,
+		})
+	}
+
+	flushTurn(currentTurn)
+
+	return observations
+}
+
+// combinations enumerates all k-sized subsets of items in lexicographic
+// order, invoking emit with each subset. items must already be sorted.
+func combinations(items []string, k int, emit func([]string)) {
+	if k <= 0 || k > len(items) {
+		return
+	}
+	idx := make([]int, k)
+	for i := range idx {
+		idx[i] = i
+	}
+	buf := make([]string, k)
+	for {
+		for i, p := range idx {
+			buf[i] = items[p]
+		}
+		emit(buf)
+		// Advance to next combination.
+		i := k - 1
+		for i >= 0 && idx[i] == i+len(items)-k {
+			i--
+		}
+		if i < 0 {
+			return
+		}
+		idx[i]++
+		for j := i + 1; j < k; j++ {
+			idx[j] = idx[j-1] + 1
+		}
+	}
+}
+
+// CoTriggerNTupleSummary aggregates n-tuple observations across games.
+type CoTriggerNTupleSummary struct {
+	Cards       []string
+	Occurrences int
+	TotalImpact float64
+	AvgImpact   float64
+}
+
+// AggregateCoTriggerNTuples groups observations by sorted-cards key,
+// sums impact, counts occurrences, and returns sorted by total impact desc.
+func AggregateCoTriggerNTuples(observations []CoTriggerNTuple) []CoTriggerNTupleSummary {
+	if len(observations) == 0 {
+		return nil
+	}
+	byKey := make(map[string]*CoTriggerNTupleSummary)
+	for _, obs := range observations {
+		cards := append([]string(nil), obs.Cards...)
+		sort.Strings(cards)
+		key := strings.Join(cards, "\x00")
+		s, ok := byKey[key]
+		if !ok {
+			s = &CoTriggerNTupleSummary{Cards: cards}
+			byKey[key] = s
+		}
+		s.Occurrences++
+		s.TotalImpact += obs.ImpactScore
+	}
+	result := make([]CoTriggerNTupleSummary, 0, len(byKey))
+	for _, s := range byKey {
+		if s.Occurrences > 0 {
+			s.AvgImpact = s.TotalImpact / float64(s.Occurrences)
+		}
+		result = append(result, *s)
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].TotalImpact != result[j].TotalImpact {
+			return result[i].TotalImpact > result[j].TotalImpact
+		}
+		return result[i].Occurrences > result[j].Occurrences
+	})
+	return result
+}
+
 // --- Aggregation for multi-game analysis ---
 
 // CoTriggerSummary aggregates co-trigger observations across multiple

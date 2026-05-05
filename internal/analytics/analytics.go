@@ -42,6 +42,12 @@ type GameAnalysis struct {
 	// turn with a verified causal resource link (A produces X, B consumes X).
 	// Populated by DetectCoTriggers.
 	CoTriggerObservations []CoTriggerObservation
+
+	// CoTriggerNTuples records groups of 3-5 cards that all fired in the
+	// same turn for the same controller. Empirical co-firing is the signal;
+	// no causal-link filter is required (Huginn promotes through tiers based
+	// on cross-deck recurrence). Populated by DetectCoTriggerNTuples.
+	CoTriggerNTuples []CoTriggerNTuple
 }
 
 // StallReport describes a game that stalled — no decisive winner emerged

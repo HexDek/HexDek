@@ -361,6 +361,11 @@ func AnalyzeGame(
 	// context (tournament runner) can re-run with the real game index.
 	ga.CoTriggerObservations = DetectCoTriggers(events, nSeats, 0)
 
+	// N-tuple detection: empirically observe 3-5 card groups co-firing in
+	// a single seat-turn window. Complements pairwise observations; Huginn
+	// can graduate these without relying on transitive chain inference.
+	ga.CoTriggerNTuples = DetectCoTriggerNTuples(events, nSeats, 0, 3, 5)
+
 	return ga
 }
 
