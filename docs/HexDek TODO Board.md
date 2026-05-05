@@ -17,11 +17,15 @@ kanban-plugin: board
 ## High Priority — Platform
 
 - [ ] **Mobile full pass** — leaderboard, spectate, operator, meta pages need individual mobile audit at 375px. Deck drilldown done, rest pending. #ui #mobile
+- [ ] **Mobile deck drilldown: curse data last** — on mobile, curse/genetic section should render below all other panels (currently positioned mid-page). #ui #mobile
 - [ ] **Global glossary disclosure system** — every stat/label/metric across all pages tap-to-expand inline explanation. One shared component + glossary data source. Replaces FAQ concept. #ui #ux #accessibility
 - [ ] **Curse Proficiency sigil** — cymatic SVG replacing curse section on deck page (circle → flower of life evolution, color-identity tinted). Part of "Hats" → "Curses" rebrand. #ui #design
 - [ ] **Action button context boxes** — brief TLDR above gauntlet/test variant/etc buttons for neurodivergent UX clarity. #ui #ux #accessibility
 - [ ] **Narrator enrichment** — detailed spell/ability resolution in spectator log (card names, effects, targets, results) instead of generic "resolves spell" messages. #ui #spectator
-- [ ] **"Hats" → "Curses" rename** — rebrand across entire codebase (hat → curse, curse section → curse proficiency). User-facing only — internal package names stay. #branding
+- [ ] **"Consider Cutting" rationale** — each cut recommendation needs: what was detected (stats/pattern), why it's recommended (synergy gap, mana curve, etc), the resulting effect, and suggested swaps. #ui #deck #freya
+- [ ] **Value Engine rationale** — explain WHY each value engine was identified for this deck (what cards/interactions trigger it, how the engine functions). #ui #deck #freya
+- [ ] **Win Condition rationale** — show detection logic for each win-con (which cards form the line, what conditions are needed, how the combo resolves). #ui #deck #freya
+- [ ] **Card popup redesign** — replace black box popup with card art hero, dim+tinted backdrop using card's color identity, showcase WOTC artwork. Keep CTA button to full card page. #ui #design #cards
 
 
 ## High Priority — Learning Loop (Observability) — ALL PHASES DONE
