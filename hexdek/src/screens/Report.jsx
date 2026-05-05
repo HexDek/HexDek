@@ -6,15 +6,30 @@ import { api, cardArtUrl } from '../services/api'
 // ── API gaps for full report fidelity ──────────────────────────────────
 // CompletedGame currently exposes: game_id, commanders[], deck_keys[],
 // winner, winner_name, turns, end_reason, finished_at, final_seats[].
-// To remove the mocks below we need the backend to also return:
-//   * log[] — LogEntry[] retained on CompletedGame (already exists on
-//     GameSnapshot during live play; just persist a trimmed copy)
-//   * life_history[] — per-seat life total per turn (or per phase)
-//   * per_card_impact[] — { name, owner, plays_count, damage_dealt,
-//     enabled_combo, etc. } for proper MVP ranking
-//   * commander_damage[][] — seat × seat matrix for the 21+ check
-// Until those land, the timeline + life sparkline + MVP heuristic are
-// labeled "MOCK / HEURISTIC" inline so reviewers know what's real.
+//
+// The Report.jsx analysis sections (RPT.C/D/E/F) are now built strictly
+// from those fields:
+//   * Win condition          — classifyWinCondition(end_reason) +
+//                              eliminated seats from final_seats[]
+//   * MVP card               — composite score over winner battlefield
+//                              (commander, P/T, counters). Tagged
+//                              HEURISTIC since per-card impact telemetry
+//                              isn't tracked yet.
+//   * Game timeline          — open + per-elimination (loss_reason) +
+//                              finishing line. Eliminations lack a turn
+//                              stamp because per-turn log[] is not
+//                              retained server-side; rendered as `— —`
+//                              instead of fabricated.
+//   * Per-seat performance   — pure final_seats[] readout. The old
+//                              interpolated life-over-time sparkline
+//                              was removed.
+//
+// Future server-side work that would unlock additional fidelity:
+//   * log[] retention on CompletedGame would let us anchor each
+//     elimination + key play to its turn.
+//   * life_history[] per seat per turn → real life-over-time sparklines.
+//   * per_card_impact[] → damage-dealt-based MVP ranking.
+//   * commander_damage[][] seat × seat matrix → finer 21+ attribution.
 // ───────────────────────────────────────────────────────────────────────
 
 const Stat2 = ({ k, v, big }) => (
@@ -22,10 +37,6 @@ const Stat2 = ({ k, v, big }) => (
     <div className="t-xs muted">{k}</div>
     <div className={big ? 't-3xl' : 't-2xl'} style={{ fontWeight: 800, marginTop: 4 }}>{v}</div>
   </div>
-)
-
-const MockTag = () => (
-  <Tag kind="warn" style={{ fontSize: 8, padding: '1px 5px' }}>MOCK · NEEDS API</Tag>
 )
 
 const HeuristicTag = () => (
@@ -52,92 +63,135 @@ const classifyWinCondition = (endReason) => {
   }
 }
 
-// pickMVP picks a best-guess MVP from the winner's final battlefield.
-// Heuristic order: commander → highest power creature → first non-land
-// permanent → first permanent. Real MVP scoring requires per-card
-// impact telemetry from the engine (see API gaps note above).
+// pickMVP scores the winner's final-board permanents by a composite
+// weight and returns the top scorer with a human-readable reason. Still
+// a heuristic in the strict sense (we don't have per-card impact
+// telemetry — damage dealt, combos enabled, removal absorbed), but the
+// scoring is multi-signal so a generic 1/1 doesn't beat the commander
+// just because it sorted first.
+//
+// Score components (additive):
+//   commander    +50      single hard signal we trust
+//   creature     +10      creatures finish games more often than
+//                         artifacts/enchantments at this scale
+//   power        +power   raw beatdown weight
+//   toughness    +toughness/2  staying-power tiebreak
+//   non-land     +5       avoid promoting basics
+//   counters     +Σcounters*3  +1/+1, charge, loyalty proxy
 const pickMVP = (winnerSeat) => {
   if (!winnerSeat?.battlefield?.length) return null
   const perms = winnerSeat.battlefield
-  const cmdr = perms.find(p => p.is_commander)
-  if (cmdr) return { perm: cmdr, reason: 'COMMANDER ON THE BATTLEFIELD AT VICTORY' }
-  const nonLand = perms.filter(p => !p.is_land)
-  if (nonLand.length) {
-    const ranked = [...nonLand].sort((a, b) => (b.power || 0) - (a.power || 0))
-    if (ranked[0].power > 0) {
-      return { perm: ranked[0], reason: `HIGHEST POWER NON-LAND (${ranked[0].power}/${ranked[0].toughness ?? '?'})` }
+  const score = (p) => {
+    let s = 0
+    if (p.is_commander) s += 50
+    if (!p.is_land) s += 5
+    const types = (p.type || '').toLowerCase()
+    if (types.includes('creature') || p.power != null) s += 10
+    if (typeof p.power === 'number') s += Math.max(0, p.power)
+    if (typeof p.toughness === 'number') s += Math.max(0, p.toughness) / 2
+    if (p.counters && typeof p.counters === 'object') {
+      for (const v of Object.values(p.counters)) {
+        if (typeof v === 'number') s += v * 3
+      }
     }
-    return { perm: nonLand[0], reason: 'FIRST NON-LAND PERMANENT' }
+    return s
   }
-  return { perm: perms[0], reason: 'ONLY PERMANENT ON BOARD' }
+  let best = perms[0]
+  let bestScore = score(perms[0])
+  for (const p of perms) {
+    const s = score(p)
+    if (s > bestScore) { best = p; bestScore = s }
+  }
+  // Build a reason string from the dominant signal.
+  let reason
+  if (best.is_commander) {
+    reason = 'COMMANDER ALIVE AT VICTORY — PRIMARY THREAT VECTOR'
+  } else if (best.power != null && best.power >= 5) {
+    reason = `${best.power}/${best.toughness ?? '?'} CREATURE — HIGHEST POWER ON BOARD`
+  } else if (best.counters && Object.values(best.counters).some(v => v >= 3)) {
+    const total = Object.values(best.counters).reduce((a, b) => a + (typeof b === 'number' ? b : 0), 0)
+    reason = `LOADED WITH ${total} COUNTER${total === 1 ? '' : 'S'} — VALUE ENGINE`
+  } else if (!best.is_land) {
+    reason = 'TOP-RANKED NON-LAND PERMANENT BY COMPOSITE SCORE'
+  } else {
+    reason = 'ONLY SURVIVING PERMANENT ON FINAL BOARD'
+  }
+  return { perm: best, reason, score: bestScore }
 }
 
-// mockTimeline synthesizes a plausible turn-by-turn key-play list keyed
-// off real CompletedGame data (turns, winner, end_reason). Replace once
-// CompletedGame.log[] is persisted server-side.
-const mockTimeline = (game, commanders) => {
+// deriveTimeline builds a turn-anchored key-moments list from real
+// CompletedGame fields only — game start, the winner's final board
+// composition, each opponent's elimination (with loss reason), and the
+// finishing-line classified from end_reason.
+//
+// Caveat: the engine doesn't yet retain per-turn log[] on
+// CompletedGame, so we don't know the exact turn each elimination
+// landed. Eliminations are placed as a single "ELIMINATIONS" pre-final
+// entry with all losers stacked, ordering preserved by seat index.
+// This is intentionally honest — every line in the returned list is
+// derivable from data the API already returns; nothing is invented.
+const deriveTimeline = (game, commanders) => {
   if (!game) return []
   const total = Math.max(1, game.turns || 1)
-  const winner = game.winner ?? 0
-  const winName = (commanders[winner] || 'WINNER').split(',')[0].toUpperCase()
-  const otherSeats = commanders
-    .map((c, i) => ({ c, i }))
-    .filter(s => s.i !== winner)
-  const t = (frac) => Math.max(1, Math.round(total * frac))
+  const winner = game.winner ?? -1
+  const winName = winner >= 0 ? (commanders[winner] || 'WINNER').split(',')[0].toUpperCase() : null
+  const seats = game.final_seats || []
   const cond = classifyWinCondition(game.end_reason)
-  const finishLine = {
-    'damage':            `${winName} CLOSES OUT WITH LETHAL DAMAGE`,
-    'mill':              `${winName} EMPTIES THE LAST OPPONENT'S LIBRARY`,
-    'poison':            `${winName} REACHES 10 POISON ON FINAL TARGET`,
-    'commander_damage':  `${winName} DEALS 21+ COMMANDER DAMAGE`,
-    'concession':        `${winName} ACCEPTS CONCESSION`,
-    'stall':             `GAME REACHES TURN ${total} CAP`,
-  }[cond.kind] || `${winName} SECURES VICTORY`
-  return [
-    { turn: 1,         seat: 0,      action: 'OPENING HANDS KEPT — ALL SEATS MULLIGAN-FREE', kind: 'open' },
-    { turn: t(0.25),   seat: winner, action: `${winName} CASTS COMMANDER`, kind: 'cmdr' },
-    { turn: t(0.4),    seat: otherSeats[0]?.i ?? 0, action: `EARLY THREAT FROM ${(otherSeats[0]?.c || '').split(',')[0].toUpperCase()}`, kind: 'threat' },
-    { turn: t(0.6),    seat: winner, action: `${winName} STABILIZES THE BOARD`, kind: 'stabilize' },
-    { turn: t(0.85),   seat: otherSeats[1]?.i ?? otherSeats[0]?.i ?? 0, action: `LATE PLAY FROM ${((otherSeats[1] || otherSeats[0])?.c || '').split(',')[0].toUpperCase()}`, kind: 'threat' },
-    { turn: total,     seat: winner, action: finishLine, kind: 'win' },
-  ]
-}
 
-// mockLifeCurve synthesizes a per-turn life sparkline. Real data needs
-// a life_history field on CompletedGame.
-const mockLifeCurve = (turns, finalLife, isWinner, lost) => {
-  const T = Math.max(2, turns || 1)
-  const start = 40
-  const end = lost ? 0 : (finalLife != null ? finalLife : (isWinner ? Math.max(20, finalLife || 25) : 5))
-  const pts = []
-  for (let i = 0; i <= T; i++) {
-    const t = i / T
-    // Slight noise so the line doesn't look perfectly linear.
-    const noise = (Math.sin(i * 1.7) + Math.cos(i * 0.9)) * 1.5
-    const v = Math.max(0, Math.min(40, start + (end - start) * t + (i > 0 && i < T ? noise : 0)))
-    pts.push(v)
+  const out = []
+  // Game start — every game has one.
+  out.push({
+    turn: 1,
+    seat: -1,
+    kind: 'open',
+    action: `GAME OPENS · ${commanders.length} SEATS`,
+    detail: commanders.map(c => (c || 'UNKNOWN').split(',')[0].toUpperCase()).join(' · '),
+  })
+
+  // Eliminations — collected from final_seats. Without per-turn data
+  // we group them as a single mid-game block; loss_reason is real.
+  const losers = seats
+    .map((s, i) => ({ s, i }))
+    .filter(x => x.s.lost && x.i !== winner)
+  for (const { s, i } of losers) {
+    const cmdrShort = (commanders[i] || 'UNKNOWN').split(',')[0].toUpperCase()
+    const reason = (s.loss_reason || s.LossReason || '').replace(/_/g, ' ').toUpperCase().trim()
+    out.push({
+      turn: null, // unknown — we don't have per-elimination turn data
+      seat: i,
+      kind: 'eliminated',
+      action: `${cmdrShort} ELIMINATED`,
+      detail: reason ? `LOSS: ${reason}` : 'LOSS: STATE-BASED',
+    })
   }
-  return pts
-}
 
-const Sparkline = ({ points, accent = 'var(--ok)', height = 36 }) => {
-  if (!points?.length) return null
-  const w = 120
-  const h = height
-  const maxV = 40
-  const step = w / (points.length - 1 || 1)
-  const path = points.map((v, i) => {
-    const x = i * step
-    const y = h - (v / maxV) * h
-    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`
-  }).join(' ')
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: 'block' }}>
-      <line x1="0" y1={h - 1} x2={w} y2={h - 1} stroke="var(--rule-2)" strokeWidth="1" strokeDasharray="2 3" />
-      <line x1="0" y1={h * 0.5} x2={w} y2={h * 0.5} stroke="var(--rule-2)" strokeWidth="1" strokeDasharray="2 3" opacity="0.5" />
-      <path d={path} fill="none" stroke={accent} strokeWidth="1.5" />
-    </svg>
-  )
+  // Finishing line — anchored at the recorded turn count.
+  if (winner >= 0) {
+    const finishMap = {
+      damage:            `${winName} CLOSES OUT — LETHAL DAMAGE`,
+      mill:              `${winName} DECKS OUT FINAL OPPONENT`,
+      poison:            `${winName} HITS 10+ POISON ON FINAL TARGET`,
+      commander_damage:  `${winName} DEALS 21+ COMMANDER DAMAGE`,
+      concession:        `${winName} ACCEPTS CONCESSION`,
+      stall:             `GAME HITS TURN-LIMIT CAP — ${winName} ON TOP`,
+    }
+    out.push({
+      turn: total,
+      seat: winner,
+      kind: 'win',
+      action: finishMap[cond.kind] || `${winName} SECURES VICTORY`,
+      detail: `END REASON: ${(game.end_reason || '?').replace(/_/g, ' ').toUpperCase()}`,
+    })
+  } else {
+    out.push({
+      turn: total,
+      seat: -1,
+      kind: 'draw',
+      action: 'GAME ENDS IN DRAW',
+      detail: `END REASON: ${(game.end_reason || '?').replace(/_/g, ' ').toUpperCase()}`,
+    })
+  }
+  return out
 }
 
 /* ─── Deck Context Selector (top bar) ────────────────────────── */
@@ -541,42 +595,54 @@ export default function Report() {
           )
         })()}
 
-        {/* Game timeline — key plays per turn. Mock until log[] persists. */}
+        {/* Game timeline — derived strictly from CompletedGame fields
+            (open, eliminations w/ loss_reason, finishing line). Per-turn
+            log[] isn't retained server-side yet, so mid-game eliminations
+            are anchored without a turn number rather than fabricated. */}
         {featuredGame && (() => {
-          const timeline = mockTimeline(featuredGame, commanders)
+          const timeline = deriveTimeline(featuredGame, commanders)
           return (
-            <Panel code="RPT.E" title="GAME TIMELINE" right={<MockTag />}
+            <Panel code="RPT.E" title="GAME TIMELINE"
               style={{ gridColumn: featuredGame && isVictory ? 'auto' : '1 / -1' }}>
               <div style={{ position: 'relative', paddingLeft: 18 }}>
                 <div style={{ position: 'absolute', left: 6, top: 4, bottom: 4, width: 1, background: 'var(--rule-2)' }} />
                 {timeline.map((entry, i) => {
-                  const cmdr = commanders[entry.seat] || ''
-                  const seatColor = entry.seat === winnerIdx ? 'var(--ok)' : entry.kind === 'win' ? 'var(--ok)' : 'var(--ink-2)'
+                  const cmdrName = entry.seat >= 0 ? (commanders[entry.seat] || '') : ''
+                  const seatColor = entry.kind === 'win' ? 'var(--ok)'
+                    : entry.kind === 'eliminated' ? 'var(--danger)'
+                    : entry.kind === 'draw' ? 'var(--warn)'
+                    : 'var(--ink-2)'
                   return (
-                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '50px 1fr', gap: 10, padding: '8px 0', borderBottom: i < timeline.length - 1 ? '1px dashed var(--rule-2)' : 'none', alignItems: 'flex-start' }}>
-                      <span className="t-xs" style={{ fontWeight: 800, color: 'var(--accent)', position: 'relative' }}>
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '52px 1fr', gap: 10, padding: '8px 0', borderBottom: i < timeline.length - 1 ? '1px dashed var(--rule-2)' : 'none', alignItems: 'flex-start' }}>
+                      <span className="t-xs" style={{ fontWeight: 800, color: entry.turn != null ? 'var(--accent)' : 'var(--ink-3)', position: 'relative' }}>
                         <span style={{ position: 'absolute', left: -16, top: 4, width: 9, height: 9, borderRadius: '50%', background: seatColor, border: '2px solid var(--bg)' }} />
-                        T{entry.turn}
+                        {entry.turn != null ? `T${entry.turn}` : '— —'}
                       </span>
                       <div>
                         <div className="t-md" style={{ fontWeight: 600, lineHeight: 1.3 }}>{entry.action}</div>
-                        <div className="t-xs muted" style={{ marginTop: 2 }}>SEAT.{String(entry.seat + 1).padStart(2, '0')} · {cmdr.split(',')[0].toUpperCase()}</div>
+                        {entry.detail && (
+                          <div className="t-xs muted" style={{ marginTop: 2 }}>
+                            {entry.seat >= 0 ? `SEAT.${String(entry.seat + 1).padStart(2, '0')} · ${(cmdrName.split(',')[0] || '').toUpperCase()} · ` : ''}
+                            {entry.detail}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )
                 })}
                 <div className="t-xs muted-2" style={{ marginTop: 10, lineHeight: 1.5 }}>
-                  GENERATED FROM RESULT METADATA. REAL TIMELINE NEEDS COMPLETEDGAME.LOG[] RETENTION SERVER-SIDE.
+                  &gt; ENTRIES MARKED `— —` LACK A TURN STAMP — PER-TURN LOG RETENTION IS A SERVER-SIDE TODO.
                 </div>
               </div>
             </Panel>
           )
         })()}
 
-        {/* Per-seat performance — final stats real, life curve mock. */}
+        {/* Per-seat performance — final-state stats only. The life-over-
+            time sparkline was a fabricated curve; dropped until the
+            engine retains a per-turn life_history field. */}
         {featuredGame && (
-          <Panel code="RPT.F" title="PER-SEAT PERFORMANCE" style={{ gridColumn: '1 / -1' }}
-            right={<MockTag />}>
+          <Panel code="RPT.F" title="PER-SEAT PERFORMANCE" style={{ gridColumn: '1 / -1' }}>
             <div className="grid col-2 gap-4">
               {seats.map((s, i) => {
                 const isWinner = i === winnerIdx
@@ -584,34 +650,41 @@ export default function Report() {
                 const perms = s.battlefield || []
                 const lands = perms.filter(p => p.is_land).length
                 const nonLand = perms.length - lands
+                const creatures = perms.filter(p => (p.type || '').toLowerCase().includes('creature') || p.power != null).length
+                const totalCardsKnown = perms.length + (s.hand_size || 0) + (s.library_size || 0) + (s.gy_size || 0)
                 const lifePct = Math.max(0, Math.min(100, (s.life / 40) * 100))
-                const curve = mockLifeCurve(featuredGame.turns, s.life, isWinner, s.lost)
                 const accent = isWinner ? 'var(--ok)' : s.lost ? 'var(--danger)' : 'var(--ink-2)'
                 return (
                   <div key={i} className="panel" style={{ padding: 0, borderColor: accent }}>
                     <div className="panel-hd">
                       <span>{cmdr.split(',')[0].toUpperCase()}</span>
-                      <span className="t-xs">SEAT.{String(i + 1).padStart(2, '0')}</span>
+                      <span className="t-xs">
+                        SEAT.{String(i + 1).padStart(2, '0')}
+                        {isWinner && <span style={{ color: 'var(--ok)', marginLeft: 6 }}>★ WINNER</span>}
+                        {s.lost && !isWinner && <span style={{ color: 'var(--danger)', marginLeft: 6 }}>✕ LOST</span>}
+                      </span>
                     </div>
                     <div style={{ padding: 12 }}>
-                      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 10 }}>
-                        <div style={{ flex: 1 }}>
-                          <div className="t-xs muted" style={{ marginBottom: 2 }}>LIFE</div>
-                          <Bar value={lifePct} />
-                          <div className="t-xs" style={{ marginTop: 3, fontWeight: 700, color: accent }}>{s.life} / 40</div>
-                        </div>
-                        <div>
-                          <div className="t-xs muted" style={{ marginBottom: 2 }}>LIFE OVER TIME</div>
-                          <Sparkline points={curve} accent={accent} />
-                        </div>
+                      <div className="t-xs muted" style={{ marginBottom: 2 }}>FINAL LIFE</div>
+                      <Bar value={lifePct} lg />
+                      <div className="t-xs" style={{ marginTop: 3, fontWeight: 700, color: accent, fontVariantNumeric: 'tabular-nums' }}>
+                        {s.life} / 40
+                        {s.lost && s.loss_reason && (
+                          <span className="muted-2" style={{ marginLeft: 8, fontWeight: 400 }}>
+                            · {s.loss_reason.replace(/_/g, ' ').toUpperCase()}
+                          </span>
+                        )}
                       </div>
+                      <div className="hr" style={{ margin: '10px 0' }} />
                       <KV rows={[
                         ['BATTLEFIELD', String(perms.length)],
+                        ['CREATURES', String(creatures)],
                         ['NON-LAND', String(nonLand)],
                         ['LANDS', String(lands)],
                         ['HAND', String(s.hand_size)],
                         ['LIBRARY', String(s.library_size)],
                         ['GRAVEYARD', String(s.gy_size)],
+                        ['ZONE TOTAL', String(totalCardsKnown)],
                       ]} />
                     </div>
                   </div>
@@ -619,7 +692,7 @@ export default function Report() {
               })}
             </div>
             <div className="t-xs muted-2" style={{ marginTop: 10, lineHeight: 1.5 }}>
-              FINAL STATS ARE REAL. LIFE-OVER-TIME SPARKLINES ARE INTERPOLATED ENDPOINTS — REAL CURVES NEED COMPLETEDGAME.LIFE_HISTORY[] FROM THE ENGINE.
+              &gt; ALL FIGURES READ DIRECTLY FROM `final_seats[]` — END-OF-GAME SNAPSHOT, NOT INTERPOLATED.
             </div>
           </Panel>
         )}
