@@ -45,7 +45,7 @@ const ContextDeckSelector = ({ decks, activeDeck, onSelect }) => (
 )
 
 /* ─── Deck Card (with ELO stats) ─────────────────────────────── */
-const DeckCard = ({ slot, name, color, power, bracket, winRate, archetype, gold, commanderCard, owner, id, onClick, eloStats }) => (
+const DeckCard = ({ slot, name, color, power, bracket, winRate, archetype, gold, commanderCard, owner, id, onClick, eloStats, friendCount }) => (
   <div className="panel" style={{ padding: 0, borderColor: gold ? 'var(--warn)' : 'var(--rule-2)', cursor: 'pointer' }} onClick={onClick}>
     <div className="panel-hd" style={{ borderColor: gold ? 'var(--warn)' : 'var(--rule-2)' }}>
       <span>SLOT.{slot}</span>
@@ -72,7 +72,14 @@ const DeckCard = ({ slot, name, color, power, bracket, winRate, archetype, gold,
       {commanderCard && commanderCard.toUpperCase() !== (name || '').toUpperCase() && (
         <div className="t-xs" style={{ marginTop: 2, color: 'var(--ink-2)', lineHeight: 1.2 }}>{commanderCard}</div>
       )}
-      <div className="t-xs muted" style={{ marginTop: 4 }}>{owner?.toUpperCase() || ''}{archetype && archetype !== '—' ? ` / / ${archetype}` : ''}</div>
+      <div className="t-xs muted" style={{ marginTop: 4, display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {owner?.toUpperCase() || ''}{archetype && archetype !== '—' ? ` / / ${archetype}` : ''}
+        </span>
+        {friendCount != null && (
+          <span className="muted-2" title={`${owner?.toUpperCase()} has ${friendCount} friend${friendCount === 1 ? '' : 's'}`}>● {friendCount}</span>
+        )}
+      </div>
       <div className="hr" style={{ margin: '8px 0' }} />
       {eloStats ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginBottom: 6 }}>
@@ -200,6 +207,7 @@ export default function Dashboard() {
   const [showFullLeaderboard, setShowFullLeaderboard] = useState(false)
   const [recentImports, setRecentImports] = useState([])
   const [friends, setFriends] = useState([])
+  const [friendCounts, setFriendCounts] = useState({})
   const navigate = useNavigate()
 
   // Refetch friends when the user changes; also on a custom 'hexdek-friends-changed'
@@ -231,6 +239,36 @@ export default function Dashboard() {
       .catch(() => { if (alive) setRecentImports([]) })
     return () => { alive = false }
   }, [userOwner, showImport])
+
+  // Friend count per owner across the visible decks. There's no batch
+  // endpoint, so we fan out one listFriends call per unique slug — fine
+  // at dashboard scale (a handful of owners). Keyed-on a stable joined
+  // string so the effect doesn't refire on identity-only deck reorders.
+  const ownerListKey = [...new Set(decks.map(d => d.owner).filter(Boolean))].sort().join(',')
+  useEffect(() => {
+    if (!ownerListKey) { setFriendCounts({}); return }
+    let alive = true
+    const slugs = ownerListKey.split(',')
+    const load = () => {
+      Promise.all(slugs.map(slug =>
+        api.listFriends(slug)
+          .then(r => [slug, (r?.friends || []).length])
+          .catch(() => [slug, null])
+      )).then(pairs => {
+        if (!alive) return
+        const next = {}
+        for (const [k, v] of pairs) if (v != null) next[k] = v
+        setFriendCounts(next)
+      })
+    }
+    load()
+    const onChanged = () => load()
+    window.addEventListener('hexdek-friends-changed', onChanged)
+    return () => {
+      alive = false
+      window.removeEventListener('hexdek-friends-changed', onChanged)
+    }
+  }, [ownerListKey])
 
   const owners = [...new Set(decks.map(d => d.owner).filter(Boolean))].sort()
   const effectiveFilter = ownerFilter === '__all__' ? '' : (ownerFilter || (user && userOwner && owners.includes(userOwner) ? userOwner : ''))
@@ -346,6 +384,7 @@ export default function Dashboard() {
                   owner={d.owner}
                   id={d.id}
                   eloStats={getDeckELO(d)}
+                  friendCount={friendCounts[d.owner] ?? null}
                   onClick={() => navigate(`/decks/${d.owner}/${d.id}`)}
                 />
               ))}
