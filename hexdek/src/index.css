@@ -1373,10 +1373,8 @@ body {
   .crop { display: none; }
   .grain { display: none; }
 
-  .spectator-lower { grid-template-columns: 1fr; }
-  .spectator-lower-side { border-left: none; border-top: 1px solid var(--rule-2); padding: 10px; }
+  .spectator-lower { display: none; }
   .spectator-seats { padding: 4px; }
-  .spectator-lower-main { padding: 10px; }
   .seat-grid { gap: 3px; }
   .seat-hd { padding: 3px 5px; font-size: 9px; }
   .seat-art-col { width: 56px; }
