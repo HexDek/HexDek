@@ -315,3 +315,62 @@ Dark Ritual
 		t.Fatalf("library want 1 (only Sol Ring from Deck section), got %d", len(td.Library))
 	}
 }
+
+// TestSupplementWithOracleJSON_MDFCInstantLand regression-tests the fix for
+// the MDFC permanent_types bug: an MDFC whose front face is instant/sorcery
+// and whose back face is a land has no P/T on either face. The supplement
+// loop's pre-fix early-return on (pw==0 && tg==0) skipped these entries
+// entirely, leaving BackFaceName empty so IsMDFC()/MDFCBackFaceIsLand()
+// returned false at runtime. The non-cast battlefield-entry paths then
+// failed to swap to the back face, and the §205 SBA fired permanent_types
+// violations.
+func TestSupplementWithOracleJSON_MDFCInstantLand(t *testing.T) {
+	dir := t.TempDir()
+	oraclePath := filepath.Join(dir, "oracle.json")
+	// Minimal Scryfall-shaped record for an instant//land MDFC. No P/T
+	// on either face — the regression case the fix targets.
+	data := `[
+		{
+			"name": "Malakir Rebirth // Malakir Mire",
+			"layout": "modal_dfc",
+			"card_faces": [
+				{"name": "Malakir Rebirth", "type_line": "Instant", "mana_cost": "{B}"},
+				{"name": "Malakir Mire", "type_line": "Land", "mana_cost": ""}
+			]
+		}
+	]`
+	if err := os.WriteFile(oraclePath, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Pre-seed the MetaDB with the front-face name (mirrors what the
+	// AST dataset load would do).
+	meta := &MetaDB{byName: map[string]*CardMeta{}}
+	meta.byName[normalizeName("Malakir Rebirth")] = &CardMeta{
+		Name:     "Malakir Rebirth",
+		TypeLine: "Instant",
+		Types:    []string{"instant"},
+	}
+	if err := meta.SupplementWithOracleJSON(oraclePath); err != nil {
+		t.Fatalf("SupplementWithOracleJSON: %v", err)
+	}
+	cm := meta.Get("Malakir Rebirth")
+	if cm == nil {
+		t.Fatalf("CardMeta missing for Malakir Rebirth")
+	}
+	if cm.BackFaceName != "Malakir Mire" {
+		t.Errorf("BackFaceName: got %q, want %q", cm.BackFaceName, "Malakir Mire")
+	}
+	if cm.BackFaceTypeLine != "Land" {
+		t.Errorf("BackFaceTypeLine: got %q, want %q", cm.BackFaceTypeLine, "Land")
+	}
+	hasLand := false
+	for _, t := range cm.BackFaceTypes {
+		if t == "land" {
+			hasLand = true
+			break
+		}
+	}
+	if !hasLand {
+		t.Errorf("BackFaceTypes missing 'land': got %v", cm.BackFaceTypes)
+	}
+}

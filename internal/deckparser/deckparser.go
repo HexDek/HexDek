@@ -157,10 +157,12 @@ func (m *MetaDB) SupplementWithOracleJSON(path string) error {
 		if e.Name == "" {
 			continue
 		}
-		pw, tg := pickOraclePT(&e)
-		if pw == 0 && tg == 0 {
-			continue
-		}
+		// Resolve the CardMeta entry first — both the P/T merge and the
+		// MDFC back-face extraction need it, and an entry with no P/T
+		// on either face (instant//land MDFCs like Malakir Rebirth)
+		// must NOT be skipped: its back-face metadata is the only way
+		// the engine learns the card has a land back face for the
+		// EnsureMDFCBackFaceForBattlefield swap to fire.
 		norm := normalizeName(e.Name)
 		cm := m.byName[norm]
 		if cm == nil {
@@ -173,20 +175,27 @@ func (m *MetaDB) SupplementWithOracleJSON(path string) error {
 				continue
 			}
 		}
-		if cm.Power == 0 {
-			cm.Power = pw
-		}
-		if cm.Toughness == 0 {
-			cm.Toughness = tg
-		}
 		// MDFC back-face data: extract cost + type from face[1] for
-		// modal DFCs so the casting system can offer both faces.
+		// modal DFCs so the casting system can offer both faces and the
+		// battlefield-entry path can swap to the land back face.
+		// Independent of P/T — instant//land MDFCs have no P/T on
+		// either face but still need this metadata wired.
 		if e.Layout == "modal_dfc" && len(e.CardFaces) >= 2 && cm.BackFaceName == "" {
 			bf := e.CardFaces[1]
 			cm.BackFaceName = bf.Name
 			cm.BackFaceCMC = parseMDFCManaCost(bf.ManaCost)
 			cm.BackFaceTypeLine = bf.TypeLine
 			cm.BackFaceTypes = parseTypes(bf.TypeLine)
+		}
+		pw, tg := pickOraclePT(&e)
+		if pw == 0 && tg == 0 {
+			continue
+		}
+		if cm.Power == 0 {
+			cm.Power = pw
+		}
+		if cm.Toughness == 0 {
+			cm.Toughness = tg
 		}
 		merged++
 	}
