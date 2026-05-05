@@ -98,6 +98,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/profiles", h.handleOwnerProfilesBatch)
 	mux.HandleFunc("GET /api/card-art/{name}", h.handleCardArt)
 	mux.HandleFunc("GET /api/card-stats/{commander}", h.handleCardWinStats)
+	mux.HandleFunc("GET /api/cards/{name}/stats", h.handleCardStats)
 	mux.HandleFunc("GET /api/rivalry/{owner}/{id}", h.handleRivalry)
 	mux.HandleFunc("GET /api/threat-graph/{owner}/{id}", h.handleThreatGraph)
 	mux.HandleFunc("GET /api/leaderboard", h.handleLeaderboard)
@@ -111,6 +112,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/search", h.handleSearch)
 	mux.HandleFunc("GET /api/cards/search", h.handleCardSearch)
 	mux.HandleFunc("GET /api/cards/{name}", h.handleCardByName)
+	mux.HandleFunc("POST /api/telemetry/pageview", h.handlePageview)
+	mux.HandleFunc("POST /api/telemetry/stitch", h.handleStitch)
 }
 
 type DeckSummary struct {
