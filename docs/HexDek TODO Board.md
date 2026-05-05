@@ -18,7 +18,9 @@ kanban-plugin: board
 ## High Priority — Platform
 
 - [ ] **Amiibo display on deck page** — show per-deck DNA pool: generation count, best fitness, 7 personality params (radar chart), 20 DimStats weight corrections (heatmap), fitness sparkline over generations. Force graph or 3D brain visualization for evolved weight topology. (wiedeman/7174n1c 2026-05-04) #ui #amiibo #design
-- [ ] Negative ELO shame badges — "MID" stamp at 0, escalating tiers for deep negative. Leaderboard bottom-10 wall of shame section #ui #fun
+- [x] Negative ELO shame badges — MID/DOWN BAD/COOKED/PACK IT UP/UNINSTALL ladder + Wall of Shame bottom-10 panel (2026-05-04) #ui #fun
+- [ ] **Achievement badges** — milestone badges (first 10/100/1K users), rare/commendable action badges (first blood, comeback from <5 life, perfect sweep, etc). Beyond trash talk — reward good play. (wiedeman 2026-05-04) #ui #badges #design
+- [ ] **Volcano map smooth transition** — CSS transition on heatmap state changes so it morphs smoothly instead of instant swap. (wiedeman 2026-05-04) #ui #spectator
 - [ ] Operator platform page/tab (operator profile, deck management, analytics dashboard) #ui #platform
 - [ ] Friends system + player profiles — lightweight "pub" model: see each other's decks/ELO, no feed/notifications. Add via search or deck page #ui #social
 - [x] Bracket-stratified leaderboard tabs — filter by B1-B5, separate rankings per bracket + band labels (2026-05-04) #ui
