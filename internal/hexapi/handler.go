@@ -1,7 +1,9 @@
 package hexapi
 
 import (
+	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,6 +29,7 @@ type Handler struct {
 	Showmatch     *Showmatch
 	IndexHTMLPath string
 	cardDB        map[string]oracleCard
+	db            *sql.DB // optional — used for deck_meta (custom name, etc.)
 
 	deckSubsMu sync.RWMutex
 	deckSubs   map[string]map[chan deckEvent]struct{}
@@ -78,6 +81,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/decks", h.handleImportDeck)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}", h.handleGetDeck)
 	mux.HandleFunc("PUT /api/decks/{owner}/{id}", h.handleUpdateDeck)
+	mux.HandleFunc("PATCH /api/decks/{owner}/{id}", h.handlePatchDeck)
 	mux.HandleFunc("DELETE /api/decks/{owner}/{id}", h.handleDeleteDeck)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/versions", h.handleListVersions)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/analysis", h.handleGetAnalysis)
@@ -94,6 +98,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/leaderboard", h.handleLeaderboard)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/lineage", h.handleDeckLineage)
 	mux.HandleFunc("POST /api/import/moxfield", h.handleMoxfieldImport)
+	mux.HandleFunc("GET /api/imports/{owner}", h.handleListImports)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/events", h.handleDeckEvents)
 	mux.HandleFunc("POST /api/feedback", h.handleFeedback)
 	mux.HandleFunc("POST /api/kofi/webhook", h.handleKofiWebhook)
@@ -124,7 +129,7 @@ func (h *Handler) handleListDecks(w http.ResponseWriter, r *http.Request) {
 	ownerFilter := r.URL.Query().Get("owner")
 	containsFilter := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("contains")))
 
-	var decks []DeckSummary
+	decks := []DeckSummary{}
 	owners, err := os.ReadDir(h.DecksDir)
 	if err != nil {
 		http.Error(w, "cannot read decks directory", http.StatusInternalServerError)
@@ -183,6 +188,9 @@ func (h *Handler) handleListDecks(w http.ResponseWriter, r *http.Request) {
 
 	for i := range decks {
 		enrichDeckSummary(h.DecksDir, &decks[i])
+		if custom := h.loadCustomName(r.Context(), decks[i].Owner, decks[i].ID); custom != "" {
+			decks[i].Name = custom
+		}
 	}
 
 	sort.Slice(decks, func(i, j int) bool {
@@ -285,11 +293,13 @@ func (h *Handler) handleGetDeck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	production := computeManaProduction(h.cardDB, cards)
+	customName := h.loadCustomName(r.Context(), owner, id)
 	writeJSON(w, map[string]any{
 		"id":              id,
 		"owner":           owner,
 		"commander":       commander,
 		"commander_card":  cmdrCard,
+		"custom_name":     customName,
 		"bracket":         bracket,
 		"color":           color,
 		"card_count":      totalCards,
@@ -793,6 +803,15 @@ func (h *Handler) handleImportDeck(w http.ResponseWriter, r *http.Request) {
 	}
 	go h.registerDeckVersion(owner, finalID, cmdrCard, cardNames)
 
+	h.logImport(r.Context(), db.ImportLogEntry{
+		Owner:     owner,
+		DeckKey:   owner + "/" + finalID,
+		DeckName:  name,
+		Commander: cmdrCard,
+		Source:    "paste",
+		CardCount: len(cards),
+	})
+
 	writeJSON(w, map[string]any{
 		"id":             finalID,
 		"owner":          owner,
@@ -940,6 +959,16 @@ func (h *Handler) handleMoxfieldImport(w http.ResponseWriter, r *http.Request) {
 	finalID := strings.TrimSuffix(filepath.Base(deckPath), ".txt")
 	go h.registerDeckVersion(owner, finalID, cmdrName, cardNames)
 
+	h.logImport(r.Context(), db.ImportLogEntry{
+		Owner:     owner,
+		DeckKey:   owner + "/" + finalID,
+		DeckName:  deckName,
+		Commander: cmdrName,
+		Source:    "moxfield",
+		SourceURL: req.URL,
+		CardCount: len(cardNames),
+	})
+
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, map[string]any{
 		"id":         finalID,
@@ -950,6 +979,44 @@ func (h *Handler) handleMoxfieldImport(w http.ResponseWriter, r *http.Request) {
 		"source":     "moxfield",
 		"moxfield_id": moxID,
 	})
+}
+
+// logImport persists a deck-import event. Best-effort: a missing or failing
+// SQLite layer must not fail the import itself, so errors are logged only.
+func (h *Handler) logImport(ctx context.Context, e db.ImportLogEntry) {
+	if h.Showmatch == nil || h.Showmatch.sqlDB == nil {
+		return
+	}
+	if _, err := db.InsertImportLog(ctx, h.Showmatch.sqlDB, e); err != nil {
+		log.Printf("import_log: insert failed: %v", err)
+	}
+}
+
+func (h *Handler) handleListImports(w http.ResponseWriter, r *http.Request) {
+	owner := sanitizeFilename(strings.TrimSpace(r.PathValue("owner")))
+	if owner == "" {
+		http.Error(w, "owner required", http.StatusBadRequest)
+		return
+	}
+	limit := 25
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+	if h.Showmatch == nil || h.Showmatch.sqlDB == nil {
+		writeJSON(w, map[string]any{"owner": owner, "imports": []any{}})
+		return
+	}
+	entries, err := db.ListImportLogs(r.Context(), h.Showmatch.sqlDB, owner, limit)
+	if err != nil {
+		http.Error(w, "query failed", http.StatusInternalServerError)
+		return
+	}
+	if entries == nil {
+		entries = []db.ImportLogEntry{}
+	}
+	writeJSON(w, map[string]any{"owner": owner, "imports": entries})
 }
 
 func (h *Handler) handleCardWinStats(w http.ResponseWriter, r *http.Request) {

@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape, MiniBars } from '../components/chrome'
 import ImportModal from '../components/ImportModal'
 import { useProfile, useDecks, useGames, useMatchups } from '../hooks/useData'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useAuth } from '../context/AuthContext'
-import { cardArtUrl } from '../services/api'
+import { api, cardArtUrl } from '../services/api'
 
 /* ─── Context Deck Selector (sidebar) ──────────────────────────── */
 const ContextDeckSelector = ({ decks, activeDeck, onSelect }) => (
@@ -121,6 +121,61 @@ const NewSlot = ({ slot, onImport }) => (
   </div>
 )
 
+/* ─── Recent Imports panel ───────────────────────────────────── */
+function relativeTime(unixSec) {
+  if (!unixSec) return ''
+  const diff = Math.max(0, Math.floor(Date.now() / 1000 - unixSec))
+  if (diff < 60) return `${diff}s ago`
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`
+  return new Date(unixSec * 1000).toISOString().slice(0, 10)
+}
+
+function RecentImports({ imports, onOpen }) {
+  return (
+    <Panel code="III.A.1" title={`RECENT IMPORTS / / ${imports.length} EVENTS`}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {imports.map((entry, i) => {
+          const last = i === imports.length - 1
+          const sourceLabel = entry.source === 'moxfield' ? 'MOXFIELD' : 'PASTE'
+          return (
+            <div
+              key={entry.id}
+              onClick={() => onOpen(entry.deck_key)}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '70px 1fr 70px 70px 70px',
+                gap: 10,
+                padding: '8px 0',
+                borderBottom: last ? 'none' : '1px dashed var(--rule-2)',
+                alignItems: 'center',
+                cursor: 'pointer',
+              }}
+            >
+              <Tag solid={entry.source === 'moxfield'}>{sourceLabel}</Tag>
+              <div style={{ minWidth: 0 }}>
+                <div className="t-md" style={{ fontWeight: 700, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {entry.deck_name || entry.deck_key}
+                </div>
+                {entry.commander && (
+                  <div className="t-xs muted" style={{ marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.commander}</div>
+                )}
+                {entry.source === 'moxfield' && entry.source_url && (
+                  <div className="t-xs muted-2" style={{ marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.source_url}</div>
+                )}
+              </div>
+              <span className="t-xs muted text-right">{entry.card_count} CARDS</span>
+              <span className="t-xs muted text-right">{relativeTime(entry.imported_at)}</span>
+              <span className="t-xs muted-2 text-right">{entry.deck_key}</span>
+            </div>
+          )
+        })}
+      </div>
+    </Panel>
+  )
+}
+
 /* ─── Main Dashboard ─────────────────────────────────────────── */
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth()
@@ -143,7 +198,19 @@ export default function Dashboard() {
   const [activeDeck, setActiveDeck] = useState(null)
   const [showImport, setShowImport] = useState(false)
   const [showFullLeaderboard, setShowFullLeaderboard] = useState(false)
+  const [recentImports, setRecentImports] = useState([])
   const navigate = useNavigate()
+
+  // Recent imports for the user's owner. Refetches when the import modal is
+  // closed (which is when a new deck would have just landed).
+  useEffect(() => {
+    if (!userOwner) { setRecentImports([]); return }
+    let alive = true
+    api.getImports(userOwner, 8)
+      .then(r => { if (alive) setRecentImports(r?.imports || []) })
+      .catch(() => { if (alive) setRecentImports([]) })
+    return () => { alive = false }
+  }, [userOwner, showImport])
 
   const owners = [...new Set(decks.map(d => d.owner).filter(Boolean))].sort()
   const effectiveFilter = ownerFilter === '__all__' ? '' : (ownerFilter || (user && userOwner && owners.includes(userOwner) ? userOwner : ''))
@@ -265,6 +332,14 @@ export default function Dashboard() {
               <NewSlot slot={nextSlot} onImport={() => setShowImport(true)} />
             </div>
           </Panel>
+
+          {/* Recent imports — only shown when the signed-in user has a known owner */}
+          {userOwner && recentImports.length > 0 && (
+            <RecentImports
+              imports={recentImports}
+              onOpen={(deckKey) => navigate(`/decks/${deckKey}`)}
+            />
+          )}
 
           {/* Recent games + Dossier */}
           <div className="grid col-2 gap-3">

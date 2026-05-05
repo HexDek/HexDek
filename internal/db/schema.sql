@@ -255,3 +255,21 @@ CREATE TABLE IF NOT EXISTS kv_store (
     value      TEXT NOT NULL,
     updated_at INTEGER NOT NULL DEFAULT 0
 );
+
+-- ===== DECK IMPORT LOG =====
+-- One row per deck import event (paste or Moxfield URL). Used to surface a
+-- "Recent Imports" log on the dashboard and to audit deck provenance.
+
+CREATE TABLE IF NOT EXISTS import_log (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner        TEXT NOT NULL,
+    deck_key     TEXT NOT NULL,           -- "owner/id" of the saved deck file
+    deck_name    TEXT NOT NULL DEFAULT '',
+    commander    TEXT NOT NULL DEFAULT '',
+    source       TEXT NOT NULL,           -- 'paste' | 'moxfield'
+    source_url   TEXT NOT NULL DEFAULT '',
+    card_count   INTEGER NOT NULL DEFAULT 0,
+    imported_at  INTEGER NOT NULL         -- unix epoch seconds
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_log_owner ON import_log(owner, imported_at DESC);
