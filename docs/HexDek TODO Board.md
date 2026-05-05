@@ -12,10 +12,6 @@ kanban-plugin: board
 ## High Priority — Engine
 
 - [ ] **Remaining 276 commander handlers** — coverage at 447/652 files (750 registered names covering all 652 pool commanders). Template generator (`cmd/gen-handlers/main.go`) handles simple patterns. Pool now at 1292 decks (threshold lowered 100→80, 2026-05-05). #engine #per_card
-- [~] **Hat evaluator P/T migration to layer-aware** — IN PROGRESS (2026-05-05): migrating 23 call sites in yggdrasil.go (15) + poker.go (8) from raw `p.Power()`/`p.Toughness()` to `gs.PowerOf(p)`/`gs.ToughnessOf(p)` so evaluator respects Layer 7 continuous effects. #engine #layers #hat
-- [~] **Layer 3 text-changing handlers** — IN PROGRESS (2026-05-05): building real framework for text-rewriting effects (land type word swaps, color word changes) beyond the original no-op stub. #engine #layers
-- [~] **Expand layer dispatch (Caged Sun, Gauntlet of Power, March of the Machines)** — IN PROGRESS (2026-05-05): migrating Caged Sun + Gauntlet of Power from trigger-based to Layer 7c continuous effects; March of the Machines as Layer 4 (type-changing) + Layer 7b (P/T setting). #engine #layers
-- [ ] **BUG: MDFC permanent_types back-face resolution on battlefield entry** — `moveToZone` (state.go) has no `"battlefield"` case so `MoveCard(..., toZone="battlefield", ...)` silently falls through to graveyard; back-face land MDFCs (Fell the Profane // Fell Mire, Valakut Awakening, Sejiri Shelter) carry the front-face instant/sorcery types onto the battlefield via the deck-parser type-line leak. `tryPlayLand` was patched (commit fa018fd) but the broader `MoveCard("battlefield")` fallthrough still corrupts ~80% of zone_accounting Feynman violations. See `docs/zone-accounting-analysis.md` for full trace. #engine #bug #mdfc #zones
 
 
 ## High Priority — Platform
@@ -73,7 +69,6 @@ kanban-plugin: board
 *Ref: `docs/architecture-hat-evolution.md` Levels 6-7 + Skunkworks.*
 *Level 6 (Neural Position Evaluator), Level 7 (Self-Play Loop), Skunkworks (Tesla/Feynman/Lovelace/Ive/Watts) all complete 2026-05-02.*
 
-- [ ] **Genetic→Neural distillation** — Amiibo explores parameter space cheaply, neural net distills into general model, model feeds better Amiibo starting points. *Deferred — needs more training data first* #research #selfplay
 
 
 ## Low Priority
@@ -84,6 +79,11 @@ kanban-plugin: board
 
 ## Done — Session 2026-05-05
 
+- [x] **Hat evaluator P/T migration** — 23 call sites in yggdrasil.go + poker.go migrated from raw `p.Power()`/`p.Toughness()` to `gs.PowerOf(p)`/`gs.ToughnessOf(p)`. Evaluator now respects Layer 7 continuous effects. (2026-05-05) #engine #layers #hat
+- [x] **Layer 3 text-changing handlers** — full framework: 5 handlers (Swirl the Mists, Mind Bend, Magical Hack, Trait Doctoring, Painter's Servant), AST-driven registration, 14 tests. (2026-05-05) #engine #layers
+- [x] **Expand layer dispatch** — Caged Sun + Gauntlet of Power → Layer 7c continuous effects. March of the Machines → Layer 4 (type-changing) + Layer 7b (P/T = CMC). (2026-05-05) #engine #layers
+- [x] **BUG: MDFC permanent_types battlefield entry** — added proper `"battlefield"` case to `moveToZone`. EnsureBattlefieldFrontFace for MDFC type correction, CardCanEnterBattlefield gate, proper Permanent wrapper with ETB triggers. Eliminates ~80% of zone_accounting Feynman violations. 5 tests. (2026-05-05) #engine #bug #mdfc
+- [x] **Genetic→Neural distillation** — Amiibo→neural feedback loop: HarvestHighFitness (top-quartile DNA), EnrichWithDNA (fitness-weighted training samples), SeedDNAFromManifest (warm-start new pools from archetype centroids), TryCycle (non-blocking 30min cooldown, reseed underperformers). 17 tests. (2026-05-05) #research #selfplay
 - [x] **N-card combo line detection** — Huginn N-tuple pipeline fully wired: `DetectCoTriggerNTuples()` → `PersistRawNTuples()` → `IngestNTuples()` → `tier3_ntuples_for_freya.json`. CLI ingest/prune/stats/list commands added. Freya reads both pairwise and N-tuple exports. (2026-05-05) #engine #huginn #combo
 - [x] **Muninn persist batching** — tournament runner wired to `Batcher` in all 3 paths (Run, runPool, runLazyPool). `feedBatcher()` streams parser gaps, crashes, concessions, dead triggers per-game. Auto-flush every 30s/100 games. `persistPostTournament()` for non-Muninn data. (2026-05-05) #engine #performance
 - [x] **Feynman outlier fixes** — zone accounting: asymmetric tolerance `diff < -3 || diff > 20` (copy/clone positive diffs normal, missing cards = real bugs). game_end: turn-capped games (≥80 turns) downgraded to "info". 4 new tests. (2026-05-05) #engine #hat #feynman
