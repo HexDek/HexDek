@@ -829,6 +829,13 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 		if !oracleResult.Clean() {
 			log.Printf("feynman: grinder game violations: %s",
 				hat.FormatViolations(oracleResult.Violations))
+			msgs := make([]string, 0, len(oracleResult.Violations))
+			for _, v := range oracleResult.Violations {
+				msgs = append(msgs, v.String())
+			}
+			if err := muninn.AutoArchiveViolation("data/muninn", gauntSeed.RNGSeed, gauntSeed.DeckKeys, msgs); err != nil {
+				log.Printf("muninn: archive violations: %v", err)
+			}
 		}
 
 		if winner == 0 {
@@ -1283,6 +1290,13 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 	if !bracketOracle.Clean() {
 		log.Printf("feynman: bracket game violations: %s",
 			hat.FormatViolations(bracketOracle.Violations))
+		msgs := make([]string, 0, len(bracketOracle.Violations))
+		for _, v := range bracketOracle.Violations {
+			msgs = append(msgs, v.String())
+		}
+		if err := muninn.AutoArchiveViolation("data/muninn", bracketSeed.RNGSeed, bracketSeed.DeckKeys, msgs); err != nil {
+			log.Printf("muninn: archive violations: %v", err)
+		}
 	}
 }
 
@@ -1578,6 +1592,13 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 	if !showOracle.Clean() {
 		log.Printf("feynman: showmatch game %d violations: %s",
 			gameNum, hat.FormatViolations(showOracle.Violations))
+		msgs := make([]string, 0, len(showOracle.Violations))
+		for _, v := range showOracle.Violations {
+			msgs = append(msgs, v.String())
+		}
+		if err := muninn.AutoArchiveViolation("data/muninn", showSeed.RNGSeed, showSeed.DeckKeys, msgs); err != nil {
+			log.Printf("muninn: archive violations: %v", err)
+		}
 	}
 
 	// Ive: compose three-act narrative for spectators.

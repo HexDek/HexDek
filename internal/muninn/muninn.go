@@ -14,10 +14,15 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/hexdek/hexdek/internal/analytics"
 )
+
+var fileMu sync.Mutex
 
 // --------------------------------------------------------------------
 // Types
@@ -64,13 +69,16 @@ type ConcessionRecord struct {
 	Timestamp  string `json:"timestamp"`
 }
 
-// InvariantViolation records an Odin-detected invariant violation during a game.
+// InvariantViolation records a Feynman/Odin-detected invariant violation
+// during a game. The seed + deck keys make the offending game replayable
+// from the regression runner.
 type InvariantViolation struct {
-	Rule      string `json:"rule"`
-	Message   string `json:"message"`
-	GameSeed  int64  `json:"game_seed"`
-	Turn      int    `json:"turn"`
-	Timestamp string `json:"timestamp"`
+	GameSeed      int64     `json:"game_seed"`
+	DeckKeys      [4]string `json:"deck_keys"`
+	ViolationType string    `json:"violation_type"`
+	Message       string    `json:"message"`
+	Timestamp     string    `json:"timestamp"`
+	Turn          int       `json:"turn,omitempty"`
 }
 
 // RegressionFailure records a parity test failure.
@@ -318,6 +326,72 @@ func PersistInvariantViolations(dir string, violations []InvariantViolation) err
 	return atomicWriteJSON(filepath.Join(dir, invariantViolationsFile), existing)
 }
 
+// AutoArchiveViolation appends Feynman-detected invariant violations to
+// invariant_violations.json in dir. Each violation string in the slice
+// produces one record tagged with the game's RNG seed and deck keys so
+// the regression runner can replay the offending game.
+//
+// Violation strings are expected to use OracleViolation.String() format:
+//
+//	[severity] rule (seat N): description
+//
+// The "rule" portion is parsed out as ViolationType; the full string is
+// preserved in Message. Strings that don't match the format are stored
+// verbatim with an empty ViolationType.
+func AutoArchiveViolation(dir string, rngSeed int64, deckKeys [4]string, violations []string) error {
+	if len(violations) == 0 {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("muninn: mkdir %s: %w", dir, err)
+	}
+
+	fileMu.Lock()
+	defer fileMu.Unlock()
+
+	existing, err := ReadInvariantViolations(dir)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, v := range violations {
+		vtype, msg := parseOracleViolation(v)
+		existing = append(existing, InvariantViolation{
+			GameSeed:      rngSeed,
+			DeckKeys:      deckKeys,
+			ViolationType: vtype,
+			Message:       msg,
+			Timestamp:     now,
+		})
+	}
+
+	return atomicWriteJSON(filepath.Join(dir, invariantViolationsFile), existing)
+}
+
+// parseOracleViolation extracts the rule identifier from a string formatted
+// by hat.OracleViolation.String() ("[severity] rule (seat N): description").
+// Returns the rule plus the original message. If the string doesn't match
+// the format, returns ("", s).
+func parseOracleViolation(s string) (vtype, msg string) {
+	msg = s
+	if !strings.HasPrefix(s, "[") {
+		return "", s
+	}
+	end := strings.Index(s, "] ")
+	if end < 0 {
+		return "", s
+	}
+	rest := s[end+2:]
+	if j := strings.Index(rest, " (seat "); j >= 0 {
+		return rest[:j], s
+	}
+	if j := strings.Index(rest, ": "); j >= 0 {
+		return rest[:j], s
+	}
+	return rest, s
+}
+
 // PersistRegressionFailures appends new parity test failures to the
 // persistent regression_failures.json file.
 func PersistRegressionFailures(dir string, failures []RegressionFailure) error {
@@ -454,7 +528,7 @@ func atomicWriteJSON(path string, data interface{}) error {
 	}
 	out = append(out, '\n')
 
-	tmp := path + ".tmp"
+	tmp := path + ".tmp." + strconv.FormatInt(time.Now().UnixNano(), 36)
 	if err := os.WriteFile(tmp, out, 0o644); err != nil {
 		return fmt.Errorf("muninn: write tmp %s: %w", tmp, err)
 	}
