@@ -118,6 +118,9 @@ func PersistParserGaps(dir string, gaps map[string]int) error {
 		return fmt.Errorf("muninn: mkdir %s: %w", dir, err)
 	}
 
+	fileMu.Lock()
+	defer fileMu.Unlock()
+
 	existing, err := ReadParserGaps(dir)
 	if err != nil {
 		return err
@@ -157,6 +160,9 @@ func PersistCrashLogs(dir string, crashes []string, commanderNames []string, nGa
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("muninn: mkdir %s: %w", dir, err)
 	}
+
+	fileMu.Lock()
+	defer fileMu.Unlock()
 
 	existing, err := ReadCrashLogs(dir)
 	if err != nil {
@@ -234,6 +240,9 @@ func PersistDeadTriggers(dir string, analyses []*analytics.GameAnalysis) error {
 		return nil
 	}
 
+	fileMu.Lock()
+	defer fileMu.Unlock()
+
 	existing, err := ReadDeadTriggers(dir)
 	if err != nil {
 		return err
@@ -280,6 +289,9 @@ func PersistConcessions(dir string, records []ConcessionRecord) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("muninn: mkdir %s: %w", dir, err)
 	}
+
+	fileMu.Lock()
+	defer fileMu.Unlock()
 
 	existing, err := ReadConcessions(dir)
 	if err != nil {
