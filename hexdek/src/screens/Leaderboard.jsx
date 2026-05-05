@@ -4,7 +4,8 @@ import { Tape, Tag, ConfidenceDots } from '../components/chrome'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 
 const SORT_KEYS = [
-  { key: 'rating', label: 'RATING' },
+  { key: 'hex_rating', label: 'HEXELO' },
+  { key: 'mu', label: 'TS μ' },
   { key: 'games', label: 'GAMES' },
   { key: 'win_rate', label: 'WIN %' },
   { key: 'wins', label: 'WINS' },
@@ -74,7 +75,7 @@ function RecordDisplay({ wins, losses }) {
 
 export default function Leaderboard() {
   const [filter, setFilter] = useState('')
-  const [sortKey, setSortKey] = useState('rating')
+  const [sortKey, setSortKey] = useState('hex_rating')
   const [sortAsc, setSortAsc] = useState(false)
   const [bracket, setBracket] = useState(null)
   const navigate = useNavigate()
@@ -109,7 +110,7 @@ export default function Leaderboard() {
       const bv = b[sortKey] ?? 0
       const cmp = sortAsc ? av - bv : bv - av
       if (cmp !== 0) return cmp
-      return (b.rating ?? 0) - (a.rating ?? 0)
+      return (b.hex_rating ?? 0) - (a.hex_rating ?? 0)
     })
 
     return list
@@ -243,7 +244,10 @@ export default function Leaderboard() {
                   </td>
                   <td className="lb-td lb-td--owner muted">{entry.owner?.toUpperCase() || '--'}</td>
                   <td className="lb-td lb-td--rating">
-                    <span style={{ fontWeight: 700 }}>{Math.round(entry.rating || 0)}</span>
+                    <span style={{ fontWeight: 700 }}>{Math.round(entry.hex_rating || 0)}</span>
+                  </td>
+                  <td className="lb-td lb-td--mu">
+                    <span className="t-xs muted-2">{Math.round(entry.mu || 0)}</span>
                   </td>
                   <td className="lb-td lb-td--games">{entry.games || 0}</td>
                   <td className="lb-td lb-td--winrate">
@@ -290,8 +294,13 @@ export default function Leaderboard() {
                     <ShameBadge rating={entry.rating} />
                   </span>
                 </span>
-                <span className="t-xs" style={{ fontWeight: 700 }}>
-                  HexELO {Math.round(entry.rating || 0)}
+                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.1 }}>
+                  <span className="t-xs" style={{ fontWeight: 700 }}>
+                    HexELO {Math.round(entry.hex_rating || 0)}
+                  </span>
+                  <span className="t-xs muted-2">
+                    TS μ {Math.round(entry.mu || 0)}
+                  </span>
                 </span>
               </div>
               <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>

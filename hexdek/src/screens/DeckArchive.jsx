@@ -267,7 +267,8 @@ export default function DeckArchive() {
                   <ConfidenceDots games={deckElo.games} showLabel size="lg" />
                 </div>
                 <KV rows={[
-                  ['HexELO', <span className="punch">{Math.round(deckElo.rating)}</span>],
+                  ['HexELO', <span className="punch">{Math.round(deckElo.hex_rating || 0)}</span>],
+                  ['TS μ', <span className="t-xs muted-2">{Math.round(deckElo.mu || 0)}</span>],
                   ['RECORD', <span><span style={{ color: 'var(--ok)' }}>{deckElo.wins}W</span> — <span style={{ color: 'var(--danger)' }}>{deckElo.losses}L</span></span>],
                   ['WIN RATE', `${deckElo.win_rate}%`],
                   ['GAMES', `${deckElo.games?.toLocaleString()}`],

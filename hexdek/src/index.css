@@ -552,6 +552,8 @@ body {
 .lb-th--active { color: var(--ink); font-weight: 600; }
 .lb-th--rank { width: 40px; text-align: center; }
 .lb-th--rating,
+.lb-th--hex_rating,
+.lb-th--mu,
 .lb-th--games,
 .lb-th--win_rate,
 .lb-th--wins,
@@ -569,6 +571,7 @@ body {
 .lb-td--rank { text-align: center; font-weight: 600; color: var(--ink-2); }
 .lb-td--cmdr { font-weight: 600; }
 .lb-td--rating { text-align: right; }
+.lb-td--mu { text-align: right; color: var(--ink-2); }
 .lb-td--games { text-align: right; color: var(--ink-2); }
 .lb-td--winrate { text-align: right; }
 .lb-td--delta { text-align: right; }
