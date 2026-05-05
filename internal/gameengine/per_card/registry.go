@@ -1570,6 +1570,18 @@ func registerDefaults() {
 	registerZoyowaLavaTongue(Global())
 	registerZurgoThundersDecree(Global())
 
+	// Additional fill: well-known commanders from broader deck pool gap.
+	registerAdelineResplendentCathar(Global())
+	registerAdrianaCaptainOfTheGuard(Global())
+	registerAdrixAndNevTwincasters(Global())
+	registerAkiriLineSlinger(Global())
+	registerAkromaAngelOfWrath(Global())
+	registerAkromaAngelOfFury(Global())
+	registerAleshaWhoSmilesAtDeath(Global())
+	registerAnafenzaKinTreeSpirit(Global())
+	registerAdelizTheCinderWind(Global())
+	registerAlibouAncientWitness(Global())
+
 	// Auto-generated handlers (cmd/gen-handlers).
 	registerGeneratedHandlers(Global())
 }
