@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPie, computeColorByCmc } from '../components/chrome'
 import CardRolesGrid from '../components/CardRolesGrid'
 import AmiiboPanel from '../components/AmiiboPanel'
+import { AchievementsPanel, BadgeShowcase } from '../components/AchievementsPanel'
 import { toast } from '../components/Toast'
 import { api, cardArtUrl } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
@@ -409,7 +410,11 @@ export default function DeckArchive() {
   return (
     <div
       className="deck-archive-page"
-      style={{ '--page-wash': pageTheme.wash, '--accent': pageTheme.accent }}
+      style={{
+        '--page-wash': pageTheme.wash,
+        '--accent': pageTheme.accent,
+        '--cmdr-art': cmdrImageUrl ? `url("${cmdrImageUrl}")` : 'none',
+      }}
     >
       <Tape
         left={`DECK ARCHIVE / / ${owner?.toUpperCase()} / / ${deckName}`}
@@ -581,6 +586,12 @@ export default function DeckArchive() {
                 </>
               )}
             </div>
+            {owner && (
+              <>
+                <div className="hr" style={{ margin: '10px 0' }} />
+                <BadgeShowcase owner={owner} />
+              </>
+            )}
           </Panel>
 
           {cards.length > 0 && (
@@ -1104,6 +1115,8 @@ export default function DeckArchive() {
               <Btn ghost arrow="↗">DIFF BUILDS</Btn>
             </div>
           )}
+
+          {owner && <AchievementsPanel owner={owner} />}
         </div>
       </div>
     </div>

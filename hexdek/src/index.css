@@ -421,6 +421,116 @@ body {
   letter-spacing: 0.1em;
 }
 
+/* ── ACHIEVEMENT BADGES ── */
+:root {
+  --badge-common:     #8a9682;
+  --badge-uncommon:   #9ec48b;
+  --badge-rare:       #6ea8d4;
+  --badge-mythic:     #b78cd4;
+  --badge-secret:     #d4a843;
+}
+[data-theme="light"] {
+  --badge-common:     #5a5848;
+  --badge-uncommon:   #2a5a20;
+  --badge-rare:       #2a4a78;
+  --badge-mythic:     #5a2a78;
+  --badge-secret:     #7a5a10;
+}
+
+.badge-stats {
+  display: flex; flex-wrap: wrap; gap: 16px;
+  padding: 6px 0 12px 0;
+  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink);
+  border-bottom: 1px dashed var(--rule-2);
+  margin-bottom: 12px;
+}
+.badge-stats .muted {
+  margin-right: 4px;
+}
+
+.badge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.badge-tile {
+  position: relative;
+  border: 1px solid var(--rule-2);
+  background: var(--panel-2);
+  padding: 10px 8px 8px 8px;
+  display: flex; flex-direction: column; gap: 4px;
+  border-left: 3px solid var(--badge-common);
+  transition: transform 0.08s, box-shadow 0.12s;
+}
+.badge-tile:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 0 var(--rule-2);
+}
+.badge-tile__icon {
+  font-size: 28px; line-height: 1;
+  text-align: center;
+  filter: saturate(1.05);
+  margin-bottom: 2px;
+}
+.badge-tile__name {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-align: center;
+}
+.badge-tile__desc {
+  font-size: 9px; color: var(--ink-2);
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  min-height: 20px;
+}
+.badge-tile__rarity {
+  font-size: 8px; letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: right;
+  margin-top: auto;
+  padding-top: 2px;
+  border-top: 1px dashed var(--rule);
+}
+
+.badge-tile--common    { border-left-color: var(--badge-common);    }
+.badge-tile--common    .badge-tile__rarity { color: var(--badge-common); }
+.badge-tile--uncommon  { border-left-color: var(--badge-uncommon);  }
+.badge-tile--uncommon  .badge-tile__rarity { color: var(--badge-uncommon); }
+.badge-tile--rare      { border-left-color: var(--badge-rare);      }
+.badge-tile--rare      .badge-tile__rarity { color: var(--badge-rare); }
+.badge-tile--mythic    { border-left-color: var(--badge-mythic);    }
+.badge-tile--mythic    .badge-tile__rarity { color: var(--badge-mythic); }
+.badge-tile--secret    {
+  border-left-color: var(--badge-secret);
+  box-shadow: inset 0 0 0 1px rgba(212, 168, 67, 0.25);
+}
+.badge-tile--secret    .badge-tile__rarity { color: var(--badge-secret); }
+
+/* Compact variant for the showcase strip on the deck-specs panel. */
+.badge-tile--sm {
+  padding: 4px 4px 3px 4px;
+  border-left-width: 2px;
+  width: 38px;
+  min-width: 38px;
+  align-items: center;
+  gap: 1px;
+}
+.badge-tile--sm .badge-tile__icon { font-size: 18px; margin: 0; }
+.badge-tile--sm .badge-tile__name {
+  font-size: 6px; letter-spacing: 0.04em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+
+.badge-showcase {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.badge-showcase__strip {
+  display: flex; gap: 4px; flex-wrap: wrap;
+}
+
 /* ── ARCHIVE LAYOUT ── */
 .archive-layout {
   display: grid; grid-template-columns: 320px 1fr; flex: 1; overflow: hidden;
