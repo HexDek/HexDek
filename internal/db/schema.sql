@@ -273,3 +273,30 @@ CREATE TABLE IF NOT EXISTS import_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_import_log_owner ON import_log(owner, imported_at DESC);
+
+-- ===== TEMPORAL PINCER — ANONYMOUS PAGEVIEW + STITCH =====
+-- pageviews is append-only and stores no PII. anon_id is a client-generated
+-- UUID kept in localStorage; owner is filled in lazily when the visitor logs
+-- in (see session_stitch + the backfill UPDATE in handleStitch).
+
+CREATE TABLE IF NOT EXISTS pageviews (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    anon_id   TEXT NOT NULL,
+    owner     TEXT,
+    path      TEXT NOT NULL,
+    ts        INTEGER NOT NULL,           -- unix epoch milliseconds (client-supplied)
+    referrer  TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_pageviews_anon  ON pageviews(anon_id);
+CREATE INDEX IF NOT EXISTS idx_pageviews_owner ON pageviews(owner) WHERE owner IS NOT NULL;
+
+-- session_stitch records the moment an anonymous session was linked to an
+-- authenticated owner. Re-stitching the same pair is a no-op via INSERT OR REPLACE.
+
+CREATE TABLE IF NOT EXISTS session_stitch (
+    anon_id     TEXT NOT NULL,
+    owner       TEXT NOT NULL,
+    stitched_at INTEGER NOT NULL,         -- unix epoch milliseconds
+    PRIMARY KEY (anon_id, owner)
+);
