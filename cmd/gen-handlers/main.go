@@ -248,13 +248,16 @@ func parseRegistered(dir string) map[string]bool {
 		return registered
 	}
 
-	// Patterns to extract card names from registration calls
+	// Patterns to extract card names from registration calls.
+	// The (?:[^"\\]|\\.)+ branch tolerates Go-source escapes like
+	// `\"` inside the string literal so card names that contain quotes
+	// (e.g. `Henzie \"Toolbox\" Torre`) are captured in full.
 	regPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`\.OnETB\("([^"]+)"`),
-		regexp.MustCompile(`\.OnCast\("([^"]+)"`),
-		regexp.MustCompile(`\.OnResolve\("([^"]+)"`),
-		regexp.MustCompile(`\.OnActivated\("([^"]+)"`),
-		regexp.MustCompile(`\.OnTrigger\("([^"]+)"`),
+		regexp.MustCompile(`\.OnETB\("((?:[^"\\]|\\.)+)"`),
+		regexp.MustCompile(`\.OnCast\("((?:[^"\\]|\\.)+)"`),
+		regexp.MustCompile(`\.OnResolve\("((?:[^"\\]|\\.)+)"`),
+		regexp.MustCompile(`\.OnActivated\("((?:[^"\\]|\\.)+)"`),
+		regexp.MustCompile(`\.OnTrigger\("((?:[^"\\]|\\.)+)"`),
 	}
 
 	for _, e := range entries {
