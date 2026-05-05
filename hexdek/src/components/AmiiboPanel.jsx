@@ -109,7 +109,21 @@ export default function AmiiboPanel({ amiibo }) {
   const maxGen = pop.reduce((m, d) => Math.max(m, d.generation || 0), 0)
   const bestFitness = top.fitness
   const avgFitness = pop.reduce((s, d) => s + d.fitness, 0) / pop.length
-  const fitnessByRank = sorted.map(d => d.fitness)
+
+  // Best fitness per generation, last 20 generations. Each member carries
+  // the generation it was created in; we group by gen and take the max
+  // fitness so the sparkline plots the leading edge of evolution over time.
+  const fitnessByGen = (() => {
+    const bestByGen = new Map()
+    for (const d of pop) {
+      const g = d.generation ?? 0
+      const f = d.fitness ?? 0
+      const cur = bestByGen.get(g)
+      if (cur == null || f > cur) bestByGen.set(g, f)
+    }
+    const gens = [...bestByGen.keys()].sort((a, b) => a - b).slice(-20)
+    return gens.map(g => bestByGen.get(g))
+  })()
 
   const topValues = TRAITS.map(t => top[t.key] ?? 0)
 
@@ -132,8 +146,8 @@ export default function AmiiboPanel({ amiibo }) {
       ]} />
 
       <div className="hr" style={{ margin: '10px 0' }} />
-      <div className="t-xs muted" style={{ marginBottom: 4 }}>FITNESS BY RANK (POP SORTED ↓)</div>
-      <FitnessSparkline values={fitnessByRank} />
+      <div className="t-xs muted" style={{ marginBottom: 4 }}>FITNESS / GEN (LAST {fitnessByGen.length})</div>
+      <FitnessSparkline values={fitnessByGen} />
       <div className="t-xs muted" style={{ marginTop: 2 }}>
         DASHED = PAR (1.00) · GREEN DOTS ABOVE PAR
       </div>
