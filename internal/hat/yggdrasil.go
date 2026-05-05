@@ -539,7 +539,7 @@ func (h *YggdrasilHat) assessAllThreats(gs *gameengine.GameState, seatIdx int) [
 		}
 		st := seatThreat{
 			Seat:       i,
-			BoardPower: boardPower(s),
+			BoardPower: boardPower(gs, s),
 			Life:       s.Life,
 			HandSize:   len(s.Hand),
 			ManaSources: CountManaRocksAndLands(s),
@@ -552,7 +552,7 @@ func (h *YggdrasilHat) assessAllThreats(gs *gameengine.GameState, seatIdx int) [
 		// Retaliation risk: stronger opponents with more board presence
 		// are more dangerous to provoke. Scale by their board power
 		// relative to ours.
-		myPow := boardPower(gs.Seats[seatIdx])
+		myPow := boardPower(gs, gs.Seats[seatIdx])
 		if myPow > 0 {
 			st.RetaliationRisk = float64(st.BoardPower) / float64(myPow)
 		} else if st.BoardPower > 0 {
@@ -912,7 +912,7 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 		score += threat.EvalScore * leaderWeight
 
 		// 4. Prefer open defenders (fewer untapped blockers).
-		if attacker != nil && isOpenForAttacker(attacker, gs.Seats[def]) {
+		if attacker != nil && isOpenForAttacker(gs, attacker, gs.Seats[def]) {
 			score += 1.5
 		}
 
@@ -3371,7 +3371,7 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 		if a == nil {
 			continue
 		}
-		ranks = append(ranks, rank{a, -attackerRank(a)})
+		ranks = append(ranks, rank{a, -attackerRank(gs, a)})
 	}
 	sort.SliceStable(ranks, func(i, j int) bool { return ranks[i].score < ranks[j].score })
 
@@ -3400,24 +3400,24 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 		var survivors []*gameengine.Permanent
 		if !atkDT {
 			for _, b := range legal {
-				if b.Toughness()-b.MarkedDamage > atk.Power() {
+				if gs.ToughnessOf(b)-b.MarkedDamage > gs.PowerOf(atk) {
 					survivors = append(survivors, b)
 				}
 			}
 		}
 		sort.SliceStable(survivors, func(i, j int) bool {
 			si, sj := survivors[i], survivors[j]
-			if si.Power()+si.Toughness() != sj.Power()+sj.Toughness() {
-				return si.Power()+si.Toughness() < sj.Power()+sj.Toughness()
+			if gs.PowerOf(si)+gs.ToughnessOf(si) != gs.PowerOf(sj)+gs.ToughnessOf(sj) {
+				return gs.PowerOf(si)+gs.ToughnessOf(si) < gs.PowerOf(sj)+gs.ToughnessOf(sj)
 			}
-			return si.Toughness() < sj.Toughness()
+			return gs.ToughnessOf(si) < gs.ToughnessOf(sj)
 		})
 
 		var chosen []*gameengine.Permanent
 		if len(survivors) > 0 {
 			chosen = []*gameengine.Permanent{survivors[0]}
 		} else if willDieIfUnblocked {
-			chosen = []*gameengine.Permanent{bestChumpBlocker(legal)}
+			chosen = []*gameengine.Permanent{bestChumpBlocker(gs, legal)}
 		}
 
 		// Menace: need a second blocker.
@@ -3432,7 +3432,7 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 				chosen = nil
 			} else {
 				sort.SliceStable(extras, func(i, j int) bool {
-					return extras[i].Power()+extras[i].Toughness() < extras[j].Power()+extras[j].Toughness()
+					return gs.PowerOf(extras[i])+gs.ToughnessOf(extras[i]) < gs.PowerOf(extras[j])+gs.ToughnessOf(extras[j])
 				})
 				chosen = append(chosen, extras[0])
 			}
@@ -3447,14 +3447,14 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 		out[atk] = chosen
 
 		// Update incoming for trample accounting.
-		atkDmg := atk.Power()
+		atkDmg := gs.PowerOf(atk)
 		if atk.HasKeyword("double strike") || atk.HasKeyword("double_strike") {
 			atkDmg *= 2
 		}
 		if atk.HasKeyword("trample") {
 			totalT := 0
 			for _, b := range chosen {
-				totalT += b.Toughness() - b.MarkedDamage
+				totalT += gs.ToughnessOf(b) - b.MarkedDamage
 			}
 			leak := atkDmg - totalT
 			if leak < 0 {
@@ -3692,7 +3692,7 @@ func (h *YggdrasilHat) ChooseTarget(gs *gameengine.GameState, seatIdx int, filte
 			}
 			sc := 1.0
 			if p.Card != nil {
-				pow := p.Power()
+				pow := gs.PowerOf(p)
 				if pow > 0 {
 					sc += float64(pow) * 0.3
 				}
@@ -4467,7 +4467,7 @@ func (h *YggdrasilHat) ObserveEvent(gs *gameengine.GameState, seatIdx int, event
 			if s == nil || s.Lost || s.LeftGame {
 				continue
 			}
-			bp := boardPower(s)
+			bp := boardPower(gs, s)
 			if i < len(h.threatTrajectory) {
 				h.threatTrajectory[i] = append(h.threatTrajectory[i], bp)
 			}
@@ -4841,13 +4841,13 @@ func (h *YggdrasilHat) tutorTargetScore(gs *gameengine.GameState, seatIdx int, c
 				maxOppBoard := 0
 				for i, s := range gs.Seats {
 					if i != seatIdx && s != nil && !s.Lost {
-						bp := boardPower(s)
+						bp := boardPower(gs, s)
 						if bp > maxOppBoard {
 							maxOppBoard = bp
 						}
 					}
 				}
-				if maxOppBoard > boardPower(seat) {
+				if maxOppBoard > boardPower(gs, seat) {
 					score += 3.0
 				}
 			}

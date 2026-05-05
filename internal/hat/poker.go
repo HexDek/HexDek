@@ -298,7 +298,7 @@ func (h *PokerHat) reEvaluate(gs *gameengine.GameState, seatIdx int) {
 	}
 
 	// 2. Offensive RAISE.
-	ourBoard := boardPower(seat)
+	ourBoard := boardPower(gs, seat)
 	if ourBoard >= raiseBoardPowerFloor && h.comboReady(gs, seat) && h.Mode != ModeRaise {
 		h.transition(gs, seatIdx, ModeRaise,
 			fmt.Sprintf("offensive: board=%d + combo_ready", ourBoard))
@@ -337,7 +337,7 @@ func (h *PokerHat) considerCascadeRaise(gs *gameengine.GameState, seatIdx int) {
 	}
 	seat := gs.Seats[seatIdx]
 	combo := h.comboPiecesInHand(seat)
-	bp := boardPower(seat)
+	bp := boardPower(gs, seat)
 	imminent := h.opponentOneTurnFromWin(gs, seatIdx) || seat.Life <= raiseLifeThreshold
 	if combo >= 2 || bp >= raiseCascadeBoardPow || imminent {
 		h.transition(gs, seatIdx, ModeRaise,
@@ -660,7 +660,7 @@ func (h *PokerHat) threatBreakdown(gs *gameengine.GameState, srcIdx int, target 
 	}
 
 	// Dim 1 — board power + high-CMC proxy + low-life leverage.
-	bp := boardPower(target)
+	bp := boardPower(gs, target)
 	hc := highCMCPermanents(target)
 	dimBoard := wBoardPower * float64(bp+hc)
 	if target.Life <= 10 {
@@ -832,7 +832,7 @@ func (h *PokerHat) opponentOneTurnFromWin(gs *gameengine.GameState, seatIdx int)
 		untappedPower := 0
 		for _, p := range opp.Battlefield {
 			if p != nil && p.IsCreature() && !p.Tapped {
-				pw := p.Power()
+				pw := gs.PowerOf(p)
 				if pw > 0 {
 					untappedPower += pw
 				}
@@ -1320,7 +1320,7 @@ func (h *PokerHat) pickSafeAttackers(gs *gameengine.GameState, seatIdx int, lega
 			if o == nil || o.Lost || o.Idx == seatIdx {
 				continue
 			}
-			if isOpenForAttacker(a, o) || o.Life <= 30 {
+			if isOpenForAttacker(gs, a, o) || o.Life <= 30 {
 				safe = append(safe, a)
 				break
 			}
@@ -1338,8 +1338,8 @@ func (h *PokerHat) pickCallAttackers(gs *gameengine.GameState, seatIdx int, lega
 		}
 	}
 	sort.SliceStable(ranked, func(i, j int) bool {
-		ri := attackerRank(ranked[i])
-		rj := attackerRank(ranked[j])
+		ri := attackerRank(gs, ranked[i])
+		rj := attackerRank(gs, ranked[j])
 		return ri > rj
 	})
 
@@ -1357,7 +1357,7 @@ func (h *PokerHat) pickCallAttackers(gs *gameengine.GameState, seatIdx int, lega
 			if o == nil || o.Lost || o.Idx == seatIdx {
 				continue
 			}
-			if isOpenForAttacker(a, o) || o.Life <= 30 {
+			if isOpenForAttacker(gs, a, o) || o.Life <= 30 {
 				ok = true
 				break
 			}
@@ -1398,7 +1398,7 @@ func (h *PokerHat) ChooseAttackTarget(gs *gameengine.GameState, seatIdx int, att
 	}
 	// Prefer open target.
 	for _, o := range living {
-		if isOpenForAttacker(attacker, o) {
+		if isOpenForAttacker(gs, attacker, o) {
 			return o.Idx
 		}
 	}
@@ -1453,7 +1453,7 @@ func (h *PokerHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, attacke
 			if a.HasKeyword("double strike") || a.HasKeyword("double_strike") {
 				mul = 2
 			}
-			incoming += a.Power() * mul
+			incoming += gs.PowerOf(a) * mul
 		}
 		if seatIdx >= 0 && seatIdx < len(gs.Seats) {
 			if incoming < gs.Seats[seatIdx].Life {
@@ -1827,7 +1827,7 @@ func isCheapThreat(card *gameengine.Card) bool {
 // Board / power helpers
 // ---------------------------------------------------------------------
 
-func boardPower(seat *gameengine.Seat) int {
+func boardPower(gs *gameengine.GameState, seat *gameengine.Seat) int {
 	if seat == nil {
 		return 0
 	}
@@ -1837,7 +1837,7 @@ func boardPower(seat *gameengine.Seat) int {
 			continue
 		}
 		if p.IsCreature() {
-			if pw := p.Power(); pw > 0 {
+			if pw := gs.PowerOf(p); pw > 0 {
 				n += pw
 			}
 		}
@@ -1900,7 +1900,7 @@ func CountManaRocksAndLands(seat *gameengine.Seat) int {
 
 // isOpenForAttacker — rough heuristic for "can attacker swing through
 // this defender's pool mostly unblocked".
-func isOpenForAttacker(attacker *gameengine.Permanent, defender *gameengine.Seat) bool {
+func isOpenForAttacker(gs *gameengine.GameState, attacker *gameengine.Permanent, defender *gameengine.Seat) bool {
 	if attacker == nil || defender == nil {
 		return false
 	}
@@ -1927,12 +1927,12 @@ func isOpenForAttacker(attacker *gameengine.Permanent, defender *gameengine.Seat
 	if attacker.HasKeyword("menace") && len(untapped) <= 1 {
 		return true
 	}
-	ap := attacker.Power()
+	ap := gs.PowerOf(attacker)
 	if ap < 0 {
 		ap = 0
 	}
 	for _, b := range untapped {
-		if b.Power() >= ap {
+		if gs.PowerOf(b) >= ap {
 			return false
 		}
 	}
@@ -1940,7 +1940,7 @@ func isOpenForAttacker(attacker *gameengine.Permanent, defender *gameengine.Seat
 }
 
 // attackerRank returns a deadliest-first numeric score.
-func attackerRank(a *gameengine.Permanent) int {
+func attackerRank(gs *gameengine.GameState, a *gameengine.Permanent) int {
 	if a == nil {
 		return -1 << 30
 	}
@@ -1952,21 +1952,21 @@ func attackerRank(a *gameengine.Permanent) int {
 	if a.HasKeyword("double strike") || a.HasKeyword("double_strike") {
 		ds = 3
 	}
-	return a.Power() + dt + ds
+	return gs.PowerOf(a) + dt + ds
 }
 
 // bestChumpBlocker picks the best creature to sacrifice as a chump blocker.
 // Prefers tokens, then creatures with death triggers, then summoning-sick
 // creatures, then smallest. This ensures we don't waste valuable permanents
 // when we need to chump-block to survive.
-func bestChumpBlocker(legal []*gameengine.Permanent) *gameengine.Permanent {
+func bestChumpBlocker(gs *gameengine.GameState, legal []*gameengine.Permanent) *gameengine.Permanent {
 	if len(legal) == 0 {
 		return nil
 	}
 	best := legal[0]
-	bestScore := chumpScore(best)
+	bestScore := chumpScore(gs, best)
 	for _, b := range legal[1:] {
-		s := chumpScore(b)
+		s := chumpScore(gs, b)
 		if s > bestScore {
 			best = b
 			bestScore = s
@@ -1975,7 +1975,7 @@ func bestChumpBlocker(legal []*gameengine.Permanent) *gameengine.Permanent {
 	return best
 }
 
-func chumpScore(p *gameengine.Permanent) float64 {
+func chumpScore(gs *gameengine.GameState, p *gameengine.Permanent) float64 {
 	if p == nil {
 		return -100
 	}
@@ -1995,7 +1995,7 @@ func chumpScore(p *gameengine.Permanent) float64 {
 	if p.SummoningSick {
 		score += 1.0
 	}
-	score -= float64(p.Power()+p.Toughness()) * 0.1
+	score -= float64(gs.PowerOf(p)+gs.ToughnessOf(p)) * 0.1
 	return score
 }
 

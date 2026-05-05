@@ -1090,6 +1090,99 @@ func RegisterOpalescence(gs *GameState, p *Permanent) {
 	})
 }
 
+// RegisterMarchOfTheMachines wires March of the Machines:
+//   - Layer 4: each non-creature artifact becomes a creature in
+//     addition to its other types. Artifact creatures are unaffected
+//     (they already are creatures).
+//   - Layer 7b: each affected artifact's P/T = its mana value (CMC).
+//     Artifacts with CMC 0 that become 0/0 creatures will die to SBAs.
+//
+// CR §613.1d / §613.4b. Pattern mirrors Opalescence but targets
+// artifacts instead of enchantments. Equipment that becomes a creature
+// can no longer equip (CR §301.5c) — that's handled by SBA/attach
+// validation elsewhere.
+func RegisterMarchOfTheMachines(gs *GameState, p *Permanent) {
+	if p == nil {
+		return
+	}
+	ts := gs.NextTimestamp()
+	source := p
+	isNonCreatureArtifact := func(_ *GameState, t *Permanent) bool {
+		if t == source {
+			// March of the Machines is an enchantment, not an artifact,
+			// so it wouldn't match anyway — but guard for safety.
+			return false
+		}
+		if t == nil || t.Card == nil {
+			return false
+		}
+		// Check PRINTED types — layer 4 reads printed artifact-ness.
+		isArt := false
+		isCre := false
+		for _, ty := range t.Card.Types {
+			if ty == "artifact" {
+				isArt = true
+			}
+			if ty == "creature" {
+				isCre = true
+			}
+		}
+		// Only non-creature artifacts are affected.
+		return isArt && !isCre
+	}
+	addCreatureType := func(_ *GameState, _ *Permanent, chars *Characteristics) {
+		if !charsHaveType(chars.Types, "creature") {
+			chars.Types = append(chars.Types, "creature")
+		}
+	}
+	setPtToCMCMarch := func(_ *GameState, t *Permanent, chars *Characteristics) {
+		if !charsHaveType(chars.Types, "creature") {
+			return
+		}
+		// Only SET P/T on permanents that March turned into creatures —
+		// i.e. those whose printed type line doesn't already include
+		// creature. A printed artifact creature isn't affected by the
+		// P/T set.
+		if t != nil && t.Card != nil {
+			for _, ty := range t.Card.Types {
+				if ty == "creature" {
+					return
+				}
+			}
+		}
+		cmc := 0
+		if t != nil && t.Card != nil {
+			cmc = t.Card.CMC
+		}
+		// Also allow test injection via Flags["cmc"].
+		if t != nil && t.Flags != nil {
+			if v, ok := t.Flags["cmc"]; ok {
+				cmc = v
+			}
+		}
+		chars.Power = cmc
+		chars.Toughness = cmc
+		chars.BasePower = cmc
+		chars.BaseToughness = cmc
+	}
+	gs.RegisterContinuousEffect(&ContinuousEffect{
+		Layer: LayerType, Timestamp: ts,
+		SourcePerm: source, SourceCardName: "March of the Machines",
+		ControllerSeat: source.Controller,
+		HandlerID:      layerHandlerKey("march_machines_type", source),
+		Predicate:      isNonCreatureArtifact,
+		ApplyFn:        addCreatureType,
+	})
+	gs.RegisterContinuousEffect(&ContinuousEffect{
+		Layer: LayerPT, Sublayer: "b", Timestamp: ts,
+		SourcePerm: source, SourceCardName: "March of the Machines",
+		ControllerSeat: source.Controller,
+		HandlerID:      layerHandlerKey("march_machines_pt", source),
+		Predicate:      isNonCreatureArtifact,
+		ApplyFn:        setPtToCMCMarch,
+	})
+}
+
 // RegisterBloodMoon wires Blood Moon — nonbasic lands are Mountains
 // (CR §613.1d layer 4 + §305.7 land-subtype replacement semantics).
 //
@@ -1254,16 +1347,268 @@ func RegisterUrborg(gs *GameState, p *Permanent) {
 	})
 }
 
-// RegisterPaintersServant wires Painter's Servant — layer 5 adds a
-// chosen color to every permanent (in all zones, but layer 5 only
-// affects battlefield queries here; gs.PainterColor carries the
-// all-zones signal).
+// -----------------------------------------------------------------------------
+// Layer 3 — Text-Changing Effects (§613.1c)
+// -----------------------------------------------------------------------------
+//
+// Text-changing effects modify the actual text of a card's abilities. They run
+// BEFORE layer 4 (type-changing) per the strict layer ordering. In practice
+// very few cards use layer 3; the most relevant:
+//
+//   - Painter's Servant — changes color words in text (cosmetic for mechanics)
+//   - Swirl the Mists / Mind Bend / Magical Hack — change basic land type words
+//   - Trait Doctoring — cipher, changes color/land type words
+//
+// The framework modifies ability Raw text + keyword names in chars.Abilities
+// and chars.Keywords. This ensures that subsequent layers (especially layer 4
+// type-checking) see the text-changed versions.
+
+// layer3BasicLandTypes are the five basic land type words per CR §305.6 that
+// text-changing effects can swap between.
+var layer3BasicLandTypes = []string{"plains", "island", "swamp", "mountain", "forest"}
+
+// layer3ColorWordList are the five color words per CR §105.1 that text-changing
+// effects can swap. Named with layer3 prefix to avoid collision with
+// colorWords map in combat.go.
+var layer3ColorWordList = []string{"white", "blue", "black", "red", "green"}
+
+// layer3ColorToLetter maps a color word to its single-letter code for Layer 3.
+var layer3ColorToLetter = map[string]string{
+	"white": "W", "blue": "U", "black": "B", "red": "R", "green": "G",
+}
+
+// layer3ApplyTextSwap replaces all occurrences of `from` with `to` in the Raw
+// text of all abilities and in keyword names (case-insensitive). This is the
+// core operation for all Layer 3 effects.
+func layer3ApplyTextSwap(chars *Characteristics, from, to string) {
+	if from == "" || to == "" || strings.EqualFold(from, to) {
+		return
+	}
+	fromLower := strings.ToLower(from)
+	toLower := strings.ToLower(to)
+	// Swap in ability Raw text.
+	for i, ab := range chars.Abilities {
+		switch a := ab.(type) {
+		case *gameast.Static:
+			if a != nil && a.Raw != "" {
+				newRaw := layer3ReplaceInsensitive(a.Raw, fromLower, toLower)
+				if newRaw != a.Raw {
+					cp := *a
+					cp.Raw = newRaw
+					chars.Abilities[i] = &cp
+				}
+			}
+		case *gameast.Activated:
+			if a != nil && a.Raw != "" {
+				newRaw := layer3ReplaceInsensitive(a.Raw, fromLower, toLower)
+				if newRaw != a.Raw {
+					cp := *a
+					cp.Raw = newRaw
+					chars.Abilities[i] = &cp
+				}
+			}
+		case *gameast.Triggered:
+			if a != nil && a.Raw != "" {
+				newRaw := layer3ReplaceInsensitive(a.Raw, fromLower, toLower)
+				if newRaw != a.Raw {
+					cp := *a
+					cp.Raw = newRaw
+					chars.Abilities[i] = &cp
+				}
+			}
+		case *gameast.Keyword:
+			if a != nil && a.Raw != "" {
+				newRaw := layer3ReplaceInsensitive(a.Raw, fromLower, toLower)
+				if newRaw != a.Raw {
+					cp := *a
+					cp.Raw = newRaw
+					// Also update the keyword Name field.
+					cp.Name = layer3ReplaceInsensitive(a.Name, fromLower, toLower)
+					chars.Abilities[i] = &cp
+				}
+			}
+		}
+	}
+	// Swap in keyword names (e.g. "forestwalk" → "islandwalk").
+	for i, kw := range chars.Keywords {
+		newKw := layer3ReplaceInsensitive(kw, fromLower, toLower)
+		if newKw != kw {
+			chars.Keywords[i] = newKw
+		}
+	}
+}
+
+// layer3ReplaceInsensitive does a case-insensitive replacement of `fromLower`
+// with `to` in text. The `fromLower` parameter must already be lowercased.
+func layer3ReplaceInsensitive(text, fromLower, to string) string {
+	lower := strings.ToLower(text)
+	if !strings.Contains(lower, fromLower) {
+		return text
+	}
+	// Build result by scanning for occurrences in the lowered version.
+	var result strings.Builder
+	result.Grow(len(text))
+	pos := 0
+	for {
+		idx := strings.Index(lower[pos:], fromLower)
+		if idx < 0 {
+			result.WriteString(text[pos:])
+			break
+		}
+		result.WriteString(text[pos : pos+idx])
+		result.WriteString(to)
+		pos += idx + len(fromLower)
+	}
+	return result.String()
+}
+
+// RegisterTextChangeLandType registers a Layer 3 text-changing effect that
+// swaps one basic land type word for another in all ability text. Used by
+// Swirl the Mists, Mind Bend, Magical Hack, Trait Doctoring.
+//
+// CR §613.1c: text-changing effects modify the text of abilities.
+// The from/to values are read from p.Flags:
+//   - "text_from_plains"/"text_from_island"/etc. → the source land type
+//   - "text_to_plains"/"text_to_island"/etc. → the target land type
+//
+// Defaults: from="swamp", to="island" (most common use case).
+func RegisterTextChangeLandType(gs *GameState, p *Permanent, cardName string) {
+	if p == nil {
+		return
+	}
+	from := "swamp"
+	to := "island"
+	if p.Flags != nil {
+		for _, lt := range layer3BasicLandTypes {
+			if p.Flags["text_from_"+lt] > 0 {
+				from = lt
+				break
+			}
+		}
+		for _, lt := range layer3BasicLandTypes {
+			if p.Flags["text_to_"+lt] > 0 {
+				to = lt
+				break
+			}
+		}
+	}
+	if strings.EqualFold(from, to) {
+		return
+	}
+	ts := gs.NextTimestamp()
+	fromWord := from
+	toWord := to
+	applyFn := func(_ *GameState, _ *Permanent, chars *Characteristics) {
+		layer3ApplyTextSwap(chars, fromWord, toWord)
+	}
+	gs.RegisterContinuousEffect(&ContinuousEffect{
+		Layer: LayerText, Timestamp: ts,
+		SourcePerm: p, SourceCardName: cardName,
+		ControllerSeat: p.Controller,
+		HandlerID:      layerHandlerKey("text_land_type", p),
+		Predicate:      func(*GameState, *Permanent) bool { return true },
+		ApplyFn:        applyFn,
+	})
+}
+
+// RegisterTextChangeColorWord registers a Layer 3 text-changing effect that
+// swaps one color word for another in all ability text. Used by Painter's
+// Servant (its text-changing component), Trait Doctoring, etc.
+//
+// CR §613.1c.
+func RegisterTextChangeColorWord(gs *GameState, p *Permanent, cardName string, fromColor, toColor string) {
+	if p == nil {
+		return
+	}
+	if strings.EqualFold(fromColor, toColor) || fromColor == "" || toColor == "" {
+		return
+	}
+	ts := gs.NextTimestamp()
+	applyFn := func(_ *GameState, _ *Permanent, chars *Characteristics) {
+		layer3ApplyTextSwap(chars, fromColor, toColor)
+	}
+	gs.RegisterContinuousEffect(&ContinuousEffect{
+		Layer: LayerText, Timestamp: ts,
+		SourcePerm: p, SourceCardName: cardName,
+		ControllerSeat: p.Controller,
+		HandlerID:      layerHandlerKey("text_color_"+strings.ToLower(fromColor)+"_"+strings.ToLower(toColor), p),
+		Predicate:      func(*GameState, *Permanent) bool { return true },
+		ApplyFn:        applyFn,
+	})
+}
+
+// RegisterSwirlTheMists wires Swirl the Mists — Layer 3 text-changing:
+// change all instances of a chosen basic land type word to another.
+//
+// CR §613.1c. Chosen types read from p.Flags["text_from_*"] / ["text_to_*"].
+func RegisterSwirlTheMists(gs *GameState, p *Permanent) {
+	RegisterTextChangeLandType(gs, p, "Swirl the Mists")
+}
+
+// RegisterMindBend wires Mind Bend — instant, creates a text-changing
+// effect on a targeted permanent. Since the effect is on the resolved
+// permanent (not on Mind Bend itself), this is called with the TARGET
+// permanent as p and the from/to flags set on it.
+//
+// CR §613.1c. Duration: permanent (the text change lasts indefinitely
+// per CR §612.1).
+func RegisterMindBend(gs *GameState, p *Permanent) {
+	RegisterTextChangeLandType(gs, p, "Mind Bend")
+}
+
+// RegisterMagicalHack wires Magical Hack — same as Mind Bend.
+func RegisterMagicalHack(gs *GameState, p *Permanent) {
+	RegisterTextChangeLandType(gs, p, "Magical Hack")
+}
+
+// RegisterTraitDoctoring wires Trait Doctoring — cipher, changes either
+// a color word or a basic land type word. Uses p.Flags to determine mode:
+//   - If "text_from_<landtype>" is set → land type swap
+//   - If "text_color_from_<color>" is set → color word swap
+func RegisterTraitDoctoring(gs *GameState, p *Permanent) {
+	if p == nil {
+		return
+	}
+	if p.Flags != nil {
+		// Check for land type swap mode.
+		for _, lt := range layer3BasicLandTypes {
+			if p.Flags["text_from_"+lt] > 0 {
+				RegisterTextChangeLandType(gs, p, "Trait Doctoring")
+				return
+			}
+		}
+		// Check for color word swap mode.
+		for _, cw := range layer3ColorWordList {
+			if p.Flags["text_color_from_"+cw] > 0 {
+				fromColor := cw
+				toColor := ""
+				for _, tc := range layer3ColorWordList {
+					if p.Flags["text_color_to_"+tc] > 0 {
+						toColor = tc
+						break
+					}
+				}
+				if toColor != "" {
+					RegisterTextChangeColorWord(gs, p, "Trait Doctoring", fromColor, toColor)
+				}
+				return
+			}
+		}
+	}
+	// Default: land type swap (swamp → island).
+	RegisterTextChangeLandType(gs, p, "Trait Doctoring")
+}
+
+// RegisterPaintersServant wires Painter's Servant:
+//   - Layer 3: text-changing — changes all instances of non-chosen color
+//     words to the chosen color word in ability text (CR-correct per §613.1c).
+//   - Layer 5: adds the chosen color to every permanent.
 //
 // The chosen color is read from p.Flags["painter_color_W/U/B/R/G"] set
 // by the player choice hook. Defaults to "U" when no choice is
 // present (tests inject explicitly).
 //
-// CR §613.1e / §613.7a. Python reference:
+// CR §613.1c (text) / §613.1e (color) / §613.7a. Python reference:
 // per_card_runtime.py _painters_servant_register_layer5.
 func RegisterPaintersServant(gs *GameState, p *Permanent) {
 	if p == nil {
@@ -1279,7 +1624,42 @@ func RegisterPaintersServant(gs *GameState, p *Permanent) {
 		}
 	}
 	gs.PainterColor = chosen
-	ts := gs.NextTimestamp()
+
+	// Layer 3: text-changing — change all non-chosen color words to the
+	// chosen color in ability text. Per CR §613.1c, Painter's Servant
+	// changes instances of color words. In practice, this means if chosen
+	// is "blue", all "white"/"black"/"red"/"green" in ability text become
+	// "blue". This is mostly cosmetic but mechanically relevant for cards
+	// that reference color words in abilities (e.g. "protection from black").
+	chosenColorWord := ""
+	for word, letter := range layer3ColorToLetter {
+		if letter == chosen {
+			chosenColorWord = word
+			break
+		}
+	}
+	if chosenColorWord != "" {
+		textTS := gs.NextTimestamp()
+		capturedColorWord := chosenColorWord
+		painterTextApply := func(_ *GameState, _ *Permanent, chars *Characteristics) {
+			for _, cw := range layer3ColorWordList {
+				if !strings.EqualFold(cw, capturedColorWord) {
+					layer3ApplyTextSwap(chars, cw, capturedColorWord)
+				}
+			}
+		}
+		gs.RegisterContinuousEffect(&ContinuousEffect{
+			Layer: LayerText, Timestamp: textTS,
+			SourcePerm: p, SourceCardName: "Painter's Servant",
+			ControllerSeat: p.Controller,
+			HandlerID:      layerHandlerKey("painter_text", p),
+			Predicate:      func(*GameState, *Permanent) bool { return true },
+			ApplyFn:        painterTextApply,
+		})
+	}
+
+	// Layer 5: add chosen color to every permanent (original behavior).
+	colorTS := gs.NextTimestamp()
 	addColor := func(_ *GameState, _ *Permanent, chars *Characteristics) {
 		for _, c := range chars.Colors {
 			if c == chosen {
@@ -1289,7 +1669,7 @@ func RegisterPaintersServant(gs *GameState, p *Permanent) {
 		chars.Colors = append(chars.Colors, chosen)
 	}
 	gs.RegisterContinuousEffect(&ContinuousEffect{
-		Layer: LayerColor, Timestamp: ts,
+		Layer: LayerColor, Timestamp: colorTS,
 		SourcePerm: p, SourceCardName: "Painter's Servant",
 		ControllerSeat: p.Controller,
 		HandlerID:      layerHandlerKey("painter_color", p),
@@ -1830,6 +2210,22 @@ func registerASTStaticEffects(gs *GameState, p *Permanent) {
 			registerAnthemPT(gs, p, pow, tough, "ast-enchanted-pt", func(_ *GameState, t *Permanent) bool {
 				return src.AttachedTo != nil && t == src.AttachedTo
 			})
+
+		case "text_change_land_type":
+			// AST-driven Layer 3 text-changing: swap basic land type words.
+			// from/to read from p.Flags["text_from_*"] / ["text_to_*"].
+			RegisterTextChangeLandType(gs, p, p.Card.DisplayName())
+
+		case "text_change_color_word":
+			// AST-driven Layer 3 text-changing: swap color words.
+			// Args: [fromColor, toColor] (strings).
+			if len(mod.Args) >= 2 {
+				fromColor, _ := mod.Args[0].(string)
+				toColor, _ := mod.Args[1].(string)
+				if fromColor != "" && toColor != "" {
+					RegisterTextChangeColorWord(gs, p, p.Card.DisplayName(), fromColor, toColor)
+				}
+			}
 		}
 	}
 }
@@ -1909,6 +2305,14 @@ func RegisterContinuousEffectsForPermanent(gs *GameState, p *Permanent) {
 		RegisterUrborg(gs, p)
 	case "Painter's Servant":
 		RegisterPaintersServant(gs, p)
+	case "Swirl the Mists":
+		RegisterSwirlTheMists(gs, p)
+	case "Mind Bend":
+		RegisterMindBend(gs, p)
+	case "Magical Hack":
+		RegisterMagicalHack(gs, p)
+	case "Trait Doctoring":
+		RegisterTraitDoctoring(gs, p)
 	case "Mycosynth Lattice":
 		RegisterMycosynthLattice(gs, p)
 	case "Lignify":
@@ -1921,6 +2325,8 @@ func RegisterContinuousEffectsForPermanent(gs *GameState, p *Permanent) {
 		RegisterSplinterTwin(gs, p)
 	case "Doran, the Siege Tower":
 		RegisterDoranSiegeTower(gs, p)
+	case "March of the Machines":
+		RegisterMarchOfTheMachines(gs, p)
 	}
 	// Generic AST-driven registration for anthems and keyword grants.
 	registerASTStaticEffects(gs, p)

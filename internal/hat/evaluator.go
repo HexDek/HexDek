@@ -166,7 +166,7 @@ func (e *GameStateEvaluator) EvaluateDetailed(gs *gameengine.GameState, seatIdx 
 
 // scoreBoard: total creature power relative to opponents' average.
 func (e *GameStateEvaluator) scoreBoard(gs *gameengine.GameState, seatIdx int) float64 {
-	myPow := float64(boardPower(gs.Seats[seatIdx]))
+	myPow := float64(boardPower(gs, gs.Seats[seatIdx]))
 
 	var oppSum float64
 	var oppN int
@@ -174,7 +174,7 @@ func (e *GameStateEvaluator) scoreBoard(gs *gameengine.GameState, seatIdx int) f
 		if i == seatIdx || s.Lost || s.LeftGame {
 			continue
 		}
-		oppSum += float64(boardPower(s))
+		oppSum += float64(boardPower(gs, s))
 		oppN++
 	}
 	if oppN == 0 {
@@ -391,7 +391,7 @@ func (e *GameStateEvaluator) scoreThreat(gs *gameengine.GameState, seatIdx int) 
 		if i == seatIdx || s.Lost || s.LeftGame {
 			continue
 		}
-		bp := float64(boardPower(s))
+		bp := float64(boardPower(gs, s))
 		if bp > maxOppPow {
 			maxOppPow = bp
 		}
@@ -1185,7 +1185,7 @@ func (e *GameStateEvaluator) scoreThreatTrajectory(gs *gameengine.GameState, sea
 			continue
 		}
 
-		bp := float64(boardPower(s))
+		bp := float64(boardPower(gs, s))
 		handCards := float64(len(s.Hand))
 		manaSources := float64(CountManaRocksAndLands(s))
 
@@ -1397,14 +1397,14 @@ func (e *GameStateEvaluator) rescaleWeights(gs *gameengine.GameState, seatIdx in
 
 	// Position signal: board power comparison.
 	seat := gs.Seats[seatIdx]
-	myPow := float64(boardPower(seat))
+	myPow := float64(boardPower(gs, seat))
 	var oppPowSum float64
 	var oppN int
 	for i, s := range gs.Seats {
 		if i == seatIdx || s.Lost || s.LeftGame {
 			continue
 		}
-		oppPowSum += float64(boardPower(s))
+		oppPowSum += float64(boardPower(gs, s))
 		oppN++
 	}
 	positionSignal := 0.0

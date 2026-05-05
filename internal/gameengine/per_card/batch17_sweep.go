@@ -701,8 +701,13 @@ func chiefOfTheFoundryETB(gs *gameengine.GameState, perm *gameengine.Permanent) 
 // Caged Sun — "As ~ enters, choose a color. Creatures you control of
 // that color get +1/+1. Whenever a land you control is tapped for mana
 // of that color, add one additional mana of that color."
-// Simplified: choose the commander's primary color, apply creature buff.
-// Mana doubling logged as partial.
+//
+// Layer 7c continuous effect: creatures you control of the chosen color
+// get +1/+1 while Caged Sun is on the battlefield. The chosen color is
+// stored in perm.Flags["chosen_color_X"] (same pattern as Painter's
+// Servant). Defaults to first color in commander identity; falls back
+// to "W" if none available.
+// Mana doubling kept as a triggered ability (not a layer effect).
 // ---------------------------------------------------------------------------
 
 func registerCagedSun(r *Registry) {
@@ -710,33 +715,81 @@ func registerCagedSun(r *Registry) {
 	r.OnTrigger("Caged Sun", "land_tapped_for_mana", cagedSunLandTap)
 }
 
+// cagedSunChosenColor reads the chosen color from the permanent's flags.
+// Falls back to the commander's first color, then "W".
+func cagedSunChosenColor(gs *gameengine.GameState, perm *gameengine.Permanent) string {
+	if perm.Flags != nil {
+		for _, c := range []string{"W", "U", "B", "R", "G"} {
+			if perm.Flags["chosen_color_"+c] > 0 {
+				return c
+			}
+		}
+	}
+	// Default: first color of the commander, or "W".
+	seat := gs.Seats[perm.Controller]
+	if seat != nil {
+		for _, cmd := range seat.CommandZone {
+			if cmd != nil && len(cmd.Colors) > 0 {
+				return cmd.Colors[0]
+			}
+		}
+		// Check battlefield for the commander.
+		for _, p := range seat.Battlefield {
+			if p == nil || p.Card == nil {
+				continue
+			}
+			for _, cn := range seat.CommanderNames {
+				if cn != "" && p.Card.Name == cn && len(p.Card.Colors) > 0 {
+					return p.Card.Colors[0]
+				}
+			}
+		}
+	}
+	return "W"
+}
+
 func cagedSunETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	if gs == nil || perm == nil {
 		return
 	}
-	seat := gs.Seats[perm.Controller]
-	if seat == nil {
-		return
+	chosen := cagedSunChosenColor(gs, perm)
+	// Stamp the chosen color into flags for the layer handler to read.
+	if perm.Flags == nil {
+		perm.Flags = map[string]int{}
 	}
-	buffed := 0
-	for _, p := range seat.Battlefield {
-		if p == nil || p.Card == nil || !p.IsCreature() {
-			continue
-		}
-		p.Modifications = append(p.Modifications, gameengine.Modification{
-			Power:     1,
-			Toughness: 1,
-			Duration:  "while_source_on_battlefield",
-			Timestamp: gs.NextTimestamp(),
-		})
-		buffed++
-	}
-	if buffed > 0 {
-		gs.InvalidateCharacteristicsCache()
-	}
+	perm.Flags["chosen_color_"+chosen] = 1
+
+	// Register layer 7c continuous effect: +1/+1 to creatures you control
+	// of the chosen color.
+	source := perm
+	controllerSeat := perm.Controller
+	gs.RegisterContinuousEffect(&gameengine.ContinuousEffect{
+		Layer:          gameengine.LayerPT,
+		Sublayer:       "c",
+		SourcePerm:     source,
+		SourceCardName: "Caged Sun",
+		ControllerSeat: controllerSeat,
+		HandlerID:      "caged_sun_" + itoa(controllerSeat) + "_" + chosen,
+		Duration:       gameengine.DurationPermanent,
+		Predicate: func(_ *gameengine.GameState, target *gameengine.Permanent) bool {
+			if target == nil || target.Card == nil || !target.IsCreature() {
+				return false
+			}
+			if target.Controller != controllerSeat {
+				return false
+			}
+			return gameengine.CardHasColor(target.Card, chosen)
+		},
+		ApplyFn: func(_ *gameengine.GameState, _ *gameengine.Permanent, chars *gameengine.Characteristics) {
+			chars.Power++
+			chars.Toughness++
+		},
+	})
+	gs.InvalidateCharacteristicsCache()
 	emit(gs, "caged_sun_etb", "Caged Sun", map[string]interface{}{
 		"seat":   perm.Controller,
-		"buffed": buffed,
+		"color":  chosen,
+		"effect": "layer_7c_color_buff",
 	})
 }
 
@@ -763,7 +816,13 @@ func cagedSunLandTap(gs *gameengine.GameState, perm *gameengine.Permanent, ctx m
 }
 
 // ---------------------------------------------------------------------------
-// Gauntlet of Power — same as Caged Sun but symmetric (all players).
+// Gauntlet of Power — "As ~ enters, choose a color. Creatures of the
+// chosen color get +1/+1. Whenever a basic land is tapped for mana of
+// that color, its controller adds one additional mana of that color."
+//
+// Same layer 7c pattern as Caged Sun but SYMMETRIC — affects ALL
+// creatures of the chosen color regardless of controller. The chosen
+// color uses the same flag/fallback logic as Caged Sun.
 // ---------------------------------------------------------------------------
 
 func registerGauntletOfPower(r *Registry) {
@@ -775,30 +834,41 @@ func gauntletOfPowerETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	if gs == nil || perm == nil {
 		return
 	}
-	buffed := 0
-	for _, s := range gs.Seats {
-		if s == nil {
-			continue
-		}
-		for _, p := range s.Battlefield {
-			if p == nil || p.Card == nil || !p.IsCreature() {
-				continue
+	// Reuse same color-choosing logic as Caged Sun.
+	chosen := cagedSunChosenColor(gs, perm)
+	if perm.Flags == nil {
+		perm.Flags = map[string]int{}
+	}
+	perm.Flags["chosen_color_"+chosen] = 1
+
+	// Register layer 7c continuous effect: +1/+1 to ALL creatures of
+	// the chosen color (symmetric — every seat).
+	source := perm
+	controllerSeat := perm.Controller
+	gs.RegisterContinuousEffect(&gameengine.ContinuousEffect{
+		Layer:          gameengine.LayerPT,
+		Sublayer:       "c",
+		SourcePerm:     source,
+		SourceCardName: "Gauntlet of Power",
+		ControllerSeat: controllerSeat,
+		HandlerID:      "gauntlet_of_power_" + itoa(controllerSeat) + "_" + chosen,
+		Duration:       gameengine.DurationPermanent,
+		Predicate: func(_ *gameengine.GameState, target *gameengine.Permanent) bool {
+			if target == nil || target.Card == nil || !target.IsCreature() {
+				return false
 			}
-			p.Modifications = append(p.Modifications, gameengine.Modification{
-				Power:     1,
-				Toughness: 1,
-				Duration:  "while_source_on_battlefield",
-				Timestamp: gs.NextTimestamp(),
-			})
-			buffed++
-		}
-	}
-	if buffed > 0 {
-		gs.InvalidateCharacteristicsCache()
-	}
+			return gameengine.CardHasColor(target.Card, chosen)
+		},
+		ApplyFn: func(_ *gameengine.GameState, _ *gameengine.Permanent, chars *gameengine.Characteristics) {
+			chars.Power++
+			chars.Toughness++
+		},
+	})
+	gs.InvalidateCharacteristicsCache()
 	emit(gs, "gauntlet_of_power_etb", "Gauntlet of Power", map[string]interface{}{
 		"seat":   perm.Controller,
-		"buffed": buffed,
+		"color":  chosen,
+		"effect": "layer_7c_color_buff_symmetric",
 	})
 }
 
