@@ -45,6 +45,7 @@ type oracleCard struct {
 	ManaCost   string  `json:"mana_cost"`
 	TypeLine   string  `json:"type_line"`
 	OracleText string  `json:"oracle_text"`
+	Set        string  `json:"set,omitempty"`
 }
 
 func (h *Handler) LoadCardDB(path string) {
@@ -59,6 +60,7 @@ func (h *Handler) LoadCardDB(path string) {
 		ManaCost   string  `json:"mana_cost"`
 		TypeLine   string  `json:"type_line"`
 		OracleText string  `json:"oracle_text"`
+		Set        string  `json:"set"`
 	}
 	if err := json.Unmarshal(data, &cards); err != nil {
 		log.Printf("carddb: parse error: %v", err)
@@ -71,6 +73,7 @@ func (h *Handler) LoadCardDB(path string) {
 			ManaCost:   c.ManaCost,
 			TypeLine:   c.TypeLine,
 			OracleText: c.OracleText,
+			Set:        c.Set,
 		}
 	}
 	log.Printf("carddb: loaded %d cards", len(h.cardDB))
@@ -106,6 +109,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/kofi/webhook", h.handleKofiWebhook)
 	mux.HandleFunc("GET /api/donations/summary", h.handleDonationsSummary)
 	mux.HandleFunc("GET /api/search", h.handleSearch)
+	mux.HandleFunc("GET /api/cards/search", h.handleCardSearch)
+	mux.HandleFunc("GET /api/cards/{name}", h.handleCardByName)
 }
 
 type DeckSummary struct {
