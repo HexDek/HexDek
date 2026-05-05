@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { Panel, Tag, Btn, Tape } from '../components/chrome'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -155,6 +155,27 @@ export default function Import() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (!user) {
+    return (
+      <>
+        <Tape left="DECK IMPORT / / SIGN IN REQUIRED" mid="" right="DOC HX-110" />
+        <div style={{ padding: '40px 30px', maxWidth: 600, margin: '0 auto', textAlign: 'center' }}>
+          <Panel code="IMP.0" title="AUTHENTICATION REQUIRED" solid>
+            <div style={{ padding: '24px 0', lineHeight: 1.8 }}>
+              <div className="t-md" style={{ fontWeight: 700, marginBottom: 12 }}>SIGN IN TO IMPORT DECKS</div>
+              <div className="t-xs muted" style={{ marginBottom: 20 }}>
+                Deck ownership requires an account. Sign in to import, save, and run analysis on your decks.
+              </div>
+              <Link to="/login" style={{ display: 'inline-block', padding: '8px 20px', background: 'var(--ink)', color: 'var(--bg)', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textDecoration: 'none', textTransform: 'uppercase' }}>
+                SIGN IN ↗
+              </Link>
+            </div>
+          </Panel>
+        </div>
+      </>
+    )
   }
 
   return (

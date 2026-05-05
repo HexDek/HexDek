@@ -894,7 +894,7 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 		score := 0.0
 
 		// 1. Kill-shot detection: always prioritize lethal attacks.
-		if attacker != nil && attacker.Power() >= threat.Life && threat.Life > 0 {
+		if attacker != nil && gs.PowerOf(attacker) >= threat.Life && threat.Life > 0 {
 			score += 8.0
 		}
 
@@ -1011,7 +1011,7 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 		// us in 1-2 turns get deprioritized as attack targets (we need
 		// to block them) UNLESS we can kill them first.
 		if threat.TurnsToKill > 0 && threat.TurnsToKill <= 2 && attacker != nil {
-			if attacker.Power() < threat.Life {
+			if gs.PowerOf(attacker) < threat.Life {
 				score -= 1.0
 			}
 		}
@@ -3120,7 +3120,7 @@ func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, le
 		if p == nil {
 			continue
 		}
-		pw := p.Power()
+		pw := gs.PowerOf(p)
 		if pw <= 0 {
 			continue
 		}
@@ -3148,7 +3148,7 @@ func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, le
 		blockerTough := 0
 		for _, bp := range s.Battlefield {
 			if bp != nil && bp.IsCreature() && !bp.Tapped {
-				blockerTough += bp.Toughness() - bp.MarkedDamage
+				blockerTough += gs.ToughnessOf(bp) - bp.MarkedDamage
 			}
 		}
 		if totalPower >= s.Life+blockerTough {
@@ -3161,7 +3161,7 @@ func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, le
 			roundTag(gs, seatIdx), lethalTarget)
 		var all []*gameengine.Permanent
 		for _, p := range legal {
-			if p != nil && p.Power() > 0 {
+			if p != nil && gs.PowerOf(p) > 0 {
 				all = append(all, p)
 			}
 		}
@@ -3176,7 +3176,7 @@ func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, le
 		if p == nil {
 			continue
 		}
-		pw := p.Power()
+		pw := gs.PowerOf(p)
 		if pw <= 0 {
 			continue
 		}
@@ -3318,7 +3318,7 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 		if a.HasKeyword("double strike") || a.HasKeyword("double_strike") {
 			mul = 2
 		}
-		incoming += a.Power() * mul
+		incoming += gs.PowerOf(a) * mul
 	}
 
 	relPos := h.relativePosition(gs, seatIdx)

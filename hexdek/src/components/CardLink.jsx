@@ -1,21 +1,7 @@
+import { useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import { useCardPopup } from './CardPopup'
 
-// CardLink wraps a card name (or arbitrary children) in a Link to
-// /cards/:cardName. Single canonical helper so every card-name display
-// across the app navigates to the same place.
-//
-// Props:
-//   name              — required card name (URL-encoded by this component)
-//   children          — optional override for displayed text; defaults to name
-//   stopPropagation   — true by default; lets CardLink sit inside parent
-//                       rows that have their own onClick (DeckList rows,
-//                       Leaderboard rows) without double-firing
-//   underline         — true by default; renders a 1px dotted underline so
-//                       links are visible against the brutalist palette.
-//                       Pass false when the link wraps an art tile / icon
-//                       and an underline would be visual noise.
-//   onClick           — optional extra handler (after stopPropagation)
-//   style, className  — passthrough
 export default function CardLink({
   name,
   children,
@@ -28,23 +14,43 @@ export default function CardLink({
 }) {
   if (!name) return <span className={className} style={style}>{children}</span>
   const href = `/cards/${encodeURIComponent(name)}`
+  const touchedRef = useRef(false)
+  const { triggerProps, popup } = useCardPopup(name)
+
+  const handleTouchStart = useCallback((e) => {
+    touchedRef.current = true
+    if (triggerProps.onTouchStart) triggerProps.onTouchStart(e)
+  }, [triggerProps])
+
   const handleClick = (e) => {
     if (stopPropagation) e.stopPropagation()
+    if (touchedRef.current) {
+      e.preventDefault()
+      touchedRef.current = false
+      return
+    }
     if (onClick) onClick(e)
   }
   const baseStyle = underline
     ? { color: 'inherit', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)' }
     : { color: 'inherit', textDecoration: 'none' }
   return (
-    <Link
-      to={href}
-      onClick={handleClick}
-      style={{ ...baseStyle, ...style }}
-      className={className}
-      {...rest}
-    >
-      {children ?? name}
-    </Link>
+    <>
+      <Link
+        to={href}
+        ref={triggerProps.ref}
+        onClick={handleClick}
+        onMouseEnter={triggerProps.onMouseEnter}
+        onMouseLeave={triggerProps.onMouseLeave}
+        onTouchStart={handleTouchStart}
+        style={{ ...baseStyle, ...style }}
+        className={className}
+        {...rest}
+      >
+        {children ?? name}
+      </Link>
+      {popup}
+    </>
   )
 }
 

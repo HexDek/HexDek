@@ -429,14 +429,23 @@ func (sm *Showmatch) loadAndRun(astPath, oraclePath, decksDir string) {
 	}
 
 	var decks []*deckparser.TournamentDeck
-	var bannedSkipped int
+	var bannedSkipped, parseSkipped, tooSmallSkipped, noCmdrSkipped int
 	for _, p := range deckPaths {
 		d, perr := deckparser.ParseDeckFile(p, corpus, meta)
 		if perr != nil {
+			parseSkipped++
+			log.Printf("showmatch: parse skip %s: %v", filepath.Base(p), perr)
 			continue
 		}
 		totalCards := len(d.Library) + len(d.CommanderCards)
-		if len(d.CommanderCards) == 0 || totalCards < 100 {
+		if len(d.CommanderCards) == 0 {
+			noCmdrSkipped++
+			log.Printf("showmatch: no commander %s (%d cards)", deckKeyFromPath(p), totalCards)
+			continue
+		}
+		if totalCards < 80 {
+			tooSmallSkipped++
+			log.Printf("showmatch: too small %s (%d cards)", deckKeyFromPath(p), totalCards)
 			continue
 		}
 		if commanderBanned(d.CommanderName) {
@@ -445,8 +454,10 @@ func (sm *Showmatch) loadAndRun(astPath, oraclePath, decksDir string) {
 		}
 		decks = append(decks, d)
 	}
-	if bannedSkipped > 0 {
-		log.Printf("showmatch: skipped %d decks with banned commanders", bannedSkipped)
+	if parseSkipped+tooSmallSkipped+noCmdrSkipped+bannedSkipped > 0 {
+		log.Printf("showmatch: filtered %d decks (parse=%d noCmd=%d small=%d banned=%d)",
+			parseSkipped+tooSmallSkipped+noCmdrSkipped+bannedSkipped,
+			parseSkipped, noCmdrSkipped, tooSmallSkipped, bannedSkipped)
 	}
 	log.Printf("showmatch: %d decks parsed successfully (from %d files)", len(decks), len(deckPaths))
 
@@ -625,6 +636,7 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 	deckKey := owner + "/" + id
 	targetDeck := sm.findDeckInPool(owner, id)
 	if targetDeck == nil {
+		log.Printf("gauntlet: deck %s not in engine pool — filtered at startup or missing", deckKey)
 		sm.gauntletMu.Lock()
 		sm.gauntlets[deckKey] = &GauntletResult{
 			DeckKey: deckKey, Status: "error", Commander: id,

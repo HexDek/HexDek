@@ -111,6 +111,96 @@ func TestFeynman_NoWinner(t *testing.T) {
 	}
 }
 
+func TestFeynman_TurnCapped_DowngradeToInfo(t *testing.T) {
+	gs := newFeynmanGame(t, 4)
+	// Turn-capped game: 2 seats lost (tied leaders), expected 3.
+	gs.Seats[1].Lost = true
+	gs.Seats[2].Lost = true
+	gs.Turn = 80
+
+	result := CheckGame(gs)
+	found := false
+	for _, v := range result.Violations {
+		if v.Rule == "game_end" {
+			found = true
+			if v.Severity != "info" {
+				t.Errorf("turn-capped game with partial losers should be info, got %s", v.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected game_end violation (info) for turn-capped game")
+	}
+}
+
+func TestFeynman_TurnCapped_StillCriticalIfNobodyLost(t *testing.T) {
+	gs := newFeynmanGame(t, 4)
+	// Turn-capped but nobody lost at all — still critical.
+	gs.Turn = 80
+
+	result := CheckGame(gs)
+	found := false
+	for _, v := range result.Violations {
+		if v.Rule == "game_end" {
+			found = true
+			if v.Severity != "critical" {
+				t.Errorf("turn-capped with 0 losers should remain critical, got %s", v.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected game_end violation for turn-capped game with no losers")
+	}
+}
+
+func TestFeynman_ZoneAccounting_CopyTolerance(t *testing.T) {
+	gs := newFeynmanGame(t, 4)
+	gs.Seats[1].Lost = true
+	gs.Seats[2].Lost = true
+	gs.Seats[3].Lost = true
+	gs.Turn = 15
+
+	// Add 15 extra non-token cards to seat 0 (simulating copy/clone effects).
+	for i := 0; i < 15; i++ {
+		gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield,
+			&gameengine.Permanent{
+				Card:       &gameengine.Card{Name: "Clone Copy", Owner: 0, Types: []string{"creature"}, IsCopy: true},
+				Controller: 0,
+				Owner:      0,
+				Flags:      map[string]int{},
+			})
+	}
+
+	result := CheckGame(gs)
+	for _, v := range result.Violations {
+		if v.Rule == "zone_accounting" && v.Seat == 0 {
+			t.Errorf("15 copy-created cards should not trigger zone_accounting (positive tolerance is 20), got: %v", v)
+		}
+	}
+}
+
+func TestFeynman_ZoneAccounting_NegativeDiffStillFlags(t *testing.T) {
+	gs := newFeynmanGame(t, 4)
+	gs.Seats[1].Lost = true
+	gs.Seats[2].Lost = true
+	gs.Seats[3].Lost = true
+	gs.Turn = 15
+
+	// Remove 5 cards from seat 0's library (simulating missing cards bug).
+	gs.Seats[0].Library = gs.Seats[0].Library[:95]
+
+	result := CheckGame(gs)
+	found := false
+	for _, v := range result.Violations {
+		if v.Rule == "zone_accounting" && v.Seat == 0 {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("negative diff of -5 should still trigger zone_accounting violation")
+	}
+}
+
 func TestFeynman_PermanentTypes_Clean(t *testing.T) {
 	gs := newFeynmanGame(t, 2)
 	creature := &gameengine.Card{

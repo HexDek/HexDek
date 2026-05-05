@@ -30,7 +30,7 @@ type PivotLabel struct {
 // snapshots. evalHistory[turn][seat] = eval score at that turn.
 // winnerSeat is the seat that placed 1st.
 func ExtractPivot(evalHistory map[int][]float64, winnerSeat int, gameTurns int) CausalPivot {
-	if len(evalHistory) < 2 {
+	if len(evalHistory) < 2 || winnerSeat < 0 {
 		return CausalPivot{Turn: gameTurns / 2, WinnerSeat: winnerSeat}
 	}
 

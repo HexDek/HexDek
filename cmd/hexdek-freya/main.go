@@ -897,7 +897,32 @@ func findEmergentSynergies(report *FreyaReport) []strategyEmergentSynergy {
 		}
 	}
 
-	// Second pass: tier 2+ from full learned interactions (catches recurring
+	// Second pass: tier 3 N-tuple combos (3-5 cards observed co-firing).
+	ntExport, _ := huginn.ReadTier3NTupleExport("data/huginn")
+	for _, combo := range ntExport.NTuples {
+		if len(combo.Cards) < 3 {
+			continue
+		}
+		allPresent := true
+		for _, c := range combo.Cards {
+			if !deckCards[c] {
+				allPresent = false
+				break
+			}
+		}
+		if !allPresent {
+			continue
+		}
+		synergies = append(synergies, strategyEmergentSynergy{
+			Cards:            append([]string(nil), combo.Cards...),
+			EffectPattern:    fmt.Sprintf("%d-card co-firing combo", len(combo.Cards)),
+			Tier:             huginn.TierConfirmed,
+			ObservationCount: combo.Confidence,
+			AvgImpact:        combo.AvgImpact,
+		})
+	}
+
+	// Third pass: tier 2+ from full learned interactions (catches recurring
 	// patterns that haven't been promoted to tier 3 yet).
 	interactions, err := huginn.ReadLearnedInteractions("data/huginn")
 	if err != nil || len(interactions) == 0 {

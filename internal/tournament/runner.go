@@ -134,6 +134,11 @@ func Run(cfg TournamentConfig) (*TournamentResult, error) {
 		close(outcomes)
 	}()
 
+	// Muninn batcher: accumulates per-game observations and flushes
+	// periodically (every 30s or 100 games) instead of one bulk write
+	// at the end. Close() after aggregation ensures nothing is lost.
+	batcher := muninn.NewBatcher(muninn.BatcherConfig{Dir: "data/muninn"})
+
 	// Optionally intercept outcomes to award achievements before they
 	// reach the aggregator. Owners parallel cfg.Decks, so the standard
 	// rotate mode resolves SeatStats.CommanderIdx → cfg.Decks[idx].Path.
@@ -154,11 +159,26 @@ func Run(cfg TournamentConfig) (*TournamentResult, error) {
 		aggInput = forwarded
 	}
 
+	// Intercept outcomes to feed the Muninn batcher per-game.
+	batchedInput := make(chan GameOutcome, bufferSize)
+	go func() {
+		for o := range aggInput {
+			feedBatcher(batcher, o, commanderNames)
+			batchedInput <- o
+		}
+		close(batchedInput)
+	}()
+
 	// Aggregator.
-	result := aggregate(aggInput, cfg.NGames, cfg.NSeats, commanderNames)
+	result := aggregate(batchedInput, cfg.NGames, cfg.NSeats, commanderNames)
 	result.Duration = time.Since(start)
 	if result.Duration.Seconds() > 0 {
 		result.GamesPerSecond = float64(result.Games) / result.Duration.Seconds()
+	}
+
+	// Flush remaining buffered Muninn data.
+	if err := batcher.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "muninn: batcher close: %v\n", err)
 	}
 
 	if cfg.ReportPath != "" {
@@ -167,8 +187,8 @@ func Run(cfg TournamentConfig) (*TournamentResult, error) {
 		}
 	}
 
-	// Persist Muninn memory regardless of --report flag.
-	persistMuninn(result)
+	// Persist non-Muninn data (Huginn, rivalry, threat graph).
+	persistPostTournament(result)
 
 	return result, nil
 }
@@ -771,6 +791,9 @@ func runPool(cfg TournamentConfig, workers, maxTurns int, gameTimeout time.Durat
 		}
 	}
 
+	// Muninn batcher for pool mode.
+	poolBatcher := muninn.NewBatcher(muninn.BatcherConfig{Dir: "data/muninn"})
+
 	// Aggregate per-commander stats across all pool games.
 	type cmdStats struct {
 		wins, games int
@@ -790,6 +813,8 @@ func runPool(cfg TournamentConfig, workers, maxTurns int, gameTimeout time.Durat
 			crashes++
 			crashLogs = append(crashLogs, o.CrashErr)
 		}
+		// Feed per-game data to the Muninn batcher.
+		feedBatcher(poolBatcher, o.GameOutcome, allNames)
 		for _, idx := range o.deckIdxs {
 			name := allNames[idx]
 			s := stats[name]
@@ -888,8 +913,13 @@ func runPool(cfg TournamentConfig, workers, maxTurns int, gameTimeout time.Durat
 		result.GamesPerSecond = float64(totalGames) / elapsed.Seconds()
 	}
 
-	// Persist Muninn memory for pool mode.
-	persistMuninn(result)
+	// Flush remaining buffered Muninn data for pool mode.
+	if err := poolBatcher.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "muninn: batcher close (pool): %v\n", err)
+	}
+
+	// Persist non-Muninn data (Huginn, rivalry, threat graph).
+	persistPostTournament(result)
 
 	return result, nil
 }
@@ -1050,6 +1080,9 @@ func runLazyPool(cfg TournamentConfig, workers, maxTurns int, gameTimeout time.D
 		}
 	}
 
+	// Muninn batcher for lazy-pool mode.
+	lazyBatcher := muninn.NewBatcher(muninn.BatcherConfig{Dir: "data/muninn"})
+
 	totalGames := 0
 	var crashLogs []string
 	for out := range outcomes {
@@ -1065,6 +1098,8 @@ func runLazyPool(cfg TournamentConfig, workers, maxTurns int, gameTimeout time.D
 		if out.CrashErr != "" {
 			crashLogs = append(crashLogs, out.CrashErr)
 		}
+		// Feed per-game data to the Muninn batcher.
+		feedBatcher(lazyBatcher, out.GameOutcome, cmdrNames)
 		awardAchievements(cfg.Achievements, out.GameOutcome, lazyOwners)
 		// After the first game completes, dump a heap profile for leak diagnosis.
 		if totalGames == 1 && cfg.PprofEnabled {
@@ -1140,8 +1175,13 @@ func runLazyPool(cfg TournamentConfig, workers, maxTurns int, gameTimeout time.D
 		result.GamesPerSecond = float64(totalGames) / elapsed.Seconds()
 	}
 
-	// Persist Muninn memory for lazy-pool mode.
-	persistMuninn(result)
+	// Flush remaining buffered Muninn data for lazy-pool mode.
+	if err := lazyBatcher.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "muninn: batcher close (lazy-pool): %v\n", err)
+	}
+
+	// Persist non-Muninn data (Huginn, rivalry, threat graph).
+	persistPostTournament(result)
 
 	return result, nil
 }
@@ -1164,37 +1204,62 @@ func scanCommanderName(path string) string {
 	return "unknown"
 }
 
-// persistMuninn writes parser gaps, crash logs, and dead triggers to
-// the data/muninn directory. Also persists Huginn raw observations.
+// feedBatcher sends a single game's Muninn-relevant data into the batcher.
+// Called once per completed game from the aggregation loops. The batcher
+// handles batching, deduplication, and periodic flushing to disk.
+func feedBatcher(b *muninn.Batcher, o GameOutcome, commanderNames []string) {
+	// Parser gaps.
+	if len(o.ParserGapSnippets) > 0 {
+		b.AddParserGaps(o.ParserGapSnippets)
+	}
+
+	// Crash logs.
+	if o.CrashErr != "" {
+		b.AddCrash(o.CrashErr, commanderNames, 0, 0)
+	}
+
+	// Concession records.
+	if len(o.ConcessionRecords) > 0 {
+		b.AddConcessions(o.ConcessionRecords)
+	}
+
+	// Dead triggers extracted from analytics (mirrors PersistDeadTriggers logic).
+	if o.Analysis != nil {
+		for _, pa := range o.Analysis.Players {
+			for _, cp := range pa.CardsPlayed {
+				if cp.TriggeredCount > 0 &&
+					cp.DamageDealt == 0 &&
+					cp.KillsAttributed == 0 &&
+					!cp.ContributedToWin &&
+					cp.Name != o.Analysis.WinningCard &&
+					!cp.IsLand &&
+					!cp.IsToken {
+					b.AddDeadTrigger("triggered_ability", cp.Name, cp.TriggeredCount, 1)
+				}
+			}
+		}
+	}
+
+	// Tick the per-game counter for flush-interval tracking.
+	b.EndGame()
+}
+
+// persistPostTournament writes non-Muninn data after the tournament:
+// Huginn raw observations, rivalry matchups, and threat graph kills.
+// Muninn data (parser gaps, crashes, dead triggers, concessions) is
+// handled by the batcher during the run.
 // Errors are logged to stderr but do not fail the tournament run.
-func persistMuninn(result *TournamentResult) {
-	const muninnDir = "data/muninn"
+func persistPostTournament(result *TournamentResult) {
 	const huginnDir = "data/huginn"
 	const rivalryDir = "data/rivalry"
 	const analyticsDir = "data/analytics"
 
-	if len(result.ParserGapSnippets) > 0 {
-		if err := muninn.PersistParserGaps(muninnDir, result.ParserGapSnippets); err != nil {
-			fmt.Fprintf(os.Stderr, "muninn: persist parser gaps: %v\n", err)
-		}
-	}
-	if len(result.CrashLogs) > 0 {
-		if err := muninn.PersistCrashLogs(muninnDir, result.CrashLogs, result.CommanderNames, result.Games, result.NSeats); err != nil {
-			fmt.Fprintf(os.Stderr, "muninn: persist crash logs: %v\n", err)
-		}
-	}
 	if len(result.Analyses) > 0 {
-		if err := muninn.PersistDeadTriggers(muninnDir, result.Analyses); err != nil {
-			fmt.Fprintf(os.Stderr, "muninn: persist dead triggers: %v\n", err)
-		}
 		if err := huginn.PersistRawObservations(huginnDir, result.Analyses, result.CommanderNames); err != nil {
 			fmt.Fprintf(os.Stderr, "huginn: persist raw observations: %v\n", err)
 		}
-	}
-
-	if len(result.ConcessionRecords) > 0 {
-		if err := muninn.PersistConcessions(muninnDir, result.ConcessionRecords); err != nil {
-			fmt.Fprintf(os.Stderr, "muninn: persist concessions: %v\n", err)
+		if err := huginn.PersistRawNTuples(huginnDir, result.Analyses, result.CommanderNames); err != nil {
+			fmt.Fprintf(os.Stderr, "huginn: persist raw ntuples: %v\n", err)
 		}
 	}
 

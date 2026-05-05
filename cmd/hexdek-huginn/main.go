@@ -68,7 +68,7 @@ func runIngest(dir string, gamesSince int) {
 	if err != nil {
 		log.Fatalf("read raw: %v", err)
 	}
-	fmt.Printf("Raw observations: %d\n", len(raw))
+	fmt.Printf("Raw observations (pairwise): %d\n", len(raw))
 
 	promotions, err := huginn.Ingest(dir, gamesSince)
 	if err != nil {
@@ -79,16 +79,42 @@ func runIngest(dir string, gamesSince int) {
 	if err != nil {
 		log.Fatalf("read learned: %v", err)
 	}
-	fmt.Printf("Learned interactions: %d\n", len(interactions))
+	fmt.Printf("Learned interactions (pairwise): %d\n", len(interactions))
 
 	if len(promotions) > 0 {
-		fmt.Printf("\n*** %d NEW TIER 3 PROMOTIONS ***\n", len(promotions))
+		fmt.Printf("\n*** %d NEW TIER 3 PROMOTIONS (pairwise) ***\n", len(promotions))
 		for i, p := range promotions {
 			fmt.Printf("  %d. %s  obs=%d  decks=%d  avg-impact=%.1f\n",
 				i+1, p.Pattern, p.ObservationCount, p.UniqueDeckCount, p.AvgImpactScore)
 			if len(p.ExampleCards) > 0 {
 				fmt.Printf("     examples: %s\n", strings.Join(p.ExampleCards, "; "))
 			}
+		}
+	}
+
+	// N-tuple ingestion (3-5 card combos).
+	rawNT, err := huginn.ReadRawNTuples(dir)
+	if err != nil {
+		log.Fatalf("read raw ntuples: %v", err)
+	}
+	fmt.Printf("Raw observations (n-tuples): %d\n", len(rawNT))
+
+	ntPromotions, err := huginn.IngestNTuples(dir, gamesSince)
+	if err != nil {
+		log.Fatalf("ingest ntuples: %v", err)
+	}
+
+	learnedNT, err := huginn.ReadLearnedNTuples(dir)
+	if err != nil {
+		log.Fatalf("read learned ntuples: %v", err)
+	}
+	fmt.Printf("Learned interactions (n-tuples): %d\n", len(learnedNT))
+
+	if len(ntPromotions) > 0 {
+		fmt.Printf("\n*** %d NEW TIER 3 PROMOTIONS (n-tuples) ***\n", len(ntPromotions))
+		for i, p := range ntPromotions {
+			fmt.Printf("  %d. [%s]  obs=%d  decks=%d  avg-impact=%.1f\n",
+				i+1, strings.Join(p.Cards, " + "), p.ObservationCount, p.UniqueDeckCount, p.AvgImpactScore)
 		}
 	}
 	fmt.Println()
@@ -100,11 +126,17 @@ func runPrune(dir string) {
 	if err != nil {
 		log.Fatalf("prune: %v", err)
 	}
-	fmt.Printf("Removed %d stale entries\n\n", removed)
+	fmt.Printf("Removed %d stale pairwise entries\n", removed)
+
+	ntRemoved, err := huginn.PruneNTuples(dir)
+	if err != nil {
+		log.Fatalf("prune ntuples: %v", err)
+	}
+	fmt.Printf("Removed %d stale n-tuple entries\n\n", ntRemoved)
 }
 
 func runStats(dir string) {
-	fmt.Println("=== HUGINN STATS ===")
+	fmt.Println("=== HUGINN STATS (pairwise) ===")
 	t1, t2, t3, total, err := huginn.Stats(dir)
 	if err != nil {
 		log.Fatalf("stats: %v", err)
@@ -113,6 +145,28 @@ func runStats(dir string) {
 	fmt.Printf("  Tier 2 (RECURRING): %d\n", t2)
 	fmt.Printf("  Tier 3 (CONFIRMED): %d\n", t3)
 	fmt.Printf("  Total:              %d\n", total)
+	fmt.Println()
+
+	fmt.Println("=== HUGINN STATS (n-tuples) ===")
+	learnedNT, err := huginn.ReadLearnedNTuples(dir)
+	if err != nil {
+		log.Fatalf("stats ntuples: %v", err)
+	}
+	var nt1, nt2, nt3 int
+	for _, ln := range learnedNT {
+		switch ln.Tier {
+		case huginn.TierObserved:
+			nt1++
+		case huginn.TierRecurring:
+			nt2++
+		case huginn.TierConfirmed:
+			nt3++
+		}
+	}
+	fmt.Printf("  Tier 1 (OBSERVED):  %d\n", nt1)
+	fmt.Printf("  Tier 2 (RECURRING): %d\n", nt2)
+	fmt.Printf("  Tier 3 (CONFIRMED): %d\n", nt3)
+	fmt.Printf("  Total:              %d\n", len(learnedNT))
 	fmt.Println()
 }
 
@@ -193,7 +247,46 @@ func runList(dir string, top int) {
 	}
 
 	if len(interactions) == 0 {
-		fmt.Println("(no learned interactions yet — run --ingest first)")
+		fmt.Println("(no learned pairwise interactions yet — run --ingest first)")
+		fmt.Println()
+	}
+
+	// N-tuple listing.
+	learnedNT, err := huginn.ReadLearnedNTuples(dir)
+	if err != nil {
+		log.Fatalf("read ntuples: %v", err)
+	}
+
+	for _, tier := range []int{huginn.TierConfirmed, huginn.TierRecurring, huginn.TierObserved} {
+		var entries []huginn.LearnedNTuple
+		for _, ln := range learnedNT {
+			if ln.Tier == tier {
+				entries = append(entries, ln)
+			}
+		}
+		if len(entries) == 0 {
+			continue
+		}
+
+		fmt.Printf("=== N-TUPLES TIER %d: %s (%d entries) ===\n", tier, tierNames[tier], len(entries))
+		limit := top
+		if limit > len(entries) {
+			limit = len(entries)
+		}
+		for i := 0; i < limit; i++ {
+			ln := &entries[i]
+			fmt.Printf("  %2d. [%s]  obs=%-4d decks=%-3d impact=%.1f  age=%d games\n",
+				i+1, strings.Join(ln.Cards, " + "), ln.ObservationCount, ln.UniqueDeckCount,
+				ln.AvgImpactScore, ln.GamesSinceLastSeen)
+		}
+		if len(entries) > limit {
+			fmt.Printf("  ... and %d more\n", len(entries)-limit)
+		}
+		fmt.Println()
+	}
+
+	if len(learnedNT) == 0 && len(interactions) == 0 {
+		fmt.Println("(no learned data yet — run --ingest first)")
 		fmt.Println()
 	}
 }

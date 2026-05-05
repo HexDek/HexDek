@@ -72,6 +72,7 @@ export default function DeckArchive() {
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
+  const [winLinesExpanded, setWinLinesExpanded] = useState(false)
   const [isFriend, setIsFriend] = useState(false)
   const [friendBusy, setFriendBusy] = useState(false)
   const [ownerFriendCount, setOwnerFriendCount] = useState(null)
@@ -824,6 +825,91 @@ export default function DeckArchive() {
             )}
           </Panel>
 
+          {/* Gauntlet button — prominent, right under Freya */}
+          {owner && id && (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <Btn solid arrow="▶" onClick={() => {
+                if (gauntlet?.status === 'running') return
+                trackEvent('start_gauntlet', { deck: `${owner}/${id}`, games: 500 })
+                api.startGauntlet(`${owner}/${id}`, 500).then(() => {
+                  const poll = () => {
+                    api.getGauntlet(`${owner}/${id}`).then(r => {
+                      setGauntlet(r)
+                      if (r.status === 'running') setTimeout(poll, 3000)
+                    })
+                  }
+                  setTimeout(poll, 2000)
+                })
+                setGauntlet({ status: 'running', games: 0, target: 500, win_rate: 0 })
+              }}>{gauntlet?.status === 'running' ? 'GAUNTLET RUNNING...' : 'RUN GAUNTLET (500)'}</Btn>
+              <Btn ghost arrow="▶">TEST VARIANT</Btn>
+            </div>
+          )}
+
+          {gauntlet && gauntlet.status !== 'none' && (
+            <Panel code="04.G" title="GAUNTLET REPORT" right={
+              <Tag solid kind={gauntlet.status === 'complete' ? 'ok' : null}>
+                {gauntlet.status === 'running' ? `${gauntlet.games}/${gauntlet.target}` : gauntlet.status?.toUpperCase()}
+              </Tag>
+            }>
+              {gauntlet.status === 'running' ? (
+                <div style={{ padding: '16px 0', textAlign: 'center' }}>
+                  <div className="t-md muted" style={{ lineHeight: 1.8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    &gt; GAUNTLET IN PROGRESS<span className="blink">_</span><br />
+                    &gt; {gauntlet.games?.toLocaleString()} / {gauntlet.target?.toLocaleString()} GAMES ({gauntlet.win_rate || 0}% WIN RATE)
+                  </div>
+                  <Bar value={gauntlet.games / gauntlet.target * 100} />
+                </div>
+              ) : gauntlet.status === 'complete' ? (
+                <div>
+                  <div className="grid col-3" style={{ gap: 14, marginBottom: 14 }}>
+                    <div>
+                      <div className="t-xs muted">WIN RATE</div>
+                      <div className="t-2xl" style={{ fontWeight: 700, color: gauntlet.win_rate >= 25 ? 'var(--ok)' : 'var(--danger)' }}>{gauntlet.win_rate}%</div>
+                    </div>
+                    <div>
+                      <div className="t-xs muted">RECORD</div>
+                      <div className="t-2xl" style={{ fontWeight: 700 }}><span style={{ color: 'var(--ok)' }}>{gauntlet.wins}W</span> — <span style={{ color: 'var(--danger)' }}>{gauntlet.losses}L</span></div>
+                    </div>
+                    <div>
+                      <div className="t-xs muted">ELO DELTA</div>
+                      <div className="t-2xl" style={{ fontWeight: 700, color: gauntlet.elo_delta >= 0 ? 'var(--ok)' : 'var(--danger)' }}>
+                        {gauntlet.elo_delta >= 0 ? '+' : ''}{Math.round(gauntlet.elo_delta)}
+                      </div>
+                    </div>
+                  </div>
+                  <KV rows={[
+                    ['GAMES', `${gauntlet.games?.toLocaleString()}`],
+                    ['AVG TURNS', `${gauntlet.avg_turns}`],
+                    ['ELO', `${gauntlet.elo_start} → ${gauntlet.elo_end}`],
+                  ]} />
+                  {gauntlet.top_beaten?.length > 0 && (
+                    <>
+                      <div className="hr" style={{ margin: '8px 0' }} />
+                      <div className="t-xs muted" style={{ marginBottom: 4 }}>MOST BEATEN</div>
+                      {gauntlet.top_beaten.map((b, i) => (
+                        <div key={i} className="t-xs" style={{ color: 'var(--ok)', padding: '1px 0' }}>&gt; {b}</div>
+                      ))}
+                    </>
+                  )}
+                  {gauntlet.top_lost_to?.length > 0 && (
+                    <>
+                      <div className="hr" style={{ margin: '8px 0' }} />
+                      <div className="t-xs muted" style={{ marginBottom: 4 }}>MOST LOST TO</div>
+                      {gauntlet.top_lost_to.map((b, i) => (
+                        <div key={i} className="t-xs" style={{ color: 'var(--danger)', padding: '1px 0' }}>&gt; {b}</div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              ) : gauntlet.status === 'error' ? (
+                <div className="t-xs" style={{ color: 'var(--danger)', padding: '10px 0' }}>
+                  &gt; GAUNTLET ERROR — deck may not be loaded in the engine pool. Try again or contact support.
+                </div>
+              ) : null}
+            </Panel>
+          )}
+
           {/* Mana Curve + Color Balance */}
           {curveData && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }} className="curve-grid">
@@ -885,13 +971,17 @@ export default function DeckArchive() {
           )}
 
           {/* Win lines */}
-          {winLines.length > 0 && (
+          {winLines.length > 0 && (() => {
+            const WINLINE_CAP = 8
+            const visible = winLinesExpanded ? winLines : winLines.slice(0, WINLINE_CAP)
+            const hidden = winLines.length - WINLINE_CAP
+            return (
             <Panel code="04.D" title={`WIN LINES / / ${winLines.length} DETECTED`}>
-              {winLines.map((wl, i) => {
+              {visible.map((wl, i) => {
                 const kindMap = { finisher: 'bad', combat: 'warn', commander_damage: 'ok', combo: 'bad', synergy: null }
                 const symbols = ['α', 'β', 'γ', 'δ', 'ε', 'ζ']
                 return (
-                  <div key={i} className="winline-row" style={{ padding: '10px 0', borderBottom: i < winLines.length - 1 ? '1px dashed var(--rule-2)' : 'none' }}>
+                  <div key={i} className="winline-row" style={{ padding: '10px 0', borderBottom: i < visible.length - 1 ? '1px dashed var(--rule-2)' : 'none' }}>
                     <div style={{ fontSize: 24, fontWeight: 700, color: kindMap[wl.type] === 'bad' ? 'var(--danger)' : kindMap[wl.type] === 'warn' ? 'var(--warn)' : kindMap[wl.type] === 'ok' ? 'var(--ok)' : 'var(--ink)' }}>
                       {symbols[i] || '·'}
                     </div>
@@ -907,8 +997,27 @@ export default function DeckArchive() {
                   </div>
                 )
               })}
+              {!winLinesExpanded && hidden > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setWinLinesExpanded(true)}
+                  style={{ width: '100%', padding: '10px 0', marginTop: 6, background: 'none', border: '1px dashed var(--rule-2)', color: 'var(--ink-2)', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}
+                >
+                  SHOW {hidden} MORE WIN LINE{hidden === 1 ? '' : 'S'} ↓
+                </button>
+              )}
+              {winLinesExpanded && winLines.length > WINLINE_CAP && (
+                <button
+                  type="button"
+                  onClick={() => setWinLinesExpanded(false)}
+                  style={{ width: '100%', padding: '10px 0', marginTop: 6, background: 'none', border: '1px dashed var(--rule-2)', color: 'var(--ink-2)', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}
+                >
+                  COLLAPSE ↑
+                </button>
+              )}
             </Panel>
-          )}
+            )
+          })()}
 
           {/* Legality violations */}
           {legality && !legality.valid && (
@@ -1049,86 +1158,6 @@ export default function DeckArchive() {
             </Panel>
           )}
 
-          {/* Gauntlet button + report — right after Freya analysis */}
-          {owner && id && (
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-              <Btn solid arrow="▶" onClick={() => {
-                if (gauntlet?.status === 'running') return
-                trackEvent('start_gauntlet', { deck: `${owner}/${id}`, games: 500 })
-                api.startGauntlet(`${owner}/${id}`, 500).then(() => {
-                  const poll = () => {
-                    api.getGauntlet(`${owner}/${id}`).then(r => {
-                      setGauntlet(r)
-                      if (r.status === 'running') setTimeout(poll, 3000)
-                    })
-                  }
-                  setTimeout(poll, 2000)
-                })
-                setGauntlet({ status: 'running', games: 0, target: 500, win_rate: 0 })
-              }}>{gauntlet?.status === 'running' ? 'GAUNTLET RUNNING...' : 'RUN GAUNTLET (500)'}</Btn>
-              <Btn ghost arrow="▶">TEST VARIANT</Btn>
-            </div>
-          )}
-
-          {gauntlet && gauntlet.status !== 'none' && (
-            <Panel code="04.G" title="GAUNTLET REPORT" right={
-              <Tag solid kind={gauntlet.status === 'complete' ? 'ok' : null}>
-                {gauntlet.status === 'running' ? `${gauntlet.games}/${gauntlet.target}` : gauntlet.status?.toUpperCase()}
-              </Tag>
-            }>
-              {gauntlet.status === 'running' ? (
-                <div style={{ padding: '16px 0', textAlign: 'center' }}>
-                  <div className="t-md muted" style={{ lineHeight: 1.8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    &gt; GAUNTLET IN PROGRESS<span className="blink">_</span><br />
-                    &gt; {gauntlet.games?.toLocaleString()} / {gauntlet.target?.toLocaleString()} GAMES ({gauntlet.win_rate || 0}% WIN RATE)
-                  </div>
-                  <Bar value={gauntlet.games / gauntlet.target * 100} />
-                </div>
-              ) : gauntlet.status === 'complete' ? (
-                <div>
-                  <div className="grid col-3" style={{ gap: 14, marginBottom: 14 }}>
-                    <div>
-                      <div className="t-xs muted">WIN RATE</div>
-                      <div className="t-2xl" style={{ fontWeight: 700, color: gauntlet.win_rate >= 25 ? 'var(--ok)' : 'var(--danger)' }}>{gauntlet.win_rate}%</div>
-                    </div>
-                    <div>
-                      <div className="t-xs muted">RECORD</div>
-                      <div className="t-2xl" style={{ fontWeight: 700 }}><span style={{ color: 'var(--ok)' }}>{gauntlet.wins}W</span> — <span style={{ color: 'var(--danger)' }}>{gauntlet.losses}L</span></div>
-                    </div>
-                    <div>
-                      <div className="t-xs muted">ELO DELTA</div>
-                      <div className="t-2xl" style={{ fontWeight: 700, color: gauntlet.elo_delta >= 0 ? 'var(--ok)' : 'var(--danger)' }}>
-                        {gauntlet.elo_delta >= 0 ? '+' : ''}{Math.round(gauntlet.elo_delta)}
-                      </div>
-                    </div>
-                  </div>
-                  <KV rows={[
-                    ['GAMES', `${gauntlet.games?.toLocaleString()}`],
-                    ['AVG TURNS', `${gauntlet.avg_turns}`],
-                    ['ELO', `${gauntlet.elo_start} → ${gauntlet.elo_end}`],
-                  ]} />
-                  {gauntlet.top_beaten?.length > 0 && (
-                    <>
-                      <div className="hr" style={{ margin: '8px 0' }} />
-                      <div className="t-xs muted" style={{ marginBottom: 4 }}>MOST BEATEN</div>
-                      {gauntlet.top_beaten.map((b, i) => (
-                        <div key={i} className="t-xs" style={{ color: 'var(--ok)', padding: '1px 0' }}>&gt; {b}</div>
-                      ))}
-                    </>
-                  )}
-                  {gauntlet.top_lost_to?.length > 0 && (
-                    <>
-                      <div className="hr" style={{ margin: '8px 0' }} />
-                      <div className="t-xs muted" style={{ marginBottom: 4 }}>MOST LOST TO</div>
-                      {gauntlet.top_lost_to.map((b, i) => (
-                        <div key={i} className="t-xs" style={{ color: 'var(--danger)', padding: '1px 0' }}>&gt; {b}</div>
-                      ))}
-                    </>
-                  )}
-                </div>
-              ) : null}
-            </Panel>
-          )}
           </>}
 
           {/* === DECK LIST TAB === */}
