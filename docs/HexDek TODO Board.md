@@ -92,7 +92,7 @@ kanban-plugin: board
 - [ ] Universal search bar — one search field: decks, commanders, cards, players. Contextual results. Always accessible #ui #search
 
 **Auth flow:**
-- [ ] One-tap auth (Google/Discord) — triggered contextually (first deck upload, first friend add), not gatekept at the door #ui #auth
+- [x] One-tap auth — contextual AuthPrompt modal triggered on auth-gated actions (upload/import), email magic-link primary path + Discord OAuth button stubbed pending provider wiring, proactive SIGN IN ↗ button in nav (2026-05-04) #ui #auth
 
 **Sharing:**
 - [ ] Share = link — no login needed to view a shared deck. Shareable URL on every deck page #ui #social
