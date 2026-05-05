@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Panel, Tag, Btn, Tape, ConfidenceDots } from '../components/chrome'
+import ImportModal from '../components/ImportModal'
 import { api, cardArtUrl } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useLiveSocket } from '../hooks/useLiveSocket'
