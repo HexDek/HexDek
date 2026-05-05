@@ -469,6 +469,16 @@ func runOneGame(gameIdx int, decks []*deckparser.TournamentDeck, hats []HatFacto
 					leaders = append(leaders, i)
 				}
 			}
+			// Eliminate every living seat below the top life. When there's
+			// exactly one leader the remaining survivor count drops to one
+			// (Feynman's checkExactlyOneWinner invariant: N-1 seats Lost).
+			// Tied leaders stay alive — the result is genuinely a draw.
+			for _, i := range living {
+				if gs.Seats[i].Life < topLife {
+					gs.Seats[i].Lost = true
+					gs.Seats[i].LossReason = "turn_cap"
+				}
+			}
 			if len(leaders) == 1 {
 				out.Winner = leaders[0]
 				out.WinnerCommanderIdx = originalIdxForSeat[leaders[0]]
