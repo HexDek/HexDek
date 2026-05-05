@@ -458,3 +458,36 @@ func MDFCBackFaceIsLand(c *Card) bool {
 	}
 	return false
 }
+
+// EnsureMDFCBackFaceForBattlefield is the canonical "card is about to
+// enter the battlefield via a non-cast path" hook for MDFCs whose back
+// face is a land. Reanimation, tutor-onto-battlefield, "put X onto the
+// battlefield" effects, return-from-exile, unearth, etc. all bypass
+// the casting code path that resolvePermanentSpellETB uses; without
+// this swap the card lands with its front-face (instant/sorcery)
+// Types and trips the §205 permanent_type SBA.
+//
+// Gates:
+//   - card is non-nil
+//   - card is not a token (token copies of MDFCs preserve the source's
+//     visible face — they don't carry the printed back-face Types in
+//     a meaningful way)
+//   - back face is a land per MDFCBackFaceIsLand
+//
+// Idempotent — SwapToBackFace clears CastingBackFace and overwrites
+// Types/Name/CMC with the back-face values, so calling on an already
+// swapped card is a no-op in observable terms.
+//
+// Returns true on a successful swap, false if any gate failed.
+func EnsureMDFCBackFaceForBattlefield(c *Card) bool {
+	if c == nil {
+		return false
+	}
+	if cardIsToken(c) {
+		return false
+	}
+	if !MDFCBackFaceIsLand(c) {
+		return false
+	}
+	return SwapToBackFace(c)
+}

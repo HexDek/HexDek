@@ -1034,6 +1034,7 @@ func ApplyChampion(gs *GameState, perm *Permanent, creatureType string) {
 			for _, c := range s.Exile {
 				if c == exiled {
 					removeCardFromZone(gs, seatIdx, exiled, "exile")
+					EnsureMDFCBackFaceForBattlefield(exiled)
 					returned := &Permanent{
 						Card:       exiled,
 						Controller: seatIdx,

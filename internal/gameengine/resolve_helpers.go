@@ -401,6 +401,7 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 			}
 			if card != nil {
 				removeCardFromZone(gs, seat, card, fromZone)
+				EnsureMDFCBackFaceForBattlefield(card)
 				p := &Permanent{
 					Card:          card,
 					Controller:    seat,
@@ -2008,6 +2009,7 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 				}
 				if card != nil {
 					removeCardFromZone(gs, seat, card, fromZone)
+					EnsureMDFCBackFaceForBattlefield(card)
 					p := &Permanent{
 						Card:          card,
 						Controller:    seat,

@@ -1102,6 +1102,12 @@ func resolvePermanentSpellETB(gs *GameState, item *StackItem) *Permanent {
 		}
 		card.CastingBackFace = false
 	}
+	// Defense in depth: any MDFC reaching the resolve path with a
+	// land back face still needs the swap, in case CastingBackFace
+	// wasn't set on the cast machinery (e.g. a permanent spell that
+	// cascaded into another MDFC, where the cascade put-onto-stack
+	// path didn't flip the flag).
+	EnsureMDFCBackFaceForBattlefield(card)
 
 	// Summoning sickness: only creatures care (§302.1 / §212.3f). A creature
 	// with haste ignores it.

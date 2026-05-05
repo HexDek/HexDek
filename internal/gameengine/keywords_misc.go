@@ -2345,6 +2345,7 @@ func ActivateBlight(gs *GameState, seatIdx int, cardInGrave *Card, blightX int, 
 
 	// Cost: remove from graveyard, put onto battlefield.
 	removeCardFromZone(gs, seatIdx, cardInGrave, "graveyard")
+	EnsureMDFCBackFaceForBattlefield(cardInGrave)
 	perm := &Permanent{
 		Card:       cardInGrave,
 		Controller: seatIdx,
