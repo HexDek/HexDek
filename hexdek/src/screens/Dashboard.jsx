@@ -234,7 +234,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!userOwner) { setRecentImports([]); return }
     let alive = true
-    api.getImports(userOwner, 8)
+    api.getImports(userOwner, 10)
       .then(r => { if (alive) setRecentImports(r?.imports || []) })
       .catch(() => { if (alive) setRecentImports([]) })
     return () => { alive = false }
