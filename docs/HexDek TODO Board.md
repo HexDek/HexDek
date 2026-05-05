@@ -21,11 +21,11 @@ kanban-plugin: board
 - [ ] **Global glossary disclosure system** — every stat/label/metric across all pages tap-to-expand inline explanation. One shared component + glossary data source. Replaces FAQ concept. #ui #ux #accessibility
 - [ ] **Curse Proficiency sigil** — cymatic SVG replacing curse section on deck page (circle → flower of life evolution, color-identity tinted). Part of "Hats" → "Curses" rebrand. #ui #design
 - [ ] **Action button context boxes** — brief TLDR above gauntlet/test variant/etc buttons for neurodivergent UX clarity. #ui #ux #accessibility
-- [ ] **Narrator enrichment** — detailed spell/ability resolution in spectator log (card names, effects, targets, results) instead of generic "resolves spell" messages. #ui #spectator
 - [ ] **"Consider Cutting" rationale** — each cut recommendation needs: what was detected (stats/pattern), why it's recommended (synergy gap, mana curve, etc), the resulting effect, and suggested swaps. #ui #deck #freya
 - [ ] **Value Engine rationale** — explain WHY each value engine was identified for this deck (what cards/interactions trigger it, how the engine functions). #ui #deck #freya
 - [ ] **Win Condition rationale** — show detection logic for each win-con (which cards form the line, what conditions are needed, how the combo resolves). #ui #deck #freya
-- [ ] **Card popup redesign** — replace black box popup with card art hero, dim+tinted backdrop using card's color identity, showcase WOTC artwork. Keep CTA button to full card page. #ui #design #cards
+- [ ] **Deck clone** — non-owners can clone a deck to their own collection for editing. Clone creates a copy under the cloner's owner dir, then they can rename/edit freely. #ui #platform
+- [ ] **Reconnection countdown** — when WebSocket disconnects, show attempt number and countdown timer per reconnection attempt (currently just shows "DISCONNECTED — RECONNECTING"). #ui #ux
 
 
 ## High Priority — Learning Loop (Observability) — ALL PHASES DONE
@@ -88,7 +88,40 @@ kanban-plugin: board
 - [ ] Multi-format support beyond Commander (Modern, Legacy deck ratings) #engine
 
 
-## Done — Session 2026-05-05
+## Done — Session 2026-05-05 Evening (UI/UX Sprint)
+
+- [x] **Narrator enrichment** — 15 new event kinds surfaced (untap, tap, discard, scry, surveil, bounce, flicker, equip, etc), coalescing (consecutive same-seat events merge), dedup (cast suppresses ETB), per-seat color-coded log borders, turn separators. LogEntry enriched with source/targets/amount/count for animation rigging. (2026-05-05) #ui #spectator
+- [x] **Card popup redesign** — click-to-open fullscreen overlay with actual Scryfall card image, MTG color-identity tinted backdrop (W=gold, U=blue, B=black, R=red, G=green), dimmed blur behind. Replaced DIY reconstructed card popup. VIEW CARD PAGE button. (2026-05-05) #ui #design #cards
+- [x] **Volcmap pure gradient** — removed ISO contour lines from heatmap, pure gradient now. (2026-05-05) #ui #spectator
+- [x] **HexELO display swap** — spectator seat display + ELO sidebar now show hex_rating/hex_delta instead of TrueSkill. (2026-05-05) #ui #spectator
+- [x] **Card names linkable in log** — all card names in narrator/raw log wrapped in CardLink (hover preview + click to card page). 19 verb patterns covered. (2026-05-05) #ui #spectator
+- [x] **Play View CTA removed** — redundant with fishtank embed. (2026-05-05) #ui
+- [x] **SYS.BUILD version removed** — removed from header on desktop + mobile. (2026-05-05) #ui
+- [x] **Mobile header 2-row layout** — search + theme + lang + auth share one row below nav. (2026-05-05) #ui #mobile
+- [x] **Lang select dropdown** — proper `<select>` with 2-char codes (EN, ES, JA, etc) instead of cycling. (2026-05-05) #ui
+- [x] **Search input reduced** — 30% smaller trigger, expandable overlay handles full search. (2026-05-05) #ui
+- [x] **Tape bar hidden on mobile** — decorative info strip between nav and content removed at mobile breakpoint. (2026-05-05) #ui #mobile
+- [x] **Amiibo → Curse rename** — 322 references across 25 files renamed (Go, React, docs, API). `data/amiibo/` → `data/curse/` on production. (2026-05-05) #engine #ui #legal
+- [x] **Rankings + Meta merged** — single page at `/leaderboard` with RANKINGS/META tab toggle. META removed from main nav. `/meta` redirects. (2026-05-05) #ui #nav
+- [x] **MY DECKS / ALL DECKS toggle** — always visible for logged-in users. Default to MY DECKS. Prefix matching for owner slug mismatch (joshua→josh). (2026-05-05) #ui
+- [x] **Spectator telemetry hidden on mobile** — fishtank-only view on mobile, full telemetry on desktop/tablet. (2026-05-05) #ui #mobile
+- [x] **Card page scrim overlay** — 14px blur frosted glass, heavy gradient opacity for text readability over art. (2026-05-05) #ui #design
+- [x] **Recent games panel (FT.D)** — last 20 games in spectator sidebar with winner, turns, end reason, REPORT → link. Live via WebSocket. (2026-05-05) #ui #spectator
+- [x] **Multi-scroll-pane fix** — removed independent `overflow: auto` from deck archive, leaderboard, dashboard, spectator, card page. Single page scroll via AppShell. (2026-05-05) #ui
+- [x] **Nav control height normalization** — all appbar controls (search, theme, lang, auth) set to 24px height via shared CSS. Removed inline style overrides. (2026-05-05) #ui
+- [x] **Username removed from header** — only LOGOUT button remains. (2026-05-05) #ui
+- [x] **Accessibility contrast** — mana pip drop shadows, hero tags dark frosted backdrop, ADD FRIEND dark backdrop + blur, summary text shadow. (2026-05-05) #ui #a11y
+- [x] **Curse data moved below tutor targets** — in deck drilldown. (2026-05-05) #ui
+- [x] **2-layer footer** — top row: live connection status (green/yellow/red dot + state text) + OPEN SOURCE motto + user email. Bottom row: ABOUT/BUG/DONATE/DISCORD links. (2026-05-05) #ui
+- [x] **Data consistency fix** — new `/api/owner/{owner}/stats` + `/api/owner/{owner}/games` endpoints querying SQLite directly. deck_key backfill on startup for old seat rows. Operator profile now shows real aggregate stats. (2026-05-05) #api #data
+- [x] **Curse lifetime total** — added `TotalGames` field (never resets), seeded from `GenCount*100+GameCount` for existing pools. Frontend displays lifetime instead of cycle counter. (2026-05-05) #engine #curse
+- [x] **Deck ownership enforcement** — DELETE/PUT/PATCH require `X-HexDek-Owner` header matching deck owner. 403 for non-owners. Frontend sends header automatically. (2026-05-05) #api #security
+- [x] **Custom display names** — import flow persists name to deck_meta. PATCH rename for owners. Default display: commander name. (2026-05-05) #ui #api
+- [x] **Deck hero button sizing** — FRIEND/SHARE/COMPARE normalized to matching padding + gap. (2026-05-05) #ui
+- [x] **Operator profile owner slug fix** — prefix matching against ELO data resolves joshua→josh mismatch. (2026-05-05) #ui #bug
+- [x] **Card page hero mobile fix** — hero body `position: relative` on mobile, card renders at 200px/160px. (2026-05-05) #ui #mobile
+
+## Done — Session 2026-05-05 Day
 
 - [x] **Deck import flow** — unified ImportModal with 3 input modes (paste/URL/file), real-time card validation against corpus, inline error surfacing, Freya progress indicator, success redirect with toast. Auth-gated. Replaces old piecemeal hooks. (2026-05-05) #ui #import
 - [x] **Card performance tracking** — `GET /api/card-stats/card/{cardName}` + `/by-commander`. Per-card win rate, inclusion rate, top commanders, bracket distribution. CardPage frontend panel added. (2026-05-05) #engine #analytics #cards
