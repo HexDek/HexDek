@@ -162,6 +162,9 @@ export default function Spectator() {
   const logContainerRef = useRef(null)
   const userScrolledRef = useRef(false)
   const heatmapRefs = useRef([])
+  const heatmapAnimsRef = useRef([])
+  const heatmapPrevEvalRef = useRef([])
+  const heatmapPrevLostRef = useRef([])
   const [heatmapTip, setHeatmapTip] = useState(null)
   const error = status === 'disconnected' ? 'WebSocket disconnected' : null
 
@@ -218,10 +221,70 @@ export default function Spectator() {
 
   useEffect(() => {
     if (!game?.seats) return
+    const HEATMAP_KEYS = [
+      'board_presence', 'card_advantage', 'mana_advantage',
+      'combo_proximity', 'score', 'life_resource',
+      'threat_exposure', 'commander_progress', 'graveyard_value',
+    ]
+    const DURATION = 500
+    const easeInOutQuad = t => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
+
     game.seats.forEach((s, i) => {
-      if (heatmapRefs.current[i]) drawEvalContour(heatmapRefs.current[i], s.eval, s.lost)
+      const canvas = heatmapRefs.current[i]
+      if (!canvas) return
+
+      // Cancel any in-flight animation for this seat — the new target supersedes it.
+      const prevAnim = heatmapAnimsRef.current[i]
+      if (prevAnim) cancelAnimationFrame(prevAnim)
+
+      const prevEval = heatmapPrevEvalRef.current[i] || null
+      const targetEval = s.eval || null
+      const prevLost = !!heatmapPrevLostRef.current[i]
+      const targetLost = !!s.lost
+
+      // Lost state paints solid; skip the lerp — the GG overlay + .seat-art opacity
+      // transition handle the visual fade.
+      if (targetLost || !targetEval) {
+        drawEvalContour(canvas, targetEval, targetLost)
+        heatmapPrevEvalRef.current[i] = targetEval
+        heatmapPrevLostRef.current[i] = targetLost
+        return
+      }
+
+      // First paint or coming back from lost: snap, don't morph.
+      if (!prevEval || prevLost) {
+        drawEvalContour(canvas, targetEval, false)
+        heatmapPrevEvalRef.current[i] = targetEval
+        heatmapPrevLostRef.current[i] = targetLost
+        return
+      }
+
+      const start = performance.now()
+      const tick = (now) => {
+        const t = Math.min(1, (now - start) / DURATION)
+        const k = easeInOutQuad(t)
+        const interp = {}
+        for (const key of HEATMAP_KEYS) {
+          const a = prevEval[key] ?? 0
+          const b = targetEval[key] ?? 0
+          interp[key] = a + (b - a) * k
+        }
+        drawEvalContour(canvas, interp, false)
+        if (t < 1) {
+          heatmapAnimsRef.current[i] = requestAnimationFrame(tick)
+        } else {
+          heatmapAnimsRef.current[i] = null
+          heatmapPrevEvalRef.current[i] = targetEval
+          heatmapPrevLostRef.current[i] = targetLost
+        }
+      }
+      heatmapAnimsRef.current[i] = requestAnimationFrame(tick)
     })
   }, [game])
+
+  useEffect(() => () => {
+    for (const h of heatmapAnimsRef.current) if (h) cancelAnimationFrame(h)
+  }, [])
 
   if (error && !game) {
     return (

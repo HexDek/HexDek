@@ -282,12 +282,14 @@ body {
 .seat-art {
   flex: 1; min-height: 0;
   background-size: cover; background-position: center;
+  transition: opacity 500ms ease-in-out, filter 500ms ease-in-out;
 }
 .seat-eval-map {
   width: 80px; height: 80px; display: block;
   border-top: 1px solid var(--rule-2);
   image-rendering: pixelated;
   cursor: crosshair;
+  transition: opacity 500ms ease-in-out, filter 500ms ease-in-out, width 500ms ease-in-out, height 500ms ease-in-out;
 }
 .heatmap-tooltip {
   position: fixed; z-index: 999; pointer-events: none;
