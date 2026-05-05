@@ -813,9 +813,10 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 		if sm.heimdall != nil {
 			sm.heimdall.RecordSeed(gauntSeed)
 			sm.heimdall.RecordObservation(heimdall.Observation{
-				Seed:       gauntSeed,
-				ParserGaps: heimdall.ExtractParserGaps(gs),
-				CoTriggers: heimdall.ExtractCoTriggers(turnETBs),
+				Seed:            gauntSeed,
+				ParserGaps:      heimdall.ExtractParserGaps(gs),
+				CoTriggers:      heimdall.ExtractCoTriggers(turnETBs),
+				CardFirstPlayed: gs.CardFirstPlayed,
 			})
 		}
 
@@ -1314,9 +1315,10 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 	if sm.heimdall != nil {
 		sm.heimdall.RecordSeed(bracketSeed)
 		sm.heimdall.RecordObservation(heimdall.Observation{
-			Seed:       bracketSeed,
-			ParserGaps: heimdall.ExtractParserGaps(gs),
-			CoTriggers: heimdall.ExtractCoTriggers(bracketETBs),
+			Seed:            bracketSeed,
+			ParserGaps:      heimdall.ExtractParserGaps(gs),
+			CoTriggers:      heimdall.ExtractCoTriggers(bracketETBs),
+			CardFirstPlayed: gs.CardFirstPlayed,
 		})
 	}
 
@@ -1615,9 +1617,10 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 	if sm.heimdall != nil {
 		sm.heimdall.RecordSeed(showSeed)
 		sm.heimdall.RecordObservation(heimdall.Observation{
-			Seed:       showSeed,
-			ParserGaps: heimdall.ExtractParserGaps(gs),
-			CoTriggers: heimdall.ExtractCoTriggers(showETBs),
+			Seed:            showSeed,
+			ParserGaps:      heimdall.ExtractParserGaps(gs),
+			CoTriggers:      heimdall.ExtractCoTriggers(showETBs),
+			CardFirstPlayed: gs.CardFirstPlayed,
 		})
 	}
 

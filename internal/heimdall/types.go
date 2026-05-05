@@ -13,14 +13,15 @@ type GameSeed struct {
 // Observation is the lightweight per-game extraction. ~200 bytes.
 // Only populated during batch replay or live observation mode.
 type Observation struct {
-	Seed           GameSeed
-	ParserGaps     []string        // card names that hit unhandled abilities
-	DeadTriggers   []DeadTrigger   // registered but never fired
-	ComboAttempted bool            // did the deck attempt its Freya combo?
-	ComboSucceeded bool            // did the combo resolve to a win?
-	ComboMissed    bool            // were combo pieces available but not used?
-	CoTriggers     []CoTriggerPair // Huginn food: cards that synergized
-	CausalPivot    *PivotEvent     // Tesla: the turn/action that decided the game
+	Seed            GameSeed
+	ParserGaps      []string        // card names that hit unhandled abilities
+	DeadTriggers    []DeadTrigger   // registered but never fired
+	ComboAttempted  bool            // did the deck attempt its Freya combo?
+	ComboSucceeded  bool            // did the combo resolve to a win?
+	ComboMissed     bool            // were combo pieces available but not used?
+	CoTriggers      []CoTriggerPair // Huginn food: cards that synergized
+	CausalPivot     *PivotEvent     // Tesla: the turn/action that decided the game
+	CardFirstPlayed map[string]int  // card name → turn it first resolved as a spell
 }
 
 // DeadTrigger records a trigger that was registered but never fired during the game.

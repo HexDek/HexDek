@@ -922,6 +922,19 @@ func ResolveStackTop(gs *GameState) {
 		item.Targets = legalTargets
 	}
 
+	// First-play instrumentation. Record only for true spell stack items
+	// (item.Card set, no Source permanent) — triggered/activated abilities
+	// have a Source and don't count as "played". Only the first resolution
+	// per card name is kept; storm copies and recursion don't overwrite.
+	if isSpell && item.Card != nil {
+		if gs.CardFirstPlayed == nil {
+			gs.CardFirstPlayed = map[string]int{}
+		}
+		if _, ok := gs.CardFirstPlayed[name]; !ok {
+			gs.CardFirstPlayed[name] = gs.Turn
+		}
+	}
+
 	// Wave 3a: activated-ability stack items resolve through their own
 	// dispatch path. CR §602.2: "The controller of an activated ability
 	// on the stack is the player who activated it."

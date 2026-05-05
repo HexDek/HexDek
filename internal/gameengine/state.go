@@ -168,6 +168,16 @@ type GameState struct {
 	// to a ZoneCastPermission describing how and from where it can be
 	// cast. Consumed by the AI/Hat's cast-from-zone decision logic.
 	ZoneCastGrants map[*Card]*ZoneCastPermission
+
+	// CardFirstPlayed maps a card display name to the turn number on
+	// which it first resolved as a spell during this game. Populated by
+	// ResolveStackTop only for spell stack items (item.Card != nil and
+	// item.Source == nil) and only on the first appearance per name —
+	// re-casts (storm, recursion) don't overwrite. Heimdall reads this
+	// at game end to feed the card_stats.avg_turn_played aggregate so
+	// the analytics layer can answer "Sol Ring is played turn 1 in N%
+	// of games it appears in" queries.
+	CardFirstPlayed map[string]int
 }
 
 // Day/Night state constants (CR §726).
