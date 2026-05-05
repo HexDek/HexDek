@@ -13,15 +13,18 @@ kanban-plugin: board
 
 - [ ] **Remaining 276 commander handlers** — coverage at 447/652 files (681 registered names). Most remaining are 1-2 deck count. Template generator (`cmd/gen-handlers/main.go`) handles simple patterns. #engine #per_card
 - [ ] **BUG: Ajani Nacatl Pariah 74% WR** — handler is correct; high WR was because opponents couldn't deal with PW. PW threat scoring fix (below) should normalize this. Re-check after grinder reset. #engine #bug #hat
+- [ ] **BUG: MDFC permanent_types back-face resolution on battlefield entry** — `moveToZone` (state.go) has no `"battlefield"` case so `MoveCard(..., toZone="battlefield", ...)` silently falls through to graveyard; back-face land MDFCs (Fell the Profane // Fell Mire, Valakut Awakening, Sejiri Shelter) carry the front-face instant/sorcery types onto the battlefield via the deck-parser type-line leak. `tryPlayLand` was patched (commit fa018fd) but the broader `MoveCard("battlefield")` fallthrough still corrupts ~80% of zone_accounting Feynman violations. See `docs/zone-accounting-analysis.md` for full trace. #engine #bug #mdfc #zones
 
 
 ## High Priority — Platform
 
 - [ ] **Amiibo display on deck page** — show per-deck DNA pool: generation count, best fitness, 7 personality params (radar chart), 20 DimStats weight corrections (heatmap), fitness sparkline over generations. Force graph or 3D brain visualization for evolved weight topology. (wiedeman/7174n1c 2026-05-04) #ui #amiibo #design
+- [x] **Amiibo fitness sparkline polish** — switched sparkline to per-generation best across last 20 generations (commit ea249a4, 2026-05-04) #ui #amiibo
+- [ ] **BUG: AmiiboPanel `fitnessByRank` variable** — undefined / shadowed reference in `hexdek/src/components/AmiiboPanel.jsx`; tile rendering can throw when DNA pool snapshot is empty or partially populated #ui #amiibo #bug
 - [x] Negative ELO shame badges — MID/DOWN BAD/COOKED/PACK IT UP/UNINSTALL ladder + Wall of Shame bottom-10 panel (2026-05-04) #ui #fun
-- [ ] **Achievement badges** — milestone badges (first 10/100/1K users), rare/commendable action badges (first blood, comeback from <5 life, perfect sweep, etc). Beyond trash talk — reward good play. (wiedeman 2026-05-04) #ui #badges #design
+- [x] **Achievement badges** — milestone badges (first 10/100/1K users), rare/commendable action badges (first blood, comeback from <5 life, perfect sweep, etc). Beyond trash talk — reward good play. Earned-badge showcase rendered on deck pages via owner achievements (commit ba6db99, 2026-05-04) #ui #badges #design
 - [x] **Volcano map smooth transition** — rAF-based heatmap interpolation, CSS transitions on seat-art opacity/filter for smooth morphing instead of instant swap (2026-05-04) #ui #spectator
-- [ ] Operator platform page/tab (operator profile, deck management, analytics dashboard) #ui #platform
+- [x] Operator platform page/tab — `/operator` profile page with deck shelf, match history, friends panel (commit e4d61b1, 2026-05-04) #ui #platform
 - [ ] Friends system + player profiles — lightweight "pub" model: see each other's decks/ELO, no feed/notifications. Add via search or deck page #ui #social
 - [x] Bracket-stratified leaderboard tabs — filter by B1-B5, separate rankings per bracket + band labels (2026-05-04) #ui
 - [x] Game Changer cards list on deck page — GC card names persisted to strategy.json + "GAME CHANGERS" panel with art thumbnails on deck drilldown (2026-05-04) #ui
@@ -75,7 +78,7 @@ kanban-plugin: board
 - [x] Consolidate ABOUT into footer — moved to AppShell statusbar, no nav slot (2026-05-04) #ui #nav
 
 **Home / Splash page:**
-- [ ] Embed fishtank on home/splash page — merge splash + spectate into one attention trap. Live game visible immediately on landing #ui #home
+- [x] Embed fishtank on home/splash page — full-width lazy-mounted fishtank section below the hero merges splash + spectate into one attention trap (commit 9a59d72, 2026-05-04) #ui #home
 - [x] "Upload My Deck" CTA prominent on home page and browse/deck pages — full-width brutalist hero button on Splash, pinned `+ ADD YOUR DECK` tile on DeckList shelf/list views, shared useUploadDeck hook with anon SignInPrompt gate (2026-05-04) #ui #home
 
 **Deck pages — "tangible object" design:**
@@ -83,13 +86,13 @@ kanban-plugin: board
 - [x] Full-bleed commander art on deck pages — hero image, not a thumbnail. The commander IS the page (2026-05-04) #ui #deck #design
 - [ ] Card grid view as default — art thumbnails grouped by Freya role (ramp, draw, removal, combo pieces, etc). Text list as toggle for data people #ui #deck
 - [x] Deck personality blurb prominent — Freya hero blurb on deck archive, front and center (2026-05-04) #ui #deck
-- [ ] Commander theming on deck pages — visual design system where each deck page feels like holding a real object, not browsing a database row #ui #deck #design
+- [x] Commander theming on deck pages — physical-deck-box polish with full-bleed art + color-identity wash + accent rules; each deck page feels like holding a real object, not browsing a database row (commit fd89de3, 2026-05-04) #ui #deck #design
 
 **Deck library:**
 - [x] Deck library as visual shelf — shelf/list view toggle with shelf as default, commander art cards (2026-05-04) #ui #deck #library
 
 **Search:**
-- [ ] Universal search bar — one search field: decks, commanders, cards, players. Contextual results. Always accessible #ui #search
+- [x] Universal search bar — overlay-style search with categorized sections (decks, commanders, cards, players); contextual results, always accessible (commit 0f013e0, 2026-05-04) #ui #search
 
 **Auth flow:**
 - [x] One-tap auth — contextual AuthPrompt modal triggered on auth-gated actions (upload/import), email magic-link primary path + Discord OAuth button stubbed pending provider wiring, proactive SIGN IN ↗ button in nav (2026-05-04) #ui #auth
@@ -239,7 +242,7 @@ kanban-plugin: board
 - [ ] **i18n** — internationalize hexdek.dev for global audience. Scryfall has localized card names for 11 print languages. 500 UI keys, 50 languages, <$200 translation cost. #platform
 - [ ] Multi-format support beyond Commander (Modern, Legacy deck ratings) #engine
 - [ ] Mobile-friendly leaderboard #ui
-- [ ] Donations page BOINC/ads buttons — "COMING SOON" placeholders (`Donations.jsx:109,119`) #ui
+- [x] Donations page BOINC/ads buttons — placeholders replaced with real BOINC distributed-compute card + Support Dev card (Ko-fi + GH Sponsors) + FAQ panel (commit 2f45e1a, 2026-05-04) #ui
 - [ ] Report analysis placeholder (`Report.jsx:332`) — feature not fully wired #ui
 
 
