@@ -481,6 +481,31 @@ body {
   text-transform: uppercase;
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
 }
+.deck-hero__title-row {
+  display: flex; align-items: baseline; gap: 12px;
+}
+.deck-hero__rename {
+  background: transparent; border: none; padding: 4px 6px;
+  color: var(--accent); cursor: pointer;
+  font-size: 22px; line-height: 1;
+  opacity: 0.55; transition: opacity 120ms ease, transform 120ms ease;
+}
+.deck-hero__rename:hover { opacity: 1; transform: translateY(-1px); }
+.deck-hero__rename:focus { outline: 1px dashed var(--accent); outline-offset: 2px; opacity: 1; }
+.deck-hero__title-input {
+  flex: 1; min-width: 0;
+  margin: 0; padding: 4px 8px;
+  background: rgba(12, 13, 10, 0.6);
+  border: 1px solid var(--accent);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 56px; font-weight: 800;
+  letter-spacing: -0.04em; line-height: 0.95;
+  text-transform: uppercase;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
+}
+.deck-hero__title-input:focus { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.deck-hero__title-input:disabled { opacity: 0.6; cursor: progress; }
 .deck-hero__sub {
   font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--accent);
@@ -530,6 +555,8 @@ body {
 @media (max-width: 900px) {
   .deck-hero { height: 220px; }
   .deck-hero__title { font-size: 36px; }
+  .deck-hero__title-input { font-size: 36px; }
+  .deck-hero__rename { font-size: 16px; padding: 2px 4px; }
   .deck-hero__body { padding: 12px 16px 14px; margin-left: 8px; }
   .deck-hero__summary { display: none; }
   .deck-hero__share { bottom: 10px; right: 10px; padding: 6px 10px; font-size: 10px; }

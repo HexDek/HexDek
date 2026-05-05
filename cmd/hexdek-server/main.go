@@ -109,6 +109,10 @@ func main() {
 
 	// HexDek API: deck listing, Freya analysis, live stats
 	hexAPI := &hexapi.Handler{DecksDir: "data/decks", Showmatch: sm, IndexHTMLPath: *indexHTML}
+	hexAPI.SetDB(database)
+	if err := hexapi.EnsureDeckMetaSchema(context.Background(), database); err != nil {
+		log.Fatalf("deck_meta schema: %v", err)
+	}
 	hexAPI.LoadCardDB("data/rules/oracle-cards.json")
 	hexAPI.Register(mux)
 	log.Printf("showmatch: loading in background — live games at /api/live/game")

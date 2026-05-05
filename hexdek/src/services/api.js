@@ -48,6 +48,10 @@ export const api = {
     body: JSON.stringify({ deck_list: deckList }),
   }),
   deleteDeck: (id) => request(`/api/decks/${id}`, { method: 'DELETE' }),
+  patchDeck: (id, fields) => request(`/api/decks/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(fields),
+  }),
   getDeckVersions: (id) => request(`/api/decks/${id}/versions`),
   getDeckAmiibo: (id) => request(`/api/decks/${id}/amiibo`),
   getAchievements: (owner) => request(`/api/achievements/${owner}`),

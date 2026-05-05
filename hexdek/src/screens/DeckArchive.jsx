@@ -53,8 +53,43 @@ export default function DeckArchive() {
   const [amiibo, setAmiibo] = useState(null)
   const [achievements, setAchievements] = useState(null)
   const [shareToast, setShareToast] = useState(null)
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+  const [savingName, setSavingName] = useState(false)
   const { elo } = useLiveSocket()
   const { user } = useAuth()
+
+  const startNameEdit = () => {
+    setNameDraft(deck?.custom_name || deck?.commander || '')
+    setEditingName(true)
+  }
+
+  const cancelNameEdit = () => {
+    setEditingName(false)
+    setNameDraft('')
+  }
+
+  const commitNameEdit = async () => {
+    if (!owner || !id || savingName) return
+    const trimmed = nameDraft.trim()
+    const current = deck?.custom_name || ''
+    if (trimmed === current) {
+      cancelNameEdit()
+      return
+    }
+    setSavingName(true)
+    try {
+      const updated = await api.patchDeck(`${owner}/${id}`, { name: trimmed })
+      setDeck(d => ({ ...(d || {}), custom_name: updated.custom_name || '' }))
+      trackEvent('rename_deck', { deck: `${owner}/${id}`, len: trimmed.length })
+      setEditingName(false)
+    } catch (err) {
+      setShareToast('RENAME FAILED')
+      setTimeout(() => setShareToast(null), 2000)
+    } finally {
+      setSavingName(false)
+    }
+  }
 
   const handleShare = async () => {
     if (!owner || !id) return
@@ -144,7 +179,14 @@ export default function DeckArchive() {
     })
   }, [owner, id])
 
-  const deckName = deck?.commander || id?.replace(/_/g, ' ').toUpperCase() || 'DECK'
+  const deckName = deck?.custom_name || deck?.commander || id?.replace(/_/g, ' ').toUpperCase() || 'DECK'
+
+  // Owner check mirrors the userOwner derivation in Dashboard.jsx — Firebase
+  // doesn't carry a HexDek username, so we infer it from displayName/email.
+  const userOwnerSlug = user
+    ? (localStorage.getItem('hexdek_owner') || user.displayName?.toLowerCase() || user.email?.split('@')[0]?.split('.')[0] || '')
+    : ''
+  const isOwner = !!owner && !!userOwnerSlug && userOwnerSlug === owner.toLowerCase()
   const cardCount = deck?.card_count || deck?.cards?.length || 99
   const userBracket = deck?.bracket || '?'
   const wbs = analysis?.bracket || userBracket
@@ -345,7 +387,36 @@ export default function DeckArchive() {
             <Tag>{archetype}</Tag>
             {colorIdentity.length > 0 && <Tag>{colorIdentity.join('')}</Tag>}
           </div>
-          <h1 className="deck-hero__title">{deckName}</h1>
+          <div className="deck-hero__title-row">
+            {editingName ? (
+              <input
+                autoFocus
+                className="deck-hero__title-input"
+                value={nameDraft}
+                maxLength={120}
+                disabled={savingName}
+                onChange={e => setNameDraft(e.target.value)}
+                onBlur={commitNameEdit}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { e.preventDefault(); commitNameEdit() }
+                  else if (e.key === 'Escape') { e.preventDefault(); cancelNameEdit() }
+                }}
+              />
+            ) : (
+              <>
+                <h1 className="deck-hero__title">{deckName}</h1>
+                {isOwner && (
+                  <button
+                    type="button"
+                    className="deck-hero__rename"
+                    onClick={startNameEdit}
+                    title="Rename deck"
+                    aria-label="Rename deck"
+                  >✎</button>
+                )}
+              </>
+            )}
+          </div>
           {cmdrCardName && cmdrCardName.toUpperCase() !== deckName && (
             <div className="deck-hero__sub">{cmdrCardName}</div>
           )}
