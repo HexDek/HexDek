@@ -16,8 +16,7 @@ kanban-plugin: board
 
 ## High Priority — Platform
 
-- [ ] **Deck import flow** — end-to-end UX overhaul of the import path: paste/URL/file inputs unified in a single ImportModal, real-time validation against the AST corpus, inline error surfacing (unresolved cards, illegal counts), Freya analyze-on-import progress indicator, success → DeckArchive redirect with celebratory toast. Replaces the current piecemeal hooks. #ui #import
-- [ ] **Card performance tracking** — per-card win-rate & inclusion-rate analytics: stats served at `/api/card-stats/{commander}` already exist but per-card historical performance across decks needs a dedicated CardPage panel ("appears in N decks at owner X / B-bracket Y, W/L Z"). Scaffolding lives at `internal/db/card_stats.go` + `internal/hexapi/cardstats.go`. #engine #analytics #cards
+*No open items — all shipped.*
 
 
 ## High Priority — Learning Loop (Observability) — ALL PHASES DONE
@@ -37,9 +36,9 @@ kanban-plugin: board
 *GA4 Health Pulse (Phase 6) complete 2026-05-02. Server-side + client-side telemetry wired.*
 
 
-## High Priority — Calibration
+## High Priority — Calibration — DONE
 
-- [ ] **Ceiling calibration** — after Amiibo ships: identify best B5 combo deck after 10K+ generations. This is the upper bound reference point. *Depends: Amiibo* #rating #calibration
+*Floor + Ceiling calibration complete. Rating normalization (0-100 percentile) available via `NormalizeRating()`.*
 
 
 ## Medium Priority — Hat Advanced (Silver tier) — ALL LEVELS DONE
@@ -79,6 +78,9 @@ kanban-plugin: board
 
 ## Done — Session 2026-05-05
 
+- [x] **Deck import flow** — unified ImportModal with 3 input modes (paste/URL/file), real-time card validation against corpus, inline error surfacing, Freya progress indicator, success redirect with toast. Auth-gated. Replaces old piecemeal hooks. (2026-05-05) #ui #import
+- [x] **Card performance tracking** — `GET /api/card-stats/card/{cardName}` + `/by-commander`. Per-card win rate, inclusion rate, top commanders, bracket distribution. CardPage frontend panel added. (2026-05-05) #engine #analytics #cards
+- [x] **Ceiling calibration** — `cmd/hexdek-ceiling` CLI: scans B5 decks, cross-refs ELO + Amiibo fitness, runs focused gauntlet with accelerated evolution. `NormalizeRating()` maps ELO to 0-100 (floor=0, ceiling=100). `SkillPercentile()` letter grades. (2026-05-05) #rating #calibration
 - [x] **Hat evaluator P/T migration** — 23 call sites in yggdrasil.go + poker.go migrated from raw `p.Power()`/`p.Toughness()` to `gs.PowerOf(p)`/`gs.ToughnessOf(p)`. Evaluator now respects Layer 7 continuous effects. (2026-05-05) #engine #layers #hat
 - [x] **Layer 3 text-changing handlers** — full framework: 5 handlers (Swirl the Mists, Mind Bend, Magical Hack, Trait Doctoring, Painter's Servant), AST-driven registration, 14 tests. (2026-05-05) #engine #layers
 - [x] **Expand layer dispatch** — Caged Sun + Gauntlet of Power → Layer 7c continuous effects. March of the Machines → Layer 4 (type-changing) + Layer 7b (P/T = CMC). (2026-05-05) #engine #layers
