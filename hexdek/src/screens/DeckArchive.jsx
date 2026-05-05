@@ -51,8 +51,34 @@ export default function DeckArchive() {
   const [versions, setVersions] = useState([])
   const [gauntlet, setGauntlet] = useState(null)
   const [amiibo, setAmiibo] = useState(null)
+  const [achievements, setAchievements] = useState(null)
+  const [shareToast, setShareToast] = useState(null)
   const { elo } = useLiveSocket()
   const { user } = useAuth()
+
+  const handleShare = async () => {
+    if (!owner || !id) return
+    const url = `${window.location.origin}/decks/${owner}/${id}`
+    let copied = false
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url)
+        copied = true
+      } else {
+        const ta = document.createElement('textarea')
+        ta.value = url
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        copied = document.execCommand('copy')
+        document.body.removeChild(ta)
+      }
+    } catch {}
+    trackEvent('share_deck', { deck: `${owner}/${id}`, copied })
+    setShareToast(copied ? 'COPIED!' : 'COPY FAILED — ' + url)
+    setTimeout(() => setShareToast(null), 2200)
+  }
 
   const eloByDeckId = {}
   for (const e of elo) {
@@ -84,7 +110,8 @@ export default function DeckArchive() {
       api.getDeckAnalysis(`${owner}/${id}`),
       api.getGauntlet(`${owner}/${id}`),
       api.getDeckAmiibo(`${owner}/${id}`),
-    ]).then(([deckRes, analysisRes, gauntletRes, amiiboRes]) => {
+      api.getAchievements(owner),
+    ]).then(([deckRes, analysisRes, gauntletRes, amiiboRes, achievementsRes]) => {
       if (deckRes.status === 'fulfilled') setDeck(deckRes.value)
       if (analysisRes.status === 'fulfilled') {
         const data = analysisRes.value
@@ -97,6 +124,9 @@ export default function DeckArchive() {
       }
       if (amiiboRes.status === 'fulfilled' && amiiboRes.value && amiiboRes.value.population) {
         setAmiibo(amiiboRes.value)
+      }
+      if (achievementsRes.status === 'fulfilled' && achievementsRes.value) {
+        setAchievements(achievementsRes.value)
       }
       if (gauntletRes.status === 'fulfilled' && gauntletRes.value.status !== 'none') {
         setGauntlet(gauntletRes.value)
@@ -299,6 +329,15 @@ export default function DeckArchive() {
         <div className="deck-hero__scrim" />
         <div className="deck-hero__corner deck-hero__corner--tl">04.HERO / / {pageTheme.label}</div>
         <div className="deck-hero__corner deck-hero__corner--tr">{owner?.toUpperCase()} / / {id}</div>
+        {owner && id && (
+          <button type="button" className="deck-hero__share" onClick={handleShare} title="Copy shareable link">
+            <span>SHARE</span>
+            <span className="arr">↗</span>
+          </button>
+        )}
+        {shareToast && (
+          <div className="deck-hero__toast" role="status" aria-live="polite">{shareToast}</div>
+        )}
         <div className="deck-hero__body">
           <div className="deck-hero__meta">
             <Tag solid>B{wbs}{wbsLabel ? ' · ' + wbsLabel : ''}</Tag>
@@ -829,6 +868,86 @@ export default function DeckArchive() {
 
           {/* Amiibo genetic population */}
           {amiibo && <AmiiboPanel amiibo={amiibo} />}
+
+          {/* Achievement badges */}
+          {achievements && achievements.catalog?.length > 0 && (
+            <Panel
+              code="04.B"
+              title={`ACHIEVEMENTS / / ${owner?.toUpperCase() || ''}`}
+              right={<Tag solid kind={achievements.badges?.length > 0 ? 'ok' : null}>{achievements.badges?.length || 0} / {achievements.catalog.length}</Tag>}
+            >
+              {(achievements.total_games > 0 || achievements.opponents_faced > 0) && (
+                <KV rows={[
+                  ['GAMES', `${achievements.total_games?.toLocaleString() || 0}`],
+                  ['WINS', `${achievements.total_wins?.toLocaleString() || 0}`],
+                  ['STREAK', `${achievements.current_win_streak || 0} (BEST ${achievements.max_win_streak || 0})`],
+                  ['OPPONENTS', `${achievements.opponents_faced?.toLocaleString() || 0}`],
+                ]} />
+              )}
+              <div className="hr" style={{ margin: '10px 0' }} />
+              {(() => {
+                const RARITY_COLOR = {
+                  common:   { border: '#8a9682', bg: 'rgba(138,150,130,0.06)', label: 'COMMON' },
+                  uncommon: { border: '#6e8fa0', bg: 'rgba(110,143,160,0.08)', label: 'UNCOMMON' },
+                  rare:     { border: '#d8c878', bg: 'rgba(216,200,120,0.10)', label: 'RARE' },
+                  mythic:   { border: '#cc5c4a', bg: 'rgba(204,92,74,0.12)', label: 'MYTHIC' },
+                  secret:   { border: '#9c6ab0', bg: 'rgba(156,106,176,0.14)', label: 'SECRET' },
+                }
+                const earnedById = {}
+                for (const b of (achievements.badges || [])) earnedById[b.id] = b
+                return (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                    gap: 8,
+                  }}>
+                    {achievements.catalog.map(b => {
+                      const earned = earnedById[b.id]
+                      const palette = RARITY_COLOR[b.rarity] || RARITY_COLOR.common
+                      const isSecret = b.rarity === 'secret' && !earned
+                      return (
+                        <div
+                          key={b.id}
+                          title={isSecret ? 'Hidden achievement — keep playing.' : `${b.name}\n${b.description}`}
+                          style={{
+                            border: `2px solid ${earned ? palette.border : 'var(--rule-2)'}`,
+                            background: earned ? palette.bg : 'transparent',
+                            padding: '8px 10px',
+                            opacity: earned ? 1 : 0.45,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 4,
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 22, lineHeight: 1, filter: earned ? 'none' : 'grayscale(1)' }}>
+                              {isSecret ? '❔' : b.icon}
+                            </span>
+                            <span className="t-xs" style={{
+                              color: earned ? palette.border : 'var(--ink-3)',
+                              letterSpacing: '0.06em',
+                              fontWeight: 700,
+                            }}>{palette.label}</span>
+                          </div>
+                          <div className="t-xs" style={{ fontWeight: 700, letterSpacing: '0.04em' }}>
+                            {isSecret ? '???' : b.name}
+                          </div>
+                          <div className="t-xs muted" style={{ lineHeight: 1.3 }}>
+                            {isSecret ? 'Hidden achievement.' : b.description}
+                          </div>
+                          {earned && (
+                            <div className="t-xs muted-2" style={{ marginTop: 2 }}>
+                              {new Date(earned.awarded_at).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+            </Panel>
+          )}
 
           {/* Actions */}
           {owner && id && (

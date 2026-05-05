@@ -34,6 +34,7 @@ func main() {
 	addr := flag.String("addr", "0.0.0.0:8090", "HTTP listen address")
 	deckPath := flag.String("deck", "data/decks/yuriko_v1.json", "Path to test deck JSON file")
 	dbPath := flag.String("db", "data/hexdek.db", "SQLite path (use :memory: for ephemeral)")
+	indexHTML := flag.String("index-html", "", "Path to built SPA index.html for share-page OG injection (optional)")
 	flag.Parse()
 
 	// Open SQLite
@@ -104,7 +105,7 @@ func main() {
 	sm.RegisterShowmatch(mux)
 
 	// HexDek API: deck listing, Freya analysis, live stats
-	hexAPI := &hexapi.Handler{DecksDir: "data/decks", Showmatch: sm}
+	hexAPI := &hexapi.Handler{DecksDir: "data/decks", Showmatch: sm, IndexHTMLPath: *indexHTML}
 	hexAPI.LoadCardDB("data/rules/oracle-cards.json")
 	hexAPI.Register(mux)
 	log.Printf("showmatch: loading in background — live games at /api/live/game")
