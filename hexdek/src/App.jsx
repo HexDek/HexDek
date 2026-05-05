@@ -22,6 +22,7 @@ import Donations from './screens/Donations'
 import Profile from './screens/Profile'
 import PublicProfile from './screens/PublicProfile'
 import OperatorProfile from './screens/OperatorProfile'
+import Friends from './screens/Friends'
 import Login from './screens/Login'
 import AuthCallback from './screens/AuthCallback'
 import DeckCompare from './screens/DeckCompare'
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="profile/:owner" element={<PublicProfile />} />
         <Route path="operator" element={<RequireAuth><OperatorProfile /></RequireAuth>} />
         <Route path="me" element={<Navigate to="/operator" replace />} />
+        <Route path="friends" element={<RequireAuth><Friends /></RequireAuth>} />
       </Route>
     </Routes>
   )

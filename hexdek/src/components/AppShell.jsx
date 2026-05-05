@@ -18,6 +18,7 @@ const AUTH_NAV = [
   { to: '/spectate', key: 'nav.spectate' },
   { to: '/decks?tab=mine', key: 'nav.my_decks' },
   { to: '/operator', key: 'nav.operator' },
+  { to: '/friends', key: 'nav.friends' },
 ]
 
 function useTheme() {
