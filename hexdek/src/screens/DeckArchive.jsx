@@ -112,6 +112,7 @@ export default function DeckArchive() {
       if (wasFriend) await api.removeFriend(target, userOwnerSlug)
       else           await api.addFriend(target, userOwnerSlug)
       trackEvent(wasFriend ? 'remove_friend' : 'add_friend', { target })
+      window.dispatchEvent(new CustomEvent('hexdek-friends-changed'))
     } catch {
       setIsFriend(wasFriend) // rollback
       setShareToast(wasFriend ? 'UNFRIEND FAILED' : 'ADD FRIEND FAILED')

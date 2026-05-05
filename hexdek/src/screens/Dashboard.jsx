@@ -199,7 +199,27 @@ export default function Dashboard() {
   const [showImport, setShowImport] = useState(false)
   const [showFullLeaderboard, setShowFullLeaderboard] = useState(false)
   const [recentImports, setRecentImports] = useState([])
+  const [friends, setFriends] = useState([])
   const navigate = useNavigate()
+
+  // Refetch friends when the user changes; also on a custom 'hexdek-friends-changed'
+  // window event so DeckArchive's add/remove can ping us without prop drilling.
+  useEffect(() => {
+    if (!userOwner) { setFriends([]); return }
+    let alive = true
+    const load = () => {
+      api.listFriends(userOwner)
+        .then(r => { if (alive) setFriends(r?.friends || []) })
+        .catch(() => { if (alive) setFriends([]) })
+    }
+    load()
+    const onChanged = () => load()
+    window.addEventListener('hexdek-friends-changed', onChanged)
+    return () => {
+      alive = false
+      window.removeEventListener('hexdek-friends-changed', onChanged)
+    }
+  }, [userOwner])
 
   // Recent imports for the user's owner. Refetches when the import modal is
   // closed (which is when a new deck would have just landed).
@@ -428,6 +448,39 @@ export default function Dashboard() {
               ['PRIMARY', profile.primaryColor],
             ]} />
           </Panel>
+
+          {/* Friends — only meaningful when the visitor has a known owner slug. */}
+          {userOwner && (
+            <Panel code="III.FR" title={`FRIENDS / / ${friends.length}`}>
+              {friends.length === 0 ? (
+                <div className="t-xs muted" style={{ padding: '8px 0', lineHeight: 1.6 }}>
+                  &gt; NO FRIENDS YET<br />
+                  &gt; ADD ONE FROM ANY DECK PAGE<span className="blink">_</span>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {friends.map((f, i) => (
+                    <div
+                      key={f}
+                      onClick={() => navigate(`/decks?q=${encodeURIComponent(f)}`)}
+                      style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '6px 0',
+                        borderBottom: i < friends.length - 1 ? '1px dashed var(--rule-2)' : 'none',
+                        cursor: 'pointer',
+                      }}
+                      title={`View ${f}'s decks`}
+                    >
+                      <span className="t-md" style={{ fontWeight: 700, letterSpacing: '0.04em' }}>
+                        <span style={{ color: 'var(--ok)', marginRight: 6 }}>●</span>{f.toUpperCase()}
+                      </span>
+                      <span className="t-xs muted-2">↗</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Panel>
+          )}
 
           {/* Context Deck selector */}
           <ContextDeckSelector
