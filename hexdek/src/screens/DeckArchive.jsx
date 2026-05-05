@@ -436,7 +436,7 @@ export default function DeckArchive() {
             }}>
               <span style={{
                 position: 'absolute',
-                top: -2, left: 14,
+                top: 8, left: 14,
                 fontSize: 56, lineHeight: 1,
                 color: 'var(--ok)',
                 opacity: 0.35,
