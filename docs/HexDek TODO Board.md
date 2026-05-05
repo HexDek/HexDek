@@ -20,7 +20,7 @@ kanban-plugin: board
 - [ ] **Amiibo display on deck page** — show per-deck DNA pool: generation count, best fitness, 7 personality params (radar chart), 20 DimStats weight corrections (heatmap), fitness sparkline over generations. Force graph or 3D brain visualization for evolved weight topology. (wiedeman/7174n1c 2026-05-04) #ui #amiibo #design
 - [x] Negative ELO shame badges — MID/DOWN BAD/COOKED/PACK IT UP/UNINSTALL ladder + Wall of Shame bottom-10 panel (2026-05-04) #ui #fun
 - [ ] **Achievement badges** — milestone badges (first 10/100/1K users), rare/commendable action badges (first blood, comeback from <5 life, perfect sweep, etc). Beyond trash talk — reward good play. (wiedeman 2026-05-04) #ui #badges #design
-- [ ] **Volcano map smooth transition** — CSS transition on heatmap state changes so it morphs smoothly instead of instant swap. (wiedeman 2026-05-04) #ui #spectator
+- [x] **Volcano map smooth transition** — rAF-based heatmap interpolation, CSS transitions on seat-art opacity/filter for smooth morphing instead of instant swap (2026-05-04) #ui #spectator
 - [ ] Operator platform page/tab (operator profile, deck management, analytics dashboard) #ui #platform
 - [ ] Friends system + player profiles — lightweight "pub" model: see each other's decks/ELO, no feed/notifications. Add via search or deck page #ui #social
 - [x] Bracket-stratified leaderboard tabs — filter by B1-B5, separate rankings per bracket + band labels (2026-05-04) #ui
@@ -79,14 +79,14 @@ kanban-plugin: board
 - [x] "Upload My Deck" CTA prominent on home page and browse/deck pages — full-width brutalist hero button on Splash, pinned `+ ADD YOUR DECK` tile on DeckList shelf/list views, shared useUploadDeck hook with anon SignInPrompt gate (2026-05-04) #ui #home
 
 **Deck pages — "tangible object" design:**
-- [ ] Commander color-identity page theming — CSS vars `--page-wash`, `--accent` derived from commander color identity (e.g. Grixis = deep blue-black gradient with red accent). Every deck page feels unique #ui #deck #design
-- [ ] Full-bleed commander art on deck pages — hero image, not a thumbnail. The commander IS the page #ui #deck #design
+- [x] Commander color-identity page theming — CSS vars `--page-wash`, `--accent` derived from commander color identity (e.g. Grixis = deep blue-black gradient with red accent). Every deck page feels unique (2026-05-04) #ui #deck #design
+- [x] Full-bleed commander art on deck pages — hero image, not a thumbnail. The commander IS the page (2026-05-04) #ui #deck #design
 - [ ] Card grid view as default — art thumbnails grouped by Freya role (ramp, draw, removal, combo pieces, etc). Text list as toggle for data people #ui #deck
-- [ ] Deck personality blurb prominent — Freya's 2-3 sentence archetype/strategy description front and center, not buried in a tab #ui #deck
+- [x] Deck personality blurb prominent — Freya hero blurb on deck archive, front and center (2026-05-04) #ui #deck
 - [ ] Commander theming on deck pages — visual design system where each deck page feels like holding a real object, not browsing a database row #ui #deck #design
 
 **Deck library:**
-- [ ] Deck library as visual shelf — card objects (commander art + name + bracket badge), not table rows. Browse = flip through a collection #ui #deck #library
+- [x] Deck library as visual shelf — shelf/list view toggle with shelf as default, commander art cards (2026-05-04) #ui #deck #library
 
 **Search:**
 - [ ] Universal search bar — one search field: decks, commanders, cards, players. Contextual results. Always accessible #ui #search
@@ -196,8 +196,8 @@ kanban-plugin: board
 
 ## Medium Priority — Engine
 
-- [ ] **N-card combo line detection** — Huginn currently tracks pairwise co-triggers. Expand to 3-5 card lines (e.g. Dramatic Reversal + Isochron Scepter + mana rock). Either N-tuple tracking or chained pairwise inference. (7174n1c 2026-05-04) #engine #huginn #combo
-- [ ] **Muninn persist batching** — coalesce per-game read-modify-write (parser_gaps.json, dead_triggers.json) into periodic batch flush. Currently re-reads + re-writes full file per game, expensive as files grow. #engine #performance
+- [x] **N-card combo line detection** — Huginn expanded from pairwise to 3-5 card combo lines via direct N-tuple observation (2026-05-04) #engine #huginn #combo
+- [x] **Muninn persist batching** — per-game flush threshold + batched AutoArchive replaces per-game read-modify-write (2026-05-04) #engine #performance
 - [ ] **Temporal Pincer** — anon UUID cookie → session tracking → on login stitch all anon device UUIDs to authenticated profile. No PII, all UUIDs. Powers P&R via GraphQL. #infra #platform
 
 
