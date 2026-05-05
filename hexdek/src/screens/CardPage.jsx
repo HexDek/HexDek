@@ -65,6 +65,8 @@ export default function CardPage() {
   const [scry, setScry] = useState(null)
   // /api/cards/:name/stats — null until resolved; {games_played:0,...} on cold cards.
   const [stats, setStats] = useState(null)
+  // /api/card-stats/card/:name — extended analytics (inclusion rate, commanders, brackets).
+  const [perfStats, setPerfStats] = useState(null)
   // Loading / error state covers whichever path is in flight.
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -79,6 +81,7 @@ export default function CardPage() {
     setDetail(null)
     setScry(null)
     setStats(null)
+    setPerfStats(null)
     setSource(null)
 
     // Engine win-rate stats — independent of card-data resolution. Fired
@@ -86,6 +89,13 @@ export default function CardPage() {
     fetch(`${API_BASE}/api/cards/${encodeURIComponent(cardName)}/stats`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (!cancelled && data) setStats(data) })
+      .catch(() => {})
+
+    // Extended card performance stats — inclusion rate, commander breakdown,
+    // bracket distribution. Non-fatal on failure.
+    fetch(`${API_BASE}/api/card-stats/card/${encodeURIComponent(cardName)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (!cancelled && data) setPerfStats(data) })
       .catch(() => {})
 
     const tryLocal = fetch(`${API_BASE}/api/cards/${encodeURIComponent(cardName)}`)
@@ -419,6 +429,93 @@ export default function CardPage() {
               </>
             )}
           </Panel>
+
+          {/* Performance panel — inclusion rate, top commanders, bracket
+              distribution. Sourced from /api/card-stats/card/:name. */}
+          {perfStats && (perfStats.games_played > 0 || perfStats.decks_using > 0) && (
+            <Panel
+              code="07.P"
+              title="PERFORMANCE / / CROSS-COMMANDER"
+              right={perfStats.decks_using > 0 ? <Tag solid>{perfStats.decks_using} DECKS</Tag> : null}
+            >
+              {/* Inclusion rate */}
+              {perfStats.total_decks > 0 && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 80px', alignItems: 'center', gap: 8 }}>
+                    <span className="t-xs muted">INCLUSION</span>
+                    <Bar value={perfStats.inclusion_rate * 100} />
+                    <span className="t-xs text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {perfStats.decks_using} / {perfStats.total_decks}
+                    </span>
+                  </div>
+                  <div className="t-xs muted" style={{ marginTop: 4 }}>
+                    APPEARS IN {(perfStats.inclusion_rate * 100).toFixed(1)}% OF TRACKED DECKS
+                  </div>
+                  <div className="hr" style={{ margin: '12px 0' }} />
+                </>
+              )}
+
+              {/* Top commanders using this card */}
+              {perfStats.top_commanders && perfStats.top_commanders.length > 0 && (
+                <>
+                  <div className="t-xs muted" style={{ marginBottom: 6 }}>TOP COMMANDERS USING THIS CARD</div>
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: '24px 1fr 60px 60px',
+                    gap: 4, padding: '4px 0', borderBottom: '1px solid var(--rule-2)', marginBottom: 4,
+                  }}>
+                    <span className="t-xs muted">#</span>
+                    <span className="t-xs muted">COMMANDER</span>
+                    <span className="t-xs muted text-right">GAMES</span>
+                    <span className="t-xs muted text-right">WR%</span>
+                  </div>
+                  {perfStats.top_commanders.slice(0, 5).map((c, i) => (
+                    <div
+                      key={c.commander}
+                      style={{
+                        display: 'grid', gridTemplateColumns: '24px 1fr 60px 60px',
+                        gap: 4, padding: '4px 0',
+                        borderBottom: i < Math.min(perfStats.top_commanders.length, 5) - 1 ? '1px dashed var(--rule-2)' : 'none',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span className="t-xs muted-2">{i + 1}</span>
+                      <span className="t-xs" style={{ fontWeight: i < 3 ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {(c.commander || '').toUpperCase()}
+                      </span>
+                      <span className="t-xs text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>{c.games}</span>
+                      <span className="t-xs text-right" style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: c.win_rate >= 0.5 ? 'var(--ok)' : 'var(--ink-2)' }}>
+                        {(c.win_rate * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  ))}
+                  <div className="hr" style={{ margin: '12px 0' }} />
+                </>
+              )}
+
+              {/* Bracket distribution */}
+              {perfStats.bracket_distribution && perfStats.bracket_distribution.length > 0 && (
+                <>
+                  <div className="t-xs muted" style={{ marginBottom: 6 }}>BRACKET DISTRIBUTION</div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 60, padding: '0 4px' }}>
+                    {perfStats.bracket_distribution.map(b => {
+                      const maxCount = Math.max(...perfStats.bracket_distribution.map(x => x.count))
+                      const pct = maxCount > 0 ? (b.count / maxCount) * 100 : 0
+                      return (
+                        <div key={b.bracket} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                          <div style={{
+                            width: '100%', minHeight: 4, height: `${pct}%`,
+                            background: 'var(--accent)', borderRadius: 2, transition: 'height 0.3s',
+                          }} />
+                          <span className="t-xs" style={{ fontWeight: 700 }}>B{b.bracket}</span>
+                          <span className="t-xs muted-2">{b.count}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </Panel>
+          )}
 
           {/* Top decks running this card — joins detail.decks_using with
               live ELO data and sorts by win rate. Empty when no overlap
