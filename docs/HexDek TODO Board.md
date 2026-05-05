@@ -26,6 +26,7 @@ kanban-plugin: board
 - [ ] **Win Condition rationale** — show detection logic for each win-con (which cards form the line, what conditions are needed, how the combo resolves). #ui #deck #freya
 - [ ] **Deck clone** — non-owners can clone a deck to their own collection for editing. Clone creates a copy under the cloner's owner dir, then they can rename/edit freely. #ui #platform
 - [ ] **Reconnection countdown** — when WebSocket disconnects, show attempt number and countdown timer per reconnection attempt (currently just shows "DISCONNECTED — RECONNECTING"). #ui #ux
+- [ ] **Magic link graceful flow** — user clicks email link → new tab catches the auth post and logs them in → tab auto-closes → original tab plays a console-style "logging in" feed animation → redirects to /operator. #ui #auth #ux
 
 
 ## High Priority — Learning Loop (Observability) — ALL PHASES DONE

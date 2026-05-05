@@ -202,7 +202,7 @@ function LeaderboardContent() {
     <>
       <Tape left={`LEADERBOARD / ${bracketLabel} / LIVE RANKINGS`} mid={`${sorted.length} DECKS`} right="DOC HX-500" />
 
-      <div style={{ padding: 18, flex: 1, display: 'flex', flexDirection: 'column', gap: 14, overflow: 'auto' }}>
+      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {/* Search + Sort controls */}
         <div className="lb-search-row" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="panel" style={{ padding: 0, flex: 1, minWidth: 200, borderStyle: filter ? 'solid' : 'dashed' }}>

@@ -150,7 +150,7 @@ export default function CursePanel({ curse }) {
       <KV rows={[
         ['GENERATIONS', `${maxGen}`],
         ['POPULATION', `${pop.length}`],
-        ['GAMES LOGGED', `${(curse.game_count ?? 0).toLocaleString()}`],
+        ['GAMES LOGGED', `${(curse.total_games ?? curse.game_count ?? 0).toLocaleString()}`],
         ['BEST FITNESS', <span style={{ color: bestFitness >= 1.0 ? 'var(--ok)' : 'var(--warn)', fontWeight: 700 }}>{bestFitness.toFixed(2)}</span>],
         ['AVG FITNESS', `${avgFitness.toFixed(2)}`],
         ['TOP GAMES', `${num(top.games_played).toLocaleString()}`],

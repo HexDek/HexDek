@@ -16,9 +16,12 @@ export default function DeckList() {
   const [filter, setFilter] = useState(searchParams.get('q') || '')
   const ownerParam = searchParams.get('owner') || ''
   const containsParam = searchParams.get('contains') || ''
+  const { user } = useAuth()
   const [tab, setTab] = useState(
     ownerParam || containsParam ? 'all' :
-    (searchParams.get('tab') === 'mine' ? 'mine' : 'all')
+    searchParams.get('tab') === 'all' ? 'all' :
+    searchParams.get('tab') === 'mine' ? 'mine' :
+    user ? 'mine' : 'all'
   )
   const [legalFilter, setLegalFilter] = useState('all')
   const [loading, setLoading] = useState(true)
@@ -27,7 +30,6 @@ export default function DeckList() {
     return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'shelf'
   })
   const navigate = useNavigate()
-  const { user } = useAuth()
   const { elo } = useLiveSocket()
   const upload = useUploadDeck(() => loadDecks())
 
@@ -58,7 +60,10 @@ export default function DeckList() {
   const storedOwner = typeof localStorage !== 'undefined' ? localStorage.getItem('hexdek_owner') : null
   const emailPrefix = user?.email?.split('@')[0]?.split('.')[0]?.toLowerCase() || ''
   const myName = storedOwner || user?.displayName?.toLowerCase() || emailPrefix || ''
-  const myDecks = myName ? decks.filter(d => d.owner?.toLowerCase() === myName) : []
+  const myDecks = myName ? decks.filter(d => {
+    const o = d.owner?.toLowerCase()
+    return o === myName || myName.startsWith(o) || o.startsWith(myName)
+  }) : []
   const hasMyDecks = myDecks.length > 0
 
   const baseDecks = (tab === 'mine' && user) ? myDecks : decks
@@ -80,7 +85,7 @@ export default function DeckList() {
     <>
       <Tape left={tapeLabel} mid={`${filtered.length} / ${decks.length} TOTAL`} right="DOC HX-400" />
 
-      <div style={{ padding: 18, flex: 1, display: 'flex', flexDirection: 'column', gap: 14, overflow: 'auto' }}>
+      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {(ownerParam || containsParam) && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-2)' }}>
             <span>FILTER:</span>

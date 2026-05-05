@@ -166,6 +166,7 @@ export default function ManaCost({ cost, size = 16, gap = 2, style, className, t
         alignItems: 'center',
         gap,
         verticalAlign: 'middle',
+        filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.7))',
         ...style,
       }}
     >

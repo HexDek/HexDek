@@ -648,8 +648,6 @@ export default function DeckArchive() {
             )}
           </Panel>
 
-          {curse && <CurseDisplay curse={curse} />}
-
           {/* MATCHUPS — head-to-head record per opposing commander
               from showmatch_game history. Best/worst leaderboards
               gate on a min-games threshold so 1-0 small samples don't
@@ -1157,6 +1155,8 @@ export default function DeckArchive() {
               <KV rows={analysis.tutor_targets.map((t, i) => [`TARGET.${i + 1}`, t])} />
             </Panel>
           )}
+
+          {curse && <CurseDisplay curse={curse} />}
 
           </>}
 

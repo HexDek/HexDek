@@ -1,5 +1,11 @@
 const API_BASE = import.meta.env.VITE_API_URL ?? ''
 
+function getOwnerSlug() {
+  try {
+    return localStorage.getItem('hexdek_owner') || ''
+  } catch { return '' }
+}
+
 async function request(path, opts = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { 'Content-Type': 'application/json', ...opts.headers },
@@ -7,6 +13,14 @@ async function request(path, opts = {}) {
   })
   if (!res.ok) throw new Error(`API ${res.status}: ${path}`)
   return res.json()
+}
+
+function authedRequest(path, opts = {}) {
+  const owner = getOwnerSlug()
+  return request(path, {
+    ...opts,
+    headers: { ...opts.headers, ...(owner ? { 'X-HexDek-Owner': owner } : {}) },
+  })
 }
 
 export function cardArtUrl(name) {
@@ -60,12 +74,12 @@ export const api = {
   }),
   searchCards: (q, limit = 6) => request(`/api/cards/search?q=${encodeURIComponent(q)}&limit=${limit}`),
   runAnalysis: (id) => request(`/api/decks/${id}/analyze`, { method: 'POST' }),
-  updateDeck: (id, deckList) => request(`/api/decks/${id}`, {
+  updateDeck: (id, deckList) => authedRequest(`/api/decks/${id}`, {
     method: 'PUT',
     body: JSON.stringify({ deck_list: deckList }),
   }),
-  deleteDeck: (id) => request(`/api/decks/${id}`, { method: 'DELETE' }),
-  patchDeck: (id, fields) => request(`/api/decks/${id}`, {
+  deleteDeck: (id) => authedRequest(`/api/decks/${id}`, { method: 'DELETE' }),
+  patchDeck: (id, fields) => authedRequest(`/api/decks/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(fields),
   }),
@@ -91,4 +105,6 @@ export const api = {
   listFriends: (asSlug) => request(`/api/friends?as=${encodeURIComponent(asSlug)}`),
   addFriend: (target, asSlug) => request(`/api/friends/${encodeURIComponent(target)}?as=${encodeURIComponent(asSlug)}`, { method: 'POST' }),
   removeFriend: (target, asSlug) => request(`/api/friends/${encodeURIComponent(target)}?as=${encodeURIComponent(asSlug)}`, { method: 'DELETE' }),
+  getOwnerStats: (owner) => request(`/api/owner/${encodeURIComponent(owner)}/stats`),
+  getOwnerGames: (owner, limit = 20) => request(`/api/owner/${encodeURIComponent(owner)}/games?limit=${limit}`),
 }

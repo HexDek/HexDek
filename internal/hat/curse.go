@@ -112,6 +112,7 @@ type CursePool struct {
 	DeckKey    string                      `json:"deck_key"`
 	Population [CursePopSize]CurseDNA    `json:"population"`
 	GameCount  int                         `json:"game_count"`
+	TotalGames int                         `json:"total_games"`
 	Bracket    int                         `json:"bracket"`    // power bracket (1-5) for fitness normalization
 	GenCount   int                         `json:"gen_count"`  // total generations evolved
 	DimStats   DimensionStats              `json:"dim_stats"`  // T3.2 outcome-correlated dimension learning
@@ -165,6 +166,7 @@ func (pool *CursePool) RecordResult(idx int, score float64) {
 	dna := &pool.Population[idx]
 	dna.GamesPlayed++
 	pool.GameCount++
+	pool.TotalGames++
 
 	// Bracket-normalize: compare against expected performance for this bracket.
 	normalized := score

@@ -85,6 +85,10 @@ func (h *Handler) handlePatchDeck(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid owner or id", http.StatusBadRequest)
 		return
 	}
+	if !checkOwnership(r, owner) {
+		http.Error(w, "forbidden: not deck owner", http.StatusForbidden)
+		return
+	}
 
 	if findDeckFile(h.DecksDir, owner, id) == "" {
 		http.Error(w, "deck not found", http.StatusNotFound)

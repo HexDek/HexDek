@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -289,6 +290,16 @@ func NewShowmatch(astPath, oraclePath, decksDir string, database *sql.DB) *Showm
 	}
 	if loaded, err := hat.LoadAllPools(sm.curseDir, rand.New(rand.NewSource(42))); err == nil && len(loaded) > 0 {
 		sm.cursePool = loaded
+		migrated := 0
+		for _, pool := range loaded {
+			if pool.TotalGames == 0 && (pool.GenCount > 0 || pool.GameCount > 0) {
+				pool.TotalGames = pool.GenCount*hat.CurseEvolveAt + pool.GameCount
+				migrated++
+			}
+		}
+		if migrated > 0 {
+			log.Printf("curse: seeded TotalGames on %d pools from GenCount*%d+GameCount", migrated, hat.CurseEvolveAt)
+		}
 		log.Printf("curse: loaded %d deck pools from %s", len(loaded), sm.curseDir)
 	}
 	if tr, err := achievements.NewTracker("data/achievements"); err != nil {
@@ -341,6 +352,12 @@ func (sm *Showmatch) loadPersistedState() {
 			owner:     r.Owner,
 			bracket:   r.Bracket,
 		}
+	}
+
+	if affected, err := db.BackfillDeckKeys(ctx, sm.sqlDB); err != nil {
+		log.Printf("showmatch: backfill deck_keys: %v", err)
+	} else if affected > 0 {
+		log.Printf("showmatch: backfilled %d seat rows with deck_key", affected)
 	}
 
 	kvGames, _ := db.KVGet(ctx, sm.sqlDB, "total_games")
@@ -2393,6 +2410,8 @@ func (sm *Showmatch) RegisterShowmatch(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/gauntlet/{owner}/{id}", sm.handleGetGauntlet)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/curse", sm.handleDeckCurse)
 	mux.HandleFunc("GET /api/achievements/{owner}", sm.handleAchievements)
+	mux.HandleFunc("GET /api/owner/{owner}/stats", sm.handleOwnerStats)
+	mux.HandleFunc("GET /api/owner/{owner}/games", sm.handleOwnerGames)
 }
 
 var gauntletSem = make(chan struct{}, 2)
@@ -2450,6 +2469,7 @@ func (sm *Showmatch) handleGetGauntlet(w http.ResponseWriter, r *http.Request) {
 type CurseResponse struct {
 	DeckKey    string            `json:"deck_key"`
 	GameCount  int               `json:"game_count"`
+	TotalGames int               `json:"total_games"`
 	Population []CurseMemberDTO `json:"population"`
 
 	// DimStatsN is the number of games observed by the dimension-stats
@@ -2508,10 +2528,11 @@ func (sm *Showmatch) handleDeckCurse(w http.ResponseWriter, r *http.Request) {
 	}
 	// Snapshot under lock to avoid data races.
 	resp := CurseResponse{
-		DeckKey:   pool.DeckKey,
-		GameCount: pool.GameCount,
-		DimStatsN: pool.DimStats.N,
-		DimLabels: curseDimLabels,
+		DeckKey:    pool.DeckKey,
+		GameCount:  pool.GameCount,
+		TotalGames: pool.TotalGames,
+		DimStatsN:  pool.DimStats.N,
+		DimLabels:  curseDimLabels,
 	}
 	corr := pool.DimStats.WeightCorrections()
 	resp.DimCorrections = make([]float64, len(corr))
@@ -3200,4 +3221,41 @@ func (sm *Showmatch) broadcastToSpectators(env wsEnvelope) {
 			sc.conn.CloseNow()
 		}
 	}
+}
+
+func (sm *Showmatch) handleOwnerStats(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	if owner == "" || sm.sqlDB == nil {
+		writeJSON(w, map[string]any{"games": 0, "wins": 0, "losses": 0, "win_rate": 0})
+		return
+	}
+	stats, err := db.LoadOwnerStats(r.Context(), sm.sqlDB, strings.ToLower(owner))
+	if err != nil {
+		writeJSON(w, map[string]any{"games": 0, "wins": 0, "losses": 0, "win_rate": 0})
+		return
+	}
+	writeJSON(w, stats)
+}
+
+func (sm *Showmatch) handleOwnerGames(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	limit := 20
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+	if owner == "" || sm.sqlDB == nil {
+		writeJSON(w, []any{})
+		return
+	}
+	games, err := db.LoadOwnerGames(r.Context(), sm.sqlDB, strings.ToLower(owner), limit)
+	if err != nil {
+		writeJSON(w, []any{})
+		return
+	}
+	if games == nil {
+		games = []db.OwnerGameRow{}
+	}
+	writeJSON(w, games)
 }

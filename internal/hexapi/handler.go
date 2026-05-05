@@ -401,6 +401,10 @@ func (h *Handler) handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid owner or id", http.StatusBadRequest)
 		return
 	}
+	if !checkOwnership(r, owner) {
+		http.Error(w, "forbidden: not deck owner", http.StatusForbidden)
+		return
+	}
 
 	deckPath := findDeckFile(h.DecksDir, owner, id)
 	if deckPath == "" {
@@ -474,6 +478,10 @@ func (h *Handler) handleDeleteDeck(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !validatePathComponent(owner) || !validatePathComponent(id) {
 		http.Error(w, "invalid owner or id", http.StatusBadRequest)
+		return
+	}
+	if !checkOwnership(r, owner) {
+		http.Error(w, "forbidden: not deck owner", http.StatusForbidden)
 		return
 	}
 
@@ -826,6 +834,10 @@ func (h *Handler) handleImportDeck(w http.ResponseWriter, r *http.Request) {
 	}
 	go h.registerDeckVersion(owner, finalID, cmdrCard, cardNames)
 
+	if name != "" && name != "imported_deck" {
+		h.saveCustomName(r.Context(), owner, finalID, name)
+	}
+
 	h.logImport(r.Context(), db.ImportLogEntry{
 		Owner:     owner,
 		DeckKey:   owner + "/" + finalID,
@@ -1105,6 +1117,11 @@ func validatePathComponent(s string) bool {
 		}
 	}
 	return true
+}
+
+func checkOwnership(r *http.Request, owner string) bool {
+	caller := strings.TrimSpace(strings.ToLower(r.Header.Get("X-HexDek-Owner")))
+	return caller != "" && caller == strings.ToLower(owner)
 }
 
 func sanitizeFilename(s string) string {

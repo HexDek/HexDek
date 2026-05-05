@@ -1,5 +1,4 @@
-import { useRef, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback } from 'react'
 import { useCardPopup } from './CardPopup'
 
 export default function CardLink({
@@ -13,42 +12,30 @@ export default function CardLink({
   ...rest
 }) {
   if (!name) return <span className={className} style={style}>{children}</span>
-  const href = `/cards/${encodeURIComponent(name)}`
-  const touchedRef = useRef(false)
   const { triggerProps, popup } = useCardPopup(name)
 
-  const handleTouchStart = useCallback((e) => {
-    touchedRef.current = true
-    if (triggerProps.onTouchStart) triggerProps.onTouchStart(e)
-  }, [triggerProps])
-
-  const handleClick = (e) => {
+  const handleClick = useCallback((e) => {
+    e.preventDefault()
     if (stopPropagation) e.stopPropagation()
-    if (touchedRef.current) {
-      e.preventDefault()
-      touchedRef.current = false
-      return
-    }
+    if (triggerProps.onClick) triggerProps.onClick(e)
     if (onClick) onClick(e)
-  }
+  }, [stopPropagation, triggerProps, onClick])
+
   const baseStyle = underline
-    ? { color: 'inherit', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)' }
-    : { color: 'inherit', textDecoration: 'none' }
+    ? { color: 'inherit', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)', cursor: 'pointer' }
+    : { color: 'inherit', textDecoration: 'none', cursor: 'pointer' }
+
   return (
     <>
-      <Link
-        to={href}
+      <span
         ref={triggerProps.ref}
         onClick={handleClick}
-        onMouseEnter={triggerProps.onMouseEnter}
-        onMouseLeave={triggerProps.onMouseLeave}
-        onTouchStart={handleTouchStart}
         style={{ ...baseStyle, ...style }}
         className={className}
         {...rest}
       >
         {children ?? name}
-      </Link>
+      </span>
       {popup}
     </>
   )
@@ -56,18 +43,7 @@ export default function CardLink({
 
 // linkifyAction parses a Spectator/GameBoard log entry's free-text
 // `action` field and pulls out the card name when the action follows
-// one of the engine's templated patterns (CASTS X, PLAYS LAND: X,
-// COUNTERS X, CREATES TOKEN: X, DESTROYS X, SACRIFICES X, → ETB: X).
-//
-// Returns { prefix, cardName } where:
-//   - prefix is everything BEFORE the card name (including the verb +
-//     any separator), already trimmed of trailing whitespace
-//   - cardName is the raw matched substring (typically uppercased to
-//     match the log's visual style); use it as both the displayed text
-//     and the CardLink `name` prop — Scryfall's exact-match endpoint
-//     is case-insensitive
-//   - cardName is null when the action doesn't match any known pattern;
-//     callers should fall back to rendering the action verbatim.
+// one of the engine's templated patterns.
 const ACTION_PATTERNS = [
   / CASTS (.+)$/,
   / PLAYS LAND: (.+)$/,

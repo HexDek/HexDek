@@ -315,3 +315,90 @@ func LoadCardWinStats(ctx context.Context, db *sql.DB, commander string, limit i
 	}
 	return out, rows.Err()
 }
+
+type OwnerStats struct {
+	Owner   string  `json:"owner"`
+	Games   int     `json:"games"`
+	Wins    int     `json:"wins"`
+	Losses  int     `json:"losses"`
+	WinRate float64 `json:"win_rate"`
+}
+
+func LoadOwnerStats(ctx context.Context, sqlDB *sql.DB, owner string) (OwnerStats, error) {
+	var s OwnerStats
+	s.Owner = owner
+	err := sqlDB.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(games),0), COALESCE(SUM(wins),0), COALESCE(SUM(losses),0)
+		 FROM showmatch_elo WHERE owner = ?`, owner).Scan(&s.Games, &s.Wins, &s.Losses)
+	if err != nil {
+		return s, err
+	}
+	if s.Games > 0 {
+		s.WinRate = float64(s.Wins) / float64(s.Games) * 100
+	}
+	return s, nil
+}
+
+type OwnerGameRow struct {
+	GameID      int64    `json:"game_id"`
+	FinishedAt  int64    `json:"finished_at"`
+	Turns       int      `json:"turns"`
+	Winner      int      `json:"winner"`
+	WinnerName  string   `json:"winner_name"`
+	EndReason   string   `json:"end_reason"`
+	MySeat      int      `json:"my_seat"`
+	MyCommander string   `json:"my_commander"`
+	Opponents   []string `json:"opponents"`
+}
+
+func LoadOwnerGames(ctx context.Context, sqlDB *sql.DB, owner string, limit int) ([]OwnerGameRow, error) {
+	rows, err := sqlDB.QueryContext(ctx,
+		`SELECT g.game_id, g.finished_at, g.turns, g.winner, g.winner_name, g.end_reason, me.seat, me.commander
+		 FROM showmatch_game g
+		 JOIN showmatch_game_seat me ON me.game_id = g.game_id
+		 JOIN showmatch_elo e ON e.deck_key = me.deck_key AND e.owner = ?
+		 ORDER BY g.finished_at DESC LIMIT ?`, owner, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var games []OwnerGameRow
+	for rows.Next() {
+		var g OwnerGameRow
+		if err := rows.Scan(&g.GameID, &g.FinishedAt, &g.Turns, &g.Winner, &g.WinnerName, &g.EndReason, &g.MySeat, &g.MyCommander); err != nil {
+			return nil, err
+		}
+		games = append(games, g)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range games {
+		oppRows, err := sqlDB.QueryContext(ctx,
+			`SELECT commander FROM showmatch_game_seat WHERE game_id = ? AND seat != ? ORDER BY seat`,
+			games[i].GameID, games[i].MySeat)
+		if err != nil {
+			continue
+		}
+		for oppRows.Next() {
+			var c string
+			oppRows.Scan(&c)
+			games[i].Opponents = append(games[i].Opponents, c)
+		}
+		oppRows.Close()
+	}
+	return games, nil
+}
+
+func BackfillDeckKeys(ctx context.Context, sqlDB *sql.DB) (int64, error) {
+	res, err := sqlDB.ExecContext(ctx,
+		`UPDATE showmatch_game_seat SET deck_key = (
+			SELECT e.deck_key FROM showmatch_elo e
+			WHERE e.commander = showmatch_game_seat.commander AND e.owner != '' AND e.deck_key != ''
+			LIMIT 1
+		) WHERE deck_key = '' AND commander != ''`)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}

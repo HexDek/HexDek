@@ -4,6 +4,7 @@ import { Crops } from './chrome'
 import SearchBar from './SearchBar'
 import { ToastHost } from './Toast'
 import { useAuth } from '../context/AuthContext'
+import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useTranslation } from '../i18n'
 
 const PUBLIC_NAV = [
@@ -33,6 +34,7 @@ function useTheme() {
 
 export default function AppShell() {
   const { user, loading, logout } = useAuth()
+  const { status: wsStatus } = useLiveSocket()
   const navigate = useNavigate()
   const location = useLocation()
   const nav = user ? AUTH_NAV : PUBLIC_NAV
@@ -71,21 +73,13 @@ export default function AppShell() {
           </div>
           <div className="appbar-controls">
             <SearchBar />
-            <button onClick={toggleTheme} className="btn--sm btn--ghost" style={{
-              padding: '2px 6px', border: '1px solid var(--rule-2)', background: 'transparent',
-              color: 'var(--ink-2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 9,
-              letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap',
-            }}>{theme === 'dark' ? '☽' : '☀'}</button>
+            <button onClick={toggleTheme}>{theme === 'dark' ? '☽' : '☀'}</button>
             {availableLocales.length > 1 && (
               <select
                 value={locale}
                 onChange={e => setLocale(e.target.value)}
                 aria-label="Change language"
-                style={{
-                  padding: '2px 4px', border: '1px solid var(--rule-2)', background: 'transparent',
-                  color: 'var(--ink-2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 9,
-                  letterSpacing: '0.08em', whiteSpace: 'nowrap', outline: 'none',
-                }}
+                style={{ outline: 'none' }}
               >
                 {availableLocales.map(l => (
                   <option key={l} value={l} style={{ background: 'var(--bg)', color: 'var(--ink)' }}>
@@ -96,12 +90,9 @@ export default function AppShell() {
             )}
             {!loading && (
               user ? (
-                <>
-                  <NavLink to="/profile" className="t-xs" style={{ color: 'var(--ok)', textDecoration: 'none', whiteSpace: 'nowrap' }}>● {user.email?.split('@')[0]?.toUpperCase()}</NavLink>
-                  <a onClick={handleLogout} style={{ cursor: 'pointer', fontSize: 9, letterSpacing: '0.1em', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>LOGOUT</a>
-                </>
+                <a onClick={handleLogout}>LOGOUT</a>
               ) : (
-                <NavLink to="/login" style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--accent)', textDecoration: 'none', fontWeight: 700, border: '1px solid var(--rule-2)', padding: '3px 8px', whiteSpace: 'nowrap' }}>SIGN IN ↗</NavLink>
+                <NavLink to="/login" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 700 }}>SIGN IN ↗</NavLink>
               )
             )}
           </div>
@@ -111,14 +102,25 @@ export default function AppShell() {
           <Outlet />
         </div>
 
-        <div className="statusbar">
-          <span>+ + +  HEXDEK CORE READY  + + +</span>
-          <NavLink to="/about" style={{ color: 'var(--ink-2)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>ABOUT</NavLink>
-          <NavLink to="/feedback" style={{ color: 'var(--danger)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>BUG / SUGGESTION</NavLink>
-          <NavLink to="/donations" style={{ color: 'var(--ok)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>DONATE ♥</NavLink>
-          <a href="https://discord.gg/Mz2ueRFXds" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink-2)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>DISCORD</a>
-          <span>OPEN SOURCE / / DONATIONS-POWERED / / NO ADS</span>
-          <span>{user ? `USR.${user.email?.split('@')[0]?.toUpperCase()}` : 'GUEST'}</span>
+        <div className="statusbar" style={{ flexDirection: 'column', gap: 0, padding: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 14px', borderBottom: '1px solid var(--rule)' }}>
+            <span>
+              <span style={{ color: wsStatus === 'live' ? 'var(--ok)' : wsStatus === 'disconnected' ? 'var(--danger)' : 'var(--warn)' }}>●</span>
+              {' '}
+              {wsStatus === 'live' && '+ + +  HEXDEK CORE READY  + + +'}
+              {wsStatus === 'contacting' && 'CONTACTING SERVER...'}
+              {wsStatus === 'initializing' && 'INITIALIZING...'}
+              {wsStatus === 'disconnected' && 'DISCONNECTED — RECONNECTING...'}
+            </span>
+            <span>OPEN SOURCE / / DONATIONS-POWERED / / NO ADS</span>
+            <span>{user ? `USR.${user.email?.split('@')[0]?.toUpperCase()}` : 'GUEST'}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '4px 14px' }}>
+            <NavLink to="/about" style={{ color: 'var(--ink-2)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>ABOUT</NavLink>
+            <NavLink to="/feedback" style={{ color: 'var(--danger)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>BUG / SUGGESTION</NavLink>
+            <NavLink to="/donations" style={{ color: 'var(--ok)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>DONATE ♥</NavLink>
+            <a href="https://discord.gg/Mz2ueRFXds" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink-2)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>DISCORD</a>
+          </div>
         </div>
       </div>
       <ToastHost />
