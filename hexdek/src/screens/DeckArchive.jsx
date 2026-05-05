@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPie, computeColorByCmc } from '../components/chrome'
 import CardRolesGrid from '../components/CardRolesGrid'
 import CardLink from '../components/CardLink'
-import AmiiboPanel from '../components/AmiiboPanel'
+import AmiiboDisplay from '../components/AmiiboDisplay'
 import ManaCost from '../components/ManaCost'
 import { AchievementsPanel, BadgeShowcase } from '../components/AchievementsPanel'
 import { toast } from '../components/Toast'
@@ -656,7 +656,7 @@ export default function DeckArchive() {
             </Panel>
           )}
 
-          {amiibo && <AmiiboPanel amiibo={amiibo} />}
+          {amiibo && <AmiiboDisplay amiibo={amiibo} />}
 
           {/* SIMILAR DECKS — server-ranked by shared-card overlap with
               bonuses for matching commander / archetype / bracket. The

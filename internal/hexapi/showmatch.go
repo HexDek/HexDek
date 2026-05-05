@@ -2344,18 +2344,47 @@ type AmiiboResponse struct {
 	DeckKey    string            `json:"deck_key"`
 	GameCount  int               `json:"game_count"`
 	Population []AmiiboMemberDTO `json:"population"`
+
+	// DimStatsN is the number of games observed by the dimension-stats
+	// EMA. The frontend treats DimCorrections as cold (== 1.0) until N
+	// crosses the engine's dimStatsMinN threshold.
+	DimStatsN int `json:"dim_stats_n"`
+
+	// DimCorrections are the 20 outcome-correlated multiplicative
+	// corrections to the deck's eval weights (1.0 = no correction;
+	// >1 means the dimension predicts wins for this deck and is
+	// boosted; <1 means it predicts losses and is suppressed). Index
+	// matches DimLabels.
+	DimCorrections []float64 `json:"dim_corrections"`
+	DimLabels      []string  `json:"dim_labels"`
 }
 
 // AmiiboMemberDTO is one member of the Amiibo genetic population.
 type AmiiboMemberDTO struct {
-	Generation      int     `json:"generation"`
-	GamesPlayed     int     `json:"games_played"`
-	Fitness         float64 `json:"fitness"`
-	Aggression      float64 `json:"aggression"`
-	ComboPatience   float64 `json:"combo_patience"`
-	ThreatParanoia  float64 `json:"threat_paranoia"`
-	ResourceGreed   float64 `json:"resource_greed"`
-	PoliticalMemory float64 `json:"political_memory"`
+	Generation       int     `json:"generation"`
+	GamesPlayed      int     `json:"games_played"`
+	Fitness          float64 `json:"fitness"`
+	Aggression       float64 `json:"aggression"`
+	ComboPatience    float64 `json:"combo_patience"`
+	ThreatParanoia   float64 `json:"threat_paranoia"`
+	ResourceGreed    float64 `json:"resource_greed"`
+	PoliticalMemory  float64 `json:"political_memory"`
+	DrainAffinity    float64 `json:"drain_affinity"`
+	ArtifactAffinity float64 `json:"artifact_affinity"`
+}
+
+// amiiboDimLabels are the human-readable names for the 20 evaluator
+// dimensions in the same order as hat.EvalWeights.AsArray() and
+// hat.DimensionStats.WeightCorrections(). Kept in sync with
+// internal/hat/eval_weights.go.
+var amiiboDimLabels = []string{
+	"BOARD",     "CARDS",      "MANA",
+	"LIFE",      "COMBO",      "THREAT",
+	"COMMANDER", "GRAVEYARD",  "DRAIN",
+	"ARTIFACT",  "ENCHANT",    "OPP GY",
+	"PARTNER",   "TEMPO",      "TOOLBOX",
+	"THR TRAJ",  "STACK",      "PLANESWALKER",
+	"EXILE",     "STAX",
 }
 
 func (sm *Showmatch) handleDeckAmiibo(w http.ResponseWriter, r *http.Request) {
@@ -2374,17 +2403,26 @@ func (sm *Showmatch) handleDeckAmiibo(w http.ResponseWriter, r *http.Request) {
 	resp := AmiiboResponse{
 		DeckKey:   pool.DeckKey,
 		GameCount: pool.GameCount,
+		DimStatsN: pool.DimStats.N,
+		DimLabels: amiiboDimLabels,
+	}
+	corr := pool.DimStats.WeightCorrections()
+	resp.DimCorrections = make([]float64, len(corr))
+	for i, v := range corr {
+		resp.DimCorrections[i] = v
 	}
 	for _, dna := range pool.Population {
 		resp.Population = append(resp.Population, AmiiboMemberDTO{
-			Generation:      dna.Generation,
-			GamesPlayed:     dna.GamesPlayed,
-			Fitness:         dna.Fitness,
-			Aggression:      dna.Aggression,
-			ComboPatience:   dna.ComboPat,
-			ThreatParanoia:  dna.ThreatParanoia,
-			ResourceGreed:   dna.ResourceGreed,
-			PoliticalMemory: dna.PoliticalMemory,
+			Generation:       dna.Generation,
+			GamesPlayed:      dna.GamesPlayed,
+			Fitness:          dna.Fitness,
+			Aggression:       dna.Aggression,
+			ComboPatience:    dna.ComboPat,
+			ThreatParanoia:   dna.ThreatParanoia,
+			ResourceGreed:    dna.ResourceGreed,
+			PoliticalMemory:  dna.PoliticalMemory,
+			DrainAffinity:    dna.DrainAffinity,
+			ArtifactAffinity: dna.ArtifactAffinity,
 		})
 	}
 	sm.amiiboMu.Unlock()
