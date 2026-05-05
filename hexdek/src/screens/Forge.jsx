@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape } from '../components/chrome'
 import { api, cardArtUrl } from '../services/api'
 import { useDecks } from '../hooks/useData'
@@ -6,6 +7,7 @@ import { trackEvent } from '../hooks/useAnalytics'
 
 export default function Forge() {
   const { data: decks, loading: decksLoading } = useDecks()
+  const [searchParams] = useSearchParams()
   const [selectedDeck, setSelectedDeck] = useState(null)
   const [deck, setDeck] = useState(null)
   const [analysis, setAnalysis] = useState(null)
@@ -14,12 +16,22 @@ export default function Forge() {
   const [gauntletGames, setGauntletGames] = useState(10000)
   const [gauntletError, setGauntletError] = useState(null)
 
-  // Auto-select first deck when list loads
+  // Auto-select: prefer ?deck=owner/id query param, otherwise first deck.
   useEffect(() => {
-    if (!selectedDeck && decks.length > 0 && decks[0].owner && decks[0].id) {
+    if (!decks.length) return
+    const qDeck = searchParams.get('deck')
+    if (qDeck) {
+      const [qOwner, qId] = qDeck.split('/')
+      const match = decks.find(d => d.owner === qOwner && d.id === qId)
+      if (match && (!selectedDeck || selectedDeck.owner !== qOwner || selectedDeck.id !== qId)) {
+        setSelectedDeck(match)
+        return
+      }
+    }
+    if (!selectedDeck && decks[0].owner && decks[0].id) {
       setSelectedDeck(decks[0])
     }
-  }, [decks, selectedDeck])
+  }, [decks, selectedDeck, searchParams])
 
   // Fetch deck + analysis when selection changes
   useEffect(() => {

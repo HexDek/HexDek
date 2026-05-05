@@ -310,6 +310,9 @@ export default function DeckArchive() {
                 }).catch(() => setAnalyzing(false))
               }}>{analyzing ? 'ANALYZING...' : 'RUN FREYA'}</Btn>
               {owner && id && (
+                <Btn ghost arrow="↗" onClick={() => navigate(`/forge?deck=${owner}/${id}`)}>OPEN IN FORGE</Btn>
+              )}
+              {owner && id && (
                 <>
                   <div className="hr" style={{ margin: '4px 0' }} />
                   {!confirmDelete ? (

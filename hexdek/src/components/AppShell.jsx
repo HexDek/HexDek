@@ -1,26 +1,20 @@
 import { useState, useEffect } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Crops } from './chrome'
 import SearchBar from './SearchBar'
 import { useAuth } from '../context/AuthContext'
 
 const PUBLIC_NAV = [
-  { to: '/', label: 'SPLASH', end: true },
   { to: '/decks', label: 'DECKS' },
-  { to: '/leaderboard', label: 'LEADERBOARD' },
+  { to: '/leaderboard', label: 'RANKINGS' },
   { to: '/spectate', label: 'SPECTATE' },
-  { to: '/about', label: 'ABOUT' },
 ]
 
 const AUTH_NAV = [
-  { to: '/dash', label: 'DASH' },
   { to: '/decks', label: 'DECKS' },
-  { to: '/leaderboard', label: 'LEADERBOARD' },
-  { to: '/play', label: 'PLAY' },
-  { to: '/forge', label: 'FORGE' },
+  { to: '/leaderboard', label: 'RANKINGS' },
   { to: '/spectate', label: 'SPECTATE' },
-  { to: '/report', label: 'REPORT' },
-  { to: '/about', label: 'ABOUT' },
+  { to: '/decks?tab=mine', label: 'MY DECKS' },
 ]
 
 function useTheme() {
@@ -37,8 +31,23 @@ function useTheme() {
 export default function AppShell() {
   const { user, loading, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const nav = user ? AUTH_NAV : PUBLIC_NAV
   const [theme, toggleTheme] = useTheme()
+
+  const isNavActive = (to) => {
+    const [path, query = ''] = to.split('?')
+    if (location.pathname !== path) return false
+    if (query) {
+      const params = new URLSearchParams(query)
+      const current = new URLSearchParams(location.search)
+      for (const [k, v] of params) if (current.get(k) !== v) return false
+      return true
+    }
+    // Plain path (e.g. /decks): active only when no `tab` query is set, so MY DECKS
+    // and DECKS don't both light up.
+    return !new URLSearchParams(location.search).get('tab')
+  }
 
   const handleLogout = async () => {
     await logout()
@@ -57,10 +66,9 @@ export default function AppShell() {
             <nav>
               {nav.map(n => (
                 <NavLink
-                  key={n.to}
+                  key={n.label}
                   to={n.to}
-                  end={n.end}
-                  className={({ isActive }) => isActive ? 'on' : ''}
+                  className={isNavActive(n.to) ? 'on' : ''}
                 >
                   {n.label}
                 </NavLink>
@@ -96,6 +104,7 @@ export default function AppShell() {
 
         <div className="statusbar">
           <span>+ + +  HEXDEK CORE READY  + + +</span>
+          <NavLink to="/about" style={{ color: 'var(--ink-2)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>ABOUT</NavLink>
           <NavLink to="/feedback" style={{ color: 'var(--danger)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>BUG / SUGGESTION</NavLink>
           <NavLink to="/donations" style={{ color: 'var(--ok)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>DONATE ♥</NavLink>
           <a href="https://discord.gg/Mz2ueRFXds" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink-2)', textDecoration: 'none', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700 }}>DISCORD</a>

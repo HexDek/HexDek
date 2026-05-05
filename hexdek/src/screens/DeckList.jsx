@@ -10,12 +10,17 @@ export default function DeckList() {
   const [searchParams] = useSearchParams()
   const [decks, setDecks] = useState([])
   const [filter, setFilter] = useState(searchParams.get('q') || '')
-  const [tab, setTab] = useState('mine')
+  const [tab, setTab] = useState(searchParams.get('tab') === 'all' ? 'all' : 'mine')
   const [legalFilter, setLegalFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
   const { user } = useAuth()
   const { elo } = useLiveSocket()
+
+  useEffect(() => {
+    const t = searchParams.get('tab')
+    if (t === 'all' || t === 'mine') setTab(t)
+  }, [searchParams])
 
   useEffect(() => {
     api.getDecks()
