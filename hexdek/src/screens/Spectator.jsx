@@ -567,7 +567,6 @@ export default function Spectator() {
                 </span>
                 <span className="turn-bar-right" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                   <span>{seats.reduce((a, s) => a + (s.battlefield?.length || 0), 0)} PERMS</span>
-                  <Btn sm ghost arrow="▶" onClick={() => navigate('/play')}>PLAY VIEW</Btn>
                 </span>
               </>
             )}

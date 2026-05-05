@@ -88,14 +88,13 @@ export default function AppShell() {
               ))}
             </nav>
           </div>
-          <SearchBar />
-          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            SYS.BUILD 25.04.28 · HEXDEK V0.10D
+          <div className="appbar-controls">
+            <SearchBar />
             <button onClick={toggleTheme} className="btn--sm btn--ghost" style={{
               padding: '2px 6px', border: '1px solid var(--rule-2)', background: 'transparent',
               color: 'var(--ink-2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 9,
-              letterSpacing: '0.08em', textTransform: 'uppercase',
-            }}>{theme === 'dark' ? '☽ DARK' : '☀ LIGHT'}</button>
+              letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+            }}>{theme === 'dark' ? '☽' : '☀'}</button>
             {availableLocales.length > 1 && (
               <button
                 onClick={cycleLocale}
@@ -105,23 +104,21 @@ export default function AppShell() {
                 style={{
                   padding: '2px 6px', border: '1px solid var(--rule-2)', background: 'transparent',
                   color: 'var(--ink-2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 9,
-                  letterSpacing: '0.08em', textTransform: 'uppercase',
+                  letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap',
                 }}
-              >🌐 {locale.toUpperCase()}</button>
+              >{locale.toUpperCase()}</button>
             )}
-          </span>
-          {!loading && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              {user ? (
+            {!loading && (
+              user ? (
                 <>
-                  <NavLink to="/profile" className="t-xs" style={{ color: 'var(--ok)', textDecoration: 'none' }}>● {user.email?.split('@')[0]?.toUpperCase()}</NavLink>
-                  <a onClick={handleLogout} style={{ cursor: 'pointer', fontSize: 9, letterSpacing: '0.1em', color: 'var(--ink-2)' }}>LOGOUT</a>
+                  <NavLink to="/profile" className="t-xs" style={{ color: 'var(--ok)', textDecoration: 'none', whiteSpace: 'nowrap' }}>● {user.email?.split('@')[0]?.toUpperCase()}</NavLink>
+                  <a onClick={handleLogout} style={{ cursor: 'pointer', fontSize: 9, letterSpacing: '0.1em', color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>LOGOUT</a>
                 </>
               ) : (
-                <NavLink to="/login" style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--accent)', textDecoration: 'none', fontWeight: 700, border: '1px solid var(--rule-2)', padding: '3px 8px' }}>SIGN IN ↗</NavLink>
-              )}
-            </span>
-          )}
+                <NavLink to="/login" style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--accent)', textDecoration: 'none', fontWeight: 700, border: '1px solid var(--rule-2)', padding: '3px 8px', whiteSpace: 'nowrap' }}>SIGN IN ↗</NavLink>
+              )
+            )}
+          </div>
         </div>
 
         <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
