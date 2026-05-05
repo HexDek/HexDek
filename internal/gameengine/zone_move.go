@@ -87,6 +87,48 @@ func MoveCard(gs *GameState, card *Card, ownerSeat int, fromZone, toZone, reason
 	return dest
 }
 
+// RemoveCardFromAllPrivateZones sweeps a card pointer out of every
+// non-battlefield, non-stack zone on the given seat (hand, library,
+// graveyard, exile, command zone). Returns the count of zones from
+// which the card was removed (typically 0 or 1; >1 indicates a prior
+// duplication that this call has now collapsed).
+//
+// Use this defensively before placing a card on the battlefield via a
+// non-stack path (reanimation, fetchland search, Sneak Attack, etc.).
+// MoveCard's `toZone="battlefield"` path silently re-graveyards the
+// card because moveToZone has no battlefield arm; per-card hooks then
+// call createPermanent / enterBattlefieldWithETB, leaving the same
+// *Card in both graveyard and battlefield. A single sweep before
+// createPermanent keeps zone accounting honest without auditing every
+// per-card site. See docs/zone-accounting-analysis.md (hypothesis #1).
+func RemoveCardFromAllPrivateZones(gs *GameState, seatIdx int, card *Card) int {
+	if gs == nil || card == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
+		return 0
+	}
+	s := gs.Seats[seatIdx]
+	if s == nil {
+		return 0
+	}
+	swept := 0
+	sweep := func(slice []*Card) []*Card {
+		out := slice[:0]
+		for _, c := range slice {
+			if c == card {
+				swept++
+				continue
+			}
+			out = append(out, c)
+		}
+		return out
+	}
+	s.Hand = sweep(s.Hand)
+	s.Library = sweep(s.Library)
+	s.Graveyard = sweep(s.Graveyard)
+	s.Exile = sweep(s.Exile)
+	s.CommandZone = sweep(s.CommandZone)
+	return swept
+}
+
 // removeCardFromZone pulls card (by pointer identity) out of the named
 // source zone on the given seat. No-op if card isn't found there, or if
 // the fromZone is battlefield/stack (those zones have their own removal

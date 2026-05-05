@@ -265,9 +265,29 @@ func removePermanent(gs *gameengine.GameState, p *gameengine.Permanent) bool {
 
 // createPermanent puts a card onto seat's battlefield as a new Permanent.
 // Summoning-sick defaults to true for creatures (haste is checked via AST).
+//
+// Defensively sweeps the card pointer out of any private zone (hand,
+// library, graveyard, exile, command zone) on the OWNER's seat before
+// placing on the battlefield. Per-card reanimate/cheat hooks frequently
+// call MoveCard("graveyard"→"battlefield") just before createPermanent;
+// MoveCard's battlefield arm is a no-op (state.go:moveToZone has no
+// "battlefield" case) and falls through to a graveyard re-append, so
+// without this sweep the same *Card ends up in both graveyard AND
+// battlefield. See docs/zone-accounting-analysis.md (hypothesis #1).
 func createPermanent(gs *gameengine.GameState, seat int, card *gameengine.Card, tapped bool) *gameengine.Permanent {
 	if gs == nil || card == nil || seat < 0 || seat >= len(gs.Seats) {
 		return nil
+	}
+	// Sweep from the OWNER's private zones (controller and owner can
+	// differ on stolen permanents; reanimation pulls from the owner's
+	// graveyard regardless of who casts the reanimate).
+	owner := card.Owner
+	if owner < 0 || owner >= len(gs.Seats) {
+		owner = seat
+	}
+	gameengine.RemoveCardFromAllPrivateZones(gs, owner, card)
+	if owner != seat {
+		gameengine.RemoveCardFromAllPrivateZones(gs, seat, card)
 	}
 	sick := false
 	if cardHasType(card, "creature") {

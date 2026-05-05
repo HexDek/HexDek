@@ -1122,10 +1122,27 @@ func (gs *GameState) moveToZone(seat int, c *Card, zone string) {
 			return
 		}
 		s.Exile = append(s.Exile, c)
-	case "library_top":
-		s.Library = append([]*Card{c}, s.Library...)
-	case "library_bottom":
+	case "library", "library_bottom":
+		// Bare "library" = bottom of library (matches per_card callers
+		// like nine_fingers_keene_to_bottom; runo_stromkirk does its
+		// own top-of-library swap after placement so bottom is fine).
+		// Without this arm, "library" fell through to the graveyard
+		// default — cards going to "library" silently became graveyard
+		// inhabitants. See docs/zone-accounting-analysis.md.
+		if inSlice(s.Library) {
+			return
+		}
 		s.Library = append(s.Library, c)
+	case "library_top":
+		if inSlice(s.Library) {
+			return
+		}
+		s.Library = append([]*Card{c}, s.Library...)
+	case "command_zone":
+		if inSlice(s.CommandZone) {
+			return
+		}
+		s.CommandZone = append(s.CommandZone, c)
 	default:
 		if inSlice(s.Graveyard) {
 			return
