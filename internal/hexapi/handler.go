@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,9 +23,10 @@ import (
 )
 
 type Handler struct {
-	DecksDir  string
-	Showmatch *Showmatch
-	cardDB    map[string]oracleCard
+	DecksDir      string
+	Showmatch     *Showmatch
+	IndexHTMLPath string
+	cardDB        map[string]oracleCard
 
 	deckSubsMu sync.RWMutex
 	deckSubs   map[string]map[chan deckEvent]struct{}
@@ -80,6 +82,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/versions", h.handleListVersions)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/analysis", h.handleGetAnalysis)
 	mux.HandleFunc("POST /api/decks/{owner}/{id}/analyze", h.handleRunAnalysis)
+	// SPA share page with OG meta injection — Caddy can route /decks/{owner}/{id}
+	// here for crawler User-Agents (or unconditionally) so Discord/Twitter unfurls
+	// pick up per-deck previews.
+	mux.HandleFunc("GET /decks/{owner}/{id}", h.handleDeckSharePage)
 	mux.HandleFunc("GET /api/profile", h.handleProfile)
 	mux.HandleFunc("GET /api/card-art/{name}", h.handleCardArt)
 	mux.HandleFunc("GET /api/card-stats/{commander}", h.handleCardWinStats)
@@ -116,6 +122,7 @@ type DeckSummary struct {
 
 func (h *Handler) handleListDecks(w http.ResponseWriter, r *http.Request) {
 	ownerFilter := r.URL.Query().Get("owner")
+	containsFilter := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("contains")))
 
 	var decks []DeckSummary
 	owners, err := os.ReadDir(h.DecksDir)
@@ -148,11 +155,12 @@ func (h *Handler) handleListDecks(w http.ResponseWriter, r *http.Request) {
 			}
 
 			name := strings.TrimSuffix(f.Name(), filepath.Ext(f.Name()))
-			commander, bracket, color := parseDeckFilename(name)
-
 			fullPath := filepath.Join(deckDir, f.Name())
+			if containsFilter != "" && !deckContainsCard(fullPath, containsFilter) {
+				continue
+			}
 			cards := countCards(fullPath)
-			cmdrCard := extractCommander(fullPath)
+			commander, bracket, color, cmdrCard := resolveDeckMetadata(h.DecksDir, owner, name, fullPath)
 
 			var modTime time.Time
 			if info, err := f.Info(); err == nil {
@@ -248,8 +256,7 @@ func (h *Handler) handleGetDeck(w http.ResponseWriter, r *http.Request) {
 	} else {
 		cards = parseDeckList(string(data))
 	}
-	commander, bracket, color := parseDeckFilename(id)
-	cmdrCard := extractCommander(deckPath)
+	commander, bracket, color, cmdrCard := resolveDeckMetadata(h.DecksDir, owner, id, deckPath)
 
 	totalCards := 0
 	for _, c := range cards {
@@ -406,8 +413,7 @@ func (h *Handler) handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cards := parseDeckList(req.DeckList)
-	cmdrCard := extractCommander(deckPath)
-	commander, bracket, color := parseDeckFilename(id)
+	commander, bracket, color, cmdrCard := resolveDeckMetadata(h.DecksDir, owner, id, deckPath)
 
 	// Register new version in the DAG with prior inheritance.
 	var cardNames []string
@@ -992,6 +998,50 @@ func sanitizeFilename(s string) string {
 	return b.String()
 }
 
+// resolveDeckMetadata returns the metadata used by deck list/get/search
+// responses. It starts from parseDeckFilename and falls back to the
+// deck's COMMANDER: line and Freya strategy.json bracket when the
+// filename doesn't follow the <words>_b<N>_<rest> convention.
+//
+// fullPath may be empty when only the id is known.
+func resolveDeckMetadata(decksDir, owner, id, fullPath string) (commander, bracket, color, cmdrCard string) {
+	commander, bracket, color = parseDeckFilename(id)
+	if fullPath != "" {
+		cmdrCard = extractCommander(fullPath)
+	}
+
+	// Filename is the source of truth when it has a _b<N>_ marker;
+	// only fall back when it doesn't.
+	if bracket != "?" {
+		return
+	}
+	if b := strategyBracket(decksDir, owner, id); b > 0 {
+		bracket = strconv.Itoa(b)
+	}
+	if cmdrCard != "" {
+		commander = strings.ToUpper(cmdrCard)
+	}
+	return
+}
+
+func strategyBracket(decksDir, owner, id string) int {
+	if decksDir == "" || owner == "" || id == "" {
+		return 0
+	}
+	p := filepath.Join(decksDir, owner, "freya", id+".strategy.json")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return 0
+	}
+	var s struct {
+		Bracket int `json:"bracket"`
+	}
+	if json.Unmarshal(data, &s) != nil {
+		return 0
+	}
+	return s.Bracket
+}
+
 func parseDeckFilename(name string) (commander, bracket, color string) {
 	parts := strings.Split(name, "_")
 
@@ -1088,6 +1138,58 @@ func parseDeckJSON(data []byte) []map[string]any {
 		})
 	}
 	return cards
+}
+
+// deckContainsCard returns true if the deck file at path contains a card
+// whose name contains needle (case-insensitive substring match). Needle
+// must already be lowercased. Reads commander, partner, and main-list
+// card names; ignores quantity prefixes and set codes in parentheses.
+func deckContainsCard(path, needle string) bool {
+	if needle == "" {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	if strings.HasSuffix(path, ".json") {
+		for _, c := range parseDeckJSON(data) {
+			if name, ok := c["name"].(string); ok && strings.Contains(strings.ToLower(name), needle) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") {
+			continue
+		}
+		upper := strings.ToUpper(line)
+		if strings.HasPrefix(upper, "COMMANDER:") {
+			if strings.Contains(strings.ToLower(strings.TrimSpace(line[len("COMMANDER:"):])), needle) {
+				return true
+			}
+			continue
+		}
+		if strings.HasPrefix(upper, "PARTNER:") {
+			if strings.Contains(strings.ToLower(strings.TrimSpace(line[len("PARTNER:"):])), needle) {
+				return true
+			}
+			continue
+		}
+		name := line
+		if parts := strings.SplitN(line, " ", 2); len(parts) == 2 && parseInt(parts[0]) > 0 {
+			name = parts[1]
+		}
+		if idx := strings.Index(name, "("); idx > 0 {
+			name = strings.TrimSpace(name[:idx])
+		}
+		if strings.Contains(strings.ToLower(name), needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func countCards(path string) int {

@@ -88,8 +88,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				id := strings.TrimSuffix(fname, filepath.Ext(fname))
-				name, _, _ := parseDeckFilename(id)
-				cmdrCard := extractCommander(filepath.Join(deckDir, fname))
+				name, _, _, cmdrCard := resolveDeckMetadata(h.DecksDir, owner, id, filepath.Join(deckDir, fname))
 
 				deckScore := bestScore(needle, strings.ToLower(name), strings.ToLower(id))
 				if deckScore > 0 {
