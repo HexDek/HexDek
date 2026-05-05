@@ -1318,12 +1318,17 @@ body {
   max-width: 160px;
 }
 
+.meta-color-grid {
+  display: grid; grid-template-columns: 220px 1fr; gap: 18px; align-items: flex-start;
+}
+
 /* ── RESPONSIVE ── */
 @media (max-width: 768px) {
   body { font-size: 11px; }
 
   .appbar { padding: 6px 10px; flex-wrap: wrap; gap: 6px; }
   .appbar nav { gap: 10px; flex-wrap: wrap; }
+  .meta-color-grid { grid-template-columns: 1fr; justify-items: center; }
 
   .appbar-controls {
     display: flex; align-items: center; gap: 8px;
@@ -1333,6 +1338,18 @@ body {
   .searchbar__hint { display: none; }
 
   .statusbar { display: none; }
+
+  .lb-sort-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 4px;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+  }
+  .lb-sort-bar::-webkit-scrollbar { height: 3px; }
+  .lb-sort-bar::-webkit-scrollbar-thumb { background: var(--rule-2); }
+  .lb-sort-bar > * { flex: 0 0 auto; }
 
   .col-2 { grid-template-columns: 1fr; }
   .col-3 { grid-template-columns: 1fr 1fr; }
@@ -1440,20 +1457,6 @@ body {
   .col-5 .panel > div:first-child { aspect-ratio: 1/1; }
   .col-5 .panel > div:last-child { padding: 2px 3px; }
   .col-5 .panel > div:last-child div { font-size: 6px !important; min-height: 10px !important; }
-
-  /* Leaderboard 375px pass — keep filter/sort tabs on one line and scrollable;
-     shrink the card art column so the body has room for owner+W/L+delta. */
-  .lb-sort-bar {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    gap: 4px;
-    padding-bottom: 2px;
-    scrollbar-width: thin;
-  }
-  .lb-sort-bar::-webkit-scrollbar { height: 3px; }
-  .lb-sort-bar::-webkit-scrollbar-thumb { background: var(--rule-2); }
-  .lb-sort-bar > * { flex: 0 0 auto; }
 
   .lb-card-row { min-height: 72px; }
   .lb-card-art { width: 64px; flex: 0 0 64px; }

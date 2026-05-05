@@ -4,7 +4,7 @@ import { Crops } from './chrome'
 import SearchBar from './SearchBar'
 import { ToastHost } from './Toast'
 import { useAuth } from '../context/AuthContext'
-import { useTranslation } from '../i18n'
+import { useTranslation, LOCALE_NAMES } from '../i18n'
 
 const PUBLIC_NAV = [
   { to: '/decks', key: 'nav.decks' },
@@ -18,7 +18,6 @@ const AUTH_NAV = [
   { to: '/leaderboard', key: 'nav.leaderboard' },
   { to: '/meta', key: 'nav.meta' },
   { to: '/spectate', key: 'nav.spectate' },
-  { to: '/decks?tab=mine', key: 'nav.my_decks' },
   { to: '/operator', key: 'nav.operator' },
   { to: '/friends', key: 'nav.friends' },
 ]
@@ -42,24 +41,8 @@ export default function AppShell() {
   const [theme, toggleTheme] = useTheme()
   const { t, locale, setLocale, availableLocales } = useTranslation()
 
-  const cycleLocale = () => {
-    if (availableLocales.length < 2) return
-    const i = availableLocales.indexOf(locale)
-    setLocale(availableLocales[(i + 1) % availableLocales.length])
-  }
-
   const isNavActive = (to) => {
-    const [path, query = ''] = to.split('?')
-    if (location.pathname !== path) return false
-    if (query) {
-      const params = new URLSearchParams(query)
-      const current = new URLSearchParams(location.search)
-      for (const [k, v] of params) if (current.get(k) !== v) return false
-      return true
-    }
-    // Plain path (e.g. /decks): active only when no `tab` query is set, so MY DECKS
-    // and DECKS don't both light up.
-    return !new URLSearchParams(location.search).get('tab')
+    return location.pathname === to.split('?')[0]
   }
 
   const handleLogout = async () => {
@@ -96,17 +79,22 @@ export default function AppShell() {
               letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap',
             }}>{theme === 'dark' ? '☽' : '☀'}</button>
             {availableLocales.length > 1 && (
-              <button
-                onClick={cycleLocale}
-                className="btn--sm btn--ghost"
-                title={`Language: ${locale.toUpperCase()}`}
+              <select
+                value={locale}
+                onChange={e => setLocale(e.target.value)}
                 aria-label="Change language"
                 style={{
-                  padding: '2px 6px', border: '1px solid var(--rule-2)', background: 'transparent',
+                  padding: '2px 4px', border: '1px solid var(--rule-2)', background: 'transparent',
                   color: 'var(--ink-2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 9,
-                  letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+                  letterSpacing: '0.08em', whiteSpace: 'nowrap', outline: 'none',
                 }}
-              >{locale.toUpperCase()}</button>
+              >
+                {availableLocales.map(l => (
+                  <option key={l} value={l} style={{ background: 'var(--bg)', color: 'var(--ink)' }}>
+                    {LOCALE_NAMES[l] || l.toUpperCase()}
+                  </option>
+                ))}
+              </select>
             )}
             {!loading && (
               user ? (
@@ -121,7 +109,7 @@ export default function AppShell() {
           </div>
         </div>
 
-        <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, overflow: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <Outlet />
         </div>
 

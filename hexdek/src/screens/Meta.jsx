@@ -136,8 +136,8 @@ function ColorIdentityPie({ rows }) {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 18, alignItems: 'flex-start' }}>
-      <svg viewBox="0 0 220 220" width="220" height="220" style={{ display: 'block' }}>
+    <div className="meta-color-grid">
+      <svg viewBox="0 0 220 220" style={{ display: 'block', width: '100%', maxWidth: 220 }}>
         <defs>
           {/* Pre-define a horizontal gradient for every multi-color
               identity present so wedges read as blends. */}
@@ -178,7 +178,7 @@ function ColorIdentityPie({ rows }) {
           const wr = (r.win_rate * 100) || 0
           return (
             <div key={r.colors} style={{
-              display: 'grid', gridTemplateColumns: '14px 60px 1fr 50px 60px',
+              display: 'grid', gridTemplateColumns: '14px 50px 1fr auto auto',
               gap: 6, alignItems: 'center', padding: '3px 0',
               borderBottom: '1px dashed var(--rule-2)',
             }}>
@@ -341,7 +341,7 @@ export default function Meta() {
         right="REV C.25"
       />
 
-      <div style={{ padding: '24px 30px', maxWidth: 1100, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ padding: '24px 30px', maxWidth: 1100, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16, overflowX: 'hidden', width: '100%', boxSizing: 'border-box' }}>
         {error && (
           <div className="panel" style={{ borderColor: 'var(--danger)' }}>
             <div className="panel-bd t-xs" style={{ color: 'var(--danger)' }}>

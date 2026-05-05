@@ -23,7 +23,7 @@ export default function Splash() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { stats, elo, status } = useLiveSocket()
-  const upload = useUploadDeck(() => navigate('/decks?tab=mine'))
+  const upload = useUploadDeck(() => navigate('/decks'))
 
   const gpm = stats?.games_per_min || 0
   const runtimeText = status === 'live'
