@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Tape, Tag, ConfidenceDots } from '../components/chrome'
 import { useLiveSocket } from '../hooks/useLiveSocket'
-import { cardArtUrl } from '../services/api'
+import { api, cardArtUrl } from '../services/api'
+import { countryFlagEmoji } from '../lib/flag'
 
 const SORT_KEYS = [
   { key: 'hex_rating', label: 'HEXELO' },
@@ -79,8 +80,35 @@ export default function Leaderboard() {
   const [sortKey, setSortKey] = useState('hex_rating')
   const [sortAsc, setSortAsc] = useState(false)
   const [bracket, setBracket] = useState(null)
+  const [countries, setCountries] = useState({}) // { owner -> "US" }
   const navigate = useNavigate()
   const { elo } = useLiveSocket()
+
+  // Batch-fetch country flags for every unique owner present in the
+  // ELO snapshot. One round trip per leaderboard load (capped at 200
+  // owners on the backend) — avoids the N+1 fetch pattern of asking
+  // /api/profile/{owner} per row. Re-runs when new owners appear in
+  // the live ELO feed; the union check below skips refetches when no
+  // new owner has shown up.
+  useEffect(() => {
+    if (!elo || elo.length === 0) return
+    const owners = []
+    const seen = new Set()
+    for (const e of elo) {
+      const o = e.owner
+      if (!o || seen.has(o)) continue
+      seen.add(o)
+      owners.push(o)
+    }
+    const missing = owners.filter(o => !(o in countries))
+    if (missing.length === 0) return
+    api.getOwnerProfiles(missing)
+      .then(map => setCountries(prev => ({ ...prev, ...map })))
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elo])
+
+  const flagFor = (owner) => countryFlagEmoji(countries[owner])
 
   const handleSort = (key) => {
     if (sortKey === key) {
@@ -247,8 +275,13 @@ export default function Leaderboard() {
                     {entry.owner ? (
                       <a
                         onClick={(e) => { e.stopPropagation(); navigate(`/profile/${entry.owner}`) }}
-                        style={{ cursor: 'pointer', color: 'var(--ink-2)', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)' }}
+                        style={{ cursor: 'pointer', color: 'var(--ink-2)', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                       >
+                        {flagFor(entry.owner) && (
+                          <span aria-label={`Country: ${countries[entry.owner]}`} style={{ fontSize: 13, lineHeight: 1 }}>
+                            {flagFor(entry.owner)}
+                          </span>
+                        )}
                         {entry.owner.toUpperCase()}
                       </a>
                     ) : '--'}
@@ -330,8 +363,13 @@ export default function Leaderboard() {
                           <a
                             onClick={(e) => { e.stopPropagation(); navigate(`/profile/${entry.owner}`) }}
                             className="t-xs muted"
-                            style={{ cursor: 'pointer', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)' }}
+                            style={{ cursor: 'pointer', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}
                           >
+                            {flagFor(entry.owner) && (
+                              <span aria-label={`Country: ${countries[entry.owner]}`} style={{ fontSize: 12, lineHeight: 1 }}>
+                                {flagFor(entry.owner)}
+                              </span>
+                            )}
                             {entry.owner.toUpperCase()}
                           </a>
                         ) : <span className="t-xs muted">--</span>}
@@ -393,7 +431,20 @@ export default function Leaderboard() {
                       {entry.commander || '--'}
                     </span>
                     <ShameBadge rating={entry.rating} />
-                    <span className="t-xs muted">{entry.owner?.toUpperCase() || '--'}</span>
+                    {entry.owner ? (
+                      <a
+                        onClick={(e) => { e.stopPropagation(); navigate(`/profile/${entry.owner}`) }}
+                        className="t-xs muted"
+                        style={{ cursor: 'pointer', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      >
+                        {flagFor(entry.owner) && (
+                          <span aria-label={`Country: ${countries[entry.owner]}`} style={{ fontSize: 12, lineHeight: 1 }}>
+                            {flagFor(entry.owner)}
+                          </span>
+                        )}
+                        {entry.owner.toUpperCase()}
+                      </a>
+                    ) : <span className="t-xs muted">--</span>}
                   </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <RecordDisplay wins={entry.wins || 0} losses={entry.losses || 0} />
