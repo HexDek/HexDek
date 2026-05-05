@@ -93,6 +93,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/decks/{owner}/{id}", h.handleDeleteDeck)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/versions", h.handleListVersions)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/analysis", h.handleGetAnalysis)
+	mux.HandleFunc("GET /api/decks/{owner}/{id}/matchups", h.handleDeckMatchups)
 	mux.HandleFunc("POST /api/decks/{owner}/{id}/analyze", h.handleRunAnalysis)
 	// SPA share page with OG meta injection — Caddy can route /decks/{owner}/{id}
 	// here for crawler User-Agents (or unconditionally) so Discord/Twitter unfurls
@@ -105,6 +106,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/card-stats/{commander}", h.handleCardWinStats)
 	mux.HandleFunc("GET /api/cards/{name}/stats", h.handleCardStats)
 	mux.HandleFunc("GET /api/cards/{name}/performance", h.handleCardPerformance)
+	mux.HandleFunc("GET /api/meta", h.handleMeta)
 	mux.HandleFunc("GET /api/rivalry/{owner}/{id}", h.handleRivalry)
 	mux.HandleFunc("GET /api/threat-graph/{owner}/{id}", h.handleThreatGraph)
 	mux.HandleFunc("GET /api/leaderboard", h.handleLeaderboard)
@@ -1056,6 +1058,37 @@ func (h *Handler) handleCardWinStats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
 		"commander": commander,
 		"cards":     stats,
+	})
+}
+
+// handleDeckMatchups returns this deck's head-to-head record against
+// every opposing commander it has met in showmatch_game history. The
+// SQL filter is bound as a parameter so injection-safe; the path-
+// component validation is defense-in-depth and rejects components
+// outside [a-zA-Z0-9_-.] before any DB call.
+func (h *Handler) handleDeckMatchups(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	id := r.PathValue("id")
+	if !validatePathComponent(owner) || !validatePathComponent(id) {
+		http.Error(w, "invalid owner or id", http.StatusBadRequest)
+		return
+	}
+	deckKey := owner + "/" + id
+	if h.Showmatch == nil || h.Showmatch.sqlDB == nil {
+		writeJSON(w, map[string]any{"deck_key": deckKey, "matchups": []any{}})
+		return
+	}
+	rows, err := db.LoadDeckMatchups(r.Context(), h.Showmatch.sqlDB, deckKey, 0)
+	if err != nil {
+		http.Error(w, "query failed", http.StatusInternalServerError)
+		return
+	}
+	if rows == nil {
+		rows = []db.MatchupRow{}
+	}
+	writeJSON(w, map[string]any{
+		"deck_key": deckKey,
+		"matchups": rows,
 	})
 }
 
