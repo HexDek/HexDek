@@ -20,19 +20,60 @@ import { useSyncExternalStore } from 'react'
 
 import en from './locales/en.json'
 import es from './locales/es.json'
+import ja from './locales/ja.json'
+import de from './locales/de.json'
+import fr from './locales/fr.json'
+import ko from './locales/ko.json'
+import zh from './locales/zh.json'
+import pt from './locales/pt.json'
 
 // Add new languages here. Keep keys ISO 639-1 (en, de, ja, ...).
-const LOCALES = { en, es }
+// Stub catalogs (ja/de/fr/ko/zh/pt) are intentionally `{}` and fall
+// through to English on every lookup — they mark the locale as
+// "available" in the picker so contributors can fill them in
+// incrementally. Card names always stay English (Scryfall localization
+// is a separate step).
+const LOCALES = { en, es, ja, de, fr, ko, zh, pt }
 const FALLBACK = 'en'
 const STORAGE_KEY = 'hexdek.locale'
 
-let currentLocale = (() => {
+// Display-name for each locale, used by the in-app language picker.
+// Self-rendered (the user reads them in their own script).
+export const LOCALE_NAMES = {
+  en: 'English',
+  es: 'Español',
+  ja: '日本語',
+  de: 'Deutsch',
+  fr: 'Français',
+  ko: '한국어',
+  zh: '中文',
+  pt: 'Português',
+}
+
+// initialLocale resolves a locale at module load time, in priority order:
+//   1. ?lang=<code> in window.location.search   (per-link sharing)
+//   2. localStorage[hexdek.locale]              (sticky user choice)
+//   3. navigator.language prefix match          (first-visit best guess)
+//   4. FALLBACK ('en')
+function initialLocale() {
+  if (typeof window !== 'undefined') {
+    try {
+      const fromURL = new URLSearchParams(window.location.search).get('lang')
+      if (fromURL && LOCALES[fromURL]) return fromURL
+    } catch {}
+  }
   try {
     const saved = typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY)
     if (saved && LOCALES[saved]) return saved
   } catch {}
+  if (typeof navigator !== 'undefined' && typeof navigator.language === 'string') {
+    const prefix = navigator.language.toLowerCase().split('-')[0]
+    if (LOCALES[prefix]) return prefix
+  }
   return FALLBACK
-})()
+}
+
+let currentLocale = initialLocale()
 
 const subscribers = new Set()
 
@@ -105,4 +146,18 @@ export function useTranslation() {
     setLocale,
     availableLocales: availableLocales(),
   }
+}
+
+// useT is a lightweight wrapper that returns just the translator —
+// most callers don't need the locale or setter and can avoid the
+// destructure noise.
+//
+//   const t = useT()
+//   <span>{t('nav.decks')}</span>
+//
+// Re-renders on locale change via the same useSyncExternalStore
+// subscription as useTranslation.
+export function useT() {
+  useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  return t
 }
