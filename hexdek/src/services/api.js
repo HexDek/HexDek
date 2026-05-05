@@ -54,6 +54,7 @@ export const api = {
   }),
   getDeckVersions: (id) => request(`/api/decks/${id}/versions`),
   getDeckAmiibo: (id) => request(`/api/decks/${id}/amiibo`),
+  getSimilarDecks: (id, limit = 5) => request(`/api/decks/${id}/similar?limit=${limit}`),
   getAchievements: (owner) => request(`/api/achievements/${owner}`),
   setUserCountry: (owner) => request(`/api/user/profile/country`, {
     method: 'POST',

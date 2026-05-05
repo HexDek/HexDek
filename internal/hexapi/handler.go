@@ -103,6 +103,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/threat-graph/{owner}/{id}", h.handleThreatGraph)
 	mux.HandleFunc("GET /api/leaderboard", h.handleLeaderboard)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/lineage", h.handleDeckLineage)
+	mux.HandleFunc("GET /api/decks/{owner}/{id}/similar", h.handleSimilarDecks)
 	mux.HandleFunc("POST /api/import/moxfield", h.handleMoxfieldImport)
 	mux.HandleFunc("GET /api/imports/{owner}", h.handleListImports)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/events", h.handleDeckEvents)
