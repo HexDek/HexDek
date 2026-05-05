@@ -35,7 +35,13 @@ export default function AppShell() {
   const location = useLocation()
   const nav = user ? AUTH_NAV : PUBLIC_NAV
   const [theme, toggleTheme] = useTheme()
-  const { t } = useTranslation()
+  const { t, locale, setLocale, availableLocales } = useTranslation()
+
+  const cycleLocale = () => {
+    if (availableLocales.length < 2) return
+    const i = availableLocales.indexOf(locale)
+    setLocale(availableLocales[(i + 1) % availableLocales.length])
+  }
 
   const isNavActive = (to) => {
     const [path, query = ''] = to.split('?')
@@ -85,6 +91,19 @@ export default function AppShell() {
               color: 'var(--ink-2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 9,
               letterSpacing: '0.08em', textTransform: 'uppercase',
             }}>{theme === 'dark' ? '☽ DARK' : '☀ LIGHT'}</button>
+            {availableLocales.length > 1 && (
+              <button
+                onClick={cycleLocale}
+                className="btn--sm btn--ghost"
+                title={`Language: ${locale.toUpperCase()}`}
+                aria-label="Change language"
+                style={{
+                  padding: '2px 6px', border: '1px solid var(--rule-2)', background: 'transparent',
+                  color: 'var(--ink-2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 9,
+                  letterSpacing: '0.08em', textTransform: 'uppercase',
+                }}
+              >🌐 {locale.toUpperCase()}</button>
+            )}
           </span>
           {!loading && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
