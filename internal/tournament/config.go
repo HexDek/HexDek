@@ -25,6 +25,7 @@ package tournament
 import (
 	"time"
 
+	"github.com/hexdek/hexdek/internal/achievements"
 	"github.com/hexdek/hexdek/internal/astload"
 	"github.com/hexdek/hexdek/internal/deckparser"
 	"github.com/hexdek/hexdek/internal/gameengine"
@@ -123,6 +124,11 @@ type TournamentConfig struct {
 	// PprofEnabled triggers a heap profile dump after the first game
 	// completes, for diagnosing memory leaks.
 	PprofEnabled bool
+
+	// Achievements is an optional tracker that receives one
+	// OnGameComplete call per finished game. Nil disables awarding;
+	// non-nil works for all three runner modes (rotate / pool / lazy).
+	Achievements *achievements.Tracker
 }
 
 // defaultMaxTurns mirrors playloop.MAX_TURNS_MULTIPLAYER.

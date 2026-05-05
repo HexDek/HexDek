@@ -134,8 +134,28 @@ func Run(cfg TournamentConfig) (*TournamentResult, error) {
 		close(outcomes)
 	}()
 
+	// Optionally intercept outcomes to award achievements before they
+	// reach the aggregator. Owners parallel cfg.Decks, so the standard
+	// rotate mode resolves SeatStats.CommanderIdx → cfg.Decks[idx].Path.
+	var aggInput <-chan GameOutcome = outcomes
+	if cfg.Achievements != nil {
+		owners := make([]string, len(decks))
+		for i, d := range decks {
+			owners[i] = ownerFromDeckPath(d.Path)
+		}
+		forwarded := make(chan GameOutcome, bufferSize)
+		go func() {
+			for o := range outcomes {
+				awardAchievements(cfg.Achievements, o, owners)
+				forwarded <- o
+			}
+			close(forwarded)
+		}()
+		aggInput = forwarded
+	}
+
 	// Aggregator.
-	result := aggregate(outcomes, cfg.NGames, cfg.NSeats, commanderNames)
+	result := aggregate(aggInput, cfg.NGames, cfg.NSeats, commanderNames)
 	result.Duration = time.Since(start)
 	if result.Duration.Seconds() > 0 {
 		result.GamesPerSecond = float64(result.Games) / result.Duration.Seconds()
@@ -732,6 +752,15 @@ func runPool(cfg TournamentConfig, workers, maxTurns int, gameTimeout time.Durat
 		close(outcomes)
 	}()
 
+	// Owners parallel to allDecks for achievement attribution.
+	var poolOwners []string
+	if cfg.Achievements != nil {
+		poolOwners = make([]string, len(allDecks))
+		for i, d := range allDecks {
+			poolOwners[i] = ownerFromDeckPath(d.Path)
+		}
+	}
+
 	// Aggregate per-commander stats across all pool games.
 	type cmdStats struct {
 		wins, games int
@@ -765,6 +794,7 @@ func runPool(cfg TournamentConfig, workers, maxTurns int, gameTimeout time.Durat
 			name := allNames[winIdx]
 			stats[name].wins++
 		}
+		awardAchievements(cfg.Achievements, o.GameOutcome, poolOwners)
 	}
 
 	elapsed := time.Since(start)
@@ -1001,6 +1031,15 @@ func runLazyPool(cfg TournamentConfig, workers, maxTurns int, gameTimeout time.D
 		}
 	}
 
+	// Owners parallel to paths for achievement attribution.
+	var lazyOwners []string
+	if cfg.Achievements != nil {
+		lazyOwners = make([]string, len(paths))
+		for i, p := range paths {
+			lazyOwners[i] = ownerFromDeckPath(p)
+		}
+	}
+
 	totalGames := 0
 	var crashLogs []string
 	for out := range outcomes {
@@ -1016,6 +1055,7 @@ func runLazyPool(cfg TournamentConfig, workers, maxTurns int, gameTimeout time.D
 		if out.CrashErr != "" {
 			crashLogs = append(crashLogs, out.CrashErr)
 		}
+		awardAchievements(cfg.Achievements, out.GameOutcome, lazyOwners)
 		// After the first game completes, dump a heap profile for leak diagnosis.
 		if totalGames == 1 && cfg.PprofEnabled {
 			runtime.GC()
