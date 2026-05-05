@@ -1338,6 +1338,7 @@ body {
   .searchbar__hint { display: none; }
 
   .statusbar { display: none; }
+  .tape-bar { display: none; }
 
   .lb-sort-bar {
     flex-wrap: nowrap;
