@@ -309,6 +309,8 @@ func PersistDeadTriggersRaw(dir string, triggers []DeadTrigger) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("muninn: mkdir %s: %w", dir, err)
 	}
+	fileMu.Lock()
+	defer fileMu.Unlock()
 	return atomicWriteJSON(filepath.Join(dir, deadTriggersFile), triggers)
 }
 
