@@ -76,7 +76,7 @@ kanban-plugin: board
 
 **Home / Splash page:**
 - [ ] Embed fishtank on home/splash page — merge splash + spectate into one attention trap. Live game visible immediately on landing #ui #home
-- [ ] "Upload My Deck" CTA prominent on home page and browse/deck pages — primary conversion action #ui #home
+- [x] "Upload My Deck" CTA prominent on home page and browse/deck pages — full-width brutalist hero button on Splash, pinned `+ ADD YOUR DECK` tile on DeckList shelf/list views, shared useUploadDeck hook with anon SignInPrompt gate (2026-05-04) #ui #home
 
 **Deck pages — "tangible object" design:**
 - [ ] Commander color-identity page theming — CSS vars `--page-wash`, `--accent` derived from commander color identity (e.g. Grixis = deep blue-black gradient with red accent). Every deck page feels unique #ui #deck #design
