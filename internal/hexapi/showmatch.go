@@ -833,10 +833,9 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 			for _, v := range oracleResult.Violations {
 				msgs = append(msgs, v.String())
 			}
-			if err := muninn.AutoArchiveViolation("data/muninn", gauntSeed.RNGSeed, gauntSeed.DeckKeys, msgs); err != nil {
-				log.Printf("muninn: archive violations: %v", err)
-			}
+			sm.muninnSink.AutoArchive(gauntSeed.RNGSeed, gauntSeed.DeckKeys, msgs)
 		}
+		sm.muninnSink.EndGame()
 
 		if winner == 0 {
 			result.Wins++
@@ -1294,10 +1293,9 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 		for _, v := range bracketOracle.Violations {
 			msgs = append(msgs, v.String())
 		}
-		if err := muninn.AutoArchiveViolation("data/muninn", bracketSeed.RNGSeed, bracketSeed.DeckKeys, msgs); err != nil {
-			log.Printf("muninn: archive violations: %v", err)
-		}
+		sm.muninnSink.AutoArchive(bracketSeed.RNGSeed, bracketSeed.DeckKeys, msgs)
 	}
+	sm.muninnSink.EndGame()
 }
 
 func (sm *Showmatch) runOneGame(rng *rand.Rand) {
@@ -1596,10 +1594,9 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 		for _, v := range showOracle.Violations {
 			msgs = append(msgs, v.String())
 		}
-		if err := muninn.AutoArchiveViolation("data/muninn", showSeed.RNGSeed, showSeed.DeckKeys, msgs); err != nil {
-			log.Printf("muninn: archive violations: %v", err)
-		}
+		sm.muninnSink.AutoArchive(showSeed.RNGSeed, showSeed.DeckKeys, msgs)
 	}
+	sm.muninnSink.EndGame()
 
 	// Ive: compose three-act narrative for spectators.
 	narrative := hat.ComposeNarrative(showPivot, showGameEvents, commanders, winner, gs.Turn)

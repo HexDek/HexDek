@@ -10,6 +10,11 @@ import (
 // flushes happen on the order of seconds, not per game.
 const DefaultBatchSize = 256
 
+// DefaultGamesPerFlush is the number of EndGame() ticks that triggers a
+// synchronous flush. Combined with FlushInterval, this enforces the
+// "every 30s or 100 games, whichever comes first" guarantee.
+const DefaultGamesPerFlush = 100
+
 // DefaultFlushInterval is the wall-clock interval at which the background
 // flusher writes any pending buffer contents to disk.
 const DefaultFlushInterval = 30 * time.Second
@@ -19,6 +24,7 @@ const DefaultFlushInterval = 30 * time.Second
 type BatcherConfig struct {
 	Dir           string
 	BatchSize     int
+	GamesPerFlush int
 	FlushInterval time.Duration
 }
 
@@ -31,6 +37,7 @@ type BatcherConfig struct {
 type Batcher struct {
 	dir           string
 	batchSize     int
+	gamesPerFlush int
 	flushInterval time.Duration
 
 	mu           sync.Mutex
@@ -41,6 +48,7 @@ type Batcher struct {
 	invariants   []InvariantViolation
 	regressions  []RegressionFailure
 	pending      int
+	games        int
 
 	stop   chan struct{}
 	doneWG sync.WaitGroup
@@ -71,12 +79,16 @@ func NewBatcher(cfg BatcherConfig) *Batcher {
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = DefaultBatchSize
 	}
+	if cfg.GamesPerFlush <= 0 {
+		cfg.GamesPerFlush = DefaultGamesPerFlush
+	}
 	if cfg.FlushInterval <= 0 {
 		cfg.FlushInterval = DefaultFlushInterval
 	}
 	b := &Batcher{
 		dir:           cfg.Dir,
 		batchSize:     cfg.BatchSize,
+		gamesPerFlush: cfg.GamesPerFlush,
 		flushInterval: cfg.FlushInterval,
 		parserGaps:    make(map[string]int),
 		deadTriggers:  make(map[deadTrigKey]*deadTrigAccum),
@@ -191,6 +203,42 @@ func (b *Batcher) AddInvariantViolations(violations []InvariantViolation) {
 	}
 }
 
+// AddAutoArchive buffers Feynman/Odin invariant violations from one game,
+// tagged with the RNG seed and deck keys so the regression runner can
+// replay it. Mirrors AutoArchiveViolation but goes through the batch.
+func (b *Batcher) AddAutoArchive(rngSeed int64, deckKeys [4]string, violations []string) {
+	if len(violations) == 0 {
+		return
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	records := make([]InvariantViolation, 0, len(violations))
+	for _, v := range violations {
+		vtype, msg := parseOracleViolation(v)
+		records = append(records, InvariantViolation{
+			GameSeed:      rngSeed,
+			DeckKeys:      deckKeys,
+			ViolationType: vtype,
+			Message:       msg,
+			Timestamp:     now,
+		})
+	}
+	b.AddInvariantViolations(records)
+}
+
+// EndGame ticks the per-game counter. When the counter reaches
+// GamesPerFlush, a synchronous Flush is triggered. Callers should invoke
+// this once per completed game even if no buffered entries were added —
+// the counter drives the "100 games" leg of the flush guarantee.
+func (b *Batcher) EndGame() {
+	b.mu.Lock()
+	b.games++
+	flush := b.games >= b.gamesPerFlush
+	b.mu.Unlock()
+	if flush {
+		_ = b.Flush()
+	}
+}
+
 // AddRegressionFailures buffers parity regression failures.
 func (b *Batcher) AddRegressionFailures(failures []RegressionFailure) {
 	if len(failures) == 0 {
@@ -210,6 +258,7 @@ func (b *Batcher) AddRegressionFailures(failures []RegressionFailure) {
 // per file. Safe to call concurrently with Add* and the background ticker.
 func (b *Batcher) Flush() error {
 	b.mu.Lock()
+	b.games = 0
 	if b.pending == 0 {
 		b.mu.Unlock()
 		return nil

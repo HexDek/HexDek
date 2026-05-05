@@ -155,6 +155,118 @@ func TestBatcher_CloseIdempotent(t *testing.T) {
 	}
 }
 
+func TestBatcher_FlushOnGameCount(t *testing.T) {
+	dir := t.TempDir()
+	b := NewBatcher(BatcherConfig{
+		Dir:           dir,
+		BatchSize:     1000,
+		GamesPerFlush: 5,
+		FlushInterval: time.Hour,
+	})
+	t.Cleanup(func() { _ = b.Close() })
+
+	b.AddParserGaps(map[string]int{"per-game-snippet": 1})
+
+	// 4 games: still under threshold, no flush expected.
+	for i := 0; i < 4; i++ {
+		b.EndGame()
+	}
+	if _, err := os.Stat(filepath.Join(dir, parserGapsFile)); !os.IsNotExist(err) {
+		t.Errorf("expected no parser_gaps.json before game threshold, got err=%v", err)
+	}
+
+	// 5th game crosses threshold and triggers a synchronous flush.
+	b.EndGame()
+
+	gaps, err := ReadParserGaps(dir)
+	if err != nil {
+		t.Fatalf("ReadParserGaps: %v", err)
+	}
+	if len(gaps) != 1 || gaps[0].Snippet != "per-game-snippet" {
+		t.Errorf("expected per-game-snippet flushed by game count, got %+v", gaps)
+	}
+}
+
+func TestBatcher_EndGameResetsCounter(t *testing.T) {
+	dir := t.TempDir()
+	b := NewBatcher(BatcherConfig{
+		Dir:           dir,
+		BatchSize:     1000,
+		GamesPerFlush: 3,
+		FlushInterval: time.Hour,
+	})
+	t.Cleanup(func() { _ = b.Close() })
+
+	// First batch of games triggers a flush at the 3rd EndGame.
+	b.AddParserGaps(map[string]int{"first": 1})
+	b.EndGame()
+	b.EndGame()
+	b.EndGame()
+
+	// Second batch must also flush after exactly 3 more games — proving
+	// the counter resets, not 6 games total.
+	b.AddParserGaps(map[string]int{"second": 1})
+	b.EndGame()
+	b.EndGame()
+	// 5 total EndGame calls; "second" should not yet be on disk.
+	gaps, err := ReadParserGaps(dir)
+	if err != nil {
+		t.Fatalf("ReadParserGaps: %v", err)
+	}
+	hasSecond := false
+	for _, g := range gaps {
+		if g.Snippet == "second" {
+			hasSecond = true
+		}
+	}
+	if hasSecond {
+		t.Errorf("second flushed too early: %+v", gaps)
+	}
+
+	b.EndGame() // 6th total / 3rd of second batch -> flush
+	gaps, err = ReadParserGaps(dir)
+	if err != nil {
+		t.Fatalf("ReadParserGaps: %v", err)
+	}
+	if len(gaps) != 2 {
+		t.Errorf("expected 2 snippets after second flush, got %+v", gaps)
+	}
+}
+
+func TestBatcher_AddAutoArchive(t *testing.T) {
+	dir := t.TempDir()
+	b := NewBatcher(BatcherConfig{Dir: dir, BatchSize: 1000, FlushInterval: time.Hour})
+
+	b.AddAutoArchive(424242, [4]string{"deckA", "deckB", "deckC", "deckD"}, []string{
+		"[error] permanent_type_consistency (seat 2): creature has noncreature type",
+		"[warn] mana_pool_drain (seat 0): floating mana not emptied",
+		"freeform note without prefix",
+	})
+	// Empty input is a no-op (must not panic, must not flush).
+	b.AddAutoArchive(0, [4]string{}, nil)
+
+	if err := b.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	got, err := ReadInvariantViolations(dir)
+	if err != nil {
+		t.Fatalf("ReadInvariantViolations: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected 3 violations, got %d (%+v)", len(got), got)
+	}
+	if got[0].GameSeed != 424242 || got[0].DeckKeys[0] != "deckA" {
+		t.Errorf("seed/deck keys not propagated: %+v", got[0])
+	}
+	if got[0].ViolationType != "permanent_type_consistency" {
+		t.Errorf("expected parsed ViolationType, got %q", got[0].ViolationType)
+	}
+	if got[2].ViolationType != "" || got[2].Message != "freeform note without prefix" {
+		t.Errorf("freeform string should round-trip with empty type: %+v", got[2])
+	}
+}
+
 func TestBatcher_EmptyFlushNoOp(t *testing.T) {
 	dir := t.TempDir()
 	b := NewBatcher(BatcherConfig{Dir: dir, BatchSize: 1000, FlushInterval: time.Hour})

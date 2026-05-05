@@ -53,3 +53,22 @@ func (a *muninnAdapter) RecordDeadTriggers(triggers []heimdall.DeadTrigger, game
 func (a *muninnAdapter) RecordCrash(panicMsg string, stackTrace string, deckKeys []string) {
 	a.batcher.AddCrash(stackTrace, deckKeys, 0, 0)
 }
+
+// AutoArchive buffers Feynman/Odin invariant violations from one game.
+// Replaces direct muninn.AutoArchiveViolation calls so the per-game
+// invariant check doesn't read-modify-write invariant_violations.json.
+func (a *muninnAdapter) AutoArchive(rngSeed int64, deckKeys [4]string, violations []string) {
+	if a.batcher == nil {
+		return
+	}
+	a.batcher.AddAutoArchive(rngSeed, deckKeys, violations)
+}
+
+// EndGame ticks the batcher's per-game counter. Drives the "100 games"
+// half of the flush guarantee — must be called once per completed game.
+func (a *muninnAdapter) EndGame() {
+	if a.batcher == nil {
+		return
+	}
+	a.batcher.EndGame()
+}
