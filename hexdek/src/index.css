@@ -1551,3 +1551,65 @@ body {
     max-width: none !important;
   }
 }
+
+/* ── NARRATOR OVERLAY (spectator commentary strip) ── */
+/* Pinned to the bottom of the viewport. Semi-transparent so the seats
+   underneath stay legible. The header bar is one brutalist row, then
+   the last MAX_EVENTS narrator lines stack above it newest-at-bottom.
+   pointer-events: none on the wrapper lets clicks through; the rows
+   re-enable pointer events for accessibility hovers. */
+.narrator-overlay {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 50;
+  background: rgba(12, 13, 10, 0.78);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  border-top: 1px solid var(--rule-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  pointer-events: none;
+}
+.narrator-overlay-hd {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 3px 12px;
+  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--rule-2);
+  background: rgba(28, 29, 22, 0.6);
+}
+.narrator-overlay-count {
+  color: var(--ink-3);
+}
+.narrator-overlay-rows {
+  display: flex; flex-direction: column;
+  max-height: 22vh;
+  overflow: hidden;
+}
+.narrator-row {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 3px 12px;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 11px; line-height: 1.4;
+  color: var(--ink-2);
+  pointer-events: auto;
+}
+.narrator-row--latest {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.03);
+}
+.narrator-row-turn {
+  flex: 0 0 36px;
+  font-size: 9px; letter-spacing: 0.08em;
+  color: var(--ink-3);
+  text-transform: uppercase;
+}
+.narrator-row-text {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.narrator-row--combat  { border-left-color: var(--danger); }
+.narrator-row--cast    { border-left-color: var(--ok); }
+.narrator-row--elim    { border-left-color: var(--danger); color: var(--danger); }
+.narrator-row--changer { border-left-color: var(--warn); color: var(--warn); }
+.narrator-row--event   { border-left-color: var(--rule-2); }

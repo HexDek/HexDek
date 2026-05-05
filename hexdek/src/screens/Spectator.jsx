@@ -5,6 +5,7 @@ import { cardArtUrl, API_BASE } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { findGameChangerInText } from '../data/gameChangers'
 import CardLink, { linkifyAction } from '../components/CardLink'
+import NarratorOverlay from '../components/NarratorOverlay'
 
 const SPEED_MARKS = [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2]
 
@@ -721,6 +722,7 @@ export default function Spectator() {
           </div>
         </div>
       </div>
+      <NarratorOverlay log={log} seats={seats} />
     </>
   )
 }
