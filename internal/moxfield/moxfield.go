@@ -29,13 +29,57 @@ import (
 var moxfieldURLRE = regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?moxfield\.com/decks/([A-Za-z0-9_-]+)`)
 
 // apiResponse mirrors the subset of the Moxfield v3 API response we need.
+//
+// The v3 API nests boards under a top-level "boards" object; older responses
+// exposed mainboard/commanders directly at the top level. We accept both so
+// older cached fixtures keep working.
 type apiResponse struct {
-	Name       string                    `json:"name"`
-	Format     string                    `json:"format"`
-	Mainboard  map[string]apiCardEntry   `json:"mainboard"`
-	Commanders map[string]apiCardEntry   `json:"commanders"`
-	Sideboard  map[string]apiCardEntry   `json:"sideboard"`
-	Companions map[string]apiCardEntry   `json:"companions"`
+	Name   string `json:"name"`
+	Format string `json:"format"`
+	Boards struct {
+		Mainboard  apiBoard `json:"mainboard"`
+		Commanders apiBoard `json:"commanders"`
+		Sideboard  apiBoard `json:"sideboard"`
+		Companions apiBoard `json:"companions"`
+	} `json:"boards"`
+	// Legacy top-level fields (pre-v3 boards wrapper).
+	Mainboard  map[string]apiCardEntry `json:"mainboard"`
+	Commanders map[string]apiCardEntry `json:"commanders"`
+	Sideboard  map[string]apiCardEntry `json:"sideboard"`
+	Companions map[string]apiCardEntry `json:"companions"`
+}
+
+type apiBoard struct {
+	Count int                     `json:"count"`
+	Cards map[string]apiCardEntry `json:"cards"`
+}
+
+func (r *apiResponse) commanders() map[string]apiCardEntry {
+	if len(r.Boards.Commanders.Cards) > 0 {
+		return r.Boards.Commanders.Cards
+	}
+	return r.Commanders
+}
+
+func (r *apiResponse) mainboard() map[string]apiCardEntry {
+	if len(r.Boards.Mainboard.Cards) > 0 {
+		return r.Boards.Mainboard.Cards
+	}
+	return r.Mainboard
+}
+
+func (r *apiResponse) sideboard() map[string]apiCardEntry {
+	if len(r.Boards.Sideboard.Cards) > 0 {
+		return r.Boards.Sideboard.Cards
+	}
+	return r.Sideboard
+}
+
+func (r *apiResponse) companions() map[string]apiCardEntry {
+	if len(r.Boards.Companions.Cards) > 0 {
+		return r.Boards.Companions.Cards
+	}
+	return r.Companions
 }
 
 type apiCardEntry struct {
@@ -152,28 +196,28 @@ func formatDecklist(data *apiResponse) (string, error) {
 	var sb strings.Builder
 
 	// Write commander(s).
-	for _, entry := range data.Commanders {
+	for _, entry := range data.commanders() {
 		if entry.Card.Name != "" {
 			sb.WriteString(fmt.Sprintf("COMMANDER: %s\n", entry.Card.Name))
 		}
 	}
 
 	// Write mainboard.
-	for _, entry := range data.Mainboard {
+	for _, entry := range data.mainboard() {
 		if entry.Card.Name != "" && entry.Quantity > 0 {
 			sb.WriteString(fmt.Sprintf("%d %s\n", entry.Quantity, entry.Card.Name))
 		}
 	}
 
 	// Write sideboard as comments (so parser can skip them).
-	for _, entry := range data.Sideboard {
+	for _, entry := range data.sideboard() {
 		if entry.Card.Name != "" && entry.Quantity > 0 {
 			sb.WriteString(fmt.Sprintf("// Sideboard: %d %s\n", entry.Quantity, entry.Card.Name))
 		}
 	}
 
 	// Write companions.
-	for _, entry := range data.Companions {
+	for _, entry := range data.companions() {
 		if entry.Card.Name != "" && entry.Quantity > 0 {
 			sb.WriteString(fmt.Sprintf("// Companion: %d %s\n", entry.Quantity, entry.Card.Name))
 		}
