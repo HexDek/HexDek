@@ -42,6 +42,12 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ name, owner, deck_list: deckList }),
   }),
+  // Full-page /import flow targets the dedicated alias route so the
+  // backend can split metrics if we ever care to (same handler today).
+  importDeckFull: ({ name, owner, deckList }) => request('/api/decks/import', {
+    method: 'POST',
+    body: JSON.stringify({ name, owner, deck_list: deckList }),
+  }),
   runAnalysis: (id) => request(`/api/decks/${id}/analyze`, { method: 'POST' }),
   updateDeck: (id, deckList) => request(`/api/decks/${id}`, {
     method: 'PUT',

@@ -82,6 +82,11 @@ func (h *Handler) LoadCardDB(path string) {
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/decks", h.handleListDecks)
 	mux.HandleFunc("POST /api/decks", h.handleImportDeck)
+	// Alias for the explicit "import a deck list" flow (Import.jsx page).
+	// Same payload + handler as POST /api/decks; the dedicated path lets
+	// the dashboard quick-import (modal) and the full-page import flow
+	// be tracked separately if we ever split metrics.
+	mux.HandleFunc("POST /api/decks/import", h.handleImportDeck)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}", h.handleGetDeck)
 	mux.HandleFunc("PUT /api/decks/{owner}/{id}", h.handleUpdateDeck)
 	mux.HandleFunc("PATCH /api/decks/{owner}/{id}", h.handlePatchDeck)
@@ -99,6 +104,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/card-art/{name}", h.handleCardArt)
 	mux.HandleFunc("GET /api/card-stats/{commander}", h.handleCardWinStats)
 	mux.HandleFunc("GET /api/cards/{name}/stats", h.handleCardStats)
+	mux.HandleFunc("GET /api/cards/{name}/performance", h.handleCardPerformance)
 	mux.HandleFunc("GET /api/rivalry/{owner}/{id}", h.handleRivalry)
 	mux.HandleFunc("GET /api/threat-graph/{owner}/{id}", h.handleThreatGraph)
 	mux.HandleFunc("GET /api/leaderboard", h.handleLeaderboard)

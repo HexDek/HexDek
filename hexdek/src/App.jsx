@@ -26,6 +26,7 @@ import Friends from './screens/Friends'
 import Login from './screens/Login'
 import AuthCallback from './screens/AuthCallback'
 import DeckCompare from './screens/DeckCompare'
+import Import from './screens/Import'
 import StreamOverlay from './components/StreamOverlay'
 
 function RequireAuth({ children }) {
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="dash" element={<Dashboard />} />
         <Route path="decks" element={<DeckList />} />
         <Route path="decks/:owner/:id" element={<DeckArchive />} />
+        <Route path="import" element={<Import />} />
         <Route path="compare/:owner1/:deck1/:owner2/:deck2" element={<DeckCompare />} />
         <Route
           path="cards/:cardName"
