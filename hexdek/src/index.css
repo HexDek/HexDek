@@ -551,17 +551,12 @@ body {
 .deck-archive-page {
   display: flex; flex-direction: column; flex: 1; min-height: 0;
   position: relative;
-  background:
-    linear-gradient(rgba(12, 13, 10, 0.78), rgba(12, 13, 10, 0.78)),
-    var(--page-wash, var(--bg));
-  background-attachment: fixed;
+  background: var(--page-wash, var(--bg));
   background-size: cover;
   isolation: isolate;
 }
 [data-theme="light"] .deck-archive-page {
-  background:
-    linear-gradient(rgba(214, 210, 191, 0.72), rgba(214, 210, 191, 0.72)),
-    var(--page-wash, var(--bg));
+  background: var(--page-wash, var(--bg));
 }
 
 /* ── PAGE TEXTURE — accent-tinted cross-hatch reads as card-back paper
@@ -586,24 +581,10 @@ body {
   opacity: 0.7;
 }
 
-/* ── COMMANDER WATERMARK — fixed-feeling ghost of the hero art behind
-   all panels, set via --cmdr-art on the wrapper. */
-.deck-archive-page::after {
-  content: '';
-  position: absolute; inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background-image: var(--cmdr-art, none);
-  background-size: cover;
-  background-position: center 20%;
-  background-repeat: no-repeat;
-  opacity: 0.07;
-  filter: saturate(0.55) contrast(0.9) blur(1px);
-}
-[data-theme="light"] .deck-archive-page::after {
-  opacity: 0.05;
-  filter: saturate(0.4) contrast(1.05) blur(1px);
-}
+/* Commander art ambience uses the shared .art-ambience class (defined
+   below in the CARD PAGE block); the deck page renders an <img> via
+   JSX rather than the older --cmdr-art pseudo-element, so both pages
+   share one mechanism. */
 
 /* Lift real content above the texture + watermark layers. */
 .deck-archive-page > * { position: relative; z-index: 1; }
@@ -1444,6 +1425,46 @@ body {
 }
 
 /* ── CARD PAGE (/cards/:cardName) ── */
+
+/* Wrapper that owns the negative-z stacking context for the ambience
+   layer + carries panel-transparency overrides scoped to the page. */
+.card-page {
+  position: relative;
+  display: flex; flex-direction: column;
+  flex: 1; min-height: 0;
+  isolation: isolate;
+}
+.card-page > * { position: relative; z-index: 1; }
+.card-page .panel {
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(2px);
+}
+.card-page-sidebar { background: color-mix(in srgb, var(--bg) 86%, transparent); }
+.card-page-main    { background: transparent; }
+
+/* ── .art-ambience — shared blurred-art ambience layer used on the
+   card and deck pages. Deliberately uses position: absolute (inside
+   an isolation: isolate wrapper) instead of position: fixed so the
+   negative-z plane stays inside the page's stacking context and isn't
+   covered by the AppShell's solid bg. The visual is identical to a
+   fixed pin because the wrapper itself doesn't scroll — only its
+   child columns do. Attach to an <img> so object-fit applies. */
+.art-ambience {
+  position: absolute;
+  inset: -40px;
+  z-index: -1;
+  width: calc(100% + 80px);
+  height: calc(100% + 80px);
+  object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+  filter: blur(40px) brightness(0.3) saturate(1.2);
+}
+[data-theme="light"] .art-ambience {
+  filter: blur(40px) brightness(1.05) saturate(1.15);
+  opacity: 0.7;
+}
+
 .card-page-hero {
   position: relative;
   height: 280px;

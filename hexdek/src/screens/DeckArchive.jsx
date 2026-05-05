@@ -440,9 +440,19 @@ export default function DeckArchive() {
       style={{
         '--page-wash': pageTheme.wash,
         '--accent': pageTheme.accent,
-        '--cmdr-art': cmdrImageUrl ? `url("${cmdrImageUrl}")` : 'none',
       }}
     >
+      {/* Blown-up gaussian-blurred commander art behind everything —
+          shared mechanism with CardPage via the .art-ambience class. */}
+      {cmdrImageUrl && (
+        <img
+          className="art-ambience"
+          src={cmdrImageUrl}
+          alt=""
+          aria-hidden="true"
+        />
+      )}
+
       <Tape
         left={`DECK ARCHIVE / / ${owner?.toUpperCase()} / / ${deckName}`}
         mid={pls ? `Plays Like B${pls} (Bracket B${wbs}) · ${pageTheme.label}` : `Bracket B${wbs} · ${pageTheme.label}`}

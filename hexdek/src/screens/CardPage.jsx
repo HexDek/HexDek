@@ -230,7 +230,19 @@ export default function CardPage() {
       : error ? 'UNAVAILABLE' : 'LOADING'
 
   return (
-    <>
+    <div className="card-page">
+      {/* Blown-up gaussian-blurred art behind everything. Empty src
+          collapses to no <img> so we don't paint a broken-icon when the
+          card has no art (loading or 404 path). */}
+      {heroArt && (
+        <img
+          className="art-ambience"
+          src={heroArt}
+          alt=""
+          aria-hidden="true"
+        />
+      )}
+
       <Tape
         left={`CARD / / ${upperName}`}
         mid={loading ? 'LOADING' : (error ? 'UNAVAILABLE' : sourceLabel)}
@@ -513,6 +525,6 @@ export default function CardPage() {
           </Panel>
         </div>
       </div>
-    </>
+    </div>
   )
 }
