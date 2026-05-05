@@ -29,6 +29,7 @@ import (
 	"github.com/hexdek/hexdek/internal/party"
 	"github.com/hexdek/hexdek/internal/pincer"
 	"github.com/hexdek/hexdek/internal/shuffle"
+	"github.com/hexdek/hexdek/internal/userprofile"
 	"github.com/hexdek/hexdek/internal/ws"
 )
 
@@ -145,6 +146,12 @@ func main() {
 	}
 	pincerTracker.Register(mux)
 
+	// User profile: per-owner country detection from Accept-Language.
+	if err := userprofile.EnsureSchema(context.Background(), database); err != nil {
+		log.Fatalf("user_profile schema: %v", err)
+	}
+	userprofile.Register(mux, database)
+
 	// Friends: owner-keyed bidirectional friend list.
 	friendTracker, err := friends.New(database)
 	if err != nil {
@@ -157,7 +164,7 @@ func main() {
 	log.Printf("Ship 2: curl -XPOST http://%s/api/device/register -d '{\"display_name\":\"Hex\"}'", *addr)
 	log.Printf("Ship 3: ws://%s/ws/party/{id}?token={token}", *addr)
 
-	handler := corsMiddleware(pincerTracker.Middleware(mux))
+	handler := corsMiddleware(pincerTracker.Middleware(userprofile.LocaleMiddleware(mux)))
 	if err := http.ListenAndServe(*addr, handler); err != nil {
 		log.Fatalf("server: %v", err)
 	}
