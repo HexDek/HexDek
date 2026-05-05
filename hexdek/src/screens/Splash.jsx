@@ -1,10 +1,17 @@
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Panel, KV, Btn, Stripes, Tape } from '../components/chrome'
 import { useAuth } from '../context/AuthContext'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { AnimatedCounter } from '../hooks/useAnimatedCounter.jsx'
 import { useUploadDeck } from '../hooks/useUploadDeck'
-import FishtankEmbed from '../components/FishtankEmbed'
+
+// FishtankEmbed is the heaviest piece on the splash — full WS-driven
+// re-render per snapshot. Code-split it so the hero paints first, and
+// only mount once the section scrolls into view (poor-man's
+// `client:visible`). useLiveSocket is a Context singleton, so deferring
+// the mount also defers the WS handshake.
+const FishtankEmbed = lazy(() => import('../components/FishtankEmbed'))
 
 const RUNTIME_LABELS = {
   disconnected: 'DISCONNECTED',
@@ -99,9 +106,6 @@ export default function Splash() {
 
         {/* RIGHT */}
         <div className="splash-right">
-          {/* Live fishtank — primary attention trap */}
-          <FishtankEmbed />
-
           <Panel code="II.A" title="LIVE FORGE STATS" right={<span className={`led ${ledClass}`} />}>
             <KV rows={[
               ['GAMES SIM.', <AnimatedCounter target={stats?.games_played} rate={gpm} className="punch" style={{ fontSize: 24 }} />],
@@ -142,7 +146,83 @@ export default function Splash() {
         </div>
       </div>
 
+      {/* Full-width live fishtank section, below the hero. Lazy-mounted
+          via WhenVisible so the WS handshake doesn't compete with the
+          first paint. The status text re-uses the same useLiveSocket
+          context the right column already drives, so a single shared
+          WS powers both regions. */}
+      <section className="splash-fishtank">
+        <Tape
+          left="LIVE FORGE / / FISHTANK"
+          mid={status === 'live' ? `LIVE · ${gpm ? Math.round(gpm).toLocaleString() : '?'} GAMES/MIN` : (RUNTIME_LABELS[status] || 'OFFLINE')}
+          right="WATCH ↗"
+        />
+        <div className="splash-fishtank-body">
+          <WhenVisible
+            placeholder={
+              <div className="fishtank-embed fishtank-embed--state" style={{ maxHeight: 240 }}>
+                <div className="fishtank-embed-hd">
+                  <span>FISHTANK / / LIVE FORGE</span>
+                  <span className="fishtank-embed-badge">
+                    <span className="led" /> STANDBY
+                  </span>
+                </div>
+                <div className="fishtank-embed-empty">
+                  &gt; SCROLL TO LOAD LIVE FEED<span className="blink">_</span>
+                </div>
+              </div>
+            }
+          >
+            <Suspense fallback={
+              <div className="fishtank-embed fishtank-embed--state" style={{ maxHeight: 240 }}>
+                <div className="fishtank-embed-hd">
+                  <span>FISHTANK / / LIVE FORGE</span>
+                  <span className="fishtank-embed-badge">
+                    <span className="led led--on blink" /> LOADING
+                  </span>
+                </div>
+                <div className="fishtank-embed-empty">
+                  &gt; LOADING FISHTANK<span className="blink">_</span>
+                </div>
+              </div>
+            }>
+              <FishtankEmbed />
+            </Suspense>
+          </WhenVisible>
+        </div>
+      </section>
+
       {upload.modal}
     </>
   )
+}
+
+// WhenVisible defers rendering its children until the placeholder is
+// scrolled into (or near) the viewport. Useful for deferring expensive
+// mounts — here, the FishtankEmbed's WS-driven snapshot loop. Once
+// mounted the children persist (no unmount on scroll-out).
+function WhenVisible({ children, placeholder = null, rootMargin = '200px' }) {
+  const [visible, setVisible] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (visible) return
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true)
+      return
+    }
+    const node = ref.current
+    if (!node) return
+    const obs = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) {
+          setVisible(true)
+          obs.disconnect()
+          return
+        }
+      }
+    }, { rootMargin })
+    obs.observe(node)
+    return () => obs.disconnect()
+  }, [visible, rootMargin])
+  return <div ref={ref}>{visible ? children : placeholder}</div>
 }

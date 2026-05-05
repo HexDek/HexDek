@@ -1239,3 +1239,19 @@ body {
   .headline { font-size: 32px; }
   .t-display { font-size: 36px; }
 }
+
+/* ── SPLASH FISHTANK SECTION ── */
+/* Full-width band below the splash hero. The inner body is capped so
+   the fishtank embed doesn't stretch past readable width on ultrawide
+   displays; the band's borders run edge-to-edge for the brutalist
+   horizon-line effect. */
+.splash-fishtank {
+  border-top: 1px solid var(--rule-2);
+  border-bottom: 1px solid var(--rule-2);
+  background: var(--bg);
+}
+.splash-fishtank-body {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 18px 24px 24px;
+}
