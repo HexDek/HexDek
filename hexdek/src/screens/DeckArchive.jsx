@@ -4,6 +4,7 @@ import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPi
 import CardRolesGrid from '../components/CardRolesGrid'
 import CardLink from '../components/CardLink'
 import AmiiboDisplay from '../components/AmiiboDisplay'
+import MatchupsPanel from '../components/MatchupsPanel'
 import ManaCost from '../components/ManaCost'
 import { AchievementsPanel, BadgeShowcase } from '../components/AchievementsPanel'
 import { toast } from '../components/Toast'
@@ -657,6 +658,12 @@ export default function DeckArchive() {
           )}
 
           {amiibo && <AmiiboDisplay amiibo={amiibo} />}
+
+          {/* MATCHUPS — head-to-head record per opposing commander
+              from showmatch_game history. Best/worst leaderboards
+              gate on a min-games threshold so 1-0 small samples don't
+              dominate the rankings. */}
+          <MatchupsPanel owner={owner} id={id} />
 
           {/* SIMILAR DECKS — server-ranked by shared-card overlap with
               bonuses for matching commander / archetype / bracket. The
