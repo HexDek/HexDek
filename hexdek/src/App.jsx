@@ -15,6 +15,7 @@ import About from './screens/About'
 import BugReport from './screens/BugReport'
 import Donations from './screens/Donations'
 import Profile from './screens/Profile'
+import PublicProfile from './screens/PublicProfile'
 import Login from './screens/Login'
 import AuthCallback from './screens/AuthCallback'
 
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="feedback" element={<BugReport />} />
         <Route path="donations" element={<Donations />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="profile/:owner" element={<PublicProfile />} />
       </Route>
     </Routes>
   )

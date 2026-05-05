@@ -428,7 +428,7 @@ export default function DeckArchive() {
         <div className="archive-sidebar">
           <Panel code="04.A" title="DECK SPECS" solid>
             <KV rows={[
-              ['OWNER', <Link to={`/decks?q=${owner}`} style={{ color: 'var(--ink)', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)' }}>{owner?.toUpperCase()}</Link>],
+              ['OWNER', <Link to={`/profile/${owner}`} style={{ color: 'var(--ink)', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)' }}>{owner?.toUpperCase()}</Link>],
               ['CARDS', `${cardCount}`],
               ['BRACKET', `B${wbs}${wbsLabel ? ' ' + wbsLabel : ''}`],
               ['PLAYS LIKE', pls ? `B${pls}${plsLabel ? ' ' + plsLabel : ''}${pls != wbs ? ' ⬆' : ''}` : '—'],

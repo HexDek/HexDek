@@ -243,7 +243,16 @@ export default function Leaderboard() {
                     <BandTag band={entry.band} bracket={entry.bracket} />
                     <ShameBadge rating={entry.rating} />
                   </td>
-                  <td className="lb-td lb-td--owner muted">{entry.owner?.toUpperCase() || '--'}</td>
+                  <td className="lb-td lb-td--owner muted">
+                    {entry.owner ? (
+                      <a
+                        onClick={(e) => { e.stopPropagation(); navigate(`/profile/${entry.owner}`) }}
+                        style={{ cursor: 'pointer', color: 'var(--ink-2)', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)' }}
+                      >
+                        {entry.owner.toUpperCase()}
+                      </a>
+                    ) : '--'}
+                  </td>
                   <td className="lb-td lb-td--rating">
                     <span style={{ fontWeight: 700 }}>{Math.round(entry.hex_rating || 0)}</span>
                   </td>
@@ -317,7 +326,15 @@ export default function Leaderboard() {
                     </div>
                     <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span className="t-xs muted">{entry.owner?.toUpperCase() || '--'}</span>
+                        {entry.owner ? (
+                          <a
+                            onClick={(e) => { e.stopPropagation(); navigate(`/profile/${entry.owner}`) }}
+                            className="t-xs muted"
+                            style={{ cursor: 'pointer', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)' }}
+                          >
+                            {entry.owner.toUpperCase()}
+                          </a>
+                        ) : <span className="t-xs muted">--</span>}
                         <ConfidenceDots games={entry.games} showLabel />
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
