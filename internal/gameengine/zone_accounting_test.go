@@ -2,6 +2,8 @@ package gameengine
 
 import (
 	"testing"
+
+	"github.com/hexdek/hexdek/internal/gameast"
 )
 
 // TestRemoveCardFromAllPrivateZones_Sweep verifies the sweep collapses a
@@ -94,5 +96,137 @@ func TestMoveToZone_CommandZoneArm(t *testing.T) {
 	}
 	if len(gs.Seats[0].Graveyard) != 0 {
 		t.Errorf("command_zone arm: card leaked to graveyard: %v", gs.Seats[0].Graveyard)
+	}
+}
+
+// TestMoveToZone_BattlefieldArm verifies that a destination of "battlefield"
+// creates a Permanent wrapper and appends to Battlefield instead of falling
+// through to the graveyard default. This was the root cause of ~80% of
+// zone_accounting Feynman violations.
+func TestMoveToZone_BattlefieldArm(t *testing.T) {
+	gs := &GameState{Seats: []*Seat{{}}}
+	c := &Card{Name: "Grizzly Bears", Owner: 0, Types: []string{"creature"}}
+	c.AST = &gameast.CardAST{Name: "Grizzly Bears"}
+
+	gs.moveToZone(0, c, "battlefield")
+	if len(gs.Seats[0].Battlefield) != 1 {
+		t.Fatalf("battlefield arm: card not on battlefield: bf=%d gy=%d",
+			len(gs.Seats[0].Battlefield), len(gs.Seats[0].Graveyard))
+	}
+	if gs.Seats[0].Battlefield[0].Card != c {
+		t.Error("battlefield arm: permanent wraps wrong card")
+	}
+	if len(gs.Seats[0].Graveyard) != 0 {
+		t.Errorf("battlefield arm: card leaked to graveyard: %v", gs.Seats[0].Graveyard)
+	}
+}
+
+// TestMoveToZone_BattlefieldTapped verifies the "battlefield_tapped" variant
+// creates a tapped Permanent.
+func TestMoveToZone_BattlefieldTapped(t *testing.T) {
+	gs := &GameState{Seats: []*Seat{{}}}
+	c := &Card{Name: "Temple of Silence", Owner: 0, Types: []string{"land"}}
+	c.AST = &gameast.CardAST{Name: "Temple of Silence"}
+
+	gs.moveToZone(0, c, "battlefield_tapped")
+	if len(gs.Seats[0].Battlefield) != 1 {
+		t.Fatalf("battlefield_tapped: card not on battlefield: bf=%d gy=%d",
+			len(gs.Seats[0].Battlefield), len(gs.Seats[0].Graveyard))
+	}
+	perm := gs.Seats[0].Battlefield[0]
+	if !perm.Tapped {
+		t.Error("battlefield_tapped: permanent should be tapped")
+	}
+	if len(gs.Seats[0].Graveyard) != 0 {
+		t.Errorf("battlefield_tapped: card leaked to graveyard")
+	}
+}
+
+// TestMoveToZone_BattlefieldMDFC verifies that an MDFC with a land back face
+// gets its types swapped to the land face when entering the battlefield via
+// moveToZone. This is the core fix for MDFC permanent_types back-face
+// resolution (Fell the Profane // Fell Mire, Valakut Awakening, etc.).
+func TestMoveToZone_BattlefieldMDFC(t *testing.T) {
+	gs := &GameState{Seats: []*Seat{{}}}
+	c := &Card{
+		Name:             "Valakut Awakening",
+		Owner:            0,
+		Types:            []string{"instant"},
+		TypeLine:         "Instant // Land",
+		BackFaceName:     "Valakut Stoneforge",
+		BackFaceTypes:    []string{"land"},
+		BackFaceTypeLine: "Land",
+	}
+	c.AST = &gameast.CardAST{Name: "Valakut Awakening"}
+
+	gs.moveToZone(0, c, "battlefield")
+	if len(gs.Seats[0].Battlefield) != 1 {
+		t.Fatalf("MDFC battlefield: card not on battlefield: bf=%d gy=%d",
+			len(gs.Seats[0].Battlefield), len(gs.Seats[0].Graveyard))
+	}
+	perm := gs.Seats[0].Battlefield[0]
+	// After EnsureBattlefieldFrontFace, the card's types should be the
+	// back face's (land), not the front face's (instant).
+	hasLand := false
+	for _, ty := range perm.Card.Types {
+		if ty == "land" {
+			hasLand = true
+		}
+		if ty == "instant" {
+			t.Error("MDFC battlefield: front-face 'instant' type leaked onto battlefield")
+		}
+	}
+	if !hasLand {
+		t.Errorf("MDFC battlefield: back-face 'land' type not present, got: %v", perm.Card.Types)
+	}
+	if len(gs.Seats[0].Graveyard) != 0 {
+		t.Errorf("MDFC battlefield: card leaked to graveyard")
+	}
+}
+
+// TestMoveToZone_BattlefieldRejectsNonPermanent verifies that an instant or
+// sorcery that somehow reaches moveToZone("battlefield") is redirected to
+// graveyard per CR 304.4 / 307.1, NOT silently placed as a Permanent.
+func TestMoveToZone_BattlefieldRejectsNonPermanent(t *testing.T) {
+	gs := &GameState{Seats: []*Seat{{}}}
+	c := &Card{Name: "Lightning Bolt", Owner: 0, Types: []string{"instant"}}
+	c.AST = &gameast.CardAST{Name: "Lightning Bolt"}
+
+	gs.moveToZone(0, c, "battlefield")
+	if len(gs.Seats[0].Battlefield) != 0 {
+		t.Error("non-permanent should not be on battlefield")
+	}
+	if len(gs.Seats[0].Graveyard) != 1 {
+		t.Errorf("non-permanent should be in graveyard, got gy=%d", len(gs.Seats[0].Graveyard))
+	}
+}
+
+// TestMoveCard_BattlefieldIntegration exercises the full MoveCard path to
+// "battlefield" — the actual call pattern used by cheat-into-play effects.
+func TestMoveCard_BattlefieldIntegration(t *testing.T) {
+	gs := &GameState{Seats: []*Seat{{
+		Hand: make([]*Card, 0),
+	}}}
+	c := &Card{Name: "Emrakul", Owner: 0, Types: []string{"creature"}}
+	c.AST = &gameast.CardAST{Name: "Emrakul, the Aeons Torn"}
+	gs.Seats[0].Hand = append(gs.Seats[0].Hand, c)
+
+	dest := MoveCard(gs, c, 0, "hand", "battlefield", "cheat_creature")
+	if dest != "battlefield" {
+		t.Errorf("MoveCard returned dest=%q, want battlefield", dest)
+	}
+	// Card should be on battlefield, not in hand or graveyard.
+	if len(gs.Seats[0].Battlefield) != 1 {
+		t.Fatalf("MoveCard battlefield: not on battlefield: bf=%d gy=%d hand=%d",
+			len(gs.Seats[0].Battlefield), len(gs.Seats[0].Graveyard), len(gs.Seats[0].Hand))
+	}
+	if gs.Seats[0].Battlefield[0].Card != c {
+		t.Error("MoveCard battlefield: wrong card on battlefield")
+	}
+	if len(gs.Seats[0].Hand) != 0 {
+		t.Errorf("MoveCard battlefield: card still in hand")
+	}
+	if len(gs.Seats[0].Graveyard) != 0 {
+		t.Errorf("MoveCard battlefield: card leaked to graveyard")
 	}
 }

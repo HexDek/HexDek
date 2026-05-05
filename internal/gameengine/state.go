@@ -1121,14 +1121,16 @@ func (gs *GameState) removePermanent(p *Permanent) bool {
 }
 
 // moveToZone appends c to the target seat's zone. Valid zones: "hand",
-// "graveyard", "exile", "library_top", "library_bottom".
+// "graveyard", "exile", "library_top", "library_bottom", "command_zone",
+// "battlefield", "battlefield_tapped".
 func (gs *GameState) moveToZone(seat int, c *Card, zone string) {
 	if seat < 0 || seat >= len(gs.Seats) || c == nil {
 		return
 	}
 	// CR §707.4 / §702.36: face-down cards are turned face-up when they
 	// move to any zone other than the battlefield. Clear the FaceDown flag.
-	if c.FaceDown {
+	// Cards entering the battlefield may remain face-down (Morph, Manifest).
+	if c.FaceDown && zone != "battlefield" && zone != "battlefield_tapped" {
 		c.FaceDown = false
 	}
 	s := gs.Seats[seat]
@@ -1177,6 +1179,48 @@ func (gs *GameState) moveToZone(seat int, c *Card, zone string) {
 			return
 		}
 		s.CommandZone = append(s.CommandZone, c)
+	case "battlefield", "battlefield_tapped":
+		// CR §110.1: A permanent is a card or token on the battlefield.
+		// Wrap the Card in a Permanent and append to the seat's battlefield.
+		// This case handles MoveCard(..., "battlefield", ...) calls from
+		// ramp, cheat-into-play, and other non-cast paths that route
+		// through FireZoneChange → moveToZone.
+		//
+		// Without this arm, "battlefield" fell through to the graveyard
+		// default — cards going to "battlefield" silently became graveyard
+		// inhabitants, causing ~80% of zone_accounting Feynman violations.
+		// See docs/zone-accounting-analysis.md.
+		for _, p := range s.Battlefield {
+			if p.Card == c {
+				return
+			}
+		}
+		EnsureBattlefieldFrontFace(c)
+		// CR 304.4 / 307.1: instants and sorceries cannot enter the
+		// battlefield. If the card has no permanent type after face
+		// correction, redirect to graveyard to avoid §205 SBA.
+		if !CardCanEnterBattlefield(c) {
+			s.Graveyard = append(s.Graveyard, c)
+			return
+		}
+		tapped := zone == "battlefield_tapped"
+		sick := false
+		if cardHasType(c, "creature") {
+			sick = !cardHasKeyword(c, "haste")
+		}
+		perm := &Permanent{
+			Card:          c,
+			Controller:    seat,
+			Owner:         c.Owner,
+			Tapped:        tapped,
+			SummoningSick: sick,
+			Timestamp:     gs.NextTimestamp(),
+			Counters:      map[string]int{},
+			Flags:         map[string]int{},
+		}
+		s.Battlefield = append(s.Battlefield, perm)
+		RegisterReplacementsForPermanent(gs, perm)
+		FirePermanentETBTriggers(gs, perm)
 	default:
 		if inSlice(s.Graveyard) {
 			return

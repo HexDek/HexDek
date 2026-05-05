@@ -94,13 +94,14 @@ func MoveCard(gs *GameState, card *Card, ownerSeat int, fromZone, toZone, reason
 // duplication that this call has now collapsed).
 //
 // Use this defensively before placing a card on the battlefield via a
-// non-stack path (reanimation, fetchland search, Sneak Attack, etc.).
-// MoveCard's `toZone="battlefield"` path silently re-graveyards the
-// card because moveToZone has no battlefield arm; per-card hooks then
-// call createPermanent / enterBattlefieldWithETB, leaving the same
-// *Card in both graveyard and battlefield. A single sweep before
-// createPermanent keeps zone accounting honest without auditing every
-// per-card site. See docs/zone-accounting-analysis.md (hypothesis #1).
+// non-stack path (reanimation, fetchland search, Sneak Attack, etc.)
+// when the caller manages Permanent construction itself (per_card
+// hooks via createPermanent / enterBattlefieldWithETB). MoveCard's
+// `toZone="battlefield"` path now has a proper battlefield arm in
+// moveToZone that wraps the Card in a Permanent, so callers routed
+// through MoveCard no longer need a pre-sweep. Per-card hooks that
+// construct their own Permanent should still call this to keep zone
+// accounting honest. See docs/zone-accounting-analysis.md.
 func RemoveCardFromAllPrivateZones(gs *GameState, seatIdx int, card *Card) int {
 	if gs == nil || card == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
 		return 0
