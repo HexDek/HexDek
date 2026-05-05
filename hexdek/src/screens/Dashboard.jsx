@@ -446,6 +446,7 @@ export default function Dashboard() {
               ['TIER', profile.tier],
               ['STREAK', profile.streak],
               ['PRIMARY', profile.primaryColor],
+              ['FRIENDS', String(friends.length)],
             ]} />
           </Panel>
 
