@@ -2177,6 +2177,17 @@ func (sm *Showmatch) updateELO(deckKeys, commanders []string, decks []*deckparse
 		sm.elo[winnerKey].hexRating += hwDelta + hexELOGravity(sm.elo[winnerKey].hexRating, wBracket)
 		sm.elo[loserKey].hexRating += hlDelta + hexELOGravity(sm.elo[loserKey].hexRating, lBracket)
 	}
+
+	// Anti-cheat Phase 1 — feed each contributor's per-game result into
+	// the statistical anomaly detector and log any flagged outliers.
+	// Detection-only: no action is taken on a flag here. The detector
+	// has its own mutex so it doesn't interact with sm.mu.
+	for i, key := range deckKeys {
+		won := i == winner
+		if flag := hat.DefaultAnomalyDetector.Record(key, won); flag != nil {
+			hat.LogAnomaly(flag)
+		}
+	}
 }
 
 func (sm *Showmatch) GetSnapshot() *GameSnapshot {
