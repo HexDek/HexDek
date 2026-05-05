@@ -25,19 +25,31 @@ flowchart TB
     %% ================== INTELLIGENCE ==================
     subgraph Intelligence["🧠 Intelligence — the YggdrasilHat brain (package hat)"]
         direction TB
-        hat["<b>hat / Yggdrasil</b><br/><i>main AI player; MCTS + heuristics + Freya intel</i><br/>YggdrasilHat · NewYggdrasilHat · BudgetForELO · MjolnirStats"]
-        strategy["<b>hat/strategy</b><br/><i>Freya strategy profile bridge</i><br/>StrategyProfile · WeaknessProfile · ComboPlan"]
-        evaluator["<b>hat/evaluator</b><br/><i>8-dim board evaluation + weights</i>"]
-        mcts["<b>hat/mcts + rollout</b><br/><i>tree search + simulated playouts</i>"]
-        amiibo["<b>hat/amiibo</b><br/><i>evolvable per-deck DNA + dimension EMA</i><br/>AmiiboDNA · DimensionStats"]
-        tesla["<b>hat/tesla</b><br/><i>causal pivot extraction (when did the game tilt?)</i><br/>CausalPivot"]
-        feynman["<b>hat/feynman</b><br/><i>provably-correct invariant oracle</i><br/>OracleViolation · OracleResult"]
-        ive["<b>hat/ive</b><br/><i>three-act spectator narrative builder</i><br/>GameNarrative · Act"]
-        micronet["<b>hat/micronet</b><br/><i>per-deck tiny neural collector</i><br/>MicroNet · MicroSample · MicroCollector"]
-        neural["<b>hat/neural</b><br/><i>state vector encoder for NN input</i><br/>StateVector · EncodeState"]
-        octo["<b>hat/octo</b><br/><i>OctoHat stress-test policy (chaos player)</i>"]
-        poker["<b>hat/poker</b><br/><i>deprecated HOLD/CALL/RAISE policy</i>"]
-        freya["<b>cmd/hexdek-freya</b><br/><i>deck analyzer: archetype, combos, roles, win lines</i><br/>FreyaReport · DeckProfile · BuildDeckProfile · ComputeEvalWeights"]
+
+        subgraph IntelCore["Core — decision-making"]
+            direction TB
+            hat["<b>hat / Yggdrasil</b><br/><i>main AI player; MCTS + heuristics + Freya intel</i><br/>YggdrasilHat · NewYggdrasilHat · BudgetForELO · MjolnirStats"]
+            strategy["<b>hat/strategy</b><br/><i>Freya strategy profile bridge</i><br/>StrategyProfile · WeaknessProfile · ComboPlan"]
+            evaluator["<b>hat/evaluator</b><br/><i>8-dim board evaluation + weights</i>"]
+            mcts["<b>hat/mcts + rollout</b><br/><i>tree search + simulated playouts</i>"]
+        end
+
+        subgraph IntelLearning["Learning — observation & evolution"]
+            direction TB
+            amiibo["<b>hat/amiibo</b><br/><i>evolvable per-deck DNA + dimension EMA</i><br/>AmiiboDNA · DimensionStats"]
+            tesla["<b>hat/tesla</b><br/><i>causal pivot extraction (when did the game tilt?)</i><br/>CausalPivot"]
+            feynman["<b>hat/feynman</b><br/><i>provably-correct invariant oracle</i><br/>OracleViolation · OracleResult"]
+            ive["<b>hat/ive</b><br/><i>three-act spectator narrative builder</i><br/>GameNarrative · Act"]
+            micronet["<b>hat/micronet</b><br/><i>per-deck tiny neural collector</i><br/>MicroNet · MicroSample · MicroCollector"]
+            neural["<b>hat/neural</b><br/><i>state vector encoder for NN input</i><br/>StateVector · EncodeState"]
+        end
+
+        subgraph IntelPolicies["Policies & Analysis — alt brains and offline tools"]
+            direction TB
+            octo["<b>hat/octo</b><br/><i>OctoHat stress-test policy (chaos player)</i>"]
+            poker["<b>hat/poker</b><br/><i>deprecated HOLD/CALL/RAISE policy</i>"]
+            freya["<b>cmd/hexdek-freya</b><br/><i>deck analyzer: archetype, combos, roles, win lines</i><br/>FreyaReport · DeckProfile · BuildDeckProfile · ComputeEvalWeights"]
+        end
     end
 
     %% ================== DISCOVERY ==================
