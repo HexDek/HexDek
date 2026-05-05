@@ -76,6 +76,18 @@ const ACTION_PATTERNS = [
   / DESTROYS (.+)$/,
   / SACRIFICES (.+)$/,
   / → ETB: (.+)$/,
+  / UNTAPS (.+)$/,
+  / TAPS (.+)$/,
+  / DISCARDS (.+)$/,
+  / BOUNCES (.+)$/,
+  / FLICKERS (.+)$/,
+  / EQUIPS (.+)$/,
+  / EXILES (.+)$/,
+  / REANIMATES (.+)$/,
+  / RETURNS (.+) TO HAND$/,
+  / ACTIVATES (.+)$/,
+  / TRIGGERS (.+)$/,
+  / CASCADE → (.+)$/,
 ]
 
 export function linkifyAction(action) {

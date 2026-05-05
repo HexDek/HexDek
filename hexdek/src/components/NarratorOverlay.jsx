@@ -56,6 +56,7 @@ function narrate(entry, seats) {
   const tail = stripActor(entry.action, actorRaw)
   const lower = tail.toLowerCase()
   const detail = entry.detail || ''
+  const source = entry.source || ''
 
   // Game-changer detection wins over the kind switch — the engine fires
   // the same enter_battlefield kind for any permanent ETB; we only want
@@ -87,9 +88,9 @@ function narrate(entry, seats) {
       return { text: `${actor} ${tail.toLowerCase()}`, tone: 'combat' }
     }
     case 'cast': {
-      // tail is "CASTS <NAME>". Narrate as "X casts NAME."
       const m = tail.match(/^CASTS (.+)$/i)
       if (m) return { text: `${actor} casts ${titleCase(m[1])}.`, tone: 'cast' }
+      if (source) return { text: `${actor} casts ${titleCase(source)}.`, tone: 'cast' }
       return { text: `${actor} casts a spell.`, tone: 'cast' }
     }
     case 'land': {

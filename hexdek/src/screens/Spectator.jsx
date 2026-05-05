@@ -161,6 +161,55 @@ const ELIMINATION_REASONS = {
   sba_704_5d: '21+ COMMANDER DMG',
 }
 
+function linkifyNarrated(text, source, targets) {
+  if (!text) return text
+  const cardNames = []
+  if (source) cardNames.push(source)
+  if (targets) {
+    for (const t of targets) {
+      if (t && !cardNames.some(c => c.toLowerCase() === t.toLowerCase())) {
+        cardNames.push(t)
+      }
+    }
+  }
+  if (cardNames.length === 0) return text
+
+  for (const card of cardNames) {
+    const titleCard = card.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+    const idx = text.indexOf(titleCard)
+    if (idx >= 0) {
+      const before = text.slice(0, idx)
+      const after = text.slice(idx + titleCard.length)
+      return (
+        <>
+          {before}
+          <CardLink name={card} style={{ color: 'inherit', borderBottom: '1px dotted currentColor' }}>
+            {titleCard}
+          </CardLink>
+          {after}
+        </>
+      )
+    }
+    const upperCard = card.toUpperCase()
+    const idxU = text.toUpperCase().indexOf(upperCard)
+    if (idxU >= 0) {
+      const before = text.slice(0, idxU)
+      const matched = text.slice(idxU, idxU + card.length)
+      const after = text.slice(idxU + card.length)
+      return (
+        <>
+          {before}
+          <CardLink name={card} style={{ color: 'inherit', borderBottom: '1px dotted currentColor' }}>
+            {matched}
+          </CardLink>
+          {after}
+        </>
+      )
+    }
+  }
+  return text
+}
+
 export default function Spectator() {
   const navigate = useNavigate()
   const { game, elo, stats, speed, status } = useLiveSocket()
@@ -592,7 +641,7 @@ export default function Spectator() {
                               }}>
                                 {gc && <span className="gc-pill" title="Game Changer">★ GC</span>}
                                 {entry.count > 1 && <span style={{ background: 'var(--ink-3)', color: 'var(--bg)', borderRadius: 3, padding: '0 4px', fontSize: 9, marginRight: 4, fontWeight: 700 }}>×{entry.count}</span>}
-                                {narrated.text}
+                                {linkifyNarrated(narrated.text, entry.source, entry.targets)}
                               </span>
                             ) : isElim ? (
                               <span style={{
