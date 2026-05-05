@@ -38,7 +38,7 @@ function resolveHref(item) {
     return `/decks?owner=${encodeURIComponent(item.label)}`
   }
   if (item.kind === 'card') {
-    return `/decks?contains=${encodeURIComponent(item.label)}`
+    return `/cards/${encodeURIComponent(item.label)}`
   }
   if (item.kind === 'commander') {
     return `/decks?tab=all&q=${encodeURIComponent(item.label)}`

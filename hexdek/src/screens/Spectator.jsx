@@ -4,6 +4,7 @@ import { Panel, KV, Bar, Tag, Btn, Tape } from '../components/chrome'
 import { cardArtUrl, API_BASE } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { findGameChangerInText } from '../data/gameChangers'
+import CardLink, { linkifyAction } from '../components/CardLink'
 
 const SPEED_MARKS = [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2]
 
@@ -532,7 +533,18 @@ export default function Spectator() {
                         ) : (
                           <span style={{ color: LOG_COLORS[entry.kind] || 'var(--ink)', letterSpacing: '0.02em' }}>
                             {gc && <span className="gc-pill" title="Game Changer">★ GC</span>}
-                            &gt; {entry.action}
+                            {(() => {
+                              const { prefix, cardName } = linkifyAction(entry.action)
+                              if (!cardName) return <>&gt; {entry.action}</>
+                              return (
+                                <>
+                                  &gt; {prefix}
+                                  <CardLink name={cardName} style={{ color: 'inherit', borderBottom: '1px dotted currentColor' }}>
+                                    {cardName}
+                                  </CardLink>
+                                </>
+                              )
+                            })()}
                           </span>
                         )}
                       </div>

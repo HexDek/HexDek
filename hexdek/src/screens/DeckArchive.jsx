@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPie, computeColorByCmc } from '../components/chrome'
 import CardRolesGrid from '../components/CardRolesGrid'
+import CardLink from '../components/CardLink'
 import AmiiboPanel from '../components/AmiiboPanel'
 import { AchievementsPanel, BadgeShowcase } from '../components/AchievementsPanel'
 import { toast } from '../components/Toast'
@@ -13,29 +14,36 @@ import { MOCK_DECK_ANALYSIS } from '../services/mock'
 
 const CardThumb = ({ name, cmc, score, compact }) => {
   const imgUrl = cardArtUrl(name)
+  // Whole tile is a CardLink. underline=false because the click
+  // affordance is the art tile itself; a dotted underline on a 5/7
+  // image would be visual noise.
   if (compact) {
     return (
-      <div className="panel" style={{ padding: 0 }}>
-        <div style={{ aspectRatio: '5/4', position: 'relative', overflow: 'hidden' }}>
-          <img src={imgUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'saturate(0.6) contrast(1.1)' }} onError={e => { e.target.style.display = 'none'; e.target.parentElement.classList.add('hatch') }} />
+      <CardLink name={name} underline={false} style={{ display: 'block' }}>
+        <div className="panel" style={{ padding: 0 }}>
+          <div style={{ aspectRatio: '5/4', position: 'relative', overflow: 'hidden' }}>
+            <img src={imgUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'saturate(0.6) contrast(1.1)' }} onError={e => { e.target.style.display = 'none'; e.target.parentElement.classList.add('hatch') }} />
+          </div>
+          <div style={{ padding: '3px 5px' }}>
+            <div style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1.1, minHeight: 14, overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+          </div>
         </div>
-        <div style={{ padding: '3px 5px' }}>
-          <div style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1.1, minHeight: 14, overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
-        </div>
-      </div>
+      </CardLink>
     )
   }
   return (
-    <div className="panel" style={{ padding: 0 }}>
-      <div style={{ aspectRatio: '5/7', borderBottom: '1px solid var(--rule-2)', position: 'relative', overflow: 'hidden' }}>
-        <img src={imgUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'saturate(0.6) contrast(1.1)' }} onError={e => { e.target.style.display = 'none'; e.target.parentElement.classList.add('hatch') }} />
-        <span style={{ position: 'absolute', top: 4, left: 5, background: 'rgba(12,13,10,0.6)', padding: '0 3px' }} className="t-xs muted-2">{cmc || ''}</span>
-        {score && <span style={{ position: 'absolute', top: 4, right: 5, fontSize: 9, color: 'var(--ok)' }}>■{score}</span>}
+    <CardLink name={name} underline={false} style={{ display: 'block' }}>
+      <div className="panel" style={{ padding: 0 }}>
+        <div style={{ aspectRatio: '5/7', borderBottom: '1px solid var(--rule-2)', position: 'relative', overflow: 'hidden' }}>
+          <img src={imgUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'saturate(0.6) contrast(1.1)' }} onError={e => { e.target.style.display = 'none'; e.target.parentElement.classList.add('hatch') }} />
+          <span style={{ position: 'absolute', top: 4, left: 5, background: 'rgba(12,13,10,0.6)', padding: '0 3px' }} className="t-xs muted-2">{cmc || ''}</span>
+          {score && <span style={{ position: 'absolute', top: 4, right: 5, fontSize: 9, color: 'var(--ok)' }}>■{score}</span>}
+        </div>
+        <div style={{ padding: '5px 7px' }}>
+          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1.2, minHeight: 24 }}>{name}</div>
+        </div>
       </div>
-      <div style={{ padding: '5px 7px' }}>
-        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1.2, minHeight: 24 }}>{name}</div>
-      </div>
-    </div>
+    </CardLink>
   )
 }
 
@@ -597,12 +605,19 @@ export default function DeckArchive() {
           {cards.length > 0 && (
             <Panel code="04.B" title={`CARD LIST / / ${cards.length} ENTRIES`}>
               <div style={{ maxHeight: 240, overflow: 'auto' }}>
-                {cards.map((c, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: i < cards.length - 1 ? '1px dotted var(--rule)' : 'none' }}>
-                    <span className="t-xs">{c.name}</span>
-                    <span className="t-xs muted">{c.quantity > 1 ? `×${c.quantity}` : ''}</span>
-                  </div>
-                ))}
+                {cards.map((c, i) => {
+                  // Strip the "COMMANDER: " deck-file prefix when present so the
+                  // CardLink target is the raw card name Scryfall knows.
+                  const linkName = (c.name || '').replace(/^COMMANDER:\s*/i, '').trim()
+                  return (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: i < cards.length - 1 ? '1px dotted var(--rule)' : 'none' }}>
+                      <CardLink name={linkName} className="t-xs" style={{ borderBottom: 'none' }}>
+                        {c.name}
+                      </CardLink>
+                      <span className="t-xs muted">{c.quantity > 1 ? `×${c.quantity}` : ''}</span>
+                    </div>
+                  )
+                })}
               </div>
             </Panel>
           )}

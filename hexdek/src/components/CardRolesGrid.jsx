@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { Panel, Tag } from './chrome'
 import { cardArtUrl } from '../services/api'
 import CardPopupTrigger from './CardPopup'
+import CardLink from './CardLink'
 
 const ROLE_ORDER = [
   'Threat',
@@ -56,25 +57,30 @@ const ROLE_KIND = {
 
 function RoleThumb({ name, qty }) {
   const imgUrl = cardArtUrl(name)
+  // CardLink wraps the popup trigger so hover-popup is preserved AND a
+  // direct click navigates to /cards/:cardName. underline=false because
+  // the click affordance is the art tile itself.
   return (
-    <CardPopupTrigger name={name} as="div" className="panel" style={{ padding: 0 }}>
-      <div style={{ aspectRatio: '5/4', position: 'relative', overflow: 'hidden' }}>
-        <img
-          src={imgUrl}
-          alt={name}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'saturate(0.6) contrast(1.1)' }}
-          onError={e => { e.target.style.display = 'none'; e.target.parentElement.classList.add('hatch') }}
-        />
-        {qty > 1 && (
-          <span style={{ position: 'absolute', top: 4, right: 5, background: 'rgba(12,13,10,0.7)', padding: '0 3px', fontSize: 9, color: 'var(--ink)' }}>×{qty}</span>
-        )}
-      </div>
-      <div style={{ padding: '3px 5px' }}>
-        <div style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1.1, minHeight: 14, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {name}
+    <CardLink name={name} underline={false} style={{ display: 'block' }}>
+      <CardPopupTrigger name={name} as="div" className="panel" style={{ padding: 0 }}>
+        <div style={{ aspectRatio: '5/4', position: 'relative', overflow: 'hidden' }}>
+          <img
+            src={imgUrl}
+            alt={name}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'saturate(0.6) contrast(1.1)' }}
+            onError={e => { e.target.style.display = 'none'; e.target.parentElement.classList.add('hatch') }}
+          />
+          {qty > 1 && (
+            <span style={{ position: 'absolute', top: 4, right: 5, background: 'rgba(12,13,10,0.7)', padding: '0 3px', fontSize: 9, color: 'var(--ink)' }}>×{qty}</span>
+          )}
         </div>
-      </div>
-    </CardPopupTrigger>
+        <div style={{ padding: '3px 5px' }}>
+          <div style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1.1, minHeight: 14, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {name}
+          </div>
+        </div>
+      </CardPopupTrigger>
+    </CardLink>
   )
 }
 
@@ -206,9 +212,11 @@ function TextList({ cards }) {
             paddingBottom: 1,
           }}
         >
-          <CardPopupTrigger name={c.displayName} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {c.displayName}
-          </CardPopupTrigger>
+          <CardLink name={c.displayName} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', borderBottom: 'none' }}>
+            <CardPopupTrigger name={c.displayName} style={{ display: 'inline' }}>
+              {c.displayName}
+            </CardPopupTrigger>
+          </CardLink>
           {c.quantity > 1 && (
             <span className="muted" style={{ flexShrink: 0 }}>×{c.quantity}</span>
           )}

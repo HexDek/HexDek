@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Panel, Bar, Tag, Btn, Tape } from '../components/chrome'
 import { cardArtUrl } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
+import CardLink, { linkifyAction } from '../components/CardLink'
 
 const LOG_COLORS = {
   cast: 'var(--ok)',
@@ -258,7 +259,18 @@ export default function GameBoard() {
                   >
                     <span className="muted-2" style={{ fontSize: 10 }}>T{entry.turn}</span>
                     <span style={{ color: LOG_COLORS[entry.kind] || 'var(--ink)', letterSpacing: '0.02em' }}>
-                      &gt; {entry.action}
+                      {(() => {
+                        const { prefix, cardName } = linkifyAction(entry.action)
+                        if (!cardName) return <>&gt; {entry.action}</>
+                        return (
+                          <>
+                            &gt; {prefix}
+                            <CardLink name={cardName} style={{ color: 'inherit', borderBottom: '1px dotted currentColor' }}>
+                              {cardName}
+                            </CardLink>
+                          </>
+                        )
+                      })()}
                     </span>
                   </div>
                 ))
