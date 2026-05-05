@@ -1556,6 +1556,19 @@ func registerDefaults() {
 	registerZndrspltEyeOfWisdom(Global())
 	registerZoralineCosmosCaller(Global())
 
+	// Manual fill of unhandled-commander gaps (oracle text from Scryfall bulk).
+	registerGolosTirelessPilgrim(Global())
+	registerIsamaruHoundOfKonda(Global())
+	registerJaradGolgariLichLord(Global())
+	registerSinSpirasPunishment(Global())
+	registerSyrVondamSunstarExemplar(Global())
+	registerTidusYunasGuardian(Global())
+	registerVarolzTheScarStriped(Global())
+	registerXuIfitOsteoharmonist(Global())
+	registerYusriFortunesFlame(Global())
+	registerZinniaValleysVoice(Global())
+	registerZoyowaLavaTongue(Global())
+	registerZurgoThundersDecree(Global())
 
 	// Auto-generated handlers (cmd/gen-handlers).
 	registerGeneratedHandlers(Global())
