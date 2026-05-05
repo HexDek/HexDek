@@ -148,6 +148,71 @@ export default function DeckArchive() {
   const metaMatchups = analysis?.meta_matchups || []
   const cardRoles = analysis?.card_roles || null
 
+  // Derive commander color identity for page theming. Prefer Freya's analysis
+  // (authoritative), then commander mana cost, then any pip in the decklist.
+  const colorIdentity = (() => {
+    if (Array.isArray(analysis?.color_identity) && analysis.color_identity.length) {
+      return [...analysis.color_identity].map(c => c.toUpperCase()).filter(c => 'WUBRG'.includes(c))
+        .sort((a, b) => 'WUBRG'.indexOf(a) - 'WUBRG'.indexOf(b))
+    }
+    const ci = new Set()
+    const scan = mc => {
+      if (!mc) return
+      const pips = mc.match(/\{([WUBRG])\}/gi) || []
+      for (const p of pips) ci.add(p.replace(/[{}]/g, '').toUpperCase())
+    }
+    const cmdrName = deck?.commander_card
+    if (cmdrName) {
+      const cmdr = cards.find(c => c.name === cmdrName)
+      if (cmdr) scan(cmdr.mana_cost)
+    }
+    if (ci.size === 0) for (const c of cards) scan(c.mana_cost)
+    return Array.from(ci).sort((a, b) => 'WUBRG'.indexOf(a) - 'WUBRG'.indexOf(b))
+  })()
+
+  const pageTheme = (() => {
+    // Per-color palette: rgba base for the wash, hex accent for highlights.
+    const COLORS = {
+      W: { base: '226, 218, 188', accent: '#d8c878' },
+      U: { base: '34, 70, 110',   accent: '#5a8fbf' },
+      B: { base: '36, 26, 42',    accent: '#9c6ab0' },
+      R: { base: '78, 28, 22',    accent: '#cc5c4a' },
+      G: { base: '36, 70, 36',    accent: '#7ac28a' },
+    }
+    const ids = colorIdentity.length ? colorIdentity : []
+    if (ids.length === 0) {
+      return { wash: 'linear-gradient(135deg, rgba(28,29,22,0.9), rgba(20,21,15,0.9))', accent: '#8a9682', label: 'COLORLESS' }
+    }
+    // Build a 135deg gradient across the colors. Single colors get a soft
+    // top-left → bottom-right fade between two intensities of the same hue.
+    let stops
+    if (ids.length === 1) {
+      const c = COLORS[ids[0]]
+      stops = `rgba(${c.base}, 0.85) 0%, rgba(${c.base}, 0.35) 100%`
+    } else {
+      stops = ids.map((c, i) => {
+        const pct = (i / (ids.length - 1)) * 100
+        return `rgba(${COLORS[c].base}, 0.7) ${pct.toFixed(0)}%`
+      }).join(', ')
+    }
+    // Pick accent by visual distinctiveness priority: R > G > U > B > W.
+    const accentPriority = ['R', 'G', 'U', 'B', 'W']
+    const accentColor = ids.find(c => accentPriority.includes(c))
+      ? COLORS[accentPriority.find(c => ids.includes(c))].accent
+      : '#8a9682'
+    const COMBO_NAMES = {
+      W: 'MONO WHITE', U: 'MONO BLUE', B: 'MONO BLACK', R: 'MONO RED', G: 'MONO GREEN',
+      WU: 'AZORIUS', UB: 'DIMIR', BR: 'RAKDOS', RG: 'GRUUL', GW: 'SELESNYA',
+      WB: 'ORZHOV', UR: 'IZZET', BG: 'GOLGARI', RW: 'BOROS', UG: 'SIMIC',
+      WUB: 'ESPER', UBR: 'GRIXIS', BRG: 'JUND', RGW: 'NAYA', GWU: 'BANT',
+      WBG: 'ABZAN', URW: 'JESKAI', BGU: 'SULTAI', RWB: 'MARDU', GUR: 'TEMUR',
+      WUBR: 'YORE-TILLER', WUBG: 'WITCH-MAW', WURG: 'INK-TREADER', WBRG: 'DUNE-BROOD', UBRG: 'GLINT-EYE',
+      WUBRG: 'FIVE-COLOR',
+    }
+    const label = COMBO_NAMES[ids.join('')] || ids.join('')
+    return { wash: `linear-gradient(135deg, ${stops})`, accent: accentColor, label }
+  })()
+
   const clientCurve = (() => {
     if (!cards.length) return null
     const dist = Array(8).fill(0)
@@ -217,8 +282,15 @@ export default function DeckArchive() {
   }
 
   return (
-    <>
-      <Tape left={`DECK ARCHIVE / / ${owner?.toUpperCase()} / / ${deckName}`} mid={pls ? `Plays Like B${pls} (Bracket B${wbs})` : `Bracket B${wbs}`} right="EXPORT ↗ ANALYZE ↗" />
+    <div
+      className="deck-archive-page"
+      style={{ '--page-wash': pageTheme.wash, '--accent': pageTheme.accent }}
+    >
+      <Tape
+        left={`DECK ARCHIVE / / ${owner?.toUpperCase()} / / ${deckName}`}
+        mid={pls ? `Plays Like B${pls} (Bracket B${wbs}) · ${pageTheme.label}` : `Bracket B${wbs} · ${pageTheme.label}`}
+        right="EXPORT ↗ ANALYZE ↗"
+      />
 
       <div className="archive-layout">
         <div className="archive-sidebar">
@@ -775,6 +847,6 @@ export default function DeckArchive() {
           )}
         </div>
       </div>
-    </>
+    </div>
   )
 }
