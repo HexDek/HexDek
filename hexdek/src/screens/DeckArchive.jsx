@@ -329,7 +329,7 @@ export default function DeckArchive() {
 
           {cards.length > 0 && (
             <Panel code="04.B" title={`CARD LIST / / ${cards.length} ENTRIES`}>
-              <div style={{ maxHeight: 300, overflow: 'auto' }}>
+              <div style={{ maxHeight: 240, overflow: 'auto' }}>
                 {cards.map((c, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: i < cards.length - 1 ? '1px dotted var(--rule)' : 'none' }}>
                     <span className="t-xs">{c.name}</span>
@@ -611,9 +611,9 @@ export default function DeckArchive() {
             </Panel>
           )}
 
-          {/* Card roles grid */}
-          {cardRoles && Object.keys(cardRoles).length > 0 && (
-            <CardRolesGrid cardRoles={cardRoles} />
+          {/* Card roles grid (toggles between role-grouped and flat list) */}
+          {cards.length > 0 && (
+            <CardRolesGrid cards={cards} cardRoles={cardRoles} />
           )}
 
           {/* Emergent synergies */}
