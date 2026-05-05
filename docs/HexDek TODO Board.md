@@ -56,7 +56,7 @@ kanban-plugin: board
 - [x] **Interaction profile** — `interaction_avg_cmc` + `cheap_interaction`: KV rows for avg CMC + count at ≤2 CMC in deck info sidebar (2026-05-04) #ui #wiring
 
 **Card-level data:**
-- [ ] **Card roles grid** — `card_roles`: per-card role tag (ramp/draw/removal/combo/etc). Powers the Ive card grid grouped by Freya role #ui #wiring #design
+- [x] **Card roles grid** — `card_roles`: per-card role tag (ramp/draw/removal/combo/etc) wired into `<CardRolesGrid>` with GRID/LIST toggle, OTHER bucket for unmapped cards (commit 5782579, 2026-05-04) #ui #wiring #design
 - [x] **Finisher cards callout** — `finisher_cards`: the actual win-condition cards. "Win Conditions" panel with art thumbnails (2026-05-04) #ui #wiring
 - [x] **Color demand heatmap** — already implemented: Color Balance panel shows production vs demand bars reading `color_demand` from strategy.json (2026-05-04) #ui #wiring
 
@@ -84,7 +84,7 @@ kanban-plugin: board
 **Deck pages — "tangible object" design:**
 - [x] Commander color-identity page theming — CSS vars `--page-wash`, `--accent` derived from commander color identity (e.g. Grixis = deep blue-black gradient with red accent). Every deck page feels unique (2026-05-04) #ui #deck #design
 - [x] Full-bleed commander art on deck pages — hero image, not a thumbnail. The commander IS the page (2026-05-04) #ui #deck #design
-- [ ] Card grid view as default — art thumbnails grouped by Freya role (ramp, draw, removal, combo pieces, etc). Text list as toggle for data people #ui #deck
+- [x] Card grid view as default — art thumbnails grouped by Freya role (ramp, draw, removal, combo pieces, etc) with LIST toggle for data people, default GRID (commit 5782579, 2026-05-04) #ui #deck
 - [x] Deck personality blurb prominent — Freya hero blurb on deck archive, front and center (2026-05-04) #ui #deck
 - [x] Commander theming on deck pages — physical-deck-box polish with full-bleed art + color-identity wash + accent rules; each deck page feels like holding a real object, not browsing a database row (commit fd89de3, 2026-05-04) #ui #deck #design
 
@@ -98,7 +98,7 @@ kanban-plugin: board
 - [x] One-tap auth — contextual AuthPrompt modal triggered on auth-gated actions (upload/import), email magic-link primary path + Discord OAuth button stubbed pending provider wiring, proactive SIGN IN ↗ button in nav (2026-05-04) #ui #auth
 
 **Sharing:**
-- [ ] Share = link — no login needed to view a shared deck. Shareable URL on every deck page #ui #social
+- [x] Share = link — SHARE button on every deck page (clipboard copy + toast confirmation, OG meta unfurl handler at GET /decks/{owner}/{id}, anonymous viewing already supported); CardLink component wires every card-name display across DeckArchive/CardRolesGrid/SearchBar/Spectator/GameBoard to /cards/:cardName (commits 582575a + 3a253d0, 2026-05-04) #ui #social
 
 
 ## High Priority — Learning Loop (Observability)
@@ -244,6 +244,27 @@ kanban-plugin: board
 - [ ] Mobile-friendly leaderboard #ui
 - [x] Donations page BOINC/ads buttons — placeholders replaced with real BOINC distributed-compute card + Support Dev card (Ko-fi + GH Sponsors) + FAQ panel (commit 2f45e1a, 2026-05-04) #ui
 - [ ] Report analysis placeholder (`Report.jsx:332`) — feature not fully wired #ui
+
+
+## Done — Session 2026-05-04 Night
+
+*All commits land on the same day; this group captures the back-half push beyond the daytime ship list above.*
+
+- [x] **Card Page (`/cards/:cardName`)** — dedicated screen with Scryfall art, mana cost, oracle text, type line, set + rarity, plus per-card Freya appearance stats. Lazy-mounted route in App.jsx. (commits 4349bd9 + f4ae8b0, 2026-05-04) #ui #cards
+- [x] **Card Popup component** — hover/tap preview with art + stats, attached to deck-list card names; trigger uses help-cursor and tolerates touch (commit e32f147, 2026-05-04) #ui #cards
+- [x] **Card search + detail API** — `GET /api/cards/search?q=` + `GET /api/cards/{name}` backed by an in-memory index; oracle loader bumped to capture Scryfall `set` field (commit a37e3bd, 2026-05-04) #api #cards
+- [x] **CardLink component + universal wiring** — single helper renders `<Link to="/cards/:cardName">` with stopPropagation; `linkifyAction` parses log strings against engine-templated patterns. Wired into DeckArchive (CardThumb + sidebar list), CardRolesGrid (RoleThumb + LIST view), SearchBar (card-kind result), Spectator + GameBoard log rows (commit 3a253d0, 2026-05-04) #ui #cards
+- [x] **Temporal Pincer** — anonymous UUID cookie → session tracking → on auth, stitch all anon device UUIDs to authenticated profile. SQLite schema, REST handlers, and frontend wiring (commits b27f86f + b988507 + eb2dd26, 2026-05-04) #infra #platform
+- [x] **Mobile responsiveness pass (375px)** — pass over the night's new features (CardPage, CardPopup, search overlay, profile flag, fishtank embed) to fix overflow + touch targets at 375px (commit 8748b52, 2026-05-04) #ui #mobile
+- [x] **MDFC fix v1: tryPlayLand back-face swap** — first half of the §712.11 fix; `SwapToBackFace` called in tournament/turn.go::tryPlayLand when an MDFC's back face is a land (commit fa018fd, 2026-05-04) #engine #mdfc
+- [x] **MDFC fix v2: SwapToBackFace at every battlefield-entry path** — extends the fix to MoveCard and the broader resolve-time entry points so back-face land MDFCs lose front-face instant/sorcery types regardless of how they reach the battlefield. Eliminates the dominant `zone_accounting` Feynman violation source identified in `docs/zone-accounting-analysis.md` (commits 29c768d + 13ed4b3, 2026-05-04) #engine #mdfc
+- [x] **game_end fix** — turn-cap leader-determination now marks below-life survivors `Lost`, fixing edge cases where the cap-truncated game ended without a clear winner (commit c2282f6, 2026-05-04) #engine #bug
+- [x] **zone_accounting fix** — defensive sweep + library / command_zone arms in the existing zone-accounting check; cooperates with the MDFC fix to drive the violation rate down (commit fb100ce, 2026-05-04) #engine #zones
+- [x] **34+ new commander handlers** — three batches of manual + auto-generated handlers: 10 manual (Adeline / Adriana / Adrix & Nev / …, commit f464b43), 12 manual (Golos / Isamaru / Jarad / …, commit 49c882f), 14 MDFC slash-form aliases for existing handlers (commit d1294ea). Net 36 new registered commanders; coverage push beyond the previous 447/652 mark. #engine #per_card
+
+*Items the user listed for this section that don't yet have a commit:*
+- Card Synergy Analytics — files exist (`internal/db/card_stats.go`, `internal/hexapi/cardstats.go`) but unstaged; not yet shipped.
+- Spectator narrator — `hexdek/src/components/NarratorOverlay.jsx` exists and is imported by Spectator.jsx, but the file itself isn't committed yet.
 
 
 ## Done
