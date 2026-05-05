@@ -60,7 +60,6 @@ func registerGeneratedHandlers(r *Registry) {
 	registerGiadaFontOfHope(r) // Giada, Font of Hope [SIMPLE_ACTIVATED]
 	registerGyrudaDoomOfDepths(r) // Gyruda, Doom of Depths [SIMPLE_ETB]
 	registerHamzaGuardianOfArashin(r) // Hamza, Guardian of Arashin [STATIC]
-	registerHenzieToolboxTorre(r) // Henzie "Toolbox" Torre [STATIC]
 	registerHidetsuguAndKairi(r) // Hidetsugu and Kairi [SIMPLE_ETB]
 	registerHogaakArisenNecropolis(r) // Hogaak, Arisen Necropolis [STATIC]
 	registerInallaArchmageRitualist(r) // Inalla, Archmage Ritualist [STATIC]

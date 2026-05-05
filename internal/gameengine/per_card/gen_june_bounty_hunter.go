@@ -11,18 +11,13 @@ import (
 //   June can't be blocked as long as you've drawn two or more cards this turn.
 //   {1}, Sacrifice another creature: Create a Clue token. Activate only during your turn. (It's an artifact with "{2}, Sacrifice this token: Draw a card.")
 //
-// Implementation:
-//   - Activated: create a Clue token. The {1} + sacrifice cost and the
-//     "your turn" timing restriction are enforced by the activation
-//     pipeline.
-//   - Static unblockability is engine-side state (cards-drawn-this-turn
-//     gating).
+// Auto-generated activated ability handler.
 func registerJuneBountyHunter(r *Registry) {
 	r.OnActivated("June, Bounty Hunter", juneBountyHunterActivate)
 }
 
 func juneBountyHunterActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilityIdx int, ctx map[string]interface{}) {
-	const slug = "june_bounty_hunter_clue"
+	const slug = "june_bounty_hunter_activate"
 	if gs == nil || src == nil {
 		return
 	}
@@ -30,14 +25,15 @@ func juneBountyHunterActivate(gs *gameengine.GameState, src *gameengine.Permanen
 	if seat < 0 || seat >= len(gs.Seats) {
 		return
 	}
-	clue := &gameengine.Card{
-		Name:     "Clue Token",
-		Owner:    src.Controller,
-		Types:    []string{"token", "artifact", "clue"},
-		Colors:   []string{},
-		TypeLine: "Token Artifact — Clue",
+	drawOne(gs, src.Controller, src.Card.DisplayName())
+	token := &gameengine.Card{
+		Name:          "1/1 Creature Token",
+		Owner:         src.Controller,
+		BasePower:     1,
+		BaseToughness: 1,
+		Types:         []string{"token", "creature", "creature"},
 	}
-	enterBattlefieldWithETB(gs, src.Controller, clue, false)
+	enterBattlefieldWithETB(gs, src.Controller, token, false)
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 		"seat": seat,
 	})
