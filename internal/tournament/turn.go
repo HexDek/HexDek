@@ -1070,6 +1070,20 @@ func tryPlayLand(gs *gameengine.GameState, seatIdx int) {
 	if !removeCard(&seat.Hand, chosen) {
 		return
 	}
+
+	// MDFC played as its back-face land (CR §712.11): swap the runtime
+	// card identity to the back face so the permanent reflects only the
+	// land's characteristics. Without this, the type leak from the
+	// combined "Front // Back" type-line parse means chosen.Types still
+	// carries the front face's "instant"/"sorcery" alongside "land", and
+	// the permanent on the battlefield trips §205.2 / the Feynman
+	// permanent_types invariant. Only swap when the front face is NOT
+	// itself a land (defensive — covers a hypothetical land/land MDFC).
+	if chosen.IsMDFC() && gameengine.MDFCBackFaceIsLand(chosen) &&
+		!gameengine.MDFCFrontFaceIsLand(chosen) {
+		gameengine.SwapToBackFace(chosen)
+	}
+
 	if !containsType(chosen.Types, "land") {
 		chosen.Types = append(chosen.Types, "land")
 	}

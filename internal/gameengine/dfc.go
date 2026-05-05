@@ -372,3 +372,89 @@ func InitDFCFaces(p *Permanent,
 // (InvalidateCharacteristicsCache lives in layers.go — the real §613
 // implementation bumps charCacheEpoch. Transform relies on it to
 // ensure the next characteristics read picks up the face swap.)
+
+// SwapToBackFace mutates a Card so its runtime identity (Name, Types,
+// TypeLine, CMC) reflects the BACK face of an MDFC instead of the front
+// (CR §712.11). Used at ETB by the two paths that put an MDFC onto the
+// battlefield as its back face:
+//
+//  1. Casting the back face — handled inline in resolvePermanentSpellETB
+//     (stack.go) when CastingBackFace is set; that path predates this
+//     helper but performs the same swap.
+//  2. Playing the back-face land as a special action — tryPlayLand
+//     (tournament/turn.go) calls this after picking an MDFC whose front
+//     face is not a land but whose back face is.
+//
+// Without this swap, the permanent on the battlefield retains the front
+// face's instant/sorcery types, which §205.2 forbids (and Feynman flags
+// as a critical permanent_types violation).
+//
+// The combined "Front // Back" runtime type signature that the deck
+// parser produces (e.g. ["instant", "//", "land", "mountain"] from a
+// type_line of "Instant // Land — Mountain") is replaced wholesale by
+// the back-face Types, so the post-swap card carries only its actual
+// land identity.
+//
+// AST is left alone: front-face abilities (an instant's effect) shouldn't
+// fire on a land permanent, but the existing engine reads Types — not
+// AST — for permanent-type SBAs and the §205 invariant. A more thorough
+// fix that also swaps AST is deferred until the corpus loader carries a
+// per-face AST cache.
+//
+// Returns true on a successful swap, false if the card isn't an MDFC or
+// has no back-face data.
+func SwapToBackFace(c *Card) bool {
+	if c == nil || !c.IsMDFC() {
+		return false
+	}
+	c.Name = c.BackFaceName
+	if len(c.BackFaceTypes) > 0 {
+		c.Types = append([]string(nil), c.BackFaceTypes...)
+	}
+	if c.BackFaceTypeLine != "" {
+		c.TypeLine = c.BackFaceTypeLine
+	}
+	if c.BackFaceCMC > 0 {
+		c.CMC = c.BackFaceCMC
+	}
+	c.CastingBackFace = false
+	return true
+}
+
+// MDFCFrontFaceIsLand reports whether an MDFC's printed FRONT face is a
+// land. Reads c.TypeLine, which the deckparser populates with the full
+// Scryfall "Front // Back" type line. The substring before "//" is the
+// front face's printed type. False for non-MDFCs and empty type lines.
+//
+// Used by the land-play path to distinguish "this is genuinely a land
+// in hand" (front face is a land — e.g. a normal basic) from "this is
+// an MDFC being played as its back-face land" (front is instant/sorcery,
+// back is a land). Only the latter needs SwapToBackFace.
+func MDFCFrontFaceIsLand(c *Card) bool {
+	if c == nil || !c.IsMDFC() {
+		return false
+	}
+	front := c.TypeLine
+	if i := strings.Index(front, "//"); i >= 0 {
+		front = front[:i]
+	}
+	return strings.Contains(strings.ToLower(front), "land")
+}
+
+// MDFCBackFaceIsLand reports whether an MDFC's BACK face is a land,
+// i.e. the back face's printed types include "land". Used as the gate
+// for SwapToBackFace in the land-play path.
+func MDFCBackFaceIsLand(c *Card) bool {
+	if c == nil || !c.IsMDFC() {
+		return false
+	}
+	for _, t := range c.BackFaceTypes {
+		if strings.EqualFold(t, "land") {
+			return true
+		}
+	}
+	if c.BackFaceTypeLine != "" {
+		return strings.Contains(strings.ToLower(c.BackFaceTypeLine), "land")
+	}
+	return false
+}
