@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPie, computeColorByCmc } from '../components/chrome'
 import CardRolesGrid from '../components/CardRolesGrid'
 import AmiiboPanel from '../components/AmiiboPanel'
+import { toast } from '../components/Toast'
 import { api, cardArtUrl } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useAuth } from '../context/AuthContext'
@@ -52,7 +53,6 @@ export default function DeckArchive() {
   const [gauntlet, setGauntlet] = useState(null)
   const [amiibo, setAmiibo] = useState(null)
   const [achievements, setAchievements] = useState(null)
-  const [shareToast, setShareToast] = useState(null)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
@@ -86,9 +86,9 @@ export default function DeckArchive() {
       setDeck(d => ({ ...(d || {}), custom_name: updated.custom_name || '' }))
       trackEvent('rename_deck', { deck: `${owner}/${id}`, len: trimmed.length })
       setEditingName(false)
+      toast.success('DECK RENAMED')
     } catch (err) {
-      setShareToast('RENAME FAILED')
-      setTimeout(() => setShareToast(null), 2000)
+      toast.error('RENAME FAILED')
     } finally {
       setSavingName(false)
     }
@@ -134,10 +134,10 @@ export default function DeckArchive() {
       else           await api.addFriend(target, userOwnerSlug)
       trackEvent(wasFriend ? 'remove_friend' : 'add_friend', { target })
       window.dispatchEvent(new CustomEvent('hexdek-friends-changed'))
+      toast.success(wasFriend ? `UNFRIENDED ${target.toUpperCase()}` : `FRIEND ADDED · ${target.toUpperCase()}`)
     } catch {
       setIsFriend(wasFriend) // rollback
-      setShareToast(wasFriend ? 'UNFRIEND FAILED' : 'ADD FRIEND FAILED')
-      setTimeout(() => setShareToast(null), 2000)
+      toast.error(wasFriend ? 'UNFRIEND FAILED' : 'ADD FRIEND FAILED')
     } finally {
       setFriendBusy(false)
     }
@@ -163,8 +163,8 @@ export default function DeckArchive() {
       }
     } catch {}
     trackEvent('share_deck', { deck: `${owner}/${id}`, copied })
-    setShareToast(copied ? 'COPIED!' : 'COPY FAILED — ' + url)
-    setTimeout(() => setShareToast(null), 2200)
+    if (copied) toast.success('SHARE LINK COPIED')
+    else toast.error('COPY FAILED — ' + url, 5000)
   }
 
   const eloByDeckId = {}
@@ -443,9 +443,6 @@ export default function DeckArchive() {
             </button>
           )}
         </div>
-        {shareToast && (
-          <div className="deck-hero__toast" role="status" aria-live="polite">{shareToast}</div>
-        )}
         <div className="deck-hero__body">
           <div className="deck-hero__meta">
             <Tag solid>B{wbs}{wbsLabel ? ' · ' + wbsLabel : ''}</Tag>

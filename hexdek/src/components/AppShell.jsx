@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Crops } from './chrome'
 import SearchBar from './SearchBar'
+import { ToastHost } from './Toast'
 import { useAuth } from '../context/AuthContext'
 import { useTranslation } from '../i18n'
 
@@ -133,6 +134,7 @@ export default function AppShell() {
           <span>{user ? `USR.${user.email?.split('@')[0]?.toUpperCase()}` : 'GUEST'}</span>
         </div>
       </div>
+      <ToastHost />
     </div>
   )
 }
