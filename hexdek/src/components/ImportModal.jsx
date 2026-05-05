@@ -1,104 +1,633 @@
-import { useState } from 'react'
-import { Btn } from './chrome'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../services/api'
+import { useAuth } from '../context/AuthContext'
+import { toast } from './Toast'
 import { trackEvent } from '../hooks/useAnalytics'
+import AuthPrompt from './AuthPrompt'
+import './ImportModal.css'
 
-export default function ImportModal({ onClose, onImported }) {
-  const [name, setName] = useState('')
-  const [owner, setOwner] = useState('')
-  const [deckList, setDeckList] = useState('')
-  const [importing, setImporting] = useState(false)
-  const [error, setError] = useState(null)
+// ─── Constants ──────────────────────────────────────────────────
+const MODES = [
+  { id: 'paste', label: 'PASTE', sub: 'Paste a decklist from clipboard' },
+  { id: 'moxfield', label: 'MOXFIELD', sub: 'Import from Moxfield URL' },
+  { id: 'file', label: 'FILE', sub: 'Upload .txt / .dec / .mwDeck' },
+]
 
-  const handleSubmit = async () => {
-    if (!deckList.trim()) {
-      setError('DECK LIST REQUIRED')
+const ACCEPTED_EXTENSIONS = ['.txt', '.dec', '.mwDeck']
+const MOXFIELD_REGEX = /^https?:\/\/(www\.)?moxfield\.com\/decks\/[\w-]+/i
+const BASIC_LANDS = new Set([
+  'plains', 'island', 'swamp', 'mountain', 'forest',
+  'snow-covered plains', 'snow-covered island', 'snow-covered swamp',
+  'snow-covered mountain', 'snow-covered forest',
+  'wastes',
+])
+
+// Debounce helper
+function useDebouncedValue(value, delay) {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(t)
+  }, [value, delay])
+  return debounced
+}
+
+// ─── Helpers ────────────────────────────────────────────────────
+function inferCommander(text) {
+  if (!text) return ''
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    if (/^commander\s*:/i.test(line)) {
+      return line.replace(/^commander\s*:/i, '').trim()
+    }
+  }
+  return ''
+}
+
+function stripCommanderLine(text) {
+  return text
+    .split('\n')
+    .filter(line => !/^\s*commander\s*:/i.test(line))
+    .join('\n')
+}
+
+function parseDeckLines(text) {
+  if (!text) return []
+  const lines = []
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    if (!line) continue
+    if (line.startsWith('#') || line.startsWith('//')) continue
+    if (/^sideboard|^maybeboard/i.test(line)) continue
+    if (/^commander\s*:/i.test(line)) {
+      const name = line.replace(/^commander\s*:/i, '').trim()
+      if (name) lines.push({ name, quantity: 1, isCommander: true })
+      continue
+    }
+    // Match "N Card Name (SET) CN" or just "Card Name"
+    const match = line.match(/^(\d+)\s+(.+?)(?:\s*\([^)]+\))?(?:\s+\d+)?$/)
+    if (match) {
+      lines.push({ name: match[2].trim(), quantity: parseInt(match[1], 10), isCommander: false })
+    } else {
+      // Plain card name
+      const cleaned = line.replace(/\s*\([^)]+\)\s*\d*$/, '').trim()
+      if (cleaned) lines.push({ name: cleaned, quantity: 1, isCommander: false })
+    }
+  }
+  return lines
+}
+
+// ─── Validation Hook ────────────────────────────────────────────
+function useCardValidation(parsedCards) {
+  const [validationResults, setValidationResults] = useState({})
+  const [validating, setValidating] = useState(false)
+  const abortRef = useRef(null)
+
+  const debouncedCards = useDebouncedValue(parsedCards, 600)
+
+  useEffect(() => {
+    if (!debouncedCards || debouncedCards.length === 0) {
+      setValidationResults({})
+      setValidating(false)
       return
     }
-    setImporting(true)
+
+    // Abort previous validation run
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    const validate = async () => {
+      setValidating(true)
+      const results = {}
+
+      // Only validate unique card names (case-insensitive)
+      const seen = new Set()
+      const toValidate = []
+      for (const card of debouncedCards) {
+        const key = card.name.toLowerCase()
+        if (seen.has(key)) continue
+        seen.add(key)
+        // Skip basic lands — always valid
+        if (BASIC_LANDS.has(key)) {
+          results[key] = { valid: true, name: card.name }
+          continue
+        }
+        toValidate.push(card)
+      }
+
+      // Batch validate — make parallel requests but limit concurrency
+      const BATCH_SIZE = 5
+      for (let i = 0; i < toValidate.length; i += BATCH_SIZE) {
+        if (controller.signal.aborted) return
+        const batch = toValidate.slice(i, i + BATCH_SIZE)
+        const promises = batch.map(async (card) => {
+          try {
+            const res = await fetch(
+              `${import.meta.env.VITE_API_URL ?? ''}/api/cards/search?q=${encodeURIComponent(card.name)}&limit=3`,
+              { signal: controller.signal }
+            )
+            if (!res.ok) return { key: card.name.toLowerCase(), valid: false, suggestion: null }
+            const data = await res.json()
+            const hits = data.results || []
+            // Exact match (case-insensitive)
+            const exact = hits.find(h => h.name.toLowerCase() === card.name.toLowerCase())
+            if (exact) return { key: card.name.toLowerCase(), valid: true, name: exact.name }
+            // Close match — suggest
+            if (hits.length > 0) return { key: card.name.toLowerCase(), valid: false, suggestion: hits[0].name }
+            return { key: card.name.toLowerCase(), valid: false, suggestion: null }
+          } catch (e) {
+            if (e.name === 'AbortError') return null
+            return { key: card.name.toLowerCase(), valid: false, suggestion: null }
+          }
+        })
+        const batchResults = await Promise.all(promises)
+        for (const r of batchResults) {
+          if (r) results[r.key] = r
+        }
+      }
+
+      if (!controller.signal.aborted) {
+        setValidationResults(results)
+        setValidating(false)
+      }
+    }
+
+    validate()
+    return () => controller.abort()
+  }, [debouncedCards])
+
+  return { validationResults, validating }
+}
+
+// ─── Progress Indicator ─────────────────────────────────────────
+function AnalysisProgress() {
+  const [dots, setDots] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setDots(d => (d + 1) % 4), 400)
+    return () => clearInterval(t)
+  }, [])
+
+  return (
+    <div className="import-modal__progress">
+      <div className="import-modal__progress-bar">
+        <div className="import-modal__progress-fill" />
+      </div>
+      <div className="import-modal__progress-label">
+        ANALYZING DECK{'.'.repeat(dots)}
+      </div>
+      <div className="import-modal__progress-sub">
+        FREYA IS EVALUATING SYNERGY, MANA CURVE, AND THREAT DENSITY
+      </div>
+    </div>
+  )
+}
+
+// ─── Main Component ─────────────────────────────────────────────
+export default function ImportModal({ onClose, onImported }) {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+
+  // If not authenticated, show auth prompt
+  if (!user) {
+    return <AuthPrompt onClose={onClose} action="import deck" />
+  }
+
+  return <ImportModalInner onClose={onClose} onImported={onImported} navigate={navigate} user={user} />
+}
+
+function ImportModalInner({ onClose, onImported, navigate, user }) {
+  const [mode, setMode] = useState('paste')
+  const [name, setName] = useState('')
+  const [owner, setOwner] = useState(() => {
+    return (
+      localStorage.getItem('hexdek_owner')
+      || user.displayName?.toLowerCase()
+      || user.email?.split('@')[0]?.split('.')[0]
+      || ''
+    )
+  })
+  const [commander, setCommander] = useState('')
+  const [deckList, setDeckList] = useState('')
+  const [moxfieldUrl, setMoxfieldUrl] = useState('')
+  const [fileName, setFileName] = useState('')
+  const [phase, setPhase] = useState('input') // input | validating | analyzing | done
+  const [error, setError] = useState(null)
+  const fileInputRef = useRef(null)
+
+  // Parse deck lines from current input
+  const parsedCards = useMemo(() => parseDeckLines(deckList), [deckList])
+  const cardCount = parsedCards.filter(c => !c.isCommander).length
+  const detectedCommander = useMemo(() => inferCommander(deckList), [deckList])
+
+  // Auto-detect Moxfield URL in paste
+  useEffect(() => {
+    if (mode === 'paste' && deckList.trim() && MOXFIELD_REGEX.test(deckList.trim())) {
+      setMoxfieldUrl(deckList.trim())
+      setDeckList('')
+      setMode('moxfield')
+    }
+  }, [deckList, mode])
+
+  // Real-time card validation
+  const { validationResults, validating } = useCardValidation(
+    mode === 'paste' || mode === 'file' ? parsedCards : []
+  )
+
+  // Compute validation errors
+  const validationErrors = useMemo(() => {
+    const errors = []
+    for (const card of parsedCards) {
+      const key = card.name.toLowerCase()
+      const result = validationResults[key]
+      if (result && !result.valid) {
+        errors.push({
+          name: card.name,
+          suggestion: result.suggestion,
+          type: 'unresolved',
+        })
+      }
+      // Commander format: check for illegal multiples (non-basic, qty > 1)
+      if (!BASIC_LANDS.has(key) && card.quantity > 1) {
+        errors.push({
+          name: card.name,
+          type: 'illegal_count',
+          message: `${card.quantity}x — only 1 copy allowed in Commander`,
+        })
+      }
+    }
+    // Missing commander check
+    const hasCommander = commander || detectedCommander || parsedCards.some(c => c.isCommander)
+    if (parsedCards.length > 0 && !hasCommander) {
+      errors.push({ type: 'missing_commander', message: 'No commander designated' })
+    }
+    return errors
+  }, [parsedCards, validationResults, commander, detectedCommander])
+
+  // Auto-fill commander from paste
+  useEffect(() => {
+    if (!commander && detectedCommander) {
+      setCommander(detectedCommander)
+    }
+  }, [detectedCommander, commander])
+
+  // ─── File Upload Handler ──────────────────────────────────────
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setFileName(file.name)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setDeckList(ev.target.result || '')
+    }
+    reader.readAsText(file)
+  }
+
+  // ─── Submit Handler ───────────────────────────────────────────
+  const handleSubmit = async () => {
     setError(null)
+
+    if (mode === 'moxfield') {
+      if (!moxfieldUrl.trim() || !MOXFIELD_REGEX.test(moxfieldUrl.trim())) {
+        setError('ENTER A VALID MOXFIELD URL (https://www.moxfield.com/decks/...)')
+        return
+      }
+      setPhase('analyzing')
+      try {
+        const result = await api.importMoxfield({
+          url: moxfieldUrl.trim(),
+          owner: owner.trim() || 'imported',
+        })
+        trackEvent('import_moxfield', {
+          owner: owner.trim() || 'imported',
+          cards: result.card_count,
+          moxfield_id: result.moxfield_id,
+        })
+        setPhase('done')
+        toast.success(`DECK IMPORTED: ${result.name || 'MOXFIELD DECK'}`)
+        onImported?.()
+        const target = `/decks/${encodeURIComponent(result.owner)}/${encodeURIComponent(result.id)}`
+        setTimeout(() => {
+          onClose()
+          navigate(target)
+        }, 600)
+      } catch (err) {
+        setPhase('input')
+        setError(err.message || 'MOXFIELD IMPORT FAILED')
+      }
+      return
+    }
+
+    // Paste or file mode
+    if (!deckList.trim()) {
+      setError('DECK LIST REQUIRED — PASTE OR UPLOAD A FILE')
+      return
+    }
+    if (cardCount < 5) {
+      setError(`ONLY ${cardCount} CARD${cardCount === 1 ? '' : 'S'} DETECTED — CHECK YOUR INPUT`)
+      return
+    }
+
+    // Normalize commander line
+    let payloadList = deckList
+    const cmdrTrimmed = (commander || detectedCommander || '').trim()
+    if (cmdrTrimmed) {
+      payloadList = `COMMANDER: ${cmdrTrimmed}\n${stripCommanderLine(deckList)}`
+    }
+
+    setPhase('analyzing')
     try {
-      trackEvent('import_deck', { name: name || 'Imported Deck', owner: owner || 'imported' })
-      await api.importDeck(name || 'Imported Deck', owner || 'imported', deckList)
-      onImported && onImported()
-      onClose()
+      const result = await api.importDeckFull({
+        name: name.trim() || 'Imported Deck',
+        owner: owner.trim() || 'imported',
+        deckList: payloadList,
+      })
+      trackEvent('import_deck_full', {
+        name: name.trim() || 'Imported Deck',
+        owner: owner.trim() || 'imported',
+        cards: cardCount,
+        source: mode,
+      })
+
+      // Trigger Freya analysis
+      const newID = result?.id
+      if (newID) {
+        try {
+          await api.runAnalysis(newID)
+        } catch {
+          // Non-fatal — analysis can be triggered later
+        }
+      }
+
+      setPhase('done')
+      toast.success(`DECK IMPORTED: ${result?.name || name || 'NEW DECK'}`)
+      onImported?.()
+      const newOwner = result?.owner || owner.trim() || 'imported'
+      const target = newID
+        ? `/decks/${encodeURIComponent(newOwner)}/${encodeURIComponent(newID)}`
+        : '/decks'
+      setTimeout(() => {
+        onClose()
+        navigate(target)
+      }, 600)
     } catch (err) {
-      setError(err.message)
-    } finally {
-      setImporting(false)
+      setPhase('input')
+      setError(err.message || 'IMPORT FAILED')
     }
   }
 
+  // ─── Keyboard shortcuts ───────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  // ─── Render ───────────────────────────────────────────────────
+  const isSubmittable = mode === 'moxfield'
+    ? MOXFIELD_REGEX.test(moxfieldUrl.trim())
+    : cardCount >= 5
+
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 1000,
-      background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }} onClick={onClose}>
-      <div className="panel import-modal" onClick={e => e.stopPropagation()}>
-        <div className="panel-hd">
-          <span>DECK IMPORT / / PASTE LIST</span>
-          <span style={{ cursor: 'pointer' }} onClick={onClose}>X</span>
+    <div className="import-modal" onMouseDown={onClose}>
+      <div className="import-modal__panel" onMouseDown={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="import-modal__hd">
+          <span>DECK IMPORT / / UNIFIED</span>
+          <span className="import-modal__close" onClick={onClose}>ESC</span>
         </div>
-        <div className="panel-bd" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="grid col-2" style={{ gap: 10 }}>
-            <div>
-              <div className="t-xs muted" style={{ marginBottom: 4 }}>DECK NAME</div>
-              <input
-                type="text"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="TINYBONES, THE PICKPOCKET"
-                style={{
-                  width: '100%', padding: '8px 10px', background: 'var(--bg-2)',
-                  border: '1px solid var(--rule-2)', color: 'var(--ink)',
-                  fontFamily: 'inherit', fontSize: 11, letterSpacing: '0.06em',
-                  textTransform: 'uppercase', outline: 'none',
-                }}
-              />
-            </div>
-            <div>
-              <div className="t-xs muted" style={{ marginBottom: 4 }}>OWNER</div>
-              <input
-                type="text"
-                value={owner}
-                onChange={e => setOwner(e.target.value)}
-                placeholder="IMPORTED"
-                style={{
-                  width: '100%', padding: '8px 10px', background: 'var(--bg-2)',
-                  border: '1px solid var(--rule-2)', color: 'var(--ink)',
-                  fontFamily: 'inherit', fontSize: 11, letterSpacing: '0.06em',
-                  textTransform: 'uppercase', outline: 'none',
-                }}
-              />
-            </div>
-          </div>
-          <div>
-            <div className="t-xs muted" style={{ marginBottom: 4 }}>DECK LIST (1 CARD NAME PER LINE)</div>
-            <textarea
-              value={deckList}
-              onChange={e => setDeckList(e.target.value)}
-              placeholder={"COMMANDER: Tinybones, the Pickpocket\n1 Swamp\n1 Dark Ritual\n1 Sol Ring\n1 Thoughtseize\n..."}
-              rows={14}
-              style={{
-                width: '100%', padding: '8px 10px', background: 'var(--bg-2)',
-                border: '1px solid var(--rule-2)', color: 'var(--ink)',
-                fontFamily: 'inherit', fontSize: 11, letterSpacing: '0.04em',
-                outline: 'none', resize: 'vertical',
-              }}
-            />
-          </div>
-          <div className="t-xs muted-2">
-            FORMAT: "COMMANDER: Card Name" ON FIRST LINE, THEN "1 Card Name" OR JUST "Card Name" PER LINE.
-            SIDEBOARD/MAYBEBOARD SECTIONS ARE IGNORED. COMMENTS (#) AND BLANK LINES IGNORED.
-          </div>
-          {error && <div className="t-xs" style={{ color: 'var(--danger)' }}>&gt; ERROR: {error}</div>}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <Btn sm ghost onClick={onClose}>CANCEL</Btn>
-            <Btn sm solid onClick={handleSubmit} arrow={importing ? '...' : '↗'}>
-              {importing ? 'IMPORTING' : 'IMPORT'}
-            </Btn>
-          </div>
+
+        {/* Mode tabs */}
+        <div className="import-modal__modes">
+          {MODES.map(m => (
+            <button
+              key={m.id}
+              type="button"
+              className={`import-modal__mode ${mode === m.id ? 'is-on' : ''}`}
+              onClick={() => { setMode(m.id); setError(null) }}
+              disabled={phase !== 'input'}
+            >
+              <span className="import-modal__mode-label">{m.label}</span>
+              <span className="import-modal__mode-sub">{m.sub}</span>
+            </button>
+          ))}
         </div>
+
+        {/* Analyzing state */}
+        {phase === 'analyzing' && <AnalysisProgress />}
+
+        {/* Done state */}
+        {phase === 'done' && (
+          <div className="import-modal__done">
+            <div className="import-modal__done-icon">&#x2713;</div>
+            <div className="import-modal__done-label">DECK IMPORTED SUCCESSFULLY</div>
+            <div className="import-modal__done-sub">REDIRECTING TO DECK ARCHIVE...</div>
+          </div>
+        )}
+
+        {/* Input state */}
+        {phase === 'input' && (
+          <>
+            {/* Metadata row */}
+            <div className="import-modal__meta">
+              <div className="import-modal__field">
+                <label className="import-modal__label">DECK NAME</label>
+                <input
+                  type="text"
+                  className="import-modal__input"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="TINYBONES, THE PICKPOCKET"
+                />
+              </div>
+              <div className="import-modal__field">
+                <label className="import-modal__label">OWNER</label>
+                <input
+                  type="text"
+                  className="import-modal__input"
+                  value={owner}
+                  onChange={e => setOwner(e.target.value)}
+                  placeholder="IMPORTED"
+                />
+              </div>
+              <div className="import-modal__field">
+                <label className="import-modal__label">COMMANDER</label>
+                <input
+                  type="text"
+                  className="import-modal__input"
+                  value={commander}
+                  onChange={e => setCommander(e.target.value)}
+                  placeholder="AUTO-DETECTED FROM LIST"
+                />
+              </div>
+            </div>
+
+            {/* Mode-specific content */}
+            <div className="import-modal__body">
+              {mode === 'paste' && (
+                <>
+                  <div className="import-modal__body-hd">
+                    <span>DECK LIST</span>
+                    <span className="t-xs muted">
+                      {cardCount > 0 ? `${cardCount} CARDS` : 'AWAITING PASTE'}
+                      {validating && ' / VALIDATING...'}
+                    </span>
+                  </div>
+                  <textarea
+                    className="import-modal__textarea"
+                    value={deckList}
+                    onChange={e => setDeckList(e.target.value)}
+                    placeholder={"COMMANDER: Tinybones, the Pickpocket\n1 Swamp\n1 Dark Ritual\n1 Sol Ring\n1 Thoughtseize\n...\n\n(Supports MTGO, Arena, or plain card names)"}
+                    rows={14}
+                    spellCheck={false}
+                  />
+                </>
+              )}
+
+              {mode === 'moxfield' && (
+                <>
+                  <div className="import-modal__body-hd">
+                    <span>MOXFIELD URL</span>
+                    <span className="t-xs muted">
+                      {MOXFIELD_REGEX.test(moxfieldUrl.trim()) ? 'VALID URL' : 'PASTE URL'}
+                    </span>
+                  </div>
+                  <div className="import-modal__moxfield">
+                    <input
+                      type="url"
+                      className="import-modal__input import-modal__input--lg"
+                      value={moxfieldUrl}
+                      onChange={e => setMoxfieldUrl(e.target.value)}
+                      placeholder="https://www.moxfield.com/decks/abc123..."
+                    />
+                    <div className="import-modal__moxfield-help">
+                      &gt; PASTE A PUBLIC MOXFIELD DECK URL. THE DECK WILL BE FETCHED AND IMPORTED AUTOMATICALLY.
+                      <br />&gt; COMMANDER AND CARD LIST ARE EXTRACTED FROM THE MOXFIELD API.
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {mode === 'file' && (
+                <>
+                  <div className="import-modal__body-hd">
+                    <span>FILE UPLOAD</span>
+                    <span className="t-xs muted">
+                      {fileName ? fileName.toUpperCase() : '.TXT / .DEC / .MWDECK'}
+                    </span>
+                  </div>
+                  <div className="import-modal__file-zone">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".txt,.dec,.mwDeck"
+                      onChange={handleFileSelect}
+                      style={{ display: 'none' }}
+                    />
+                    {!deckList && (
+                      <button
+                        type="button"
+                        className="import-modal__file-btn"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <span className="import-modal__file-icon">&#x2191;</span>
+                        <span>SELECT FILE</span>
+                        <span className="import-modal__file-ext">.txt / .dec / .mwDeck</span>
+                      </button>
+                    )}
+                    {deckList && (
+                      <div className="import-modal__file-preview">
+                        <div className="import-modal__file-preview-hd">
+                          <span>{fileName.toUpperCase()}</span>
+                          <span className="t-xs muted">{cardCount} CARDS</span>
+                        </div>
+                        <pre className="import-modal__file-preview-text">
+                          {deckList.split('\n').slice(0, 12).join('\n')}
+                          {deckList.split('\n').length > 12 && '\n...'}
+                        </pre>
+                        <button
+                          type="button"
+                          className="import-modal__file-change"
+                          onClick={() => { setDeckList(''); setFileName(''); fileInputRef.current.value = '' }}
+                        >
+                          CHANGE FILE
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Validation errors */}
+            {validationErrors.length > 0 && (mode === 'paste' || mode === 'file') && (
+              <div className="import-modal__validation">
+                <div className="import-modal__validation-hd">
+                  <span className="led led--warn" />
+                  <span>{validationErrors.length} ISSUE{validationErrors.length !== 1 ? 'S' : ''} DETECTED</span>
+                </div>
+                <div className="import-modal__validation-list">
+                  {validationErrors.slice(0, 8).map((err, i) => (
+                    <div key={i} className={`import-modal__validation-item import-modal__validation-item--${err.type}`}>
+                      {err.type === 'unresolved' && (
+                        <>
+                          <span className="import-modal__val-name">{err.name}</span>
+                          <span className="import-modal__val-msg">
+                            {err.suggestion ? `DID YOU MEAN: ${err.suggestion}` : 'NOT FOUND IN CORPUS'}
+                          </span>
+                        </>
+                      )}
+                      {err.type === 'illegal_count' && (
+                        <>
+                          <span className="import-modal__val-name">{err.name}</span>
+                          <span className="import-modal__val-msg">{err.message}</span>
+                        </>
+                      )}
+                      {err.type === 'missing_commander' && (
+                        <span className="import-modal__val-msg">{err.message}</span>
+                      )}
+                    </div>
+                  ))}
+                  {validationErrors.length > 8 && (
+                    <div className="import-modal__validation-more">
+                      +{validationErrors.length - 8} MORE
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Error display */}
+            {error && (
+              <div className="import-modal__error">
+                &gt; {error}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="import-modal__actions">
+              <button
+                type="button"
+                className="import-modal__btn import-modal__btn--ghost"
+                onClick={onClose}
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                className="import-modal__btn import-modal__btn--solid"
+                onClick={handleSubmit}
+                disabled={!isSubmittable}
+              >
+                {mode === 'moxfield' ? 'IMPORT FROM MOXFIELD' : 'IMPORT DECK'}
+                <span className="arr">&#x2197;</span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

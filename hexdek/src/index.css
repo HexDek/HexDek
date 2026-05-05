@@ -1049,8 +1049,7 @@ body {
   display: flex; justify-content: space-between; margin-top: 4px;
 }
 
-/* ── IMPORT MODAL ── */
-.import-modal { width: 520px; max-height: 80vh; overflow: auto; }
+/* ── IMPORT MODAL ── (styles moved to components/ImportModal.css) */
 
 /* ── DASHBOARD LAYOUT ── */
 .dashboard-layout {
@@ -1422,8 +1421,6 @@ body {
   .speed-marks > span:nth-child(6),
   .speed-marks > span:nth-child(8) { display: none; }
 
-  .import-modal { width: calc(100vw - 32px); }
-
   .punch { font-size: 36px; }
   .headline { font-size: 48px; }
   .t-display { font-size: 56px; }
@@ -1493,8 +1490,6 @@ body {
   .splash-left { padding: 16px; }
   .splash-right { padding: 12px; }
   .splash-hero { font-size: 48px; }
-
-  .import-modal { width: calc(100vw - 16px); }
 
   .punch { font-size: 28px; }
   .headline { font-size: 32px; }

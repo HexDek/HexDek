@@ -54,6 +54,11 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ name, owner, deck_list: deckList }),
   }),
+  importMoxfield: ({ url, owner }) => request('/api/import/moxfield', {
+    method: 'POST',
+    body: JSON.stringify({ url, owner }),
+  }),
+  searchCards: (q, limit = 6) => request(`/api/cards/search?q=${encodeURIComponent(q)}&limit=${limit}`),
   runAnalysis: (id) => request(`/api/decks/${id}/analyze`, { method: 'POST' }),
   updateDeck: (id, deckList) => request(`/api/decks/${id}`, {
     method: 'PUT',
