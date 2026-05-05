@@ -13,7 +13,7 @@ export default function Forge() {
   const [analysis, setAnalysis] = useState(null)
   const [loading, setLoading] = useState(false)
   const [gauntlet, setGauntlet] = useState(null)
-  const [gauntletGames, setGauntletGames] = useState(10000)
+  const [gauntletGames, setGauntletGames] = useState(500)
   const [gauntletError, setGauntletError] = useState(null)
 
   // Auto-select: prefer ?deck=owner/id query param, otherwise first deck.
@@ -167,11 +167,7 @@ export default function Forge() {
                     ['GAME CHANGERS', gameChangers != null ? `${gameChangers}` : '—'],
                     ['ARCHETYPE', archetype],
                   ]} />
-                  {summary && (
-                    <div className="t-xs muted" style={{ marginTop: 10, lineHeight: 1.6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      &gt; {summary}
-                    </div>
-                  )}
+                  {/* gameplan_summary hidden — Freya win-line detection needs accuracy pass */}
                 </div>
               </div>
             </Panel>
@@ -251,7 +247,7 @@ export default function Forge() {
             {/* Card list */}
             {cards.length > 0 && (
               <Panel code="11.E" title={`CARD LIST / / ${cards.length} ENTRIES`}>
-                <div style={{ maxHeight: 300, overflow: 'auto' }}>
+                <div>
                   {cards.map((c, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: i < cards.length - 1 ? '1px dotted var(--rule)' : 'none' }}>
                       <span className="t-xs">{c.name}</span>
@@ -278,7 +274,7 @@ export default function Forge() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                     <span className="t-xs">GAMES:</span>
-                    {[1000, 5000, 10000, 25000].map(n => (
+                    {[500, 1000, 5000, 10000].map(n => (
                       <Tag key={n} solid={gauntletGames === n} onClick={() => setGauntletGames(n)} style={{ cursor: 'pointer' }}>
                         {n >= 1000 ? `${n / 1000}K` : n}
                       </Tag>

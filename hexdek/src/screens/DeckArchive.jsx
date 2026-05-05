@@ -8,7 +8,7 @@ import MatchupsPanel from '../components/MatchupsPanel'
 import ManaCost from '../components/ManaCost'
 import { AchievementsPanel, BadgeShowcase } from '../components/AchievementsPanel'
 import { toast } from '../components/Toast'
-import { api, cardArtUrl } from '../services/api'
+import { api, cardArtUrl, cardImageUrl } from '../services/api'
 import { useArtContrast } from '../hooks/useArtContrast'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useAuth } from '../context/AuthContext'
@@ -76,6 +76,7 @@ export default function DeckArchive() {
   const [friendBusy, setFriendBusy] = useState(false)
   const [ownerFriendCount, setOwnerFriendCount] = useState(null)
   const [similarDecks, setSimilarDecks] = useState(null) // null=loading, []=resolved
+  const [activeTab, setActiveTab] = useState('analysis')
   const { elo } = useLiveSocket()
   const { user } = useAuth()
 
@@ -421,6 +422,7 @@ export default function DeckArchive() {
   const cmdrImageUrl = cmdrCardName
     ? cardArtUrl(cmdrCardName)
     : null
+  const cmdrFullUrl = cmdrCardName ? cardImageUrl(cmdrCardName) : null
   const cmdrContrast = useArtContrast(cmdrImageUrl)
 
   if (loading) {
@@ -495,6 +497,17 @@ export default function DeckArchive() {
           )}
         </div>
         <div className="deck-hero__body">
+          {cmdrFullUrl && (
+            <div className="deck-hero__card">
+              <img
+                src={cmdrFullUrl}
+                alt={cmdrCardName}
+                className="deck-hero__card-img"
+                onError={(e) => { e.target.style.display = 'none' }}
+              />
+            </div>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
           <div className="deck-hero__meta">
             <Tag solid>B{wbs}{wbsLabel ? ' · ' + wbsLabel : ''}</Tag>
             {pls && pls !== wbs && <Tag solid kind="warn">PLAYS LIKE B{pls}</Tag>}
@@ -534,7 +547,8 @@ export default function DeckArchive() {
           {cmdrCardName && cmdrCardName.toUpperCase() !== deckName && (
             <div className="deck-hero__sub">{cmdrCardName}</div>
           )}
-          {summary && <div className="deck-hero__summary">&gt; {summary}</div>}
+          {/* gameplan_summary hidden — Freya win-line detection needs accuracy pass */}
+          </div>
         </div>
       </div>
 
@@ -633,29 +647,6 @@ export default function DeckArchive() {
             )}
           </Panel>
 
-          {cards.length > 0 && (
-            <Panel code="04.B" title={`CARD LIST / / ${cards.length} ENTRIES`}>
-              <div style={{ maxHeight: 240, overflow: 'auto' }}>
-                {cards.map((c, i) => {
-                  // Strip the "COMMANDER: " deck-file prefix when present so the
-                  // CardLink target is the raw card name Scryfall knows.
-                  const linkName = (c.name || '').replace(/^COMMANDER:\s*/i, '').trim()
-                  return (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '3px 0', borderBottom: i < cards.length - 1 ? '1px dotted var(--rule)' : 'none' }}>
-                      <CardLink name={linkName} className="t-xs" style={{ borderBottom: 'none', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {c.name}
-                      </CardLink>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                        {c.mana_cost && <ManaCost cost={c.mana_cost} size={12} gap={1} />}
-                        <span className="t-xs muted">{c.quantity > 1 ? `×${c.quantity}` : ''}</span>
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </Panel>
-          )}
-
           {amiibo && <AmiiboDisplay amiibo={amiibo} />}
 
           {/* MATCHUPS — head-to-head record per opposing commander
@@ -750,44 +741,14 @@ export default function DeckArchive() {
         </div>
 
         <div className="archive-main">
-          {/* Personality blurb — Freya gameplan summary as hero callout */}
-          {summary && !editing && (
-            <div className="panel" style={{
-              padding: '20px 28px',
-              borderStyle: 'solid',
-              borderLeft: '3px solid var(--ok)',
-              background: 'rgba(255, 255, 255, 0.02)',
-              position: 'relative',
-              marginBottom: 4,
-            }}>
-              <span style={{
-                position: 'absolute',
-                top: 8, left: 14,
-                fontSize: 56, lineHeight: 1,
-                color: 'var(--ok)',
-                opacity: 0.35,
-                fontFamily: 'Georgia, serif',
-                userSelect: 'none',
-                pointerEvents: 'none',
-              }}>“</span>
-              <div style={{
-                fontSize: 16,
-                lineHeight: 1.55,
-                fontStyle: 'italic',
-                color: 'var(--ink)',
-                letterSpacing: '0.01em',
-                paddingLeft: 18,
-              }}>{summary}</div>
-              <div className="t-xs muted" style={{
-                marginTop: 10,
-                paddingLeft: 18,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-              }}>— FREYA / / {archetype}</div>
-            </div>
-          )}
+          {/* Tab bar */}
+          <div className="deck-tabs">
+            <button type="button" className={`deck-tab ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>ANALYSIS</button>
+            <button type="button" className={`deck-tab ${activeTab === 'decklist' ? 'active' : ''}`} onClick={() => setActiveTab('decklist')}>DECK LIST</button>
+            <button type="button" className={`deck-tab ${activeTab === 'achievements' ? 'active' : ''}`} onClick={() => setActiveTab('achievements')}>ACHIEVEMENTS</button>
+          </div>
 
-          {/* Edit mode */}
+          {/* Edit mode — always visible regardless of tab */}
           {editing && (
             <Panel code="04.X" title="EDIT DECK LIST" right={
               <span className="t-xs" style={{ color: 'var(--warn)' }}>EDITING</span>
@@ -830,7 +791,8 @@ export default function DeckArchive() {
             </Panel>
           )}
 
-          {/* Strategy summary */}
+          {/* === ANALYSIS TAB === */}
+          {activeTab === 'analysis' && <>
           <Panel code="04.C" title="FREYA / / ENGINE ANALYSIS" right={<Tag solid>Bracket B{wbs}{pls && pls !== wbs ? ` → Plays Like B${pls}` : ''}</Tag>}>
             {!analysis ? (
               <div style={{ padding: '20px 0', textAlign: 'center' }}>
@@ -1051,11 +1013,6 @@ export default function DeckArchive() {
             </Panel>
           )}
 
-          {/* Card roles grid (toggles between role-grouped and flat list) */}
-          {cards.length > 0 && (
-            <CardRolesGrid cards={cards} cardRoles={cardRoles} />
-          )}
-
           {/* Emergent synergies */}
           {emergentSynergies.length > 0 && (
             <Panel code="04.H" title={`EMERGENT SYNERGIES / / ${emergentSynergies.length} DISCOVERED`}>
@@ -1092,7 +1049,27 @@ export default function DeckArchive() {
             </Panel>
           )}
 
-          {/* Gauntlet */}
+          {/* Gauntlet button + report — right after Freya analysis */}
+          {owner && id && (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+              <Btn solid arrow="▶" onClick={() => {
+                if (gauntlet?.status === 'running') return
+                trackEvent('start_gauntlet', { deck: `${owner}/${id}`, games: 500 })
+                api.startGauntlet(`${owner}/${id}`, 500).then(() => {
+                  const poll = () => {
+                    api.getGauntlet(`${owner}/${id}`).then(r => {
+                      setGauntlet(r)
+                      if (r.status === 'running') setTimeout(poll, 3000)
+                    })
+                  }
+                  setTimeout(poll, 2000)
+                })
+                setGauntlet({ status: 'running', games: 0, target: 500, win_rate: 0 })
+              }}>{gauntlet?.status === 'running' ? 'GAUNTLET RUNNING...' : 'RUN GAUNTLET (500)'}</Btn>
+              <Btn ghost arrow="▶">TEST VARIANT</Btn>
+            </div>
+          )}
+
           {gauntlet && gauntlet.status !== 'none' && (
             <Panel code="04.G" title="GAUNTLET REPORT" right={
               <Tag solid kind={gauntlet.status === 'complete' ? 'ok' : null}>
@@ -1152,13 +1129,43 @@ export default function DeckArchive() {
               ) : null}
             </Panel>
           )}
+          </>}
 
-          {/* Achievement badges */}
-          {achievements && achievements.catalog?.length > 0 && (
+          {/* === DECK LIST TAB === */}
+          {activeTab === 'decklist' && <>
+          {cards.length > 0 && (
+            <CardRolesGrid cards={cards} cardRoles={cardRoles} />
+          )}
+
+          {cards.length > 0 && (
+            <Panel code="04.B" title={`FULL CARD LIST / / ${cards.length} ENTRIES`}>
+              <div>
+                {cards.map((c, i) => {
+                  const linkName = (c.name || '').replace(/^COMMANDER:\s*/i, '').trim()
+                  return (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '3px 0', borderBottom: i < cards.length - 1 ? '1px dotted var(--rule)' : 'none' }}>
+                      <CardLink name={linkName} className="t-xs" style={{ borderBottom: 'none', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {c.name}
+                      </CardLink>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                        {c.mana_cost && <ManaCost cost={c.mana_cost} size={12} gap={1} />}
+                        <span className="t-xs muted">{c.quantity > 1 ? `×${c.quantity}` : ''}</span>
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </Panel>
+          )}
+          </>}
+
+          {/* === ACHIEVEMENTS TAB === */}
+          {activeTab === 'achievements' && <>
+          {achievements && (achievements.badges?.length > 0 || achievements.total_games > 0) ? (
             <Panel
-              code="04.B"
+              code="04.ACH"
               title={`ACHIEVEMENTS / / ${owner?.toUpperCase() || ''}`}
-              right={<Tag solid kind={achievements.badges?.length > 0 ? 'ok' : null}>{achievements.badges?.length || 0} / {achievements.catalog.length}</Tag>}
+              right={<Tag solid kind={achievements.badges?.length > 0 ? 'ok' : null}>{achievements.badges?.length || 0} EARNED</Tag>}
             >
               {(achievements.total_games > 0 || achievements.opponents_faced > 0) && (
                 <KV rows={[
@@ -1168,94 +1175,68 @@ export default function DeckArchive() {
                   ['OPPONENTS', `${achievements.opponents_faced?.toLocaleString() || 0}`],
                 ]} />
               )}
-              <div className="hr" style={{ margin: '10px 0' }} />
-              {(() => {
-                const RARITY_COLOR = {
-                  common:   { border: '#8a9682', bg: 'rgba(138,150,130,0.06)', label: 'COMMON' },
-                  uncommon: { border: '#6e8fa0', bg: 'rgba(110,143,160,0.08)', label: 'UNCOMMON' },
-                  rare:     { border: '#d8c878', bg: 'rgba(216,200,120,0.10)', label: 'RARE' },
-                  mythic:   { border: '#cc5c4a', bg: 'rgba(204,92,74,0.12)', label: 'MYTHIC' },
-                  secret:   { border: '#9c6ab0', bg: 'rgba(156,106,176,0.14)', label: 'SECRET' },
-                }
-                const earnedById = {}
-                for (const b of (achievements.badges || [])) earnedById[b.id] = b
-                return (
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-                    gap: 8,
-                  }}>
-                    {achievements.catalog.map(b => {
-                      const earned = earnedById[b.id]
-                      const palette = RARITY_COLOR[b.rarity] || RARITY_COLOR.common
-                      const isSecret = b.rarity === 'secret' && !earned
-                      return (
-                        <div
-                          key={b.id}
-                          title={isSecret ? 'Hidden achievement — keep playing.' : `${b.name}\n${b.description}`}
-                          style={{
-                            border: `2px solid ${earned ? palette.border : 'var(--rule-2)'}`,
-                            background: earned ? palette.bg : 'transparent',
-                            padding: '8px 10px',
-                            opacity: earned ? 1 : 0.45,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 4,
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: 22, lineHeight: 1, filter: earned ? 'none' : 'grayscale(1)' }}>
-                              {isSecret ? '❔' : b.icon}
-                            </span>
-                            <span className="t-xs" style={{
-                              color: earned ? palette.border : 'var(--ink-3)',
-                              letterSpacing: '0.06em',
-                              fontWeight: 700,
-                            }}>{palette.label}</span>
-                          </div>
-                          <div className="t-xs" style={{ fontWeight: 700, letterSpacing: '0.04em' }}>
-                            {isSecret ? '???' : b.name}
-                          </div>
-                          <div className="t-xs muted" style={{ lineHeight: 1.3 }}>
-                            {isSecret ? 'Hidden achievement.' : b.description}
-                          </div>
-                          {earned && (
-                            <div className="t-xs muted-2" style={{ marginTop: 2 }}>
-                              {new Date(earned.awarded_at).toLocaleDateString()}
+              {achievements.badges?.length > 0 && (
+                <>
+                  <div className="hr" style={{ margin: '10px 0' }} />
+                  {(() => {
+                    const RARITY_COLOR = {
+                      common:   { border: '#8a9682', bg: 'rgba(138,150,130,0.06)', label: 'COMMON' },
+                      uncommon: { border: '#6e8fa0', bg: 'rgba(110,143,160,0.08)', label: 'UNCOMMON' },
+                      rare:     { border: '#d8c878', bg: 'rgba(216,200,120,0.10)', label: 'RARE' },
+                      mythic:   { border: '#cc5c4a', bg: 'rgba(204,92,74,0.12)', label: 'MYTHIC' },
+                      secret:   { border: '#9c6ab0', bg: 'rgba(156,106,176,0.14)', label: 'SECRET' },
+                    }
+                    const catalogById = {}
+                    for (const b of (achievements.catalog || [])) catalogById[b.id] = b
+                    return (
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                        gap: 8,
+                      }}>
+                        {achievements.badges.map(badge => {
+                          const def = catalogById[badge.id] || badge
+                          const palette = RARITY_COLOR[def.rarity] || RARITY_COLOR.common
+                          return (
+                            <div
+                              key={badge.id}
+                              title={`${def.name}\n${def.description}`}
+                              style={{
+                                border: `2px solid ${palette.border}`,
+                                background: palette.bg,
+                                padding: '8px 10px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 4,
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: 22, lineHeight: 1 }}>{def.icon}</span>
+                                <span className="t-xs" style={{ color: palette.border, letterSpacing: '0.06em', fontWeight: 700 }}>{palette.label}</span>
+                              </div>
+                              <div className="t-xs" style={{ fontWeight: 700, letterSpacing: '0.04em' }}>{def.name}</div>
+                              <div className="t-xs muted" style={{ lineHeight: 1.3 }}>{def.description}</div>
+                              <div className="t-xs muted-2" style={{ marginTop: 2 }}>
+                                {badge.awarded_at ? new Date(badge.awarded_at).toLocaleDateString() : ''}
+                              </div>
                             </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })()}
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
+                </>
+              )}
+            </Panel>
+          ) : (
+            <Panel code="04.ACH" title="ACHIEVEMENTS">
+              <div className="t-xs muted" style={{ padding: '20px 0', textAlign: 'center', lineHeight: 1.8 }}>
+                &gt; NO ACHIEVEMENTS EARNED YET.<br />
+                &gt; RUN GAMES TO UNLOCK BADGES.
+              </div>
             </Panel>
           )}
-
-          {/* Actions */}
-          {owner && id && (
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <Btn solid arrow="▶" onClick={() => {
-                if (gauntlet?.status === 'running') return
-                trackEvent('start_gauntlet', { deck: `${owner}/${id}`, games: 10000 })
-                api.startGauntlet(`${owner}/${id}`, 10000).then(() => {
-                  const poll = () => {
-                    api.getGauntlet(`${owner}/${id}`).then(r => {
-                      setGauntlet(r)
-                      if (r.status === 'running') setTimeout(poll, 3000)
-                    })
-                  }
-                  setTimeout(poll, 2000)
-                })
-                setGauntlet({ status: 'running', games: 0, target: 10000, win_rate: 0 })
-              }}>{gauntlet?.status === 'running' ? 'GAUNTLET RUNNING...' : 'RUN GAUNTLET (10K)'}</Btn>
-              <Btn arrow="▶">TEST VARIANT</Btn>
-              <Btn ghost arrow="↗">DIFF BUILDS</Btn>
-            </div>
-          )}
-
-          {owner && <AchievementsPanel owner={owner} />}
+          </>}
         </div>
       </div>
       {exportOpen && (

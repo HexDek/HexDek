@@ -164,6 +164,8 @@ function titleCase(s) {
   return s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
+export { narrate }
+
 export default function NarratorOverlay({ log, seats }) {
   const lines = useMemo(() => {
     if (!Array.isArray(log) || log.length === 0) return []

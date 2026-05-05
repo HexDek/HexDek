@@ -478,7 +478,7 @@ export default function Report() {
           <Panel code="RPT.B" title={`${selectedDeck ? selectedDeck.split(',')[0].toUpperCase() + ' ' : ''}GAME LOG / / ${filteredGames.length} GAMES`}
             style={featuredGame && isVictory && seats[winnerIdx] ? {} : { gridColumn: '1 / -1' }}
           >
-            <div style={{ maxHeight: 400, overflow: 'auto' }}>
+            <div>
               {filteredGames.map((g, i) => {
                 const isWin = g.winner >= 0
                 const winnerCmdr = isWin && g.commanders?.[g.winner] ? g.commanders[g.winner] : null

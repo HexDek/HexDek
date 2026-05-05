@@ -57,7 +57,7 @@ export const Btn = ({ children, solid, sm, ghost, arrow = '↗', onClick }) => (
 
 export const Tape = ({ left, mid, right }) => (
   <div
-    className="flex items-center justify-between"
+    className="tape-bar flex items-center justify-between"
     style={{
       borderTop: '1px solid var(--rule-2)',
       borderBottom: '1px solid var(--rule-2)',

@@ -549,7 +549,7 @@ export default function Dashboard() {
                   <span className="t-xs muted text-right">WR%</span>
                 </div>
                 {/* Scrollable list */}
-                <div style={{ maxHeight: showFullLeaderboard ? 600 : 280, overflow: 'auto' }}>
+                <div>
                   {(showFullLeaderboard ? aggregatedElo : aggregatedElo.slice(0, 10)).map((r, i) => (
                     <div key={i} style={{
                       display: 'grid', gridTemplateColumns: '24px 1fr 54px 70px 50px',

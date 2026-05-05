@@ -15,6 +15,12 @@ export function cardArtUrl(name) {
   return `${API_BASE}/api/card-art/${encodeURIComponent(clean)}`
 }
 
+export function cardImageUrl(name) {
+  if (!name) return null
+  const clean = name.split('//')[0].trim()
+  return `${API_BASE}/api/card-art/${encodeURIComponent(clean)}?version=normal`
+}
+
 export { API_BASE }
 
 export const api = {
@@ -73,7 +79,7 @@ export const api = {
     return request(`/api/profiles?owners=${encodeURIComponent(list)}`)
   },
   getImports: (owner, limit = 10) => request(`/api/imports/${encodeURIComponent(owner)}?limit=${limit}`),
-  startGauntlet: (id, games = 10000) => request(`/api/gauntlet/${id}?games=${games}`, { method: 'POST' }),
+  startGauntlet: (id, games = 500) => request(`/api/gauntlet/${id}?games=${games}`, { method: 'POST' }),
   getGauntlet: (id) => request(`/api/gauntlet/${id}`),
   getDonationsSummary: () => request('/api/donations/summary'),
   search: (q, limit = 6) => request(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`),

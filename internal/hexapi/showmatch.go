@@ -2401,7 +2401,7 @@ func (sm *Showmatch) handleStartGauntlet(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	numGames := 10000
+	numGames := 500
 	if n := parseInt(r.URL.Query().Get("games")); n > 0 && n <= 50000 {
 		numGames = n
 	}

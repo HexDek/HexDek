@@ -618,18 +618,45 @@ body {
 .deck-archive-page .panel-hd { border-bottom-color: color-mix(in srgb, var(--accent) 22%, var(--rule-2)); }
 .deck-archive-page .tag--solid { background: var(--accent); border-color: var(--accent); color: var(--inv-ink); }
 
+/* ── DECK TABS ── */
+.deck-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--rule-2);
+  margin-bottom: 14px;
+}
+.deck-tab {
+  padding: 10px 18px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.deck-tab:hover { color: var(--ink); }
+.deck-tab.active {
+  color: var(--accent, var(--ink));
+  border-bottom-color: var(--accent, var(--ink));
+}
+
 /* ── DECK HERO BANNER ──
    Full-bleed commander art_crop with a multi-stop scrim so the title +
    meta read on any image. Sized tall enough to feel hero-y but not so
    tall it pushes panels below the fold on a 1080p screen. */
 .deck-hero {
   position: relative;
-  height: 320px;
+  min-height: 400px;
   background-size: cover;
   background-position: center 35%;
   background-repeat: no-repeat;
   border-bottom: 1px solid var(--rule-2);
-  overflow: hidden;
+  overflow: visible;
   flex-shrink: 0;
 }
 .deck-hero__scrim {
@@ -658,9 +685,20 @@ body {
   position: absolute; left: 0; right: 0; bottom: 0;
   padding: 18px 28px 22px;
   z-index: 2;
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex; flex-direction: row; align-items: flex-end; gap: 20px;
   border-left: 3px solid var(--accent);
   margin-left: 14px;
+}
+.deck-hero__card {
+  flex-shrink: 0;
+  width: 240px;
+  filter: drop-shadow(0 6px 20px rgba(0,0,0,0.6));
+}
+.deck-hero__card-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 10px;
 }
 .deck-hero__meta {
   display: flex; gap: 6px; flex-wrap: wrap;
@@ -777,11 +815,12 @@ body {
   100% { opacity: 0; transform: translateY(-4px); }
 }
 @media (max-width: 900px) {
-  .deck-hero { height: 220px; }
+  .deck-hero { min-height: 220px; }
   .deck-hero__title { font-size: 36px; }
   .deck-hero__title-input { font-size: 36px; }
   .deck-hero__rename { font-size: 16px; padding: 2px 4px; }
   .deck-hero__body { padding: 12px 16px 14px; margin-left: 8px; }
+  .deck-hero__card { width: 140px; }
   .deck-hero__summary { display: none; }
   .deck-hero__actions { bottom: 10px; right: 10px; gap: 6px; }
   .deck-hero__share, .deck-hero__friend { padding: 6px 10px; font-size: 10px; }
@@ -1497,14 +1536,26 @@ body {
 
 .card-page-hero {
   position: relative;
-  height: 280px;
+  min-height: 440px;
   background-size: cover;
   background-position: center 30%;
   border-bottom: 1px solid var(--rule-2);
 }
 .card-page-hero-scrim {
   position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(12,13,10,0.35) 0%, rgba(12,13,10,0.0) 30%, rgba(12,13,10,0.85) 100%);
+  background: linear-gradient(180deg, rgba(12,13,10,0.35) 0%, rgba(12,13,10,0.0) 20%, rgba(12,13,10,0.9) 100%);
+}
+.card-page-hero-card {
+  flex-shrink: 0;
+  width: 300px;
+  filter: drop-shadow(0 8px 24px rgba(0,0,0,0.6));
+  z-index: 1;
+}
+.card-page-hero-card-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 12px;
 }
 .card-page-hero-corner {
   position: absolute;
@@ -1519,7 +1570,7 @@ body {
 .card-page-hero-body {
   position: absolute; left: 0; right: 0; bottom: 0;
   padding: 14px 24px 18px;
-  display: flex; flex-direction: column; gap: 6px;
+  display: flex; flex-direction: row; align-items: flex-end; gap: 24px;
 }
 .card-page-hero-meta {
   display: flex; gap: 6px; flex-wrap: wrap;
@@ -1579,8 +1630,13 @@ body {
 @media (max-width: 720px) {
   .card-page-layout { grid-template-columns: 1fr; }
   .card-page-sidebar { border-right: none; border-bottom: 1px solid var(--rule-2); }
-  .card-page-hero { height: 200px; }
+  .card-page-hero { min-height: auto; }
   .card-page-hero-title { font-size: 26px; }
+  .card-page-hero-card { width: 140px; }
+}
+@media (max-width: 480px) {
+  .card-page-hero-card { width: 120px; }
+  .card-page-hero-title { font-size: 20px; }
 }
 
 /* Operator profile match-history row. Default 5 columns; on narrow
@@ -2043,4 +2099,27 @@ body {
   .export-modal__fmt { border-right: 0; border-bottom: 1px solid var(--rule); }
   .export-modal__actions { flex-wrap: wrap; }
   .export-modal__btn { flex: 1 1 100%; }
+}
+
+/* ── MOBILE 480px — deck hero, landing, dashboard ── */
+@media (max-width: 480px) {
+  .deck-hero { min-height: auto; }
+  .deck-hero__title { font-size: 24px; }
+  .deck-hero__title-input { font-size: 24px; }
+  .deck-hero__body { padding: 8px 10px 10px; margin-left: 0; }
+  .deck-hero__card { width: 100px; }
+  .deck-hero__actions {
+    position: static;
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 8px 10px 0;
+  }
+  .deck-hero__share, .deck-hero__friend {
+    padding: 6px 8px; font-size: 9px;
+  }
+  .deck-hero__toast { bottom: auto; top: 4px; right: 8px; }
+
+  .spectator-seats { grid-template-columns: 1fr; }
+
+  .tape-bar { flex-wrap: wrap; gap: 2px; justify-content: center; }
+  .tape-bar > * { flex-shrink: 1; min-width: 0; }
 }

@@ -5,7 +5,7 @@ import { cardArtUrl, API_BASE } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { findGameChangerInText } from '../data/gameChangers'
 import CardLink, { linkifyAction } from '../components/CardLink'
-import NarratorOverlay from '../components/NarratorOverlay'
+import { narrate } from '../components/NarratorOverlay'
 
 const SPEED_MARKS = [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2]
 
@@ -531,7 +531,7 @@ export default function Spectator() {
                 const el = e.target
                 const atTop = el.scrollTop < 30
                 userScrolledRef.current = !atTop
-              }} style={{ maxHeight: 280, overflow: 'auto', fontSize: 11, lineHeight: 1.6 }}>
+              }} style={{ maxHeight: 480, overflow: 'auto', fontSize: 11, lineHeight: 1.6 }}>
                 {log.length === 0 ? (
                   <div className="t-xs muted-2">— WAITING FOR EVENTS —</div>
                 ) : (() => {
@@ -543,6 +543,7 @@ export default function Spectator() {
                     const isElim = ELIMINATION_KINDS.has(entry.kind)
                     const elimReason = ELIMINATION_REASONS[entry.kind]
                     const gc = findGameChangerInText(entry.action)
+                    const narrated = narrate(entry, seats)
                     const rowClasses = [
                       isElim ? 'log-elimination' : null,
                       gc ? 'gc-card' : null,
@@ -561,32 +562,46 @@ export default function Spectator() {
                         }}
                       >
                         <span className="muted-2" style={{ fontSize: 10 }}>{rt(entry.turn)}</span>
-                        {isElim ? (
-                          <span style={{
-                            color: 'var(--danger)',
-                            letterSpacing: '0.04em',
-                            fontWeight: 700,
-                            fontSize: 12,
-                          }}>
-                            &gt;&gt;&gt; {entry.action}{elimReason ? ` [${elimReason}]` : ''}
-                          </span>
-                        ) : (
-                          <span style={{ color: LOG_COLORS[entry.kind] || 'var(--ink)', letterSpacing: '0.02em' }}>
-                            {gc && <span className="gc-pill" title="Game Changer">★ GC</span>}
-                            {(() => {
-                              const { prefix, cardName } = linkifyAction(entry.action)
-                              if (!cardName) return <>&gt; {entry.action}</>
-                              return (
-                                <>
-                                  &gt; {prefix}
-                                  <CardLink name={cardName} style={{ color: 'inherit', borderBottom: '1px dotted currentColor' }}>
-                                    {cardName}
-                                  </CardLink>
-                                </>
-                              )
-                            })()}
-                          </span>
-                        )}
+                        <div>
+                          {narrated ? (
+                            <span style={{
+                              color: narrated.tone === 'combat' ? 'var(--danger)'
+                                : narrated.tone === 'elim' ? 'var(--danger)'
+                                : narrated.tone === 'changer' ? 'var(--warn)'
+                                : 'var(--ink)',
+                              fontStyle: 'italic',
+                              letterSpacing: '0.01em',
+                            }}>
+                              {gc && <span className="gc-pill" title="Game Changer">★ GC</span>}
+                              {narrated.text}
+                            </span>
+                          ) : isElim ? (
+                            <span style={{
+                              color: 'var(--danger)',
+                              letterSpacing: '0.04em',
+                              fontWeight: 700,
+                              fontSize: 12,
+                            }}>
+                              &gt;&gt;&gt; {entry.action}{elimReason ? ` [${elimReason}]` : ''}
+                            </span>
+                          ) : (
+                            <span style={{ color: LOG_COLORS[entry.kind] || 'var(--ink)', letterSpacing: '0.02em' }}>
+                              {gc && <span className="gc-pill" title="Game Changer">★ GC</span>}
+                              {(() => {
+                                const { prefix, cardName } = linkifyAction(entry.action)
+                                if (!cardName) return <>&gt; {entry.action}</>
+                                return (
+                                  <>
+                                    &gt; {prefix}
+                                    <CardLink name={cardName} style={{ color: 'inherit', borderBottom: '1px dotted currentColor' }}>
+                                      {cardName}
+                                    </CardLink>
+                                  </>
+                                )
+                              })()}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     )
                   })
@@ -761,7 +776,7 @@ export default function Spectator() {
           </div>
         </div>
       </div>
-      <NarratorOverlay log={log} seats={seats} />
+      {/* narrator fused into action log — no separate overlay */}
     </>
   )
 }

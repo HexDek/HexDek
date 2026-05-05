@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Panel, KV, Tag, Tape, Btn, Bar } from '../components/chrome'
 import ManaCost from '../components/ManaCost'
-import { API_BASE, cardArtUrl } from '../services/api'
+import { API_BASE, cardArtUrl, cardImageUrl } from '../services/api'
 import { useArtContrast } from '../hooks/useArtContrast'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 
@@ -222,6 +222,7 @@ export default function CardPage() {
   }, [liveElo, localDecks])
 
   const heroArt = cardArtUrl(cardName)
+  const heroImage = cardImageUrl(cardName)
   const heroContrast = useArtContrast(heroArt)
   const sourceLabel = source === 'local'
     ? 'LOCAL CORPUS'
@@ -231,9 +232,6 @@ export default function CardPage() {
 
   return (
     <div className="card-page">
-      {/* Blown-up gaussian-blurred art behind everything. Empty src
-          collapses to no <img> so we don't paint a broken-icon when the
-          card has no art (loading or 404 path). */}
       {heroArt && (
         <img
           className="art-ambience"
@@ -249,7 +247,7 @@ export default function CardPage() {
         right="DOC HX-700"
       />
 
-      {/* Full-bleed art hero */}
+      {/* Card hero — full card render + info side by side */}
       <div
         className="card-page-hero"
         data-art-contrast={heroContrast || undefined}
@@ -262,19 +260,31 @@ export default function CardPage() {
         <div className="card-page-hero-corner card-page-hero-corner--tl">04.HERO / / {setCode || 'UNKNOWN'}</div>
         <div className="card-page-hero-corner card-page-hero-corner--tr">{upperName}</div>
         <div className="card-page-hero-body">
-          <div className="card-page-hero-meta">
-            {typeLine !== '—' && <Tag solid>{typeLine.toUpperCase()}</Tag>}
-            {manaCost && (
-              <Tag>
-                <ManaCost cost={manaCost} size={14} />
-              </Tag>
-            )}
-            {price !== '—' && <Tag kind="ok">{price}</Tag>}
-          </div>
-          <h1 className="card-page-hero-title">{upperName}</h1>
-          {setName !== '—' && (
-            <div className="card-page-hero-sub">{setName.toUpperCase()}{setCode ? ` · ${setCode}` : ''}</div>
+          {heroImage && (
+            <div className="card-page-hero-card">
+              <img
+                src={heroImage}
+                alt={cardName}
+                className="card-page-hero-card-img"
+                onError={(e) => { e.target.style.display = 'none' }}
+              />
+            </div>
           )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="card-page-hero-meta">
+              {typeLine !== '—' && <Tag solid>{typeLine.toUpperCase()}</Tag>}
+              {manaCost && (
+                <Tag>
+                  <ManaCost cost={manaCost} size={14} />
+                </Tag>
+              )}
+              {price !== '—' && <Tag kind="ok">{price}</Tag>}
+            </div>
+            <h1 className="card-page-hero-title">{upperName}</h1>
+            {setName !== '—' && (
+              <div className="card-page-hero-sub">{setName.toUpperCase()}{setCode ? ` · ${setCode}` : ''}</div>
+            )}
+          </div>
         </div>
       </div>
 

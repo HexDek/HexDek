@@ -1511,7 +1511,12 @@ func (h *Handler) handleCardArt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ToLower(name))))
+	version := r.URL.Query().Get("version")
+	if version != "normal" && version != "large" && version != "png" {
+		version = "art_crop"
+	}
+
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ToLower(name)+"|"+version)))
 
 	if cached, ok := artMemCache.Load(hash); ok {
 		w.Header().Set("Content-Type", "image/jpeg")
@@ -1546,7 +1551,7 @@ func (h *Handler) handleCardArt(w http.ResponseWriter, r *http.Request) {
 
 	clean := strings.Split(name, "//")[0]
 	clean = strings.TrimSpace(clean)
-	scryfallURL := "https://api.scryfall.com/cards/named?fuzzy=" + url.QueryEscape(clean) + "&format=image&version=art_crop"
+	scryfallURL := "https://api.scryfall.com/cards/named?fuzzy=" + url.QueryEscape(clean) + "&format=image&version=" + version
 
 	req, _ := http.NewRequest("GET", scryfallURL, nil)
 	req.Header.Set("User-Agent", "HexDek/1.0 (hexdek card art cache)")
