@@ -1,4 +1,5 @@
 import { cardArtUrl } from '../services/api'
+import { useArtContrast } from '../hooks/useArtContrast'
 
 // DeckShelf — grid of commander-art deck tiles. Used by DeckList (with
 // the "ADD YOUR DECK" upload card) and by PublicProfile (without it,
@@ -68,10 +69,20 @@ function DeckShelfCard({ deck: d, deckElo, navigate }) {
   const cmdrName = d.commander_card || d.commander
   const bracketLabel = deckBracketLabel(d)
   const deckKey = `${d.owner}/${d.id}`
+  const artUrl = cmdrName ? cardArtUrl(cmdrName) : null
+  const artContrast = useArtContrast(artUrl)
+  // Light commander art (white/cyan/silver themes) makes the white
+  // overlay name disappear; flip to dark text + light shadow when the
+  // sampled top of the art is bright. Falls back to the original
+  // white-on-dark when contrast is unknown (CORS / still loading).
+  const titleStyle = artContrast === 'light'
+    ? { color: '#0c0d0a', textShadow: '0 1px 3px rgba(255,255,255,0.85)' }
+    : { color: '#f4f0e6', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }
   return (
     <div
       key={deckKey}
       onClick={() => navigate(`/decks/${d.owner}/${d.id}`)}
+      data-art-contrast={artContrast || undefined}
       style={{
         cursor: 'pointer',
         background: 'var(--panel)',
@@ -79,6 +90,7 @@ function DeckShelfCard({ deck: d, deckElo, navigate }) {
         display: 'flex',
         flexDirection: 'column',
         transition: 'transform 80ms ease, border-color 80ms ease',
+        ...(artContrast ? { '--art-contrast': artContrast } : null),
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.borderColor = 'var(--accent)'
@@ -111,7 +123,9 @@ function DeckShelfCard({ deck: d, deckElo, navigate }) {
           style={{
             position: 'absolute',
             inset: 0,
-            background: 'linear-gradient(to bottom, rgba(0,0,0,0) 45%, rgba(0,0,0,0.78) 100%)',
+            background: artContrast === 'light'
+              ? 'linear-gradient(to bottom, rgba(255,255,255,0) 45%, rgba(255,255,255,0.7) 100%)'
+              : 'linear-gradient(to bottom, rgba(0,0,0,0) 45%, rgba(0,0,0,0.78) 100%)',
             pointerEvents: 'none',
           }}
         />
@@ -153,8 +167,7 @@ function DeckShelfCard({ deck: d, deckElo, navigate }) {
             bottom: 8,
             left: 10,
             right: 10,
-            color: '#f4f0e6',
-            textShadow: '0 1px 3px rgba(0,0,0,0.9)',
+            ...titleStyle,
           }}
         >
           <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.15, letterSpacing: '0.02em' }}>
