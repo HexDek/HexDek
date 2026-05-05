@@ -1383,6 +1383,36 @@ body {
   .col-5 .panel > div:last-child { padding: 2px 3px; }
   .col-5 .panel > div:last-child div { font-size: 6px !important; min-height: 10px !important; }
 
+  /* Leaderboard 375px pass — keep filter/sort tabs on one line and scrollable;
+     shrink the card art column so the body has room for owner+W/L+delta. */
+  .lb-sort-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 4px;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+  }
+  .lb-sort-bar::-webkit-scrollbar { height: 3px; }
+  .lb-sort-bar::-webkit-scrollbar-thumb { background: var(--rule-2); }
+  .lb-sort-bar > * { flex: 0 0 auto; }
+
+  .lb-card-row { min-height: 72px; }
+  .lb-card-art { width: 64px; flex: 0 0 64px; }
+  .lb-card-rank { font-size: 9px; padding: 1px 4px; }
+  .lb-card-body .panel-hd {
+    padding: 5px 8px;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+  .lb-card-body .panel-hd > span:first-child { flex: 1 1 auto; min-width: 0; }
+  .lb-card-body > div:last-child { padding: 6px 8px !important; gap: 4px !important; }
+
+  /* Top search row: let the input span the full row, drop count below. */
+  .lb-search-row { flex-wrap: wrap; gap: 6px !important; }
+  .lb-search-row > .panel { flex: 1 1 100%; min-width: 0 !important; }
+  .lb-search-row > .t-xs { width: 100%; text-align: right; }
+
   .appbar .brand { font-size: 9px; }
   .appbar nav { gap: 8px; font-size: 9px; }
 

@@ -182,7 +182,7 @@ export default function Leaderboard() {
 
       <div style={{ padding: 18, flex: 1, display: 'flex', flexDirection: 'column', gap: 14, overflow: 'auto' }}>
         {/* Search + Sort controls */}
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="lb-search-row" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="panel" style={{ padding: 0, flex: 1, minWidth: 200, borderStyle: filter ? 'solid' : 'dashed' }}>
             <input
               type="text"
@@ -405,8 +405,7 @@ export default function Leaderboard() {
 }
 
 // LeaderboardMobileCard — extracted so useArtContrast can run per-row.
-// Sets data-art-contrast on the card root so the rank badge backdrop and
-// any future overlay can adapt to bright vs dark commander art.
+// data-art-contrast adapts overlays to bright vs dark commander art.
 function LeaderboardMobileCard({ entry, index, flagFor, countries, navigate, onClick }) {
   const artUrl = cardArtUrl(entry.commander_card || entry.commander)
   const artContrast = useArtContrast(artUrl)
