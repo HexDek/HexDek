@@ -100,15 +100,26 @@ function FitnessSparkline({ values, width = 320, height = 60 }) {
   )
 }
 
-export default function AmiiboPanel({ amiibo }) {
-  if (!amiibo || !amiibo.population || amiibo.population.length === 0) return null
+// num coerces an arbitrary value into a finite number, falling back to
+// `fallback` for null / undefined / NaN. Centralizes the partial-snapshot
+// defense so every fitness / generation read survives a sparse DNA payload.
+const num = (v, fallback = 0) => {
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) ? n : fallback
+}
 
-  const pop = amiibo.population
-  const sorted = [...pop].sort((a, b) => b.fitness - a.fitness)
+export default function AmiiboPanel({ amiibo }) {
+  // Filter out null / undefined entries from the population snapshot —
+  // a partially-populated pool from the backend would otherwise crash
+  // on member.fitness / member.generation reads below.
+  const pop = (amiibo?.population || []).filter(d => d != null)
+  if (!amiibo || pop.length === 0) return null
+
+  const sorted = [...pop].sort((a, b) => num(b.fitness) - num(a.fitness))
   const top = sorted[0]
-  const maxGen = pop.reduce((m, d) => Math.max(m, d.generation || 0), 0)
-  const bestFitness = top.fitness
-  const avgFitness = pop.reduce((s, d) => s + d.fitness, 0) / pop.length
+  const maxGen = pop.reduce((m, d) => Math.max(m, num(d.generation)), 0)
+  const bestFitness = num(top.fitness)
+  const avgFitness = pop.reduce((s, d) => s + num(d.fitness), 0) / pop.length
 
   // Best fitness per generation, last 20 generations. Each member carries
   // the generation it was created in; we group by gen and take the max
@@ -116,8 +127,8 @@ export default function AmiiboPanel({ amiibo }) {
   const fitnessByGen = (() => {
     const bestByGen = new Map()
     for (const d of pop) {
-      const g = d.generation ?? 0
-      const f = d.fitness ?? 0
+      const g = num(d.generation)
+      const f = num(d.fitness)
       const cur = bestByGen.get(g)
       if (cur == null || f > cur) bestByGen.set(g, f)
     }
@@ -125,7 +136,7 @@ export default function AmiiboPanel({ amiibo }) {
     return gens.map(g => bestByGen.get(g))
   })()
 
-  const topValues = TRAITS.map(t => top[t.key] ?? 0)
+  const topValues = TRAITS.map(t => num(top[t.key]))
 
   return (
     <Panel
@@ -142,7 +153,7 @@ export default function AmiiboPanel({ amiibo }) {
         ['GAMES LOGGED', `${(amiibo.game_count ?? 0).toLocaleString()}`],
         ['BEST FITNESS', <span style={{ color: bestFitness >= 1.0 ? 'var(--ok)' : 'var(--warn)', fontWeight: 700 }}>{bestFitness.toFixed(2)}</span>],
         ['AVG FITNESS', `${avgFitness.toFixed(2)}`],
-        ['TOP GAMES', `${top.games_played ?? 0}`],
+        ['TOP GAMES', `${num(top.games_played).toLocaleString()}`],
       ]} />
 
       <div className="hr" style={{ margin: '10px 0' }} />
@@ -156,13 +167,14 @@ export default function AmiiboPanel({ amiibo }) {
       <div className="t-xs muted" style={{ marginBottom: 6 }}>TOP MEMBER TRAITS</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 6 }} className="amiibo-traits">
         {TRAITS.map(t => {
-          const v = top[t.key] ?? 0
+          const v = num(top[t.key])
+          const pct = Math.max(0, Math.min(100, Math.round(v * 100)))
           return (
             <div key={t.key} style={{ border: '1px solid var(--rule-2)', padding: '6px 8px' }}>
               <div className="t-xs muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.label}</div>
               <div className="t-xl" style={{ fontWeight: 700, marginTop: 2 }}>{v.toFixed(2)}</div>
               <div style={{ height: 3, background: 'var(--rule-2)', marginTop: 4 }}>
-                <div style={{ width: `${Math.round(v * 100)}%`, height: '100%', background: 'var(--ok)' }} />
+                <div style={{ width: `${pct}%`, height: '100%', background: 'var(--ok)' }} />
               </div>
             </div>
           )
