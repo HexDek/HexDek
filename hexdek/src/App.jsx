@@ -27,6 +27,7 @@ import Login from './screens/Login'
 import AuthCallback from './screens/AuthCallback'
 import DeckCompare from './screens/DeckCompare'
 import Import from './screens/Import'
+import Landing from './screens/Landing'
 import StreamOverlay from './components/StreamOverlay'
 
 function RequireAuth({ children }) {
@@ -45,7 +46,8 @@ export default function App() {
       <Route path="stream/:gameId" element={<StreamOverlay />} />
       <Route path="stream" element={<StreamOverlay />} />
       <Route element={<AppShell />}>
-        <Route index element={<Splash />} />
+        <Route index element={<Landing />} />
+        <Route path="splash" element={<Splash />} />
         <Route path="login" element={<Login />} />
         <Route path="auth/callback" element={<AuthCallback />} />
         <Route path="dash" element={<Dashboard />} />
