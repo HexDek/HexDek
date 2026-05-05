@@ -94,6 +94,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/versions", h.handleListVersions)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/analysis", h.handleGetAnalysis)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/matchups", h.handleDeckMatchups)
+	mux.HandleFunc("GET /api/decks/{owner}/{id}/upgrade", h.handleDeckUpgrade)
 	mux.HandleFunc("POST /api/decks/{owner}/{id}/analyze", h.handleRunAnalysis)
 	// SPA share page with OG meta injection — Caddy can route /decks/{owner}/{id}
 	// here for crawler User-Agents (or unconditionally) so Discord/Twitter unfurls
