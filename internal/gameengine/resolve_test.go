@@ -463,6 +463,59 @@ func TestReanimate(t *testing.T) {
 	}
 }
 
+// TestReanimate_RefusesNonPermanent regression-tests the Abrupt Decay
+// bug: an unconstrained reanimate query (e.g. "target card in your
+// graveyard") that picks an instant must NOT wrap it in a Permanent.
+// CR 304.4 / 307.1 — non-permanent cards remain in their previous zone.
+func TestReanimate_RefusesNonPermanent(t *testing.T) {
+	gs := newFixtureGame(t)
+	src := addBattlefield(gs, 0, "Animate Dead", 0, 0, "enchantment")
+	instant := &Card{
+		Name:  "Abrupt Decay",
+		Owner: 0,
+		Types: []string{"instant"},
+	}
+	gs.Seats[0].Graveyard = append(gs.Seats[0].Graveyard, instant)
+
+	// Unconstrained query — matches any card in graveyard, including the
+	// instant. This is the misuse pattern reanimate hooks have hit in
+	// the grinder.
+	e := &gameast.Reanimate{
+		Query:       gameast.Filter{Base: "card"},
+		FromZone:    "your_graveyard",
+		Destination: "battlefield",
+	}
+	ResolveEffect(gs, src, e)
+
+	// Battlefield must contain only the source enchantment — the
+	// instant must not have been wrapped in a Permanent.
+	for _, p := range gs.Seats[0].Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		if p.Card == instant {
+			t.Fatalf("Abrupt Decay (instant) wrapped in Permanent: %s", p.Card.DisplayName())
+		}
+	}
+	if len(gs.Seats[0].Battlefield) != 1 || gs.Seats[0].Battlefield[0] != src {
+		t.Errorf("battlefield should be just the source; got %d perms", len(gs.Seats[0].Battlefield))
+	}
+	// And the instant must be back in the graveyard (restored after the
+	// refusal — CR 304.4 says "remains in previous zone"; the engine
+	// puts it in graveyard which is the safe default).
+	found := false
+	for _, c := range gs.Seats[0].Graveyard {
+		if c == instant {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("instant should be in graveyard after refused reanimate, got %v",
+			gs.Seats[0].Graveyard)
+	}
+}
+
 func TestCounterSpellMarksStack(t *testing.T) {
 	gs := newFixtureGame(t)
 	// Put a fake spell on the stack.

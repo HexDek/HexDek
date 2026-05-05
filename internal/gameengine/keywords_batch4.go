@@ -1035,6 +1035,11 @@ func ApplyChampion(gs *GameState, perm *Permanent, creatureType string) {
 				if c == exiled {
 					removeCardFromZone(gs, seatIdx, exiled, "exile")
 					EnsureBattlefieldFrontFace(exiled)
+					// CR 304.4 / 307.1 — defense in depth.
+					if !CardCanEnterBattlefield(exiled) {
+						gs.moveToZone(seatIdx, exiled, "exile")
+						return
+					}
 					returned := &Permanent{
 						Card:       exiled,
 						Controller: seatIdx,

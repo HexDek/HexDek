@@ -1105,7 +1105,12 @@ func resolvePermanentSpellETB(gs *GameState, item *StackItem) *Permanent {
 
 	// MDFC back-face entry: swap type identity so the permanent enters as
 	// the back face (e.g., Bridge = enchantment, not Esika = creature).
-	if card.CastingBackFace && card.BackFaceName != "" {
+	// Reverse MDFCs (front=land, back=instant/sorcery) skip the swap —
+	// the spell-typed back face isn't a permanent and would trip §205.2.
+	// In practice a reverse MDFC's back face resolves into the graveyard,
+	// not the battlefield, so we shouldn't reach this code with
+	// CastingBackFace=true on one; the guard is defensive depth.
+	if card.CastingBackFace && card.BackFaceName != "" && !IsReverseMDFC(card) {
 		card.Name = card.BackFaceName
 		if len(card.BackFaceTypes) > 0 {
 			card.Types = card.BackFaceTypes
@@ -1114,6 +1119,10 @@ func resolvePermanentSpellETB(gs *GameState, item *StackItem) *Permanent {
 			card.TypeLine = card.BackFaceTypeLine
 		}
 		card.CastingBackFace = false
+	} else if card.CastingBackFace {
+		// Clear the transient flag even on the reverse-MDFC bail so it
+		// doesn't leak into downstream consumers.
+		card.CastingBackFace = false
 	}
 	// Defense in depth: any MDFC reaching the resolve path with a
 	// land back face still needs the swap, in case CastingBackFace
@@ -1121,6 +1130,14 @@ func resolvePermanentSpellETB(gs *GameState, item *StackItem) *Permanent {
 	// cascaded into another MDFC, where the cascade put-onto-stack
 	// path didn't flip the flag).
 	EnsureBattlefieldFrontFace(card)
+	// CR 304.4 / 307.1 — instants and sorceries should never reach the
+	// permanent-spell ETB path, but guard anyway: if one slips through
+	// (corpus mistype, malformed StackItem) send it to the graveyard
+	// instead of wrapping it in a Permanent.
+	if !CardCanEnterBattlefield(card) {
+		gs.moveToZone(seatIdx, card, "graveyard")
+		return nil
+	}
 
 	// Summoning sickness: only creatures care (§302.1 / §212.3f). A creature
 	// with haste ignores it.

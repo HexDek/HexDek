@@ -183,3 +183,17 @@ func cardIsPermanentType(card *Card) bool {
 		cardHasType(card, "land") ||
 		cardHasType(card, "battle")
 }
+
+// CardCanEnterBattlefield reports whether card has at least one
+// permanent card type and is therefore a legal target for "put onto
+// the battlefield" effects. Per CR 304.4 / 307.1, an instant or
+// sorcery card cannot enter the battlefield — effects that try are
+// no-ops and the card remains in its previous zone.
+//
+// Use as a gate at every battlefield-entry path that constructs a
+// *Permanent from a real Card pointer (not a synthesized token).
+// Public wrapper around cardIsPermanentType so the per_card subpackage
+// can call it without re-implementing the type check.
+func CardCanEnterBattlefield(card *Card) bool {
+	return cardIsPermanentType(card)
+}

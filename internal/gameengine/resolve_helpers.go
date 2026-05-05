@@ -402,18 +402,25 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 			if card != nil {
 				removeCardFromZone(gs, seat, card, fromZone)
 				EnsureBattlefieldFrontFace(card)
-				p := &Permanent{
-					Card:          card,
-					Controller:    seat,
-					Tapped:        false,
-					SummoningSick: true,
-					Timestamp:     gs.NextTimestamp(),
-					Counters:      map[string]int{},
-					Flags:         map[string]int{},
+				// CR 304.4 / 307.1: instants/sorceries can't enter the
+				// battlefield. Restore to source zone and skip the
+				// Permanent construction.
+				if !CardCanEnterBattlefield(card) {
+					gs.moveToZone(seat, card, fromZone)
+				} else {
+					p := &Permanent{
+						Card:          card,
+						Controller:    seat,
+						Tapped:        false,
+						SummoningSick: true,
+						Timestamp:     gs.NextTimestamp(),
+						Counters:      map[string]int{},
+						Flags:         map[string]int{},
+					}
+					s.Battlefield = append(s.Battlefield, p)
+					RegisterReplacementsForPermanent(gs, p)
+					FirePermanentETBTriggers(gs, p)
 				}
-				s.Battlefield = append(s.Battlefield, p)
-				RegisterReplacementsForPermanent(gs, p)
-				FirePermanentETBTriggers(gs, p)
 			}
 		}
 		gs.LogEvent(Event{
@@ -2010,18 +2017,23 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 				if card != nil {
 					removeCardFromZone(gs, seat, card, fromZone)
 					EnsureBattlefieldFrontFace(card)
-					p := &Permanent{
-						Card:          card,
-						Controller:    seat,
-						Tapped:        false,
-						SummoningSick: true,
-						Timestamp:     gs.NextTimestamp(),
-						Counters:      map[string]int{},
-						Flags:         map[string]int{},
+					// CR 304.4 / 307.1 — restore non-permanents to source.
+					if !CardCanEnterBattlefield(card) {
+						gs.moveToZone(seat, card, fromZone)
+					} else {
+						p := &Permanent{
+							Card:          card,
+							Controller:    seat,
+							Tapped:        false,
+							SummoningSick: true,
+							Timestamp:     gs.NextTimestamp(),
+							Counters:      map[string]int{},
+							Flags:         map[string]int{},
+						}
+						s.Battlefield = append(s.Battlefield, p)
+						RegisterReplacementsForPermanent(gs, p)
+						FirePermanentETBTriggers(gs, p)
 					}
-					s.Battlefield = append(s.Battlefield, p)
-					RegisterReplacementsForPermanent(gs, p)
-					FirePermanentETBTriggers(gs, p)
 				}
 			case containsIgnoreCase(argText, "graveyard"):
 				// Put top of library into graveyard (e.g. "put that card

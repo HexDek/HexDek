@@ -2346,6 +2346,11 @@ func ActivateBlight(gs *GameState, seatIdx int, cardInGrave *Card, blightX int, 
 	// Cost: remove from graveyard, put onto battlefield.
 	removeCardFromZone(gs, seatIdx, cardInGrave, "graveyard")
 	EnsureBattlefieldFrontFace(cardInGrave)
+	// CR 304.4 / 307.1 — non-permanent cards can't enter the battlefield.
+	if !CardCanEnterBattlefield(cardInGrave) {
+		gs.moveToZone(seatIdx, cardInGrave, "graveyard")
+		return false
+	}
 	perm := &Permanent{
 		Card:       cardInGrave,
 		Controller: seatIdx,

@@ -278,6 +278,19 @@ func createPermanent(gs *gameengine.GameState, seat int, card *gameengine.Card, 
 	if gs == nil || card == nil || seat < 0 || seat >= len(gs.Seats) {
 		return nil
 	}
+	// MDFC with a land back face entering via a non-cast path
+	// (reanimate, fetch, sneak attack, etc.) — swap to back face
+	// before the perm wraps it so Permanent.Card.Types reads "land"
+	// instead of "instant"/"sorcery".
+	gameengine.EnsureBattlefieldFrontFace(card)
+	// CR 304.4 / 307.1 — refuse to wrap a non-permanent in a Permanent.
+	// Per-card hooks invoking createPermanent on an instant/sorcery
+	// (mis-targeted reanimate, recursion, etc.) silently no-op here so
+	// the §205 SBA never fires. Done before the zone sweep so the card
+	// stays in whatever zone the caller put it.
+	if !gameengine.CardCanEnterBattlefield(card) {
+		return nil
+	}
 	// Sweep from the OWNER's private zones (controller and owner can
 	// differ on stolen permanents; reanimation pulls from the owner's
 	// graveyard regardless of who casts the reanimate).
@@ -289,11 +302,6 @@ func createPermanent(gs *gameengine.GameState, seat int, card *gameengine.Card, 
 	if owner != seat {
 		gameengine.RemoveCardFromAllPrivateZones(gs, seat, card)
 	}
-	// MDFC with a land back face entering via a non-cast path
-	// (reanimate, fetch, sneak attack, etc.) — swap to back face
-	// before the perm wraps it so Permanent.Card.Types reads "land"
-	// instead of "instant"/"sorcery".
-	gameengine.EnsureBattlefieldFrontFace(card)
 	sick := false
 	if cardHasType(card, "creature") {
 		sick = !cardHasKeyword(card, "haste")

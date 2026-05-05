@@ -83,6 +83,12 @@ func ApplyUnearth(gs *GameState, seatIdx int, card *Card, unearthCost int) *Perm
 
 	// Put on battlefield with haste. §702.84a.
 	EnsureBattlefieldFrontFace(card)
+	// CR 304.4 / 307.1 — defense in depth. Unearth is only printed on
+	// creatures, but a corpus glitch shouldn't turn into an SBA crash.
+	if !CardCanEnterBattlefield(card) {
+		gs.moveToZone(seatIdx, card, "graveyard")
+		return nil
+	}
 	perm := &Permanent{
 		Card:          card,
 		Controller:    seatIdx,

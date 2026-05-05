@@ -2022,6 +2022,12 @@ func placeTutoredCard(gs *GameState, seat int, c *Card, dest string) {
 	case "battlefield", "battlefield_tapped":
 		tapped := dest == "battlefield_tapped"
 		EnsureBattlefieldFrontFace(c)
+		// CR 304.4 / 307.1: a tutored instant or sorcery cannot enter
+		// the battlefield. Redirect to hand so the tutor still completes.
+		if !CardCanEnterBattlefield(c) {
+			gs.moveToZone(seat, c, "hand")
+			return
+		}
 		p := &Permanent{
 			Card:          c,
 			Controller:    seat,
@@ -2066,6 +2072,25 @@ func resolveReanimate(gs *GameState, src *Permanent, e *gameast.Reanimate) {
 	removeCardFromZone(gs, seat, c, "graveyard")
 	tapped := e.Destination == "battlefield_tapped"
 	EnsureBattlefieldFrontFace(c)
+	// CR 304.4 / 307.1: instants and sorceries cannot enter the
+	// battlefield. The reanimate query may be unconstrained (e.g.
+	// "target card in your graveyard") and pick an instant like
+	// Abrupt Decay; refuse the placement and leave the card in its
+	// graveyard so the §205 SBA never sees it as a permanent.
+	if !CardCanEnterBattlefield(c) {
+		gs.moveToZone(seat, c, "graveyard")
+		gs.LogEvent(Event{
+			Kind:   "reanimate_refused",
+			Seat:   seat,
+			Source: sourceName(src),
+			Details: map[string]interface{}{
+				"target_card": c.DisplayName(),
+				"reason":      "non_permanent_type",
+				"rule":        "304.4",
+			},
+		})
+		return
+	}
 	p := &Permanent{
 		Card:          c,
 		Controller:    seat,
