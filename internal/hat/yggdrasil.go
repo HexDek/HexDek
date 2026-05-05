@@ -26,6 +26,7 @@ var _ gameengine.Hat = (*YggdrasilHat)(nil)
 type YggdrasilHat struct {
 	Evaluator  *GameStateEvaluator
 	NeuralEval *NeuralEvaluator // optional neural position evaluator (Level 5)
+	MicroNet   *MicroNet       // optional per-deck micro neural net (Level 6)
 	Strategy   *StrategyProfile
 	Budget     int     // 0=heuristic, 1-199=evaluator-guided, 200+=rollout
 	Noise      float64 // gaussian σ applied to targeting scores (0=deterministic, 0.2=default)
