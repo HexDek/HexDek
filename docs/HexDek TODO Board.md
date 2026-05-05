@@ -67,10 +67,10 @@ kanban-plugin: board
 ### UX Overhaul (Ive/Jobs/Watts Quorum — 2026-05-02)
 
 **Navigation restructure:**
-- [ ] Reduce nav from 8 tabs to 5-6 — PUBLIC: DECKS, RANKINGS, SPECTATE; AUTH adds: MY DECKS + contextual IMPORT #ui #nav
-- [ ] Rename "DASH" → "MY DECKS" — possessive language signals ownership, not admin tooling #ui #nav
-- [ ] Fold PLAY, FORGE, REPORT into contextual access — not top-level nav. Surface where needed (e.g. FORGE inside deck drilldown, REPORT inside game end) #ui #nav
-- [ ] Consolidate ABOUT into footer — not worth a nav slot #ui #nav
+- [x] Reduce nav from 8 tabs to 5-6 — PUBLIC: DECKS, RANKINGS, SPECTATE; AUTH adds: MY DECKS + contextual IMPORT (DeckList IMPORT button for authed users) (2026-05-04) #ui #nav
+- [x] Rename "DASH" → "MY DECKS" — possessive language signals ownership, not admin tooling (2026-05-04) #ui #nav
+- [x] Fold PLAY, FORGE, REPORT into contextual access — FORGE on DeckArchive (`OPEN IN FORGE`), REPORT on Dashboard recent-games + Spectator/GameBoard end-state (`VIEW REPORT`), PLAY on Spectator turn-bar (`PLAY VIEW`) (2026-05-04) #ui #nav
+- [x] Consolidate ABOUT into footer — moved to AppShell statusbar, no nav slot (2026-05-04) #ui #nav
 
 **Home / Splash page:**
 - [ ] Embed fishtank on home/splash page — merge splash + spectate into one attention trap. Live game visible immediately on landing #ui #home
