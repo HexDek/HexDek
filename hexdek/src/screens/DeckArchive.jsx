@@ -292,25 +292,31 @@ export default function DeckArchive() {
         right="EXPORT ↗ ANALYZE ↗"
       />
 
+      <div
+        className={`deck-hero ${cmdrImageUrl ? '' : 'hatch'}`}
+        style={cmdrImageUrl ? { backgroundImage: `url(${cmdrImageUrl})` } : undefined}
+      >
+        <div className="deck-hero__scrim" />
+        <div className="deck-hero__corner deck-hero__corner--tl">04.HERO / / {pageTheme.label}</div>
+        <div className="deck-hero__corner deck-hero__corner--tr">{owner?.toUpperCase()} / / {id}</div>
+        <div className="deck-hero__body">
+          <div className="deck-hero__meta">
+            <Tag solid>B{wbs}{wbsLabel ? ' · ' + wbsLabel : ''}</Tag>
+            {pls && pls !== wbs && <Tag solid kind="warn">PLAYS LIKE B{pls}</Tag>}
+            <Tag>{archetype}</Tag>
+            {colorIdentity.length > 0 && <Tag>{colorIdentity.join('')}</Tag>}
+          </div>
+          <h1 className="deck-hero__title">{deckName}</h1>
+          {cmdrCardName && cmdrCardName.toUpperCase() !== deckName && (
+            <div className="deck-hero__sub">{cmdrCardName}</div>
+          )}
+          {summary && <div className="deck-hero__summary">&gt; {summary}</div>}
+        </div>
+      </div>
+
       <div className="archive-layout">
         <div className="archive-sidebar">
-          <Panel code="04.A" title="COMMANDER SPECIMEN" solid>
-            <div style={{ aspectRatio: '5/7', position: 'relative', border: '1px solid var(--rule-2)', overflow: 'hidden' }} className={cmdrImageUrl ? '' : 'hatch'}>
-              {cmdrImageUrl ? (
-                <img src={cmdrImageUrl} alt={cmdrCardName} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'saturate(0.7) contrast(1.1)' }} />
-              ) : (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 64, color: 'var(--ink-3)', fontWeight: 800 }}>◇</div>
-              )}
-              <span style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(12,13,10,0.7)', padding: '1px 4px' }} className="t-xs muted-2">CMDR.PORTRAIT</span>
-            </div>
-            <div style={{ marginTop: 10 }}>
-              <div className="t-xl" style={{ fontWeight: 700, lineHeight: 1.1 }}>{deckName}</div>
-              {cmdrCardName && cmdrCardName.toUpperCase() !== deckName && (
-                <div className="t-xs" style={{ marginTop: 4, color: 'var(--ink-2)' }}>{cmdrCardName}</div>
-              )}
-              <div className="t-xs muted" style={{ marginTop: 4 }}>{owner?.toUpperCase()} / / {id}</div>
-            </div>
-            <div className="hr" style={{ margin: '10px 0' }} />
+          <Panel code="04.A" title="DECK SPECS" solid>
             <KV rows={[
               ['OWNER', <Link to={`/decks?q=${owner}`} style={{ color: 'var(--ink)', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)' }}>{owner?.toUpperCase()}</Link>],
               ['CARDS', `${cardCount}`],
