@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Panel, KV, Tag, Tape, Btn, Bar } from '../components/chrome'
 import { API_BASE, cardArtUrl } from '../services/api'
+import { useArtContrast } from '../hooks/useArtContrast'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 
 // CardPage — /cards/:cardName
@@ -220,6 +221,7 @@ export default function CardPage() {
   }, [liveElo, localDecks])
 
   const heroArt = cardArtUrl(cardName)
+  const heroContrast = useArtContrast(heroArt)
   const sourceLabel = source === 'local'
     ? 'LOCAL CORPUS'
     : source === 'scryfall'
@@ -237,8 +239,10 @@ export default function CardPage() {
       {/* Full-bleed art hero */}
       <div
         className="card-page-hero"
+        data-art-contrast={heroContrast || undefined}
         style={{
           backgroundImage: heroArt ? `url(${heroArt})` : undefined,
+          ...(heroContrast ? { '--art-contrast': heroContrast } : null),
         }}
       >
         <div className="card-page-hero-scrim" />

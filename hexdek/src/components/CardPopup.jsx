@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { cardArtUrl } from '../services/api'
+import { useArtContrast } from '../hooks/useArtContrast'
 
 // CardPopup — hover (desktop) / tap (mobile) preview for any card name.
 //
@@ -85,6 +86,8 @@ function CardPopupBody({ name, position, onClose, onNavigate }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const popupRef = useRef(null)
+  const artUrl = cardArtUrl(name)
+  const artContrast = useArtContrast(artUrl)
 
   useEffect(() => {
     let alive = true
@@ -117,6 +120,8 @@ function CardPopupBody({ name, position, onClose, onNavigate }) {
     <div
       ref={popupRef}
       role="tooltip"
+      className="card-popup-overlay"
+      data-art-contrast={artContrast || undefined}
       style={{
         position: 'fixed',
         top: position.top,
@@ -131,6 +136,7 @@ function CardPopupBody({ name, position, onClose, onNavigate }) {
         display: 'flex',
         flexDirection: 'column',
         fontSize: 11,
+        ...(artContrast ? { '--art-contrast': artContrast } : null),
       }}
     >
       <div
@@ -138,7 +144,7 @@ function CardPopupBody({ name, position, onClose, onNavigate }) {
         style={{ aspectRatio: '5/4', borderBottom: '1px solid var(--rule-2)', overflow: 'hidden', position: 'relative' }}
       >
         <img
-          src={cardArtUrl(name)}
+          src={artUrl}
           alt={name}
           loading="lazy"
           style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}

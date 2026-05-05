@@ -7,6 +7,7 @@ import AmiiboPanel from '../components/AmiiboPanel'
 import { AchievementsPanel, BadgeShowcase } from '../components/AchievementsPanel'
 import { toast } from '../components/Toast'
 import { api, cardArtUrl } from '../services/api'
+import { useArtContrast } from '../hooks/useArtContrast'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useAuth } from '../context/AuthContext'
 import { trackEvent } from '../hooks/useAnalytics'
@@ -405,6 +406,7 @@ export default function DeckArchive() {
   const cmdrImageUrl = cmdrCardName
     ? cardArtUrl(cmdrCardName)
     : null
+  const cmdrContrast = useArtContrast(cmdrImageUrl)
 
   if (loading) {
     return (
@@ -434,7 +436,10 @@ export default function DeckArchive() {
 
       <div
         className={`deck-hero ${cmdrImageUrl ? '' : 'hatch'}`}
-        style={cmdrImageUrl ? { backgroundImage: `url(${cmdrImageUrl})` } : undefined}
+        data-art-contrast={cmdrContrast || undefined}
+        style={cmdrImageUrl
+          ? { backgroundImage: `url(${cmdrImageUrl})`, ...(cmdrContrast ? { '--art-contrast': cmdrContrast } : null) }
+          : undefined}
       >
         <div className="deck-hero__scrim" />
         <div className="deck-hero__corner deck-hero__corner--tl">04.HERO / / {pageTheme.label}</div>

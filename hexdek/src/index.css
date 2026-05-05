@@ -1552,6 +1552,35 @@ body {
   }
 }
 
+/* Dynamic art-contrast text overlay. The useArtContrast hook samples
+   the top of the card art and sets data-art-contrast="dark"|"light"
+   plus a CSS custom property --art-contrast on the hero container. We
+   key text color and shadow off the data-attribute (variable is also
+   exposed for downstream consumers).
+   - dark art (default): light ink, dark shadow — original look.
+   - light art:          dark ink, light shadow — readable on bright art. */
+[data-art-contrast="dark"]  { --hero-ink: #f4f0e6; --hero-shadow: 0 2px 6px rgba(0,0,0,0.85); }
+[data-art-contrast="light"] { --hero-ink: #0c0d0a; --hero-shadow: 0 1px 3px rgba(255,255,255,0.85); }
+[data-art-contrast="light"] .deck-hero__scrim,
+[data-art-contrast="light"] .card-page-hero-scrim {
+  background: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.0) 30%, rgba(255,255,255,0.55) 100%);
+}
+[data-art-contrast] .card-page-hero-title,
+[data-art-contrast] .deck-hero__title {
+  color: var(--hero-ink);
+  text-shadow: var(--hero-shadow);
+}
+[data-art-contrast] .card-page-hero-sub,
+[data-art-contrast] .deck-hero__sub {
+  color: var(--hero-ink);
+  opacity: 0.85;
+  text-shadow: var(--hero-shadow);
+}
+
+/* Card popup name overlay — popup body sits over the art-thumb header. */
+.card-popup-overlay[data-art-contrast="dark"]  { --hero-ink: #f4f0e6; --hero-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+.card-popup-overlay[data-art-contrast="light"] { --hero-ink: #0c0d0a; --hero-shadow: 0 1px 3px rgba(255,255,255,0.8); }
+
 /* ── NARRATOR OVERLAY (spectator commentary strip) ── */
 /* Pinned to the bottom of the viewport. Semi-transparent so the seats
    underneath stay legible. The header bar is one brutalist row, then
