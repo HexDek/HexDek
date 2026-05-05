@@ -491,3 +491,111 @@ func EnsureMDFCBackFaceForBattlefield(c *Card) bool {
 	}
 	return SwapToBackFace(c)
 }
+
+// StripAdventureHalfTypes drops the adventure-half (or split-card half)
+// types from a Card's runtime Types slice when the card is on (or about
+// to enter) the battlefield. Peer to SwapToBackFace; covers the same
+// class of "Front // Back type_line" parser leak but for layouts the
+// MDFC swap doesn't handle:
+//
+//   - layout=adventure   (e.g., "Virtue of Knowledge // Vantress Visions",
+//                          "Adventurous Eater // Have a Bite")
+//   - layout=split       ("Fire // Ice", "Wear // Tear")
+//   - layout=aftermath   ("Driven // Despair")
+//   - any other layout the deckparser populates with a combined
+//     "Front // Back" type_line
+//
+// CR §715 (adventurer cards) and §709 (split cards): the front face's
+// characteristics are the only ones present once the card is a
+// permanent on the battlefield. The adventure/back half exists only
+// while the card is on the stack as the alternate-cost spell.
+//
+// The deckparser's parseTypes splits "Creature — Human Warlock // Sorcery"
+// on whitespace and produces ["creature", "human", "warlock", "//",
+// "sorcery"]. That "sorcery" leak is what trips §205.2 / Feynman's
+// permanent_types invariant when the creature half resolves onto the
+// battlefield. This function detects the "//" pseudo-token and drops
+// it plus everything after it; TypeLine is trimmed to match.
+//
+// Gates:
+//   - card is non-nil
+//   - card is not a token (token Types are engine-assigned and don't
+//     contain the parser leak)
+//   - Types contains "//" (otherwise no leak to strip — no-op)
+//   - the prefix-before-"//" contains at least one permanent type
+//     (creature/artifact/enchantment/planeswalker/land/battle); if the
+//     front face has no permanent type, refuse to mutate — that
+//     situation shouldn't reach the battlefield and stripping would
+//     mask a real bug elsewhere.
+//
+// Idempotent — safe to call multiple times; the second call is a no-op
+// because the "//" marker is gone from Types after the first.
+//
+// Order with SwapToBackFace at battlefield-entry sites: SwapToBackFace
+// fires first and replaces Types wholesale with BackFaceTypes (parsed
+// from the back face's separate type_line, no leak). This stripper
+// runs second and is a no-op for the swapped MDFC. For Adventures
+// (and other non-MDFC split layouts), SwapToBackFace is a no-op
+// (gated by IsMDFC) and the stripper handles them.
+//
+// Returns true if Types was modified, false otherwise.
+func StripAdventureHalfTypes(c *Card) bool {
+	if c == nil || cardIsToken(c) {
+		return false
+	}
+	splitIdx := -1
+	for i, t := range c.Types {
+		if t == "//" {
+			splitIdx = i
+			break
+		}
+	}
+	if splitIdx < 0 {
+		return false
+	}
+	// Refuse to strip if the front face has no permanent type. Lets a
+	// genuinely-broken card surface the violation instead of being
+	// silently scrubbed clean.
+	hasPermanentType := false
+	for i := 0; i < splitIdx; i++ {
+		switch c.Types[i] {
+		case "creature", "artifact", "enchantment", "planeswalker",
+			"land", "battle":
+			hasPermanentType = true
+		}
+		if hasPermanentType {
+			break
+		}
+	}
+	if !hasPermanentType {
+		return false
+	}
+	c.Types = append([]string(nil), c.Types[:splitIdx]...)
+	if i := strings.Index(c.TypeLine, "//"); i >= 0 {
+		c.TypeLine = strings.TrimSpace(c.TypeLine[:i])
+	}
+	return true
+}
+
+// EnsureBattlefieldFrontFace is the canonical "card is about to enter
+// the battlefield via any path" hook for face-cleanup. Composes the
+// MDFC back-face swap and the adventure-half-type stripper in the
+// right order:
+//
+//  1. EnsureMDFCBackFaceForBattlefield — if the card is an MDFC whose
+//     back face is a land, swap Types wholesale to the back-face values.
+//     No-op for non-MDFCs.
+//  2. StripAdventureHalfTypes — if Types still carries a "//" leak from
+//     the deckparser's combined type_line, drop everything from "//"
+//     onward. No-op when SwapToBackFace already replaced Types.
+//
+// Call sites that previously invoked EnsureMDFCBackFaceForBattlefield
+// can switch to this function to pick up the adventure handling for
+// free; existing call sites that don't switch get the MDFC fix only
+// (which is what they previously had).
+//
+// Idempotent.
+func EnsureBattlefieldFrontFace(c *Card) {
+	EnsureMDFCBackFaceForBattlefield(c)
+	StripAdventureHalfTypes(c)
+}

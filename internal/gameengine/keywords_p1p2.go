@@ -82,7 +82,7 @@ func ApplyUnearth(gs *GameState, seatIdx int, card *Card, unearthCost int) *Perm
 	})
 
 	// Put on battlefield with haste. §702.84a.
-	EnsureMDFCBackFaceForBattlefield(card)
+	EnsureBattlefieldFrontFace(card)
 	perm := &Permanent{
 		Card:          card,
 		Controller:    seatIdx,

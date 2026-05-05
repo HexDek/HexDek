@@ -293,7 +293,7 @@ func createPermanent(gs *gameengine.GameState, seat int, card *gameengine.Card, 
 	// (reanimate, fetch, sneak attack, etc.) — swap to back face
 	// before the perm wraps it so Permanent.Card.Types reads "land"
 	// instead of "instant"/"sorcery".
-	gameengine.EnsureMDFCBackFaceForBattlefield(card)
+	gameengine.EnsureBattlefieldFrontFace(card)
 	sick := false
 	if cardHasType(card, "creature") {
 		sick = !cardHasKeyword(card, "haste")

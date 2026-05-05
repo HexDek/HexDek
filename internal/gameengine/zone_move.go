@@ -53,12 +53,12 @@ func MoveCard(gs *GameState, card *Card, ownerSeat int, fromZone, toZone, reason
 		return ""
 	}
 	// Ramp / recursion / "put onto the battlefield" effects bypass
-	// tryPlayLand and resolvePermanentSpellETB, so an MDFC with a
-	// land back face would otherwise enter under its front-face
-	// (instant/sorcery) identity. Swap before triggers fire so ETB
-	// observers see the land identity.
-	if dest == "battlefield" && MDFCBackFaceIsLand(card) {
-		SwapToBackFace(card)
+	// the cast path (tryPlayLand, resolvePermanentSpellETB), so an
+	// MDFC with a land back face would otherwise enter under its
+	// front-face (instant/sorcery) identity. Swap before triggers
+	// fire so ETB observers see the land identity.
+	if dest == "battlefield" {
+		EnsureBattlefieldFrontFace(card)
 	}
 	FireZoneChangeTriggers(gs, nil, card, fromZone, dest)
 

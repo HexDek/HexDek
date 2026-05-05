@@ -244,3 +244,144 @@ func TestIsCommanderCard_DFC(t *testing.T) {
 		t.Fatalf("IsCommanderCard should accept full name")
 	}
 }
+
+// -----------------------------------------------------------------------------
+// StripAdventureHalfTypes (§715 / §709 — Adventures + split-type leak)
+// -----------------------------------------------------------------------------
+
+func TestStripAdventureHalfTypes_AdventureCreature(t *testing.T) {
+	c := &Card{
+		Name:     "Adventurous Eater // Have a Bite",
+		Types:    []string{"creature", "human", "warlock", "//", "sorcery"},
+		TypeLine: "creature — human warlock // sorcery",
+	}
+	if !StripAdventureHalfTypes(c) {
+		t.Fatalf("expected strip to mutate; Types=%v", c.Types)
+	}
+	if !equalStrSliceDFC(c.Types, []string{"creature", "human", "warlock"}) {
+		t.Errorf("Types = %v, want [creature human warlock]", c.Types)
+	}
+	if c.TypeLine != "creature — human warlock" {
+		t.Errorf("TypeLine = %q, want %q", c.TypeLine, "creature — human warlock")
+	}
+	for _, ty := range c.Types {
+		if ty == "instant" || ty == "sorcery" || ty == "//" {
+			t.Errorf("post-strip Types must not contain %q; got %v", ty, c.Types)
+		}
+	}
+}
+
+func TestStripAdventureHalfTypes_VirtueOfKnowledgeShape(t *testing.T) {
+	// "Virtue of Knowledge // Vantress Visions" — Enchantment // Instant.
+	c := &Card{
+		Name:     "Virtue of Knowledge // Vantress Visions",
+		Types:    []string{"enchantment", "//", "instant"},
+		TypeLine: "enchantment // instant",
+	}
+	if !StripAdventureHalfTypes(c) {
+		t.Fatalf("expected strip to fire on Virtue/Vantress shape")
+	}
+	if !equalStrSliceDFC(c.Types, []string{"enchantment"}) {
+		t.Errorf("Types = %v, want [enchantment]", c.Types)
+	}
+	if c.TypeLine != "enchantment" {
+		t.Errorf("TypeLine = %q, want %q", c.TypeLine, "enchantment")
+	}
+}
+
+func TestStripAdventureHalfTypes_NoOpWhenNoSplit(t *testing.T) {
+	c := &Card{
+		Name:     "Grizzly Bears",
+		Types:    []string{"creature", "bear"},
+		TypeLine: "creature — bear",
+	}
+	before := append([]string(nil), c.Types...)
+	if StripAdventureHalfTypes(c) {
+		t.Fatalf("expected no-op for vanilla creature")
+	}
+	if !equalStrSliceDFC(c.Types, before) {
+		t.Errorf("Types mutated unexpectedly: %v", c.Types)
+	}
+}
+
+func TestStripAdventureHalfTypes_NoOpForToken(t *testing.T) {
+	c := &Card{
+		Types: []string{"token", "creature", "//", "sorcery"},
+	}
+	if StripAdventureHalfTypes(c) {
+		t.Fatalf("token strip should be a no-op")
+	}
+}
+
+func TestStripAdventureHalfTypes_NoOpWhenFrontHasNoPermanentType(t *testing.T) {
+	c := &Card{
+		Types:    []string{"instant", "//", "sorcery"},
+		TypeLine: "instant // sorcery",
+	}
+	if StripAdventureHalfTypes(c) {
+		t.Fatalf("strip should refuse when front has no permanent type; Types=%v", c.Types)
+	}
+}
+
+func TestStripAdventureHalfTypes_Idempotent(t *testing.T) {
+	c := &Card{
+		Types:    []string{"creature", "elf", "//", "instant"},
+		TypeLine: "creature — elf // instant",
+	}
+	if !StripAdventureHalfTypes(c) {
+		t.Fatalf("first call should mutate")
+	}
+	if StripAdventureHalfTypes(c) {
+		t.Fatalf("second call should be a no-op")
+	}
+	if !equalStrSliceDFC(c.Types, []string{"creature", "elf"}) {
+		t.Errorf("Types = %v, want [creature elf]", c.Types)
+	}
+}
+
+func TestEnsureBattlefieldFrontFace_AdventureSurvivesMDFCNoOp(t *testing.T) {
+	// Adventure card (not an MDFC) — SwapToBackFace is a no-op (gated by
+	// IsMDFC), and the stripper handles it.
+	c := &Card{
+		Name:     "Adventurous Eater // Have a Bite",
+		Types:    []string{"creature", "human", "warlock", "//", "sorcery"},
+		TypeLine: "creature — human warlock // sorcery",
+	}
+	EnsureBattlefieldFrontFace(c)
+	if !equalStrSliceDFC(c.Types, []string{"creature", "human", "warlock"}) {
+		t.Errorf("post-call Types = %v, want adventure-stripped", c.Types)
+	}
+}
+
+func TestEnsureBattlefieldFrontFace_MDFCSwapWinsOverStrip(t *testing.T) {
+	// Back-face-land MDFC. SwapToBackFace fires first and replaces Types
+	// wholesale with BackFaceTypes; the stripper then runs and is a
+	// no-op because no "//" remains.
+	c := &Card{
+		Name:             "Fell the Profane // Fell Mire",
+		Types:            []string{"sorcery", "//", "land", "swamp"},
+		TypeLine:         "sorcery // land — swamp",
+		BackFaceName:     "Fell Mire",
+		BackFaceTypes:    []string{"land", "swamp"},
+		BackFaceTypeLine: "land — swamp",
+	}
+	EnsureBattlefieldFrontFace(c)
+	if !equalStrSliceDFC(c.Types, []string{"land", "swamp"}) {
+		t.Errorf("post-call Types = %v, want [land swamp] from back-face swap", c.Types)
+	}
+	if c.Name != "Fell Mire" {
+		t.Errorf("Name = %q, want %q", c.Name, "Fell Mire")
+	}
+}
+
+func equalStrSliceDFC(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

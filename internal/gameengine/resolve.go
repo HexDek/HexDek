@@ -2021,7 +2021,7 @@ func placeTutoredCard(gs *GameState, seat int, c *Card, dest string) {
 	switch dest {
 	case "battlefield", "battlefield_tapped":
 		tapped := dest == "battlefield_tapped"
-		EnsureMDFCBackFaceForBattlefield(c)
+		EnsureBattlefieldFrontFace(c)
 		p := &Permanent{
 			Card:          c,
 			Controller:    seat,
@@ -2065,7 +2065,7 @@ func resolveReanimate(gs *GameState, src *Permanent, e *gameast.Reanimate) {
 	c := gy[idx]
 	removeCardFromZone(gs, seat, c, "graveyard")
 	tapped := e.Destination == "battlefield_tapped"
-	EnsureMDFCBackFaceForBattlefield(c)
+	EnsureBattlefieldFrontFace(c)
 	p := &Permanent{
 		Card:          c,
 		Controller:    seat,

@@ -1120,7 +1120,7 @@ func resolvePermanentSpellETB(gs *GameState, item *StackItem) *Permanent {
 	// wasn't set on the cast machinery (e.g. a permanent spell that
 	// cascaded into another MDFC, where the cascade put-onto-stack
 	// path didn't flip the flag).
-	EnsureMDFCBackFaceForBattlefield(card)
+	EnsureBattlefieldFrontFace(card)
 
 	// Summoning sickness: only creatures care (§302.1 / §212.3f). A creature
 	// with haste ignores it.
