@@ -58,6 +58,7 @@ export default function DeckArchive() {
   const [savingName, setSavingName] = useState(false)
   const [isFriend, setIsFriend] = useState(false)
   const [friendBusy, setFriendBusy] = useState(false)
+  const [ownerFriendCount, setOwnerFriendCount] = useState(null)
   const { elo } = useLiveSocket()
   const { user } = useAuth()
 
@@ -101,6 +102,26 @@ export default function DeckArchive() {
       .catch(() => {})
     return () => { cancelled = true }
   }, [canFriend, owner, userOwnerSlug])
+
+  // Pull the deck owner's friend count for the DECK SPECS panel. Refetches
+  // when the owner changes or when this visitor's add/remove fires the
+  // 'hexdek-friends-changed' event (mutual-add updates the owner's count too).
+  useEffect(() => {
+    if (!owner) { setOwnerFriendCount(null); return }
+    let cancelled = false
+    const load = () => {
+      api.listFriends(owner)
+        .then(r => { if (!cancelled) setOwnerFriendCount((r.friends || []).length) })
+        .catch(() => { if (!cancelled) setOwnerFriendCount(null) })
+    }
+    load()
+    const onChanged = () => load()
+    window.addEventListener('hexdek-friends-changed', onChanged)
+    return () => {
+      cancelled = true
+      window.removeEventListener('hexdek-friends-changed', onChanged)
+    }
+  }, [owner])
 
   const toggleFriend = async () => {
     if (!canFriend || friendBusy) return
@@ -474,6 +495,7 @@ export default function DeckArchive() {
           <Panel code="04.A" title="DECK SPECS" solid>
             <KV rows={[
               ['OWNER', <Link to={`/profile/${owner}`} style={{ color: 'var(--ink)', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)' }}>{owner?.toUpperCase()}</Link>],
+              ...(ownerFriendCount != null ? [['FRIENDS', String(ownerFriendCount)]] : []),
               ['CARDS', `${cardCount}`],
               ['BRACKET', `B${wbs}${wbsLabel ? ' ' + wbsLabel : ''}`],
               ['PLAYS LIKE', pls ? `B${pls}${plsLabel ? ' ' + plsLabel : ''}${pls != wbs ? ' ⬆' : ''}` : '—'],
