@@ -14,13 +14,14 @@ kanban-plugin: board
 - [ ] **Remaining 276 commander handlers** — coverage at 447/652 files (681 registered names). Most remaining are 1-2 deck count. Template generator (`cmd/gen-handlers/main.go`) handles simple patterns. #engine #per_card
 - [ ] **BUG: Ajani Nacatl Pariah 74% WR** — handler is correct; high WR was because opponents couldn't deal with PW. PW threat scoring fix (below) should normalize this. Re-check after grinder reset. #engine #bug #hat
 - [ ] **BUG: MDFC permanent_types back-face resolution on battlefield entry** — `moveToZone` (state.go) has no `"battlefield"` case so `MoveCard(..., toZone="battlefield", ...)` silently falls through to graveyard; back-face land MDFCs (Fell the Profane // Fell Mire, Valakut Awakening, Sejiri Shelter) carry the front-face instant/sorcery types onto the battlefield via the deck-parser type-line leak. `tryPlayLand` was patched (commit fa018fd) but the broader `MoveCard("battlefield")` fallthrough still corrupts ~80% of zone_accounting Feynman violations. See `docs/zone-accounting-analysis.md` for full trace. #engine #bug #mdfc #zones
+- [ ] **BUG: MDFC permanent_types deep fix** — `MDFCBackFaceIsLand` may not match all MDFC card data shapes; specific cards (Malakir Rebirth // Malakir Mire, Sink into Stupor // Soaked Spireside) still trip the §205 permanent_types invariant after the v1+v2 fixes (commits fa018fd / 29c768d / 13ed4b3) and the adventure stripper (commit fd7f08d). Likely culprits: BackFaceTypeLine substring match misses `"Land — Swamp"` casing variants or the deckparser populates BackFaceTypes inconsistently for some MDFC subsets. Re-audit shape detection against a corpus sweep of `layout=modal_dfc` rows. #engine #bug #mdfc #zones
 
 
 ## High Priority — Platform
 
-- [ ] **Amiibo display on deck page** — show per-deck DNA pool: generation count, best fitness, 7 personality params (radar chart), 20 DimStats weight corrections (heatmap), fitness sparkline over generations. Force graph or 3D brain visualization for evolved weight topology. (wiedeman/7174n1c 2026-05-04) #ui #amiibo #design
+- [x] **Amiibo display on deck page** — `AmiiboDisplay` component renders per-deck DNA pool with 7-axis personality radar + 20-cell DimStats weight heatmap, generation count, best fitness, fitness sparkline (commit bf0f73d, 2026-05-04). Force graph / 3D brain visualization for evolved weight topology deferred. #ui #amiibo #design
 - [x] **Amiibo fitness sparkline polish** — switched sparkline to per-generation best across last 20 generations (commit ea249a4, 2026-05-04) #ui #amiibo
-- [ ] **BUG: AmiiboPanel `fitnessByRank` variable** — undefined / shadowed reference in `hexdek/src/components/AmiiboPanel.jsx`; tile rendering can throw when DNA pool snapshot is empty or partially populated #ui #amiibo #bug
+- [x] **BUG: AmiiboPanel `fitnessByRank` variable** — panel hardened against null / partial DNA snapshots; tile rendering survives empty-pool + missing-fitness shapes (commit 8dd7e72, 2026-05-04) #ui #amiibo #bug
 - [x] Negative ELO shame badges — MID/DOWN BAD/COOKED/PACK IT UP/UNINSTALL ladder + Wall of Shame bottom-10 panel (2026-05-04) #ui #fun
 - [x] **Achievement badges** — milestone badges (first 10/100/1K users), rare/commendable action badges (first blood, comeback from <5 life, perfect sweep, etc). Beyond trash talk — reward good play. Earned-badge showcase rendered on deck pages via owner achievements (commit ba6db99, 2026-05-04) #ui #badges #design
 - [x] **Volcano map smooth transition** — rAF-based heatmap interpolation, CSS transitions on seat-art opacity/filter for smooth morphing instead of instant swap (2026-05-04) #ui #spectator
@@ -241,7 +242,7 @@ kanban-plugin: board
 
 - [ ] **i18n** — internationalize hexdek.dev for global audience. Scryfall has localized card names for 11 print languages. 500 UI keys, 50 languages, <$200 translation cost. #platform
 - [ ] Multi-format support beyond Commander (Modern, Legacy deck ratings) #engine
-- [ ] Mobile-friendly leaderboard #ui
+- [x] Mobile-friendly leaderboard — 375px responsive pass: column priorities, mobile card view, sort-bar wrapping (commit 136fa58, 2026-05-04) #ui
 - [x] Donations page BOINC/ads buttons — placeholders replaced with real BOINC distributed-compute card + Support Dev card (Ko-fi + GH Sponsors) + FAQ panel (commit 2f45e1a, 2026-05-04) #ui
 - [ ] Report analysis placeholder (`Report.jsx:332`) — feature not fully wired #ui
 
