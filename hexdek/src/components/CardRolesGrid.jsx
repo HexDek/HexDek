@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Panel, Tag } from './chrome'
 import { cardArtUrl } from '../services/api'
+import CardPopupTrigger from './CardPopup'
 
 const ROLE_ORDER = [
   'Threat',
@@ -56,7 +57,7 @@ const ROLE_KIND = {
 function RoleThumb({ name, qty }) {
   const imgUrl = cardArtUrl(name)
   return (
-    <div className="panel" style={{ padding: 0 }}>
+    <CardPopupTrigger name={name} as="div" className="panel" style={{ padding: 0 }}>
       <div style={{ aspectRatio: '5/4', position: 'relative', overflow: 'hidden' }}>
         <img
           src={imgUrl}
@@ -73,7 +74,7 @@ function RoleThumb({ name, qty }) {
           {name}
         </div>
       </div>
-    </div>
+    </CardPopupTrigger>
   )
 }
 
@@ -205,9 +206,9 @@ function TextList({ cards }) {
             paddingBottom: 1,
           }}
         >
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <CardPopupTrigger name={c.displayName} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {c.displayName}
-          </span>
+          </CardPopupTrigger>
           {c.quantity > 1 && (
             <span className="muted" style={{ flexShrink: 0 }}>×{c.quantity}</span>
           )}
