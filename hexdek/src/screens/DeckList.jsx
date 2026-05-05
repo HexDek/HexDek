@@ -18,7 +18,7 @@ export default function DeckList() {
   const containsParam = searchParams.get('contains') || ''
   const [tab, setTab] = useState(
     ownerParam || containsParam ? 'all' :
-    (searchParams.get('tab') === 'all' ? 'all' : 'mine')
+    (searchParams.get('tab') === 'mine' ? 'mine' : 'all')
   )
   const [legalFilter, setLegalFilter] = useState('all')
   const [loading, setLoading] = useState(true)

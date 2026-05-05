@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../services/api'
 import {
   MOCK_PROFILE,
@@ -13,19 +13,23 @@ function useAsync(fetcher, fallback) {
   const [data, setData] = useState(fallback)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const fetcherRef = useRef(fetcher)
+  const fallbackRef = useRef(fallback)
+  fetcherRef.current = fetcher
+  fallbackRef.current = fallback
 
   const refetch = useCallback(() => {
     setLoading(true)
     setError(null)
-    fetcher()
+    fetcherRef.current()
       .then(setData)
       .catch((err) => {
         console.warn('API unavailable, using mock data:', err.message)
-        setData(fallback)
+        setData(fallbackRef.current)
         setError(err)
       })
       .finally(() => setLoading(false))
-  }, [fetcher, fallback])
+  }, [])
 
   useEffect(() => { refetch() }, [refetch])
 

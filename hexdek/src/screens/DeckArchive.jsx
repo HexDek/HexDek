@@ -111,6 +111,12 @@ export default function DeckArchive() {
     }
   }
 
+  const userOwnerSlug = user
+    ? (localStorage.getItem('hexdek_owner') || user.displayName?.toLowerCase() || user.email?.split('@')[0]?.split('.')[0] || '')
+    : ''
+  const isOwner = !!owner && !!userOwnerSlug && userOwnerSlug === owner.toLowerCase()
+  const canFriend = !!user && !!userOwnerSlug && !!owner && !isOwner
+
   useEffect(() => {
     if (!canFriend) { setIsFriend(false); return }
     let cancelled = false
@@ -261,13 +267,6 @@ export default function DeckArchive() {
 
   const deckName = deck?.custom_name || deck?.commander || id?.replace(/_/g, ' ').toUpperCase() || 'DECK'
 
-  // Owner check mirrors the userOwner derivation in Dashboard.jsx — Firebase
-  // doesn't carry a HexDek username, so we infer it from displayName/email.
-  const userOwnerSlug = user
-    ? (localStorage.getItem('hexdek_owner') || user.displayName?.toLowerCase() || user.email?.split('@')[0]?.split('.')[0] || '')
-    : ''
-  const isOwner = !!owner && !!userOwnerSlug && userOwnerSlug === owner.toLowerCase()
-  const canFriend = !!user && !!userOwnerSlug && !!owner && !isOwner
   const cardCount = deck?.card_count || deck?.cards?.length || 99
   const userBracket = deck?.bracket || '?'
   const wbs = analysis?.bracket || userBracket
