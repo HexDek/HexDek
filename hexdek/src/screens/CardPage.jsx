@@ -1,23 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Panel, KV, Tag, Tape, Btn } from '../components/chrome'
-import { api, cardArtUrl } from '../services/api'
+import { API_BASE, cardArtUrl } from '../services/api'
 
 // CardPage — /cards/:cardName
 //
-// Three data sources, each independently loaded so a slow Scryfall
-// fetch doesn't block the deck-usage section:
+// Two-tier data flow:
 //
-//   - Scryfall /cards/named?exact=...   → printed art, mana cost,
-//     oracle text, type line, set, USD price.
-//   - /api/decks?contains=...           → which decks include this
-//     card (server-side substring filter).
-//   - /api/decks/{owner}/{id}/analysis  → Freya card_roles, fetched
-//     for each containing deck and merged into a tag set.
+//   1. Try /api/cards/{name} first. The local oracle corpus knows the
+//      card's mana cost, type line, oracle text, CMC, set, and — via a
+//      DecksDir scan — every indexed deck that contains it (with its
+//      Freya role tag when strategy.json exists). One round trip, no
+//      per-deck fan-out, no Scryfall dependency for the page to render.
 //
-// The Freya merge is bounded (first 6 decks, sequential to keep the
-// browser well-behaved). Roles surfaced this way are an aggregate
-// signal — different decks can label the same card differently.
+//   2. If the local API returns 404 (card not in the loaded oracle
+//      bulk), fall back to Scryfall /cards/named?exact=... for type/
+//      oracle/cost. The "USED IN" panel then comes back empty since
+//      the card isn't indexed locally.
+//
+// Card art always uses the existing /api/card-art/{name} proxy
+// (cardArtUrl()), which redirects to Scryfall's image_uris.art_crop
+// server-side. That keeps a single Scryfall dependency and avoids
+// CORS surprises.
 
 const ROLE_KIND = {
   // Map Freya role identifiers to Tag kinds for color.
@@ -47,88 +51,66 @@ function priceFromScryfall(s) {
   return '—'
 }
 
-function deckKeyOf(d) {
-  if (d?.id && d.id.includes('/')) return d.id
-  if (d?.owner && d?.id) return `${d.owner}/${d.id}`
-  return d?.id || ''
-}
-
 export default function CardPage() {
   const { cardName: rawName } = useParams()
   const navigate = useNavigate()
   const cardName = useMemo(() => decodeURIComponent(rawName || ''), [rawName])
 
+  // Local API response (CardDetail). null = no data yet or 404.
+  const [detail, setDetail] = useState(null)
+  // Scryfall response — only fetched when the local API 404s.
   const [scry, setScry] = useState(null)
-  const [scryErr, setScryErr] = useState(false)
-  const [scryLoading, setScryLoading] = useState(true)
+  // Loading / error state covers whichever path is in flight.
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+  const [source, setSource] = useState(null) // 'local' | 'scryfall' | null
 
-  const [decks, setDecks] = useState([])
-  const [decksLoading, setDecksLoading] = useState(true)
-
-  const [roles, setRoles] = useState([])
-
-  // Scryfall fetch — independent of our backend.
   useEffect(() => {
     if (!cardName) return
     let cancelled = false
-    setScryLoading(true)
-    setScryErr(false)
-    fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cardName)}`)
-      .then(r => r.ok ? r.json() : Promise.reject(new Error(`scryfall ${r.status}`)))
-      .then(data => { if (!cancelled) setScry(data) })
-      .catch(() => { if (!cancelled) setScryErr(true) })
-      .finally(() => { if (!cancelled) setScryLoading(false) })
-    return () => { cancelled = true }
-  }, [cardName])
+    setLoading(true)
+    setError(false)
+    setDetail(null)
+    setScry(null)
+    setSource(null)
 
-  // Decks containing this card. Backend already supports ?contains=
-  // via handleListDecks (substring match against the deck file).
-  useEffect(() => {
-    if (!cardName) return
-    let cancelled = false
-    setDecksLoading(true)
-    api.getDecks({ contains: cardName })
-      .then(d => { if (!cancelled) setDecks(Array.isArray(d) ? d : []) })
-      .catch(() => { if (!cancelled) setDecks([]) })
-      .finally(() => { if (!cancelled) setDecksLoading(false) })
-    return () => { cancelled = true }
-  }, [cardName])
+    const tryLocal = fetch(`${API_BASE}/api/cards/${encodeURIComponent(cardName)}`)
+      .then(async r => {
+        if (r.status === 404) return { kind: '404' }
+        if (!r.ok) throw new Error(`local ${r.status}`)
+        return { kind: 'ok', data: await r.json() }
+      })
 
-  // Freya role tags — sample up to 6 containing decks' analysis
-  // sequentially and union the role tags they assign to this card.
-  // Sequential rather than parallel keeps the request count bounded
-  // when the contains-list returns dozens of decks.
-  useEffect(() => {
-    if (!cardName || decks.length === 0) { setRoles([]); return }
-    let cancelled = false
-    const sample = decks.slice(0, 6)
-    const lcName = cardName.toLowerCase()
-    const collected = new Set()
-    ;(async () => {
-      for (const d of sample) {
+    const tryScryfall = () =>
+      fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cardName)}`)
+        .then(r => r.ok ? r.json() : Promise.reject(new Error(`scryfall ${r.status}`)))
+
+    tryLocal
+      .then(res => {
         if (cancelled) return
-        const key = deckKeyOf(d)
-        if (!key) continue
-        try {
-          const a = await api.getDeckAnalysis(key)
-          const cr = a?.card_roles
-          if (!cr) continue
-          // card_roles can be either a flat {cardName: [roles]} map or
-          // a {role: [cardNames]} grouping. Handle both.
-          if (Array.isArray(cr[cardName]) || Array.isArray(cr[lcName])) {
-            for (const r of (cr[cardName] || cr[lcName] || [])) collected.add(r)
-            continue
-          }
-          for (const [role, names] of Object.entries(cr)) {
-            if (!Array.isArray(names)) continue
-            if (names.some(n => (n || '').toLowerCase() === lcName)) collected.add(role)
-          }
-        } catch {}
-      }
-      if (!cancelled) setRoles([...collected])
-    })()
+        if (res.kind === 'ok') {
+          setDetail(res.data)
+          setSource('local')
+          setLoading(false)
+          return
+        }
+        // 404 from local API → fall back to Scryfall entirely.
+        return tryScryfall().then(data => {
+          if (cancelled) return
+          setScry(data)
+          setSource('scryfall')
+          setLoading(false)
+        })
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError(true)
+          setLoading(false)
+        }
+      })
+
     return () => { cancelled = true }
-  }, [cardName, decks])
+  }, [cardName])
 
   if (!cardName) {
     return (
@@ -141,23 +123,52 @@ export default function CardPage() {
     )
   }
 
+  // Unified view model. The local CardDetail is preferred; Scryfall's
+  // payload is the fallback shape (mana_cost / type_line / oracle_text /
+  // set / cmc all live at the top level too, with card_faces for DFCs).
   const upperName = cardName.toUpperCase()
-  const heroArt = scry?.image_uris?.art_crop
-    || scry?.card_faces?.[0]?.image_uris?.art_crop
-    || cardArtUrl(cardName)
 
-  const manaCost = scry?.mana_cost || scry?.card_faces?.[0]?.mana_cost || ''
-  const typeLine = scry?.type_line || scry?.card_faces?.[0]?.type_line || '—'
-  const oracle   = scry?.oracle_text || scry?.card_faces?.[0]?.oracle_text || ''
-  const setName  = scry?.set_name || '—'
-  const setCode  = (scry?.set || '').toUpperCase()
-  const price    = priceFromScryfall(scry)
+  const localDecks = detail?.decks_using || []
+  // Freya roles: union of every non-empty role across the decks_using
+  // list. The backend resolves card_roles from each deck's strategy.json,
+  // so this needs no per-deck fan-out from the frontend.
+  const roles = useMemo(() => {
+    const set = new Set()
+    for (const d of localDecks) {
+      if (d?.role) set.add(d.role)
+    }
+    return [...set]
+  }, [localDecks])
+
+  const manaCost = detail?.mana_cost
+    || scry?.mana_cost
+    || scry?.card_faces?.[0]?.mana_cost
+    || ''
+  const typeLine = detail?.type_line
+    || scry?.type_line
+    || scry?.card_faces?.[0]?.type_line
+    || '—'
+  const oracle = detail?.oracle_text
+    || scry?.oracle_text
+    || scry?.card_faces?.[0]?.oracle_text
+    || ''
+  const setCode = (detail?.set || scry?.set || '').toUpperCase()
+  const setName = scry?.set_name || setCode || '—'
+  const cmc = detail?.cmc != null ? detail.cmc : (scry?.cmc != null ? scry.cmc : null)
+  const price = priceFromScryfall(scry) // local API doesn't carry price; only present on Scryfall fallback.
+
+  const heroArt = cardArtUrl(cardName)
+  const sourceLabel = source === 'local'
+    ? 'LOCAL CORPUS'
+    : source === 'scryfall'
+      ? 'SCRYFALL'
+      : error ? 'UNAVAILABLE' : 'LOADING'
 
   return (
     <>
       <Tape
         left={`CARD / / ${upperName}`}
-        mid={scryLoading ? 'LOADING' : (scryErr ? 'SCRYFALL UNAVAILABLE' : 'CARD RECORD')}
+        mid={loading ? 'LOADING' : (error ? 'UNAVAILABLE' : sourceLabel)}
         right="DOC HX-700"
       />
 
@@ -191,17 +202,16 @@ export default function CardPage() {
               ['NAME', upperName],
               ['TYPE', typeLine],
               ['MANA', manaCost || '—'],
-              ['CMC', scry?.cmc != null ? `${scry.cmc}` : '—'],
+              ['CMC', cmc != null ? `${cmc}` : '—'],
               ['SET', setCode || '—'],
-              ['PRICE (USD)', price],
-              ['LEGAL COMMANDER',
-                scry?.legalities?.commander
-                  ? <span style={{ color: scry.legalities.commander === 'legal' ? 'var(--ok)' : 'var(--danger)', fontWeight: 700 }}>
-                      {scry.legalities.commander.toUpperCase()}
-                    </span>
-                  : '—',
-              ],
-              ['SOURCE', scryErr ? 'SCRYFALL OFFLINE' : 'SCRYFALL'],
+              ...(source === 'scryfall' ? [['PRICE (USD)', price]] : []),
+              ...(scry?.legalities?.commander ? [[
+                'LEGAL COMMANDER',
+                <span style={{ color: scry.legalities.commander === 'legal' ? 'var(--ok)' : 'var(--danger)', fontWeight: 700 }}>
+                  {scry.legalities.commander.toUpperCase()}
+                </span>,
+              ]] : []),
+              ['SOURCE', sourceLabel],
             ]} />
             {scry?.scryfall_uri && (
               <>
@@ -221,7 +231,7 @@ export default function CardPage() {
                 ))}
               </div>
               <div className="t-xs muted" style={{ marginTop: 6 }}>
-                AGGREGATED FROM UP TO 6 DECKS THAT INCLUDE THIS CARD.
+                ROLES SOURCED FROM EACH USING DECK'S STRATEGY.JSON.
               </div>
             </Panel>
           )}
@@ -230,15 +240,15 @@ export default function CardPage() {
         <div className="card-page-main">
           {/* Oracle text */}
           <Panel code="07.B" title="ORACLE TEXT" right={
-            <span className="t-xs muted">{scryLoading ? 'LOADING' : (scryErr ? 'OFFLINE' : 'PRINTED')}</span>
+            <span className="t-xs muted">{loading ? 'LOADING' : (error ? 'OFFLINE' : sourceLabel)}</span>
           }>
-            {scryLoading ? (
+            {loading ? (
               <div className="t-md muted" style={{ padding: '14px 0', textAlign: 'center' }}>
-                &gt; FETCHING SCRYFALL RECORD<span className="blink">_</span>
+                &gt; FETCHING CARD RECORD<span className="blink">_</span>
               </div>
-            ) : scryErr ? (
+            ) : error ? (
               <div className="t-md muted" style={{ padding: '14px 0', textAlign: 'center' }}>
-                &gt; SCRYFALL UNAVAILABLE — TRY AGAIN LATER.
+                &gt; CARD DATA UNAVAILABLE — TRY AGAIN LATER.
               </div>
             ) : (
               <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: 12 }}>
@@ -247,17 +257,20 @@ export default function CardPage() {
             )}
           </Panel>
 
-          {/* Used in — decks containing this card */}
+          {/* Used in — decks containing this card. Sourced from
+              detail.decks_using when the local API responded; the
+              Scryfall fallback path leaves this panel empty since the
+              card isn't in our oracle corpus. */}
           <Panel
             code="07.C"
-            title={`USED IN / / ${decksLoading ? '…' : decks.length} DECKS`}
-            right={<Tag solid kind={decks.length > 0 ? 'ok' : null}>{decks.length}</Tag>}
+            title={`USED IN / / ${loading ? '…' : localDecks.length} DECKS`}
+            right={<Tag solid kind={localDecks.length > 0 ? 'ok' : null}>{localDecks.length}</Tag>}
           >
-            {decksLoading ? (
+            {loading ? (
               <div className="t-md muted" style={{ padding: '14px 0', textAlign: 'center' }}>
                 &gt; SEARCHING DECK INDEX<span className="blink">_</span>
               </div>
-            ) : decks.length === 0 ? (
+            ) : localDecks.length === 0 ? (
               <div className="t-md muted" style={{ padding: '14px 0', textAlign: 'center' }}>
                 &gt; NO INDEXED DECKS INCLUDE THIS CARD YET.
               </div>
@@ -267,18 +280,15 @@ export default function CardPage() {
                 gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
                 gap: 8,
               }}>
-                {decks.slice(0, 60).map(d => {
-                  const key = deckKeyOf(d)
-                  const cmdrName = d.commander_card || d.commander || ''
-                  const art = cardArtUrl(cmdrName || d.commander)
-                  const owner = d.owner || (key.split('/')[0])
-                  const id = d.id?.includes('/') ? d.id.split('/')[1] : d.id
+                {localDecks.slice(0, 60).map(d => {
+                  const cmdrName = d.commander || ''
+                  const art = cardArtUrl(cmdrName)
                   return (
                     <Link
-                      key={key}
-                      to={`/decks/${owner}/${id}`}
+                      key={`${d.owner}/${d.id}`}
+                      to={`/decks/${d.owner}/${d.id}`}
                       className="card-page-deck-tile"
-                      title={`${d.commander || d.name || id} (${owner})`}
+                      title={`${d.commander || d.name || d.id} (${d.owner})${d.role ? ' · ' + readableRole(d.role) : ''}`}
                     >
                       <div
                         className="card-page-deck-art"
@@ -286,18 +296,23 @@ export default function CardPage() {
                       />
                       <div className="card-page-deck-meta">
                         <div className="card-page-deck-name">
-                          {(d.commander || d.name || id || '').toUpperCase()}
+                          {(d.commander || d.name || d.id || '').toUpperCase()}
                         </div>
-                        <div className="card-page-deck-owner">{(owner || '').toUpperCase()}</div>
+                        <div className="card-page-deck-owner">
+                          {(d.owner || '').toUpperCase()}
+                          {d.role && (
+                            <span style={{ marginLeft: 4, color: 'var(--ink-3)' }}>· {readableRole(d.role)}</span>
+                          )}
+                        </div>
                       </div>
                     </Link>
                   )
                 })}
               </div>
             )}
-            {decks.length > 60 && (
+            {localDecks.length > 60 && (
               <div className="t-xs muted" style={{ textAlign: 'center', marginTop: 8 }}>
-                &gt; SHOWING 60 / {decks.length}
+                &gt; SHOWING 60 / {localDecks.length}
               </div>
             )}
           </Panel>
