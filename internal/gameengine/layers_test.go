@@ -1296,3 +1296,436 @@ func TestLayer_Anthem_StacksWithHumility(t *testing.T) {
 		t.Errorf("Humility(1/1) + anthem(+2/+2) should give 3/3, got %d/%d", chars.Power, chars.Toughness)
 	}
 }
+
+// =============================================================================
+// Layer 3 — Text-Changing Effects (§613.1c)
+// =============================================================================
+
+func TestLayer3_SwirlTheMists_SwapsLandTypeInKeywords(t *testing.T) {
+	gs := newFixtureGame(t)
+	// Swirl the Mists: change "swamp" → "island" in text.
+	swirl := addBattlefield(gs, 0, "Swirl the Mists", 0, 0, "enchantment")
+	swirl.Flags["text_from_swamp"] = 1
+	swirl.Flags["text_to_island"] = 1
+	RegisterContinuousEffectsForPermanent(gs, swirl)
+
+	// A creature with "swampwalk" keyword should have it become "islandwalk".
+	creature := addBattlefield(gs, 0, "Filth", 2, 2, "creature")
+	creature.Card.AST = &gameast.CardAST{
+		Name: "Filth",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "swampwalk", Raw: "Swampwalk"},
+		},
+	}
+	chars := GetEffectiveCharacteristics(gs, creature)
+	// The keyword "swampwalk" should now read "islandwalk".
+	foundIslandwalk := false
+	for _, kw := range chars.Keywords {
+		if kw == "islandwalk" {
+			foundIslandwalk = true
+		}
+		if kw == "swampwalk" {
+			t.Errorf("Layer 3: swampwalk should have been changed to islandwalk")
+		}
+	}
+	if !foundIslandwalk {
+		t.Errorf("Layer 3: expected islandwalk keyword after text change, got %v", chars.Keywords)
+	}
+}
+
+func TestLayer3_SwirlTheMists_SwapsLandTypeInAbilityRaw(t *testing.T) {
+	gs := newFixtureGame(t)
+	swirl := addBattlefield(gs, 0, "Swirl the Mists", 0, 0, "enchantment")
+	swirl.Flags["text_from_mountain"] = 1
+	swirl.Flags["text_to_forest"] = 1
+	RegisterContinuousEffectsForPermanent(gs, swirl)
+
+	// A permanent with an activated ability referencing "mountain".
+	perm := addBattlefield(gs, 0, "Mountain Walker", 3, 3, "creature")
+	perm.Card.AST = &gameast.CardAST{
+		Name: "Mountain Walker",
+		Abilities: []gameast.Ability{
+			&gameast.Activated{Raw: "Tap target Mountain you control"},
+		},
+	}
+	chars := GetEffectiveCharacteristics(gs, perm)
+	if len(chars.Abilities) < 1 {
+		t.Fatalf("expected at least 1 ability")
+	}
+	act, ok := chars.Abilities[0].(*gameast.Activated)
+	if !ok {
+		t.Fatalf("expected *gameast.Activated, got %T", chars.Abilities[0])
+	}
+	if act.Raw != "Tap target forest you control" {
+		t.Errorf("Layer 3: expected 'Tap target forest you control', got %q", act.Raw)
+	}
+}
+
+func TestLayer3_MindBend_LandTypeSwap(t *testing.T) {
+	gs := newFixtureGame(t)
+	// Mind Bend is an instant that creates a lasting text-change on target.
+	// We model this by placing flags on the target permanent.
+	target := addBattlefield(gs, 0, "Mind Bend", 0, 0, "enchantment")
+	target.Flags["text_from_swamp"] = 1
+	target.Flags["text_to_plains"] = 1
+	RegisterContinuousEffectsForPermanent(gs, target)
+
+	// A creature with "swampwalk" should have it changed to "plainswalk".
+	creature := addBattlefield(gs, 0, "Bog Wraith", 3, 3, "creature")
+	creature.Card.AST = &gameast.CardAST{
+		Name: "Bog Wraith",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "swampwalk", Raw: "Swampwalk"},
+		},
+	}
+	chars := GetEffectiveCharacteristics(gs, creature)
+	foundPlainswalk := false
+	for _, kw := range chars.Keywords {
+		if kw == "plainswalk" {
+			foundPlainswalk = true
+		}
+	}
+	if !foundPlainswalk {
+		t.Errorf("Layer 3 Mind Bend: expected plainswalk, got keywords=%v", chars.Keywords)
+	}
+}
+
+func TestLayer3_PaintersServant_TextChangeColorWords(t *testing.T) {
+	gs := newFixtureGame(t)
+	// Painter's Servant choosing blue.
+	servant := addBattlefield(gs, 0, "Painter's Servant", 1, 3, "creature", "artifact")
+	servant.Flags["painter_color_U"] = 1
+	RegisterContinuousEffectsForPermanent(gs, servant)
+
+	// A creature with "protection from black" in ability text.
+	creature := addBattlefield(gs, 0, "Knight of Grace", 2, 2, "creature")
+	creature.Card.AST = &gameast.CardAST{
+		Name: "Knight of Grace",
+		Abilities: []gameast.Ability{
+			&gameast.Static{Raw: "Protection from black"},
+		},
+	}
+	chars := GetEffectiveCharacteristics(gs, creature)
+	if len(chars.Abilities) < 1 {
+		t.Fatalf("expected at least 1 ability")
+	}
+	st, ok := chars.Abilities[0].(*gameast.Static)
+	if !ok {
+		t.Fatalf("expected *gameast.Static, got %T", chars.Abilities[0])
+	}
+	// "black" should be changed to "blue" by Painter's Servant Layer 3.
+	if st.Raw != "Protection from blue" {
+		t.Errorf("Layer 3 Painter text: expected 'Protection from blue', got %q", st.Raw)
+	}
+}
+
+func TestLayer3_PaintersServant_StillAddsColor(t *testing.T) {
+	gs := newFixtureGame(t)
+	// Painter's Servant choosing red.
+	servant := addBattlefield(gs, 0, "Painter's Servant", 1, 3, "creature", "artifact")
+	servant.Flags["painter_color_R"] = 1
+	RegisterContinuousEffectsForPermanent(gs, servant)
+
+	// Verify Layer 5 still works (adds red to all permanents).
+	bear := addBattlefield(gs, 0, "Grizzly Bears", 2, 2, "creature")
+	chars := GetEffectiveCharacteristics(gs, bear)
+	foundRed := false
+	for _, c := range chars.Colors {
+		if c == "R" {
+			foundRed = true
+		}
+	}
+	if !foundRed {
+		t.Errorf("Painter's Servant should still add color R via Layer 5, got colors=%v", chars.Colors)
+	}
+}
+
+func TestLayer3_RunsBeforeLayer4(t *testing.T) {
+	gs := newFixtureGame(t)
+	// This test verifies that Layer 3 text changes happen BEFORE Layer 4
+	// type changes. A Layer 3 effect changes "Mountain" text to "Island".
+	swirl := addBattlefield(gs, 0, "Swirl the Mists", 0, 0, "enchantment")
+	swirl.Flags["text_from_mountain"] = 1
+	swirl.Flags["text_to_island"] = 1
+	RegisterContinuousEffectsForPermanent(gs, swirl)
+
+	// A creature with "mountainwalk" — after Layer 3 it becomes "islandwalk".
+	creature := addBattlefield(gs, 0, "Mountain Goat", 1, 1, "creature")
+	creature.Card.AST = &gameast.CardAST{
+		Name: "Mountain Goat",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "mountainwalk", Raw: "Mountainwalk"},
+		},
+	}
+	chars := GetEffectiveCharacteristics(gs, creature)
+	foundIslandwalk := false
+	for _, kw := range chars.Keywords {
+		if kw == "islandwalk" {
+			foundIslandwalk = true
+		}
+	}
+	if !foundIslandwalk {
+		t.Errorf("Layer 3 should run before Layer 4; expected islandwalk, got %v", chars.Keywords)
+	}
+}
+
+func TestLayer3_NoOpWhenFromEqualsTo(t *testing.T) {
+	gs := newFixtureGame(t)
+	// If from == to, the effect should be a no-op (not registered).
+	swirl := addBattlefield(gs, 0, "Swirl the Mists", 0, 0, "enchantment")
+	swirl.Flags["text_from_island"] = 1
+	swirl.Flags["text_to_island"] = 1
+	RegisterContinuousEffectsForPermanent(gs, swirl)
+
+	creature := addBattlefield(gs, 0, "Water Elemental", 5, 4, "creature")
+	creature.Card.AST = &gameast.CardAST{
+		Name: "Water Elemental",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "islandwalk", Raw: "Islandwalk"},
+		},
+	}
+	chars := GetEffectiveCharacteristics(gs, creature)
+	foundIslandwalk := false
+	for _, kw := range chars.Keywords {
+		if kw == "islandwalk" {
+			foundIslandwalk = true
+		}
+	}
+	if !foundIslandwalk {
+		t.Errorf("No-op text change should preserve islandwalk, got %v", chars.Keywords)
+	}
+}
+
+func TestLayer3_TraitDoctoring_ColorWordMode(t *testing.T) {
+	gs := newFixtureGame(t)
+	// Trait Doctoring in color word mode: change "white" → "green".
+	td := addBattlefield(gs, 0, "Trait Doctoring", 0, 0, "enchantment")
+	td.Flags["text_color_from_white"] = 1
+	td.Flags["text_color_to_green"] = 1
+	RegisterContinuousEffectsForPermanent(gs, td)
+
+	creature := addBattlefield(gs, 0, "White Knight", 2, 2, "creature")
+	creature.Card.AST = &gameast.CardAST{
+		Name: "White Knight",
+		Abilities: []gameast.Ability{
+			&gameast.Static{Raw: "Protection from white"},
+		},
+	}
+	chars := GetEffectiveCharacteristics(gs, creature)
+	if len(chars.Abilities) < 1 {
+		t.Fatalf("expected at least 1 ability")
+	}
+	st, ok := chars.Abilities[0].(*gameast.Static)
+	if !ok {
+		t.Fatalf("expected *gameast.Static, got %T", chars.Abilities[0])
+	}
+	if st.Raw != "Protection from green" {
+		t.Errorf("Trait Doctoring color swap: expected 'Protection from green', got %q", st.Raw)
+	}
+}
+
+func TestLayer3_TraitDoctoring_LandTypeMode(t *testing.T) {
+	gs := newFixtureGame(t)
+	// Trait Doctoring in land type mode: change "forest" → "swamp".
+	td := addBattlefield(gs, 0, "Trait Doctoring", 0, 0, "enchantment")
+	td.Flags["text_from_forest"] = 1
+	td.Flags["text_to_swamp"] = 1
+	RegisterContinuousEffectsForPermanent(gs, td)
+
+	creature := addBattlefield(gs, 0, "Elvish Champion", 2, 2, "creature")
+	creature.Card.AST = &gameast.CardAST{
+		Name: "Elvish Champion",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "forestwalk", Raw: "Forestwalk"},
+		},
+	}
+	chars := GetEffectiveCharacteristics(gs, creature)
+	foundSwampwalk := false
+	for _, kw := range chars.Keywords {
+		if kw == "swampwalk" {
+			foundSwampwalk = true
+		}
+	}
+	if !foundSwampwalk {
+		t.Errorf("Trait Doctoring land type: expected swampwalk, got %v", chars.Keywords)
+	}
+}
+
+func TestLayer3_MultipleAbilities_AllChanged(t *testing.T) {
+	gs := newFixtureGame(t)
+	swirl := addBattlefield(gs, 0, "Swirl the Mists", 0, 0, "enchantment")
+	swirl.Flags["text_from_swamp"] = 1
+	swirl.Flags["text_to_plains"] = 1
+	RegisterContinuousEffectsForPermanent(gs, swirl)
+
+	// A permanent with multiple abilities referencing "swamp".
+	perm := addBattlefield(gs, 0, "Swamp Lord", 3, 3, "creature")
+	perm.Card.AST = &gameast.CardAST{
+		Name: "Swamp Lord",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "swampwalk", Raw: "Swampwalk"},
+			&gameast.Triggered{Raw: "Whenever a Swamp enters the battlefield"},
+			&gameast.Static{Raw: "Other Swamp creatures get +1/+1"},
+		},
+	}
+	chars := GetEffectiveCharacteristics(gs, perm)
+	// Keyword should be plainswalk.
+	if len(chars.Keywords) < 1 || chars.Keywords[0] != "plainswalk" {
+		t.Errorf("expected plainswalk keyword, got %v", chars.Keywords)
+	}
+	// Triggered ability raw text should reference "plains".
+	if len(chars.Abilities) < 2 {
+		t.Fatalf("expected at least 2 abilities, got %d", len(chars.Abilities))
+	}
+	trig, ok := chars.Abilities[1].(*gameast.Triggered)
+	if !ok {
+		t.Fatalf("expected *gameast.Triggered at index 1, got %T", chars.Abilities[1])
+	}
+	if trig.Raw != "Whenever a plains enters the battlefield" {
+		t.Errorf("expected 'Whenever a plains enters the battlefield', got %q", trig.Raw)
+	}
+	// Static ability raw text should reference "plains".
+	stat, ok := chars.Abilities[2].(*gameast.Static)
+	if !ok {
+		t.Fatalf("expected *gameast.Static at index 2, got %T", chars.Abilities[2])
+	}
+	if stat.Raw != "Other plains creatures get +1/+1" {
+		t.Errorf("expected 'Other plains creatures get +1/+1', got %q", stat.Raw)
+	}
+}
+
+func TestLayer3_AST_TextChangeLandType(t *testing.T) {
+	gs := newFixtureGame(t)
+	// Test the AST-driven registration path with ModKind "text_change_land_type".
+	astCard := &gameast.CardAST{
+		Name: "Custom Text Changer",
+		Abilities: []gameast.Ability{
+			&gameast.Static{Modification: &gameast.Modification{
+				ModKind: "text_change_land_type",
+				Layer:   "3",
+			}},
+		},
+	}
+	changer := addBattlefieldWithAST(gs, 0, "Custom Text Changer", 0, 0, astCard, "enchantment")
+	changer.Flags["text_from_forest"] = 1
+	changer.Flags["text_to_mountain"] = 1
+	RegisterContinuousEffectsForPermanent(gs, changer)
+
+	creature := addBattlefield(gs, 0, "Forest Keeper", 2, 2, "creature")
+	creature.Card.AST = &gameast.CardAST{
+		Name: "Forest Keeper",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "forestwalk", Raw: "Forestwalk"},
+		},
+	}
+	chars := GetEffectiveCharacteristics(gs, creature)
+	foundMountainwalk := false
+	for _, kw := range chars.Keywords {
+		if kw == "mountainwalk" {
+			foundMountainwalk = true
+		}
+	}
+	if !foundMountainwalk {
+		t.Errorf("AST text_change_land_type: expected mountainwalk, got %v", chars.Keywords)
+	}
+}
+
+func TestLayer3_AST_TextChangeColorWord(t *testing.T) {
+	gs := newFixtureGame(t)
+	// Test the AST-driven registration path with ModKind "text_change_color_word".
+	astCard := &gameast.CardAST{
+		Name: "Custom Color Changer",
+		Abilities: []gameast.Ability{
+			&gameast.Static{Modification: &gameast.Modification{
+				ModKind: "text_change_color_word",
+				Args:    []interface{}{"red", "blue"},
+				Layer:   "3",
+			}},
+		},
+	}
+	changer := addBattlefieldWithAST(gs, 0, "Custom Color Changer", 0, 0, astCard, "enchantment")
+	RegisterContinuousEffectsForPermanent(gs, changer)
+
+	creature := addBattlefield(gs, 0, "Red Ward", 0, 0, "enchantment")
+	creature.Card.AST = &gameast.CardAST{
+		Name: "Red Ward",
+		Abilities: []gameast.Ability{
+			&gameast.Static{Raw: "Enchanted creature has protection from red"},
+		},
+	}
+	chars := GetEffectiveCharacteristics(gs, creature)
+	if len(chars.Abilities) < 1 {
+		t.Fatalf("expected at least 1 ability")
+	}
+	st, ok := chars.Abilities[0].(*gameast.Static)
+	if !ok {
+		t.Fatalf("expected *gameast.Static, got %T", chars.Abilities[0])
+	}
+	if st.Raw != "Enchanted creature has protection from blue" {
+		t.Errorf("AST text_change_color_word: expected 'Enchanted creature has protection from blue', got %q", st.Raw)
+	}
+}
+
+func TestLayer3_Idempotent(t *testing.T) {
+	gs := newFixtureGame(t)
+	swirl := addBattlefield(gs, 0, "Swirl the Mists", 0, 0, "enchantment")
+	swirl.Flags["text_from_swamp"] = 1
+	swirl.Flags["text_to_island"] = 1
+	RegisterContinuousEffectsForPermanent(gs, swirl)
+
+	creature := addBattlefield(gs, 0, "Filth", 2, 2, "creature")
+	creature.Card.AST = &gameast.CardAST{
+		Name: "Filth",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "swampwalk", Raw: "Swampwalk"},
+		},
+	}
+	// Call twice to verify idempotency.
+	chars1 := GetEffectiveCharacteristics(gs, creature)
+	gs.InvalidateCharacteristicsCache()
+	chars2 := GetEffectiveCharacteristics(gs, creature)
+
+	if len(chars1.Keywords) != len(chars2.Keywords) {
+		t.Fatalf("idempotency violation: keywords differ between calls")
+	}
+	for i := range chars1.Keywords {
+		if chars1.Keywords[i] != chars2.Keywords[i] {
+			t.Errorf("idempotency: keyword[%d] %q != %q", i, chars1.Keywords[i], chars2.Keywords[i])
+		}
+	}
+	// Verify the keyword is "islandwalk" (not "swampwalk" or double-applied).
+	if len(chars2.Keywords) < 1 || chars2.Keywords[0] != "islandwalk" {
+		t.Errorf("idempotent result should be islandwalk, got %v", chars2.Keywords)
+	}
+}
+
+func TestLayer3_UnregisterRemovesEffect(t *testing.T) {
+	gs := newFixtureGame(t)
+	swirl := addBattlefield(gs, 0, "Swirl the Mists", 0, 0, "enchantment")
+	swirl.Flags["text_from_swamp"] = 1
+	swirl.Flags["text_to_island"] = 1
+	RegisterContinuousEffectsForPermanent(gs, swirl)
+
+	creature := addBattlefield(gs, 0, "Filth", 2, 2, "creature")
+	creature.Card.AST = &gameast.CardAST{
+		Name: "Filth",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "swampwalk", Raw: "Swampwalk"},
+		},
+	}
+
+	// Before unregister: islandwalk.
+	chars := GetEffectiveCharacteristics(gs, creature)
+	if len(chars.Keywords) < 1 || chars.Keywords[0] != "islandwalk" {
+		t.Fatalf("before unregister: expected islandwalk, got %v", chars.Keywords)
+	}
+
+	// Unregister (simulate Swirl the Mists leaving the battlefield).
+	gs.UnregisterContinuousEffectsForPermanent(swirl)
+
+	// After unregister: back to swampwalk.
+	chars = GetEffectiveCharacteristics(gs, creature)
+	if len(chars.Keywords) < 1 || chars.Keywords[0] != "swampwalk" {
+		t.Errorf("after unregister: expected swampwalk, got %v", chars.Keywords)
+	}
+}
