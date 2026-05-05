@@ -446,14 +446,22 @@ export default function Spectator() {
                 <span className="turn-bar-left">
                   GAME OVER — {game.end_reason?.replace(/_/g, ' ')?.toUpperCase()} — WINNER: {game.winner >= 0 ? seats[game.winner]?.commander?.toUpperCase() : 'DRAW'}
                 </span>
-                <span className="turn-bar-right">{rt(game.turn)}</span>
+                <span className="turn-bar-right" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <span>{rt(game.turn)}</span>
+                  {game.game_id != null && (
+                    <Btn sm ghost arrow="↗" onClick={() => navigate(`/report/${game.game_id}`)}>VIEW REPORT</Btn>
+                  )}
+                </span>
               </>
             ) : (
               <>
                 <span className="turn-bar-left">
                   {rt(game.turn)} · {(game.phase || '').toUpperCase()}{game.step ? ` / ${game.step.toUpperCase()}` : ''} · {seats[game.active_seat]?.commander?.toUpperCase()}
                 </span>
-                <span className="turn-bar-right">{seats.reduce((a, s) => a + (s.battlefield?.length || 0), 0)} PERMS</span>
+                <span className="turn-bar-right" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <span>{seats.reduce((a, s) => a + (s.battlefield?.length || 0), 0)} PERMS</span>
+                  <Btn sm ghost arrow="▶" onClick={() => navigate('/play')}>PLAY VIEW</Btn>
+                </span>
               </>
             )}
           </div>

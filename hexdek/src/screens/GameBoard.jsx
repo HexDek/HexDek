@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Panel, Bar, Tag, Btn, Tape } from '../components/chrome'
 import { cardArtUrl } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
@@ -120,6 +121,7 @@ const SeatPanel = ({ seat, seatIdx, isActive, isWinner, isYou, compact, right })
 }
 
 export default function GameBoard() {
+  const navigate = useNavigate()
   const { game, elo: eloArr, status } = useLiveSocket()
   const elo = eloArr || []
   const error = status === 'disconnected' ? 'WebSocket disconnected' : null
@@ -205,6 +207,11 @@ export default function GameBoard() {
                     <div className="hr" style={{ margin: '8px 0' }} />
                     <div className="t-xs muted">REASON</div>
                     <div className="t-md" style={{ fontWeight: 700 }}>{(game.end_reason || '').replace(/_/g, ' ').toUpperCase()}</div>
+                    {game.game_id != null && (
+                      <div style={{ marginTop: 12 }}>
+                        <Btn sm ghost arrow="↗" onClick={() => navigate(`/report/${game.game_id}`)}>VIEW REPORT</Btn>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <>
