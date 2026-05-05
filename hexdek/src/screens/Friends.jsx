@@ -186,7 +186,9 @@ export default function Friends() {
   const [results, setResults] = useState([])
   const [searching, setSearching] = useState(false)
 
-  // Initial friend list.
+  // Initial friend list. Normalize to slug strings — listFriends has
+  // returned both ['slug', ...] and [{owner: 'slug'}, ...] shapes
+  // historically, and downstream code expects plain strings.
   useEffect(() => {
     if (!userOwner) { setFriends([]); setLoading(false); return }
     let alive = true
@@ -194,7 +196,11 @@ export default function Friends() {
     api.listFriends(userOwner)
       .then(r => {
         if (!alive) return
-        setFriends(Array.isArray(r) ? r : (r?.friends || []))
+        const raw = Array.isArray(r) ? r : (r?.friends || [])
+        const slugs = raw
+          .map(f => typeof f === 'string' ? f : (f?.owner || f?.slug || ''))
+          .filter(Boolean)
+        setFriends(slugs)
       })
       .catch(() => { if (alive) setFriends([]) })
       .finally(() => { if (alive) setLoading(false) })

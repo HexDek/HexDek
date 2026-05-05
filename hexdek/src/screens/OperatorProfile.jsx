@@ -92,7 +92,7 @@ export default function OperatorProfile() {
   const navigate = useNavigate()
   const { elo } = useLiveSocket()
 
-  const owner = useMemo(() => {
+  const baseSlug = useMemo(() => {
     if (typeof localStorage !== 'undefined') {
       const stored = localStorage.getItem('hexdek_owner')
       if (stored) return stored.toLowerCase()
@@ -102,11 +102,22 @@ export default function OperatorProfile() {
     return ''
   }, [user])
 
+  const owner = useMemo(() => {
+    if (!baseSlug) return ''
+    const match = (elo || []).find(e => {
+      const o = e.owner?.toLowerCase()
+      if (!o) return false
+      return o === baseSlug || baseSlug.startsWith(o) || o.startsWith(baseSlug)
+    })
+    return match ? match.owner.toLowerCase() : baseSlug
+  }, [baseSlug, elo])
+
   const [decks, setDecks] = useState([])
   const [decksLoading, setDecksLoading] = useState(true)
   const [achievements, setAchievements] = useState(null)
   const [achLoading, setAchLoading] = useState(true)
   const [profile, setProfile] = useState(null)
+  const [ownerStats, setOwnerStats] = useState(null)
   const [games, setGames] = useState([])
   const [gamesLoading, setGamesLoading] = useState(true)
   const [friends, setFriends] = useState([])
@@ -132,15 +143,17 @@ export default function OperatorProfile() {
   useEffect(() => {
     if (!owner) return
     api.getOwnerProfile(owner).then(setProfile).catch(() => setProfile(null))
+    api.getOwnerStats(owner).then(setOwnerStats).catch(() => setOwnerStats(null))
   }, [owner])
 
   useEffect(() => {
+    if (!owner) return
     setGamesLoading(true)
-    api.getGames(20)
+    api.getOwnerGames(owner, 20)
       .then(g => setGames(Array.isArray(g) ? g : []))
       .catch(() => setGames([]))
       .finally(() => setGamesLoading(false))
-  }, [])
+  }, [owner])
 
   useEffect(() => {
     if (!owner) { setFriends([]); return }
@@ -165,19 +178,18 @@ export default function OperatorProfile() {
   }, [ownerElo])
 
   const aggregate = useMemo(() => {
-    const a = achievements
-    if (a && a.total_games > 0) {
+    if (ownerStats && ownerStats.games > 0) {
       return {
-        games: a.total_games,
-        wins: a.total_wins,
-        losses: Math.max(0, a.total_games - a.total_wins),
-        winRate: (a.total_wins / a.total_games) * 100,
+        games: ownerStats.games,
+        wins: ownerStats.wins,
+        losses: ownerStats.losses,
+        winRate: ownerStats.win_rate,
       }
     }
     let g = 0, w = 0, l = 0
     for (const e of ownerElo) { g += e.games || 0; w += e.wins || 0; l += e.losses || 0 }
     return { games: g, wins: w, losses: l, winRate: g > 0 ? (w / g) * 100 : 0 }
-  }, [achievements, ownerElo])
+  }, [ownerStats, ownerElo])
 
   const bestRating = useMemo(() => {
     let best = null
@@ -201,14 +213,7 @@ export default function OperatorProfile() {
   }, [achievements])
   const catalog = achievements?.catalog || []
 
-  // Match history filtered to this owner. The /api/games endpoint returns
-  // recent games globally; we keep entries where the operator was a seat.
-  const myGames = useMemo(() => {
-    if (!games?.length) return []
-    return games
-      .filter(g => Array.isArray(g.owners) ? g.owners.some(o => o?.toLowerCase() === owner) : true)
-      .slice(0, 20)
-  }, [games, owner])
+  const myGames = games
 
   if (!owner) {
     return (
@@ -229,7 +234,7 @@ export default function OperatorProfile() {
         right="DOC HX-501"
       />
 
-      <div style={{ padding: 18, flex: 1, display: 'flex', flexDirection: 'column', gap: 14, overflow: 'auto' }}>
+      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
 
         {/* ID card */}
         <Panel
@@ -331,13 +336,10 @@ export default function OperatorProfile() {
                   <span style={{ textAlign: 'right' }}>DATE</span>
                 </div>
                 {myGames.map((g) => {
-                  const cmdrs = g.commanders || []
-                  const seatIdx = (g.owners || []).findIndex(o => o?.toLowerCase() === owner)
-                  const won = seatIdx >= 0 && g.winner === seatIdx
+                  const won = g.winner === g.my_seat
                   const drew = g.winner < 0
-                  const opponents = cmdrs
-                    .filter((_, i) => i !== seatIdx)
-                    .map(c => (c || '').split(',')[0])
+                  const opponents = (g.opponents || [])
+                    .map(c => (c || '').split('//')[0].trim())
                     .filter(Boolean)
                     .join(' / ') || '—'
                   return (

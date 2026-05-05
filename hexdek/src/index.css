@@ -201,7 +201,18 @@ body {
   background: var(--bg);
 }
 .appbar .brand { color: var(--ink); font-weight: 700; letter-spacing: 0.2em; }
-.appbar-controls { display: flex; align-items: center; gap: 10px; }
+.appbar-controls { display: flex; align-items: center; gap: 8px; }
+.appbar-controls > button,
+.appbar-controls > select,
+.appbar-controls > a {
+  height: 24px; box-sizing: border-box;
+  display: inline-flex; align-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--rule-2); background: transparent;
+  color: var(--ink-2); cursor: pointer;
+  font-family: inherit; font-size: 9px; letter-spacing: 0.08em;
+  text-transform: uppercase; white-space: nowrap;
+}
 .appbar nav { display: flex; gap: 14px; }
 .appbar nav a { color: var(--ink-2); text-decoration: none; cursor: pointer; }
 .appbar nav a.on { color: var(--ink); border-bottom: 1px solid var(--ink); padding-bottom: 1px; }
@@ -244,10 +255,31 @@ body {
 .text-right { text-align: right; }
 .text-center { text-align: center; }
 
-/* ── SPECTATOR LAYOUT ── */
+/* ── SPECTATOR LAYOUT ──
+   The .art-ambience layer (defined further down) bleeds the active seat's
+   commander art behind everything as a blurred glow. isolation:isolate +
+   relative children pin the negative-z plane inside this stacking context
+   so AppShell's solid background doesn't cover it. */
 .spectator-layout {
-  flex: 1; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden;
+  flex: 1; display: flex; flex-direction: column; overflow-x: hidden;
   overflow-anchor: none;
+  position: relative;
+  isolation: isolate;
+}
+.spectator-layout > * { position: relative; z-index: 1; }
+/* Slight transparency on the seats / lower bands so the ambience reads
+   through. Matches the deck-archive treatment (.archive-main panels). */
+.spectator-layout .seat-panel {
+  background: color-mix(in srgb, var(--bg-2, rgba(0,0,0,0.2)) 78%, transparent);
+}
+.spectator-layout .panel {
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+}
+
+/* Game board (player POV) — same ambient-blur treatment as Spectator. */
+.game-board-layout > * { position: relative; z-index: 1; }
+.game-board-layout .panel {
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
 }
 .spectator-seats {
   padding: 10px; display: flex; flex-direction: column; gap: 6px;
@@ -539,7 +571,6 @@ body {
 .archive-sidebar {
   padding: 16px; display: flex; flex-direction: column; gap: 14px;
   border-right: 1px solid var(--rule-2);
-  position: sticky; top: 0; align-self: start; max-height: 100vh; overflow: auto;
 }
 .archive-main {
   padding: 16px; display: flex; flex-direction: column; gap: 14px;
@@ -653,7 +684,7 @@ body {
    tall it pushes panels below the fold on a 1080p screen. */
 .deck-hero {
   position: relative;
-  min-height: 400px;
+  min-height: clamp(360px, 45vh, 520px);
   background-size: cover;
   background-position: center 35%;
   background-repeat: no-repeat;
@@ -709,6 +740,19 @@ body {
 .deck-hero__meta {
   display: flex; gap: 6px; flex-wrap: wrap;
 }
+.deck-hero__meta .tag {
+  background: rgba(12, 13, 10, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: var(--ink);
+  border-color: rgba(240, 235, 216, 0.25);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.deck-hero__meta .tag--solid {
+  background: var(--ink);
+  color: var(--inv-ink);
+  text-shadow: none;
+}
 .deck-hero__title {
   margin: 0;
   font-size: 60px; font-weight: 900;
@@ -760,10 +804,11 @@ body {
 }
 .deck-hero__summary {
   font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
-  color: var(--ink-2);
+  color: var(--ink);
   max-width: 70ch;
   line-height: 1.55;
   margin-top: 4px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
 }
 .deck-hero__actions {
   position: absolute; bottom: 14px; right: 14px;
@@ -771,17 +816,20 @@ body {
   display: inline-flex; gap: 8px; align-items: center;
 }
 .deck-hero__friend {
-  display: inline-flex; align-items: center;
-  padding: 8px 12px;
-  background: transparent;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  background: rgba(12, 13, 10, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   color: var(--accent);
   border: 1px solid var(--accent);
   font-family: inherit; font-size: 11px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.12em;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
-.deck-hero__friend:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.deck-hero__friend:hover { background: rgba(12, 13, 10, 0.85); }
 .deck-hero__friend:active { transform: translateY(1px); }
 .deck-hero__friend:disabled { cursor: progress; opacity: 0.6; }
 .deck-hero__friend.is-on { background: var(--accent); color: var(--inv-ink); }
@@ -789,7 +837,7 @@ body {
 .deck-hero__share {
   position: relative;
   z-index: 3;
-  display: inline-flex; align-items: center; gap: 8px;
+  display: inline-flex; align-items: center; gap: 6px;
   padding: 8px 14px;
   background: var(--accent);
   color: var(--inv-ink);
@@ -1054,14 +1102,14 @@ body {
 
 /* ── DASHBOARD LAYOUT ── */
 .dashboard-layout {
-  display: grid; grid-template-columns: 1fr 360px; flex: 1; overflow: hidden;
+  display: grid; grid-template-columns: 1fr 360px;
 }
 .dashboard-main {
   padding: 18px; display: flex; flex-direction: column; gap: 14px;
-  overflow: auto; border-right: 1px solid var(--rule-2);
+  border-right: 1px solid var(--rule-2);
 }
 .dashboard-sidebar {
-  padding: 18px; display: flex; flex-direction: column; gap: 14px; overflow: auto;
+  padding: 18px; display: flex; flex-direction: column; gap: 14px;
 }
 
 /* ── LEADERBOARD ── */
@@ -1142,15 +1190,16 @@ body {
 
 /* ── SEARCH BAR (overlay-style) ── */
 .searchbar-trigger {
-  display: inline-flex; align-items: center; gap: 8px;
+  display: inline-flex; align-items: center; gap: 6px;
   border: 1px solid var(--rule-2);
   background: var(--bg-2);
   color: var(--ink-2);
-  padding: 4px 10px;
-  font-family: inherit; font-size: 10px; letter-spacing: 0.1em;
+  padding: 0 8px;
+  height: 24px; box-sizing: border-box;
+  font-family: inherit; font-size: 9px; letter-spacing: 0.1em;
   text-transform: uppercase;
   cursor: pointer;
-  min-width: 140px;
+  min-width: 120px;
 }
 .searchbar-trigger:hover { border-color: var(--ink); color: var(--ink); }
 .searchbar-trigger__label { flex: 1; text-align: left; }
@@ -1527,7 +1576,6 @@ body {
 .card-page {
   position: relative;
   display: flex; flex-direction: column;
-  flex: 1; min-height: 0;
   isolation: isolate;
 }
 .card-page > * { position: relative; z-index: 1; }
@@ -1616,16 +1664,13 @@ body {
 }
 .card-page-layout {
   display: grid; grid-template-columns: 320px 1fr;
-  flex: 1; min-height: 0;
 }
 .card-page-sidebar {
   padding: 18px; display: flex; flex-direction: column; gap: 14px;
   border-right: 1px solid var(--rule-2);
-  overflow: auto;
 }
 .card-page-main {
   padding: 18px; display: flex; flex-direction: column; gap: 14px;
-  overflow: auto;
 }
 .card-page-deck-tile {
   display: block;

@@ -212,7 +212,7 @@ function linkifyNarrated(text, source, targets) {
 
 export default function Spectator() {
   const navigate = useNavigate()
-  const { game, elo, stats, speed, status } = useLiveSocket()
+  const { game, elo, stats, speed, status, history } = useLiveSocket()
   const logContainerRef = useRef(null)
   const userScrolledRef = useRef(false)
   const heatmapRefs = useRef([])
@@ -439,6 +439,16 @@ export default function Spectator() {
       />
 
       <div className="spectator-layout">
+        {/* Ambient blurred-art background — uses the active (or seat 0)
+            commander's art_crop. Blur + brightness handled by .art-ambience.
+            Keyed by name so the <img> swaps cleanly when the active player
+            rotates instead of restyling an in-flight image. */}
+        {(() => {
+          const ambientName = seats[game.active_seat]?.commander || seats[0]?.commander
+          const ambientUrl = ambientName ? cardArtUrl(ambientName) : null
+          if (!ambientUrl) return null
+          return <img key={ambientName} className="art-ambience" src={ambientUrl} alt="" aria-hidden="true" />
+        })()}
         {/* All 4 seats — full width, above the fold */}
         <div className="spectator-seats">
           <div className="seat-grid">
@@ -586,7 +596,7 @@ export default function Spectator() {
                   <div className="t-xs muted-2">— WAITING FOR EVENTS —</div>
                 ) : (() => {
                   const currentRound = Math.ceil(game.turn / numSeats)
-                  const reversed = [...log].reverse()
+                  const reversed = [...log].reverse().slice(0, 100)
                   let lastTurn = -1
                   return reversed.map((entry, i) => {
                     const entryRound = Math.ceil(entry.turn / numSeats)
@@ -837,6 +847,37 @@ export default function Spectator() {
                   ]} />
                 ) : (
                   <div className="t-xs muted">LOADING...</div>
+                )}
+              </div>
+            </Panel>
+
+            <Panel code="FT.D" title="RECENT GAMES" right={<span className="t-xs muted">{history.length}</span>}>
+              <div style={{ maxHeight: 340, overflow: 'auto' }}>
+                {history.length === 0 ? (
+                  <div className="t-xs muted">NO GAME HISTORY YET</div>
+                ) : (
+                  history.slice(0, 20).map((g) => (
+                    <div
+                      key={g.game_id}
+                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--rule)' }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="t-xs" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {(g.winner_name || g.commanders?.[g.winner] || '???').split('//')[0].trim().toUpperCase()}
+                        </div>
+                        <div className="t-xs muted-2" style={{ fontSize: 8 }}>
+                          {g.turns}T · {g.end_reason?.replace(/_/g, ' ')?.toUpperCase() || 'UNKNOWN'}
+                        </div>
+                      </div>
+                      <span
+                        className="t-xs"
+                        style={{ color: 'var(--accent)', cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 8, textDecoration: 'underline', textDecorationColor: 'var(--rule-2)' }}
+                        onClick={() => navigate(`/report/${g.game_id}`)}
+                      >
+                        REPORT →
+                      </span>
+                    </div>
+                  ))
                 )}
               </div>
             </Panel>

@@ -179,7 +179,16 @@ export default function GameBoard() {
         right={`T${game.turn} / / ${(game.phase || '').toUpperCase()}`}
       />
 
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 280px', overflow: 'hidden' }}>
+      <div className="game-board-layout" style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 280px', overflow: 'hidden', position: 'relative', isolation: 'isolate' }}>
+        {/* Ambient blurred-art background — your seat's commander, falls back
+            to the active seat. Keyed by name so swaps don't restyle an
+            in-flight image. */}
+        {(() => {
+          const ambientName = mySeat?.commander || seats[game.active_seat]?.commander
+          const ambientUrl = ambientName ? cardArtUrl(ambientName) : null
+          if (!ambientUrl) return null
+          return <img key={ambientName} className="art-ambience" src={ambientUrl} alt="" aria-hidden="true" />
+        })()}
         {/* Board */}
         <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'auto' }}>
           {/* Opponent row — top */}
