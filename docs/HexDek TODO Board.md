@@ -35,7 +35,7 @@ kanban-plugin: board
 - [x] **Legality badge on deck cards** — DeckList card tiles: green ✓ / red ✗ next to bracket. Legality read from strategy.json via enrichDeckSummary (2026-05-04) #ui #legality
 - [x] **Legality section on deck info panel** — DeckArchive sidebar: new KV row `LEGALITY` with LEGAL/ILLEGAL status. If illegal, expandable violation list panel (2026-05-04) #ui #legality
 - [x] **Legality filter on deck browse** — ALL/✓LEGAL/✗ILLEGAL filter tags on DECKS page, reads `d.legal` from API (2026-05-04) #ui #legality
-- [ ] **Fix Meglin phantom metadata** — 3 Meglin decks (`brudiclad`, `lich_jarads_rats`, `sisay_trix`) missing commander card + bracket. Re-import with COMMANDER: header or manual fix #data
+- [x] **Fix Meglin phantom metadata** — `resolveDeckMetadata` now wraps `parseDeckFilename` and falls back to the COMMANDER: header + Freya `strategy.json` bracket when the filename has no `_b<N>_` marker. All 3 Meglin decks (`brudiclad` B4, `lich_jarads_rats` B3, `sisay_trix` B5) now return populated `commander_card`, `bracket`, `wbs`, `pls`, `archetype`, and `legal` across `/api/decks`, `/api/decks/{owner}/{id}`, and `/api/search` (commit 622b889, 2026-05-04) #data
 
 ### Freya → UI Wiring Pass (2026-05-02 audit)
 
