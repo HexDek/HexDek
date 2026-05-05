@@ -14,6 +14,7 @@ export default function DeckList() {
   const [tab, setTab] = useState(searchParams.get('tab') === 'all' ? 'all' : 'mine')
   const [legalFilter, setLegalFilter] = useState('all')
   const [loading, setLoading] = useState(true)
+  const [showImport, setShowImport] = useState(false)
   const navigate = useNavigate()
   const { user } = useAuth()
   const { elo } = useLiveSocket()
@@ -23,12 +24,15 @@ export default function DeckList() {
     if (t === 'all' || t === 'mine') setTab(t)
   }, [searchParams])
 
-  useEffect(() => {
+  const loadDecks = () => {
+    setLoading(true)
     api.getDecks()
       .then(setDecks)
       .catch(() => setDecks(MOCK_DECKS.map(d => ({ ...d, owner: 'josh' }))))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadDecks() }, [])
 
   const eloByDeckId = {}
   for (const e of elo) {
@@ -99,6 +103,9 @@ export default function DeckList() {
             />
           </div>
           <span className="t-xs muted">{filtered.length} MATCHES</span>
+          {user && (
+            <Btn sm ghost arrow="↑" onClick={() => setShowImport(true)}>IMPORT</Btn>
+          )}
         </div>
 
         {/* Deck grid */}
@@ -176,6 +183,13 @@ export default function DeckList() {
           </div>
         )}
       </div>
+
+      {showImport && (
+        <ImportModal
+          onClose={() => setShowImport(false)}
+          onImported={loadDecks}
+        />
+      )}
     </>
   )
 }
