@@ -168,6 +168,12 @@ export default function Spectator() {
   const heatmapAnimsRef = useRef([])
   const heatmapPrevEvalRef = useRef([])
   const heatmapPrevLostRef = useRef([])
+  // heatmapDrawnRef tracks the eval values most recently *painted* per seat
+  // (including mid-tween interpolated frames). New tweens start from here
+  // rather than heatmapPrevEvalRef so a fast-arriving WS push doesn't
+  // snap the canvas back to the pre-tween state — the source of the
+  // triple-jitter bug.
+  const heatmapDrawnRef = useRef([])
   const [heatmapTip, setHeatmapTip] = useState(null)
   const error = status === 'disconnected' ? 'WebSocket disconnected' : null
 
@@ -232,15 +238,21 @@ export default function Spectator() {
     const DURATION = 500
     const easeInOutQuad = t => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
 
+    const EPS = 1e-3
+    const evalsEqual = (a, b) => {
+      if (a === b) return true
+      if (!a || !b) return false
+      for (const key of HEATMAP_KEYS) {
+        if (Math.abs((a[key] ?? 0) - (b[key] ?? 0)) > EPS) return false
+      }
+      return true
+    }
+
     game.seats.forEach((s, i) => {
       const canvas = heatmapRefs.current[i]
       if (!canvas) return
 
-      // Cancel any in-flight animation for this seat — the new target supersedes it.
-      const prevAnim = heatmapAnimsRef.current[i]
-      if (prevAnim) cancelAnimationFrame(prevAnim)
-
-      const prevEval = heatmapPrevEvalRef.current[i] || null
+      const drawn = heatmapDrawnRef.current[i] || null
       const targetEval = s.eval || null
       const prevLost = !!heatmapPrevLostRef.current[i]
       const targetLost = !!s.lost
@@ -248,37 +260,64 @@ export default function Spectator() {
       // Lost state paints solid; skip the lerp — the GG overlay + .seat-art opacity
       // transition handle the visual fade.
       if (targetLost || !targetEval) {
+        const prevAnim = heatmapAnimsRef.current[i]
+        if (prevAnim) cancelAnimationFrame(prevAnim)
+        heatmapAnimsRef.current[i] = null
         drawEvalContour(canvas, targetEval, targetLost)
+        heatmapPrevEvalRef.current[i] = targetEval
+        heatmapPrevLostRef.current[i] = targetLost
+        heatmapDrawnRef.current[i] = targetEval
+        return
+      }
+
+      // No-op when the eval is unchanged within epsilon — prevents the
+      // WS firing every event from re-arming the tween.
+      if (!prevLost && drawn && evalsEqual(drawn, targetEval) && !heatmapAnimsRef.current[i]) {
         heatmapPrevEvalRef.current[i] = targetEval
         heatmapPrevLostRef.current[i] = targetLost
         return
       }
 
       // First paint or coming back from lost: snap, don't morph.
-      if (!prevEval || prevLost) {
+      if (!drawn || prevLost) {
+        const prevAnim = heatmapAnimsRef.current[i]
+        if (prevAnim) cancelAnimationFrame(prevAnim)
+        heatmapAnimsRef.current[i] = null
         drawEvalContour(canvas, targetEval, false)
         heatmapPrevEvalRef.current[i] = targetEval
         heatmapPrevLostRef.current[i] = targetLost
+        heatmapDrawnRef.current[i] = targetEval
         return
       }
 
+      // Mid-tween interruption: start the new tween from whatever we
+      // last painted, NOT from heatmapPrevEvalRef (which is the value
+      // before the in-flight animation started). This is the fix for the
+      // triple-jitter: rapid WS pushes used to keep restarting from the
+      // same stale source, visibly snapping the canvas back to the
+      // start of the prior tween.
+      const prevAnim = heatmapAnimsRef.current[i]
+      if (prevAnim) cancelAnimationFrame(prevAnim)
+      const sourceEval = { ...drawn }
       const start = performance.now()
       const tick = (now) => {
         const t = Math.min(1, (now - start) / DURATION)
         const k = easeInOutQuad(t)
         const interp = {}
         for (const key of HEATMAP_KEYS) {
-          const a = prevEval[key] ?? 0
+          const a = sourceEval[key] ?? 0
           const b = targetEval[key] ?? 0
           interp[key] = a + (b - a) * k
         }
         drawEvalContour(canvas, interp, false)
+        heatmapDrawnRef.current[i] = interp
         if (t < 1) {
           heatmapAnimsRef.current[i] = requestAnimationFrame(tick)
         } else {
           heatmapAnimsRef.current[i] = null
           heatmapPrevEvalRef.current[i] = targetEval
           heatmapPrevLostRef.current[i] = targetLost
+          heatmapDrawnRef.current[i] = targetEval
         }
       }
       heatmapAnimsRef.current[i] = requestAnimationFrame(tick)
