@@ -322,6 +322,9 @@ func PersistInvariantViolations(dir string, violations []InvariantViolation) err
 		return fmt.Errorf("muninn: mkdir %s: %w", dir, err)
 	}
 
+	fileMu.Lock()
+	defer fileMu.Unlock()
+
 	existing, err := ReadInvariantViolations(dir)
 	if err != nil {
 		return err
@@ -413,6 +416,9 @@ func PersistRegressionFailures(dir string, failures []RegressionFailure) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("muninn: mkdir %s: %w", dir, err)
 	}
+
+	fileMu.Lock()
+	defer fileMu.Unlock()
 
 	existing, err := ReadRegressionFailures(dir)
 	if err != nil {
