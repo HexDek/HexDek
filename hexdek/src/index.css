@@ -601,6 +601,22 @@ body {
   color: var(--ink-2);
   text-align: center;
 }
+/* WATCH LIVE CTA — explicit button at the bottom of every state. */
+.fishtank-embed-cta {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0; border-top: 1px solid var(--rule-2);
+  background: var(--ink); color: var(--inv-ink);
+  font-family: inherit; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  cursor: pointer;
+}
+.fishtank-embed-cta:hover { background: var(--ok); color: var(--bg); }
+.fishtank-embed-cta:focus-visible {
+  outline: 1px solid var(--ok); outline-offset: -3px;
+}
+.fishtank-embed-cta .arr { font-size: 13px; }
 
 /* ── KPI STRIP ── */
 .kpi-strip {

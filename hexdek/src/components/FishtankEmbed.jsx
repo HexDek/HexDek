@@ -8,7 +8,10 @@ export default function FishtankEmbed() {
 
   const goSpectate = () => navigate('/spectate')
 
-  // Loading / disconnected gates
+  // Loading / disconnected / between-games gates. The full-card click
+  // affordance is preserved on every state, but each idle branch also
+  // surfaces an explicit WATCH LIVE button at the bottom so the CTA is
+  // discoverable without hover.
   if (status === 'disconnected') {
     return (
       <div className="fishtank-embed fishtank-embed--state" onClick={goSpectate}>
@@ -17,13 +20,37 @@ export default function FishtankEmbed() {
           <span className="fishtank-embed-badge fishtank-embed-badge--off">OFFLINE</span>
         </div>
         <div className="fishtank-embed-empty">
+          <span className="led led--bad blink" style={{ marginRight: 8 }} />
           &gt; FISHTANK OFFLINE<br />
           &gt; SHOWMATCH ENGINE NOT REACHABLE<span className="blink">_</span>
         </div>
+        <WatchLiveButton onClick={goSpectate} />
       </div>
     )
   }
 
+  // Between matches (status is live but the engine hasn't pushed a game
+  // snapshot yet, or the snapshot is in the "starting" pre-roll state).
+  if (status === 'live' && (!game || game.status === 'starting' || !game.seats)) {
+    return (
+      <div className="fishtank-embed fishtank-embed--state" onClick={goSpectate}>
+        <div className="fishtank-embed-hd">
+          <span>FISHTANK / / LIVE FORGE</span>
+          <span className="fishtank-embed-badge">
+            <span className="led led--on blink" /> IDLE
+          </span>
+        </div>
+        <div className="fishtank-embed-empty">
+          <span className="led led--on blink" style={{ marginRight: 8 }} />
+          &gt; NO GAME IN PROGRESS<br />
+          &gt; ENGINE WILL SLOT THE NEXT MATCH AUTOMATICALLY<span className="blink">_</span>
+        </div>
+        <WatchLiveButton onClick={goSpectate} />
+      </div>
+    )
+  }
+
+  // Connecting / initializing — handshake hasn't completed yet.
   if (!game || game.status === 'starting' || !game.seats) {
     return (
       <div className="fishtank-embed fishtank-embed--state" onClick={goSpectate}>
@@ -37,6 +64,7 @@ export default function FishtankEmbed() {
           &gt; CONTACTING FORGE...<br />
           &gt; LOADING FIRST SHOWMATCH<span className="blink">_</span>
         </div>
+        <WatchLiveButton onClick={goSpectate} />
       </div>
     )
   }
@@ -116,8 +144,26 @@ export default function FishtankEmbed() {
             ? `WINNER: ${game.winner >= 0 ? (seats[game.winner]?.commander || '—').toUpperCase().split('//')[0].trim() : 'DRAW'}`
             : `${rt} · ${phase}${game.step ? ` / ${game.step.toUpperCase()}` : ''}`}
         </span>
-        <span className="fishtank-embed-ft-cta">OPEN SPECTATOR ↗</span>
       </div>
+      <WatchLiveButton onClick={goSpectate} />
     </div>
+  )
+}
+
+// WatchLiveButton — explicit CTA at the bottom of every embed state.
+// Stops click propagation so it doesn't double-fire the parent card's
+// click handler (both navigate to the same place, but the duplicate
+// onClick fires React-internally as two separate handlers and looks
+// noisy in dev tracing). The button itself navigates.
+function WatchLiveButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      className="fishtank-embed-cta"
+      onClick={(e) => { e.stopPropagation(); onClick() }}
+    >
+      <span>WATCH LIVE</span>
+      <span className="arr">↗</span>
+    </button>
   )
 }
