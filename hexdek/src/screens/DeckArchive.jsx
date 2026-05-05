@@ -346,6 +346,43 @@ export default function DeckArchive() {
         </div>
 
         <div className="archive-main">
+          {/* Personality blurb — Freya gameplan summary as hero callout */}
+          {summary && !editing && (
+            <div className="panel" style={{
+              padding: '20px 28px',
+              borderStyle: 'solid',
+              borderLeft: '3px solid var(--ok)',
+              background: 'rgba(255, 255, 255, 0.02)',
+              position: 'relative',
+              marginBottom: 4,
+            }}>
+              <span style={{
+                position: 'absolute',
+                top: -2, left: 14,
+                fontSize: 56, lineHeight: 1,
+                color: 'var(--ok)',
+                opacity: 0.35,
+                fontFamily: 'Georgia, serif',
+                userSelect: 'none',
+                pointerEvents: 'none',
+              }}>“</span>
+              <div style={{
+                fontSize: 16,
+                lineHeight: 1.55,
+                fontStyle: 'italic',
+                color: 'var(--ink)',
+                letterSpacing: '0.01em',
+                paddingLeft: 18,
+              }}>{summary}</div>
+              <div className="t-xs muted" style={{
+                marginTop: 10,
+                paddingLeft: 18,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}>— FREYA / / {archetype}</div>
+            </div>
+          )}
+
           {/* Edit mode */}
           {editing && (
             <Panel code="04.X" title="EDIT DECK LIST" right={
@@ -406,11 +443,6 @@ export default function DeckArchive() {
                 <div>
                   <div className="t-xs muted">ARCHETYPE</div>
                   <div className="t-2xl" style={{ fontWeight: 700, marginTop: 2 }}>{archetype}</div>
-                  {summary && (
-                    <div className="t-md muted" style={{ marginTop: 10, lineHeight: 1.6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      &gt; {summary}
-                    </div>
-                  )}
                 </div>
                 <div className="analysis-weights">
                   <div className="t-xs muted">EVAL WEIGHTS</div>
