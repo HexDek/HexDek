@@ -26,6 +26,7 @@ import Friends from './screens/Friends'
 import Login from './screens/Login'
 import AuthCallback from './screens/AuthCallback'
 import DeckCompare from './screens/DeckCompare'
+import StreamOverlay from './components/StreamOverlay'
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth()
@@ -37,6 +38,11 @@ export default function App() {
   usePageTracking()
   return (
     <Routes>
+      {/* Stream overlay — outside AppShell so the appbar/footer/frame
+          don't render. The component forces html/body bg transparent
+          on mount so OBS browser-source captures alpha cleanly. */}
+      <Route path="stream/:gameId" element={<StreamOverlay />} />
+      <Route path="stream" element={<StreamOverlay />} />
       <Route element={<AppShell />}>
         <Route index element={<Splash />} />
         <Route path="login" element={<Login />} />
