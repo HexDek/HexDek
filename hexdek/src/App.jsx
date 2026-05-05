@@ -28,7 +28,6 @@ import AuthCallback from './screens/AuthCallback'
 import DeckCompare from './screens/DeckCompare'
 import Import from './screens/Import'
 import Landing from './screens/Landing'
-import Meta from './screens/Meta'
 import StreamOverlay from './components/StreamOverlay'
 
 function RequireAuth({ children }) {
@@ -67,7 +66,7 @@ export default function App() {
         <Route path="play" element={<GameBoard />} />
         <Route path="forge" element={<Forge />} />
         <Route path="leaderboard" element={<Leaderboard />} />
-        <Route path="meta" element={<Meta />} />
+        <Route path="meta" element={<Navigate to="/leaderboard?view=meta" replace />} />
         <Route path="spectate" element={<Spectator />} />
         <Route path="report" element={<Report />} />
         <Route path="report/:gameId" element={<Report />} />

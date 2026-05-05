@@ -61,7 +61,7 @@ export default function DeckList() {
   const myDecks = myName ? decks.filter(d => d.owner?.toLowerCase() === myName) : []
   const hasMyDecks = myDecks.length > 0
 
-  const baseDecks = (tab === 'mine' && hasMyDecks) ? myDecks : decks
+  const baseDecks = (tab === 'mine' && user) ? myDecks : decks
   const hasLegalityData = decks.some(d => d.legal != null)
   const filtered = baseDecks.filter(d => {
     if (legalFilter === 'legal' && d.legal === false) return false
@@ -102,7 +102,7 @@ export default function DeckList() {
         )}
         {/* Tabs + Search */}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          {hasMyDecks && (
+          {user && (
             <>
               <Tag solid={tab === 'mine'} onClick={() => setTab('mine')} style={{ cursor: 'pointer' }}>MY DECKS</Tag>
               <Tag solid={tab === 'all'} onClick={() => setTab('all')} style={{ cursor: 'pointer' }}>ALL DECKS</Tag>

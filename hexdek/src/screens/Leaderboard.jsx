@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Tape, Tag, ConfidenceDots } from '../components/chrome'
+import Meta from './Meta'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useArtContrast } from '../hooks/useArtContrast'
 import { api, cardArtUrl } from '../services/api'
@@ -77,6 +78,27 @@ function RecordDisplay({ wins, losses }) {
 }
 
 export default function Leaderboard() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const view = searchParams.get('view') === 'meta' ? 'meta' : 'rankings'
+  const setView = (v) => {
+    const next = new URLSearchParams(searchParams)
+    if (v === 'meta') next.set('view', 'meta')
+    else next.delete('view')
+    setSearchParams(next, { replace: true })
+  }
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 8, padding: '10px 18px 0', alignItems: 'center' }}>
+        <Tag solid={view === 'rankings'} onClick={() => setView('rankings')} style={{ cursor: 'pointer' }}>RANKINGS</Tag>
+        <Tag solid={view === 'meta'} onClick={() => setView('meta')} style={{ cursor: 'pointer' }}>META</Tag>
+      </div>
+      {view === 'meta' ? <Meta /> : <LeaderboardContent />}
+    </>
+  )
+}
+
+function LeaderboardContent() {
   const [filter, setFilter] = useState('')
   const [sortKey, setSortKey] = useState('hex_rating')
   const [sortAsc, setSortAsc] = useState(false)
