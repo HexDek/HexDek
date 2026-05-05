@@ -112,6 +112,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/search", h.handleSearch)
 	mux.HandleFunc("GET /api/cards/search", h.handleCardSearch)
 	mux.HandleFunc("GET /api/cards/{name}", h.handleCardByName)
+	mux.HandleFunc("GET /api/analytics/cards", h.handleCardAnalytics)
 	mux.HandleFunc("POST /api/telemetry/pageview", h.handlePageview)
 	mux.HandleFunc("POST /api/telemetry/stitch", h.handleStitch)
 }

@@ -23,6 +23,7 @@ import (
 
 	"github.com/hexdek/hexdek/internal/achievements"
 	"github.com/hexdek/hexdek/internal/astload"
+	"github.com/hexdek/hexdek/internal/cardstats"
 	"github.com/hexdek/hexdek/internal/db"
 	"github.com/hexdek/hexdek/internal/deckparser"
 	"github.com/hexdek/hexdek/internal/gameengine"
@@ -1235,6 +1236,47 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 		}
 	}
 
+	// Per-card win/loss + first-played telemetry. firstPlayed is built
+	// from bracketETBs (battlefield-diff captured every turn) — not
+	// perfect (a card recursed back into play counts as "first") but
+	// cheap and good enough for empirical card-page analytics. Indexed
+	// by lowercased name so it round-trips through cardstats.Record.
+	firstPlayed := make(map[string]int, 64)
+	turns := make([]int, 0, len(bracketETBs))
+	for t := range bracketETBs {
+		turns = append(turns, t)
+	}
+	sort.Ints(turns)
+	for _, t := range turns {
+		for _, name := range bracketETBs[t] {
+			key := strings.ToLower(strings.TrimSpace(name))
+			if key == "" {
+				continue
+			}
+			if _, seen := firstPlayed[key]; !seen {
+				firstPlayed[key] = t
+			}
+		}
+	}
+	for i := 0; i < showmatchSeats; i++ {
+		tpl := pickedDecks[i]
+		if tpl == nil {
+			continue
+		}
+		names := make([]string, 0, len(tpl.Library)+len(tpl.CommanderCards))
+		for _, c := range tpl.CommanderCards {
+			if c != nil && c.Name != "" {
+				names = append(names, c.Name)
+			}
+		}
+		for _, c := range tpl.Library {
+			if c != nil && c.Name != "" {
+				names = append(names, c.Name)
+			}
+		}
+		cardstats.Default.Record(names, i == winner, firstPlayed)
+	}
+
 	// Amiibo: record results + dimension stats for each seat's DNA variant.
 	sm.amiiboMu.Lock()
 	var evolved []*hat.AmiiboPool
@@ -1692,6 +1734,72 @@ func (sm *Showmatch) persistGame(g CompletedGame) {
 			log.Printf("showmatch: card win stats: %v", err)
 		}
 	}
+
+	// Deck-list-based per-card aggregate (cross-commander).
+	// For every card in each seat's deck list, count one game and tag
+	// it as win or loss based on whether that seat won. This drives
+	// /api/cards/{name}/stats. Distinct from the battlefield-presence
+	// accounting in card_win_stats above.
+	var deckCardDeltas []db.CardStatDelta
+	for i, dk := range g.DeckKeys {
+		if dk == "" {
+			continue
+		}
+		owner, id := splitDeckKey(dk)
+		if owner == "" {
+			continue
+		}
+		td := sm.findDeckInPool(owner, id)
+		if td == nil {
+			continue
+		}
+		isWinner := i == g.Winner
+		// Dedupe within a single deck — duplicates in the deck list
+		// (basics, common spells) shouldn't multi-count the same game.
+		seen := make(map[string]struct{}, len(td.Library)+len(td.CommanderCards))
+		add := func(name string) {
+			if name == "" {
+				return
+			}
+			if _, ok := seen[name]; ok {
+				return
+			}
+			seen[name] = struct{}{}
+			d := db.CardStatDelta{CardName: name}
+			if isWinner {
+				d.Win = 1
+			} else {
+				d.Loss = 1
+			}
+			deckCardDeltas = append(deckCardDeltas, d)
+		}
+		for _, c := range td.CommanderCards {
+			if c != nil {
+				add(c.Name)
+			}
+		}
+		for _, c := range td.Library {
+			if c != nil {
+				add(c.Name)
+			}
+		}
+	}
+	if len(deckCardDeltas) > 0 {
+		if err := db.BatchUpsertCardStats(context.Background(), sm.sqlDB, deckCardDeltas); err != nil {
+			log.Printf("showmatch: card_stats: %v", err)
+		}
+	}
+}
+
+// splitDeckKey splits "owner/id" into its parts. Returns ("","") on
+// malformed input rather than panicking — callers can skip silently.
+func splitDeckKey(k string) (string, string) {
+	for i := 0; i < len(k); i++ {
+		if k[i] == '/' {
+			return k[:i], k[i+1:]
+		}
+	}
+	return "", ""
 }
 
 func safeCommander(commanders []string, idx int) string {

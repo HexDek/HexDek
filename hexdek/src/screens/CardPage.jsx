@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { Panel, KV, Tag, Tape, Btn } from '../components/chrome'
+import { Panel, KV, Tag, Tape, Btn, Bar } from '../components/chrome'
 import { API_BASE, cardArtUrl } from '../services/api'
+import { useLiveSocket } from '../hooks/useLiveSocket'
 
 // CardPage — /cards/:cardName
 //
@@ -60,10 +61,13 @@ export default function CardPage() {
   const [detail, setDetail] = useState(null)
   // Scryfall response — only fetched when the local API 404s.
   const [scry, setScry] = useState(null)
+  // /api/cards/:name/stats — null until resolved; {games_played:0,...} on cold cards.
+  const [stats, setStats] = useState(null)
   // Loading / error state covers whichever path is in flight.
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [source, setSource] = useState(null) // 'local' | 'scryfall' | null
+  const { elo: liveElo } = useLiveSocket()
 
   useEffect(() => {
     if (!cardName) return
@@ -72,7 +76,15 @@ export default function CardPage() {
     setError(false)
     setDetail(null)
     setScry(null)
+    setStats(null)
     setSource(null)
+
+    // Engine win-rate stats — independent of card-data resolution. Fired
+    // in parallel; failures are non-fatal (cold endpoint or new server).
+    fetch(`${API_BASE}/api/cards/${encodeURIComponent(cardName)}/stats`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (!cancelled && data) setStats(data) })
+      .catch(() => {})
 
     const tryLocal = fetch(`${API_BASE}/api/cards/${encodeURIComponent(cardName)}`)
       .then(async r => {
@@ -156,6 +168,56 @@ export default function CardPage() {
   const setName = scry?.set_name || setCode || '—'
   const cmc = detail?.cmc != null ? detail.cmc : (scry?.cmc != null ? scry.cmc : null)
   const price = priceFromScryfall(scry) // local API doesn't carry price; only present on Scryfall fallback.
+
+  // Cross-reference local decks (containing the card) with live ELO data
+  // to derive per-deck win rates and the WITH/WITHOUT comparison. Done as
+  // a memoized join on deck_id (or owner/id) since liveElo is a flat list.
+  const eloByKey = useMemo(() => {
+    const m = {}
+    for (const e of (liveElo || [])) {
+      const dk = e.deck_id || (e.owner && e.id ? `${e.owner}/${e.id}` : null)
+      if (dk) m[dk] = e
+      // Also key by bare id as a fallback (older payloads).
+      if (e.id) m[e.id] = m[e.id] || e
+    }
+    return m
+  }, [liveElo])
+
+  const decksWithElo = useMemo(() => {
+    if (!localDecks.length) return []
+    const out = []
+    for (const d of localDecks) {
+      const k = `${d.owner}/${d.id}`
+      const e = eloByKey[k] || eloByKey[d.id]
+      if (e && (e.games || 0) > 0) {
+        out.push({ ...d, rating: e.rating, wins: e.wins || 0, losses: e.losses || 0, games: e.games || 0, win_rate: e.win_rate ?? (e.wins / e.games) * 100 })
+      }
+    }
+    out.sort((a, b) => (b.win_rate || 0) - (a.win_rate || 0))
+    return out
+  }, [localDecks, eloByKey])
+
+  // Aggregate WR across decks WITH this card vs the rest of the elo pool.
+  const withVsWithout = useMemo(() => {
+    if (!liveElo || liveElo.length === 0) return null
+    const hasCard = new Set(localDecks.map(d => `${d.owner}/${d.id}`))
+    let withW = 0, withL = 0, woW = 0, woL = 0
+    for (const e of liveElo) {
+      const dk = e.deck_id || (e.owner && e.id ? `${e.owner}/${e.id}` : '')
+      const inSet = hasCard.has(dk) || hasCard.has(e.id)
+      if (inSet) { withW += e.wins || 0; withL += e.losses || 0 }
+      else       { woW   += e.wins || 0; woL   += e.losses || 0 }
+    }
+    const withGames = withW + withL
+    const woGames = woW + woL
+    if (withGames === 0 && woGames === 0) return null
+    return {
+      withWR: withGames > 0 ? (withW / withGames) * 100 : null,
+      withGames,
+      woWR:   woGames   > 0 ? (woW   / woGames)   * 100 : null,
+      woGames,
+    }
+  }, [liveElo, localDecks])
 
   const heroArt = cardArtUrl(cardName)
   const sourceLabel = source === 'local'
@@ -256,6 +318,130 @@ export default function CardPage() {
               </div>
             )}
           </Panel>
+
+          {/* Engine win-rate stats — sourced from /api/cards/:name/stats.
+              The endpoint returns games_played=0 for cards with no
+              recorded plays; we render an honest empty state in that
+              case instead of a misleading 0% bar. */}
+          <Panel
+            code="07.W"
+            title="ENGINE STATS / / WIN RATE"
+            right={stats?.games_played > 0 ? <Tag solid kind={stats.win_rate >= 0.5 ? 'ok' : null}>{(stats.win_rate * 100).toFixed(1)}% WR</Tag> : null}
+          >
+            {stats == null ? (
+              <div className="t-md muted" style={{ padding: '14px 0', textAlign: 'center' }}>
+                &gt; FETCHING ENGINE STATS<span className="blink">_</span>
+              </div>
+            ) : (stats.games_played || 0) === 0 ? (
+              <div className="t-md muted" style={{ padding: '14px 0', textAlign: 'center' }}>
+                &gt; NOT ENOUGH GAME DATA YET.
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 56px', alignItems: 'center', gap: 8 }}>
+                  <span className="t-xs muted">WIN RATE</span>
+                  <Bar value={stats.win_rate * 100} lg />
+                  <span className="t-md text-right" style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                    {(stats.win_rate * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="hr" style={{ margin: '12px 0' }} />
+                <KV rows={[
+                  ['GAMES PLAYED', `${stats.games_played.toLocaleString()}`],
+                  ['WINS', <span style={{ color: 'var(--ok)' }}>{(stats.wins || 0).toLocaleString()}</span>],
+                  ['LOSSES', <span style={{ color: 'var(--danger)' }}>{(stats.losses || 0).toLocaleString()}</span>],
+                  ...(stats.avg_turn_played > 0 ? [['AVG TURN PLAYED', stats.avg_turn_played.toFixed(1)]] : []),
+                ]} />
+
+                {withVsWithout && (withVsWithout.withWR != null || withVsWithout.woWR != null) && (
+                  <>
+                    <div className="hr" style={{ margin: '12px 0' }} />
+                    <div className="t-xs muted" style={{ marginBottom: 6 }}>DECK WIN-RATE COMPARISON (LIVE ELO)</div>
+                    {withVsWithout.withWR != null && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 90px', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <span className="t-xs">DECKS WITH</span>
+                        <Bar value={withVsWithout.withWR} />
+                        <span className="t-xs text-right" style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--ok)' }}>
+                          {withVsWithout.withWR.toFixed(1)}% · {withVsWithout.withGames.toLocaleString()}G
+                        </span>
+                      </div>
+                    )}
+                    {withVsWithout.woWR != null && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 90px', alignItems: 'center', gap: 8 }}>
+                        <span className="t-xs">DECKS WITHOUT</span>
+                        <Bar value={withVsWithout.woWR} />
+                        <span className="t-xs text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          {withVsWithout.woWR.toFixed(1)}% · {withVsWithout.woGames.toLocaleString()}G
+                        </span>
+                      </div>
+                    )}
+                    {withVsWithout.withWR != null && withVsWithout.woWR != null && (
+                      <div className="t-xs muted" style={{ marginTop: 6 }}>
+                        DELTA{' '}
+                        <span style={{ color: withVsWithout.withWR > withVsWithout.woWR ? 'var(--ok)' : 'var(--danger)', fontWeight: 700 }}>
+                          {withVsWithout.withWR > withVsWithout.woWR ? '+' : ''}{(withVsWithout.withWR - withVsWithout.woWR).toFixed(1)}PP
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </Panel>
+
+          {/* Top decks running this card — joins detail.decks_using with
+              live ELO data and sorts by win rate. Empty when no overlap
+              between the deck index and the showmatch ELO pool. */}
+          {decksWithElo.length > 0 && (
+            <Panel
+              code="07.T"
+              title={`TOP DECKS / / ${decksWithElo.length} RANKED`}
+              right={<Tag solid>{decksWithElo.length}</Tag>}
+            >
+              <div style={{
+                display: 'grid', gridTemplateColumns: '24px 1fr 70px 70px 60px',
+                gap: 6, padding: '4px 0', borderBottom: '1px solid var(--rule-2)', marginBottom: 4,
+              }}>
+                <span className="t-xs muted">#</span>
+                <span className="t-xs muted">DECK</span>
+                <span className="t-xs muted text-right">ELO</span>
+                <span className="t-xs muted text-right">REC</span>
+                <span className="t-xs muted text-right">WR%</span>
+              </div>
+              {decksWithElo.slice(0, 5).map((d, i) => (
+                <Link
+                  key={`${d.owner}/${d.id}`}
+                  to={`/decks/${d.owner}/${d.id}`}
+                  style={{
+                    display: 'grid', gridTemplateColumns: '24px 1fr 70px 70px 60px',
+                    gap: 6, padding: '6px 0',
+                    borderBottom: i < Math.min(decksWithElo.length, 5) - 1 ? '1px dashed var(--rule-2)' : 'none',
+                    alignItems: 'center', textDecoration: 'none', color: 'var(--ink)',
+                  }}
+                >
+                  <span className="t-xs muted-2">{i + 1}</span>
+                  <span className="t-xs" style={{ fontWeight: i < 3 ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {(d.commander || d.name || d.id || '').toUpperCase()}
+                    <span className="muted-2" style={{ marginLeft: 4 }}>· {(d.owner || '').toUpperCase()}</span>
+                  </span>
+                  <span className="t-xs text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>{Math.round(d.rating)}</span>
+                  <span className="t-xs text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ color: 'var(--ok)' }}>{d.wins}</span>
+                    <span className="muted-2">-</span>
+                    <span style={{ color: 'var(--danger)' }}>{d.losses}</span>
+                  </span>
+                  <span className="t-xs text-right" style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: d.win_rate >= 30 ? 'var(--ok)' : 'var(--ink-2)' }}>
+                    {(d.win_rate || 0).toFixed(1)}%
+                  </span>
+                </Link>
+              ))}
+              {decksWithElo.length > 5 && (
+                <div className="t-xs muted" style={{ textAlign: 'center', marginTop: 8 }}>
+                  &gt; {decksWithElo.length - 5} MORE — SEE USED IN BELOW
+                </div>
+              )}
+            </Panel>
+          )}
 
           {/* Used in — decks containing this card. Sourced from
               detail.decks_using when the local API responded; the
