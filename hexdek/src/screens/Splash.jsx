@@ -1,8 +1,11 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Panel, KV, Btn, Stripes, MiniBars, Tape } from '../components/chrome'
+import { Panel, KV, Btn, Stripes, Tape } from '../components/chrome'
 import { useAuth } from '../context/AuthContext'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { AnimatedCounter } from '../hooks/useAnimatedCounter.jsx'
+import FishtankEmbed from '../components/FishtankEmbed'
+import ImportModal from '../components/ImportModal'
 
 const RUNTIME_LABELS = {
   disconnected: 'DISCONNECTED',
@@ -14,6 +17,7 @@ export default function Splash() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { stats, elo, status } = useLiveSocket()
+  const [importOpen, setImportOpen] = useState(false)
 
   const gpm = stats?.games_per_min || 0
   const runtimeText = status === 'live'
@@ -48,6 +52,7 @@ export default function Splash() {
           </div>
 
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Btn solid arrow="▶" onClick={() => setImportOpen(true)}>UPLOAD MY DECK</Btn>
             <Btn solid arrow="▶" onClick={() => navigate(user ? '/dash' : '/login')}>ENTER THE FORGE</Btn>
             <a href="https://github.com/hexdek-labs/HexDek#readme" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}><Btn ghost arrow="↗">DOCS / / README</Btn></a>
             <a href="https://github.com/hexdek-labs/HexDek" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}><Btn ghost arrow="↗">GITHUB / / SRC</Btn></a>
@@ -57,23 +62,8 @@ export default function Splash() {
 
         {/* RIGHT */}
         <div className="splash-right">
-          <div className="panel inv" style={{ padding: 0 }}>
-            <div className="panel-hd" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
-              <span>CATALOGUED BUILDS C.25</span>
-              <span>SLOT.01</span>
-            </div>
-            <div style={{ padding: '18px 16px', textAlign: 'center' }}>
-              <div style={{ fontSize: 11, letterSpacing: '0.06em', lineHeight: 1.6 }}>
-                HEXDEK COMBAT CORE<br />
-                ENGINE: HEXDEK V0.10D<br />
-                FORMAT: COMMANDER / 1V1 / ARCHENEMY<br />
-                RUNTIME: {runtimeText}
-              </div>
-              <div style={{ borderTop: '1px solid rgba(0,0,0,0.15)', marginTop: 14, paddingTop: 10, fontSize: 10, letterSpacing: '0.1em' }}>
-                HEXDEK__©2026
-              </div>
-            </div>
-          </div>
+          {/* Live fishtank — primary attention trap */}
+          <FishtankEmbed />
 
           <Panel code="II.A" title="LIVE FORGE STATS" right={<span className={`led ${ledClass}`} />}>
             <KV rows={[
@@ -86,6 +76,24 @@ export default function Splash() {
             ]} />
           </Panel>
 
+          <div className="panel inv" style={{ padding: 0 }}>
+            <div className="panel-hd" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+              <span>CATALOGUED BUILDS C.25</span>
+              <span>SLOT.01</span>
+            </div>
+            <div style={{ padding: '14px 16px', textAlign: 'center' }}>
+              <div style={{ fontSize: 11, letterSpacing: '0.06em', lineHeight: 1.6 }}>
+                HEXDEK COMBAT CORE<br />
+                ENGINE: HEXDEK V0.10D<br />
+                FORMAT: COMMANDER / 1V1 / ARCHENEMY<br />
+                RUNTIME: {runtimeText}
+              </div>
+              <div style={{ borderTop: '1px solid rgba(0,0,0,0.15)', marginTop: 12, paddingTop: 8, fontSize: 10, letterSpacing: '0.1em' }}>
+                HEXDEK__©2026
+              </div>
+            </div>
+          </div>
+
           <Panel code="II.B" title="SYS NOTICE">
             <div className="t-md muted" style={{ lineHeight: 1.6 }}>
               &gt; OPEN SOURCE.<br />
@@ -96,6 +104,13 @@ export default function Splash() {
           </Panel>
         </div>
       </div>
+
+      {importOpen && (
+        <ImportModal
+          onClose={() => setImportOpen(false)}
+          onImported={() => navigate('/decks')}
+        />
+      )}
     </>
   )
 }

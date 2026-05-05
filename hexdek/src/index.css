@@ -451,6 +451,83 @@ body {
   line-height: 0.85; text-transform: uppercase;
 }
 
+/* ── FISHTANK EMBED (splash live game preview) ── */
+.fishtank-embed {
+  border: 1px solid var(--rule-2);
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+  max-height: 360px;
+  overflow: hidden;
+}
+.fishtank-embed:hover { border-color: var(--ink); }
+.fishtank-embed:focus { outline: 1px solid var(--ink); outline-offset: 2px; }
+.fishtank-embed-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--rule-2);
+  font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-2);
+  background: var(--bg-2);
+}
+.fishtank-embed-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 9px; letter-spacing: 0.1em; color: var(--ok);
+}
+.fishtank-embed-badge--off { color: var(--danger); }
+.fishtank-embed-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  background: var(--rule-2);
+  border-bottom: 1px solid var(--rule-2);
+}
+.fishtank-embed-seat {
+  position: relative;
+  height: 122px;
+  background: var(--bg);
+  border: 1px solid transparent;
+  overflow: hidden;
+}
+.fishtank-embed-seat-art {
+  position: absolute; inset: 0;
+  background-size: cover; background-position: center 30%;
+  filter: grayscale(0.3) contrast(1.05);
+  transition: opacity 0.3s ease;
+}
+.fishtank-embed-seat-body {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; justify-content: space-between;
+  height: 100%; padding: 6px 8px;
+  background: linear-gradient(to bottom, rgba(12,13,10,0.75) 0%, rgba(12,13,10,0.35) 50%, rgba(12,13,10,0.85) 100%);
+}
+.fishtank-embed-seat-name {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--ink);
+  text-transform: uppercase;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.85);
+}
+.fishtank-embed-seat-stats {
+  display: flex; gap: 5px; align-items: center;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.05em;
+  color: var(--ink);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.85);
+}
+.fishtank-embed-ft {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 10px;
+  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-2);
+  background: var(--bg-2);
+}
+.fishtank-embed-ft-cta { color: var(--ok); font-weight: 700; }
+.fishtank-embed--state .fishtank-embed-empty {
+  padding: 28px 14px;
+  font-size: 11px; line-height: 1.7; letter-spacing: 0.04em;
+  color: var(--ink-2);
+  text-align: center;
+}
+
 /* ── KPI STRIP ── */
 .kpi-strip {
   display: grid; grid-template-columns: repeat(4, 1fr);
@@ -748,6 +825,9 @@ body {
   .splash-left { border-right: none; border-bottom: 1px solid var(--rule-2); padding: 20px 16px; }
   .splash-right { padding: 16px; }
   .splash-hero { font-size: 72px; }
+  .fishtank-embed-seat { height: 100px; }
+  .fishtank-embed-seat-name { font-size: 9px; }
+  .fishtank-embed-seat-stats { font-size: 10px; }
 
   .kpi-strip { grid-template-columns: 1fr 1fr; }
   .kpi-strip > div:nth-child(2) { border-right: none; }
