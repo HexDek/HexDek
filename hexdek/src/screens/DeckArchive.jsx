@@ -56,6 +56,8 @@ export default function DeckArchive() {
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
+  const [isFriend, setIsFriend] = useState(false)
+  const [friendBusy, setFriendBusy] = useState(false)
   const { elo } = useLiveSocket()
   const { user } = useAuth()
 
@@ -88,6 +90,34 @@ export default function DeckArchive() {
       setTimeout(() => setShareToast(null), 2000)
     } finally {
       setSavingName(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!canFriend) { setIsFriend(false); return }
+    let cancelled = false
+    api.listFriends(userOwnerSlug)
+      .then(r => { if (!cancelled) setIsFriend((r.friends || []).includes(owner.toLowerCase())) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [canFriend, owner, userOwnerSlug])
+
+  const toggleFriend = async () => {
+    if (!canFriend || friendBusy) return
+    setFriendBusy(true)
+    const target = owner.toLowerCase()
+    const wasFriend = isFriend
+    setIsFriend(!wasFriend) // optimistic
+    try {
+      if (wasFriend) await api.removeFriend(target, userOwnerSlug)
+      else           await api.addFriend(target, userOwnerSlug)
+      trackEvent(wasFriend ? 'remove_friend' : 'add_friend', { target })
+    } catch {
+      setIsFriend(wasFriend) // rollback
+      setShareToast(wasFriend ? 'UNFRIEND FAILED' : 'ADD FRIEND FAILED')
+      setTimeout(() => setShareToast(null), 2000)
+    } finally {
+      setFriendBusy(false)
     }
   }
 
@@ -187,6 +217,7 @@ export default function DeckArchive() {
     ? (localStorage.getItem('hexdek_owner') || user.displayName?.toLowerCase() || user.email?.split('@')[0]?.split('.')[0] || '')
     : ''
   const isOwner = !!owner && !!userOwnerSlug && userOwnerSlug === owner.toLowerCase()
+  const canFriend = !!user && !!userOwnerSlug && !!owner && !isOwner
   const cardCount = deck?.card_count || deck?.cards?.length || 99
   const userBracket = deck?.bracket || '?'
   const wbs = analysis?.bracket || userBracket
@@ -371,12 +402,25 @@ export default function DeckArchive() {
         <div className="deck-hero__scrim" />
         <div className="deck-hero__corner deck-hero__corner--tl">04.HERO / / {pageTheme.label}</div>
         <div className="deck-hero__corner deck-hero__corner--tr">{owner?.toUpperCase()} / / {id}</div>
-        {owner && id && (
-          <button type="button" className="deck-hero__share" onClick={handleShare} title="Copy shareable link">
-            <span>SHARE</span>
-            <span className="arr">↗</span>
-          </button>
-        )}
+        <div className="deck-hero__actions">
+          {canFriend && (
+            <button
+              type="button"
+              className={`deck-hero__friend ${isFriend ? 'is-on' : ''}`}
+              onClick={toggleFriend}
+              disabled={friendBusy}
+              title={isFriend ? `Unfriend ${owner.toUpperCase()}` : `Add ${owner.toUpperCase()} as a friend`}
+            >
+              <span>{isFriend ? '✓ FRIEND' : '+ ADD FRIEND'}</span>
+            </button>
+          )}
+          {owner && id && (
+            <button type="button" className="deck-hero__share" onClick={handleShare} title="Copy shareable link">
+              <span>SHARE</span>
+              <span className="arr">↗</span>
+            </button>
+          )}
+        </div>
         {shareToast && (
           <div className="deck-hero__toast" role="status" aria-live="polite">{shareToast}</div>
         )}

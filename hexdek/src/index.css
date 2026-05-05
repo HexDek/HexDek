@@ -518,8 +518,29 @@ body {
   line-height: 1.55;
   margin-top: 4px;
 }
-.deck-hero__share {
+.deck-hero__actions {
   position: absolute; bottom: 14px; right: 14px;
+  z-index: 3;
+  display: inline-flex; gap: 8px; align-items: center;
+}
+.deck-hero__friend {
+  display: inline-flex; align-items: center;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  font-family: inherit; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.12em;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+}
+.deck-hero__friend:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.deck-hero__friend:active { transform: translateY(1px); }
+.deck-hero__friend:disabled { cursor: progress; opacity: 0.6; }
+.deck-hero__friend.is-on { background: var(--accent); color: var(--inv-ink); }
+.deck-hero__friend.is-on:hover { background: color-mix(in srgb, var(--accent) 80%, transparent); }
+.deck-hero__share {
+  position: relative;
   z-index: 3;
   display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 14px;
@@ -559,7 +580,8 @@ body {
   .deck-hero__rename { font-size: 16px; padding: 2px 4px; }
   .deck-hero__body { padding: 12px 16px 14px; margin-left: 8px; }
   .deck-hero__summary { display: none; }
-  .deck-hero__share { bottom: 10px; right: 10px; padding: 6px 10px; font-size: 10px; }
+  .deck-hero__actions { bottom: 10px; right: 10px; gap: 6px; }
+  .deck-hero__share, .deck-hero__friend { padding: 6px 10px; font-size: 10px; }
   .deck-hero__toast { bottom: 46px; right: 10px; }
 }
 

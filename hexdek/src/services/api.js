@@ -60,4 +60,7 @@ export const api = {
   getGauntlet: (id) => request(`/api/gauntlet/${id}`),
   getDonationsSummary: () => request('/api/donations/summary'),
   search: (q, limit = 6) => request(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  listFriends: (asSlug) => request(`/api/friends?as=${encodeURIComponent(asSlug)}`),
+  addFriend: (target, asSlug) => request(`/api/friends/${encodeURIComponent(target)}?as=${encodeURIComponent(asSlug)}`, { method: 'POST' }),
+  removeFriend: (target, asSlug) => request(`/api/friends/${encodeURIComponent(target)}?as=${encodeURIComponent(asSlug)}`, { method: 'DELETE' }),
 }

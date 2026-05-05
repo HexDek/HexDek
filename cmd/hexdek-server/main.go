@@ -25,6 +25,7 @@ import (
 	"github.com/hexdek/hexdek/internal/hub"
 	"github.com/hexdek/hexdek/internal/moxfield"
 	"github.com/hexdek/hexdek/internal/oracle"
+	"github.com/hexdek/hexdek/internal/friends"
 	"github.com/hexdek/hexdek/internal/party"
 	"github.com/hexdek/hexdek/internal/pincer"
 	"github.com/hexdek/hexdek/internal/shuffle"
@@ -143,6 +144,13 @@ func main() {
 		log.Fatalf("pincer init: %v", err)
 	}
 	pincerTracker.Register(mux)
+
+	// Friends: owner-keyed bidirectional friend list.
+	friendTracker, err := friends.New(database)
+	if err != nil {
+		log.Fatalf("friends init: %v", err)
+	}
+	friendTracker.Register(mux)
 
 	log.Printf("listening on %s", *addr)
 	log.Printf("Ship 1: curl http://%s/game/test/library/top/3", *addr)
