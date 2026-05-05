@@ -142,7 +142,7 @@ Each plan adjusts the evaluation weights:
 
 ---
 
-## Level 3: Genetic Amiibo (Per-Deck Evolution)
+## Level 3: Genetic Curse (Per-Deck Evolution)
 
 > *"Evolution is smarter than you."* — Leslie Orgel
 > *"We don't need to understand the search space. We just need enough iterations."*
@@ -155,7 +155,7 @@ tuned for all decks — a population per deck where mutations that win survive.
 ### DNA Schema
 
 ```go
-type AmiiboDNA struct {
+type CurseDNA struct {
     DeckKey         string    // which deck this belongs to
     Generation      int       // evolution counter
     GamesPlayed     int       // games this individual has played
@@ -193,13 +193,13 @@ At 35K games/min, 1,196 decks, 4 players/game:
 ### Storage
 
 ```
-data/amiibo/{deck_key}.json — 8 × ~200 bytes = 1.6 KB per deck
+data/curse/{deck_key}.json — 8 × ~200 bytes = 1.6 KB per deck
 1,196 decks = ~2 MB total
 ```
 
 ### Product Feature
 
-Users upload a deck → watch the Amiibo evolve a unique playstyle over thousands
+Users upload a deck → watch the Curse evolve a unique playstyle over thousands
 of games. Serializable, shareable. "My Muldrotha plays greedy-control because
 that's what 50,000 games of natural selection discovered."
 
@@ -208,7 +208,7 @@ that's what 50,000 games of natural selection discovered."
 ```go
 for i := 0; i < seats; i++ {
     dk := deckKeys[i]
-    dna := sm.amiiboPool[dk].SelectForGame(rng)
+    dna := sm.cursePool[dk].SelectForGame(rng)
     gs.Seats[i].Hat = hat.NewYggdrasilHatWithDNA(dna, freya[dk])
 }
 ```
@@ -231,7 +231,7 @@ Three decision tiers, fired based on complexity:
 ```
 Mjolnir (Stage 1) — Fast heuristic. 90% of decisions.
     Deterministic, zero-allocation. "Play this land, attack that player."
-    Current YggdrasilHat budget-0 path, refined by Amiibo parameters.
+    Current YggdrasilHat budget-0 path, refined by Curse parameters.
 
 Gungnir (Stage 2) — SAT + evaluator. 9% of decisions.
     Fires at uncertainty points: "Should I counter this spell?"
@@ -340,9 +340,9 @@ Neural net + MCTS + self-play. The grinder becomes the training ground:
 
 ### Genetic Exploration → Neural Distillation
 
-The Amiibo genetic system explores the parameter space cheaply.
+The Curse genetic system explores the parameter space cheaply.
 The neural network distills that exploration into a general model.
-The model feeds back into better Amiibo starting points.
+The model feeds back into better Curse starting points.
 Ouroboros at the highest level.
 
 ### Timeline
@@ -399,7 +399,7 @@ Freya (deck analysis) → YggdrasilHat (play decisions) → Heimdall (observe)
 ### Skill Loop (How to do it)
 ```
 YggdrasilHat (play with DNA) → Heimdall (observe win/loss)
-    → Amiibo (evolve parameters) → YggdrasilHat (play with better DNA) → ...
+    → Curse (evolve parameters) → YggdrasilHat (play with better DNA) → ...
 ```
 
 ### Immune System (What's broken)
@@ -423,7 +423,7 @@ into deck analysis).
 | **3** | Huginn → Freya pipe | 2-3 days | Closes the knowledge loop |
 | **4** | Combo Sequencer (Level 2) | 2-4 weeks | **Biggest winrate impact** |
 | **5** | Hat State Machine (Level 2.5) | 2-3 weeks | Mid-game plan adaptation |
-| **6** | Genetic Amiibo (Level 3) | 2-3 weeks | Per-deck personality evolution |
+| **6** | Genetic Curse (Level 3) | 2-3 weeks | Per-deck personality evolution |
 | **7** | GA4 telemetry | 2-3 days | Health monitoring |
 | **8** | Staged architecture (Level 4) | 1-2 months | Efficiency + bracket-aware play |
 | **9** | MCTS (Level 5) | 1-2 months | Uncertain decision quality |
@@ -444,7 +444,7 @@ To make the rating scale meaningful, we need floor and ceiling anchors:
 sub-5%) is the absolute statistical baseline. If TrueSkill can't differentiate
 a 99-land pile from a real deck within 50 games, convergence is broken.
 
-**Ceiling:** Best-tuned B5 combo deck with optimized Amiibo DNA after 10K+
+**Ceiling:** Best-tuned B5 combo deck with optimized Curse DNA after 10K+
 generations. This sets the upper bound of what the engine can achieve.
 
 Both extremes stress-test the rating system and provide context for every
@@ -457,13 +457,13 @@ deck in between.
 A player uploads their Commander deck. Within minutes:
 - Freya analyzes it (combos, mana, archetype, role assignments)
 - The grinder runs thousands of games with it
-- Amiibo evolves an optimal playstyle
+- Curse evolves an optimal playstyle
 - TrueSkill places it accurately on the power scale
 - The player watches their deck play — making decisions they never considered
 - In their language, with narrative commentary, accessible to anyone on earth
 
 The engine learns from every game. Every bug makes it stronger (Muninn).
 Every pattern makes it smarter (Huginn → Freya). Every generation makes it
-more skilled (Amiibo). The ouroboros eats its tail and grows.
+more skilled (Curse). The ouroboros eats its tail and grows.
 
 *"Find what's broken. Then forget about it."* — except the engine never forgets.

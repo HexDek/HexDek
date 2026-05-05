@@ -11,7 +11,7 @@ import (
 func TestHarvestHighFitness_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
 	cfg := DistillationConfig{
-		AmiiboDir:         dir,
+		CurseDir:         dir,
 		TrainingDir:       filepath.Join(dir, "training"),
 		FitnessQuartile:   0.25,
 		MinPoolsForSeed:   5,
@@ -48,7 +48,7 @@ func TestHarvestHighFitness_FiltersLowGen(t *testing.T) {
 	SavePool(dir, &pool)
 
 	cfg := DistillationConfig{
-		AmiiboDir:         dir,
+		CurseDir:         dir,
 		TrainingDir:       filepath.Join(dir, "training"),
 		FitnessQuartile:   0.25,
 		MinPoolsForSeed:   5,
@@ -77,14 +77,14 @@ func TestHarvestHighFitness_SelectsTopQuartile(t *testing.T) {
 		pool.GenCount = 5
 		for j := range pool.Population {
 			// Spread fitness: deck-a has lowest, deck-d has highest.
-			pool.Population[j].Fitness = float64(i*AmiiboPopSize+j+1) / float64(4*AmiiboPopSize)
+			pool.Population[j].Fitness = float64(i*CursePopSize+j+1) / float64(4*CursePopSize)
 			pool.Population[j].GamesPlayed = 50
 		}
 		SavePool(dir, &pool)
 	}
 
 	cfg := DistillationConfig{
-		AmiiboDir:         dir,
+		CurseDir:         dir,
 		TrainingDir:       filepath.Join(dir, "training"),
 		FitnessQuartile:   0.25,
 		MinPoolsForSeed:   2,
@@ -99,7 +99,7 @@ func TestHarvestHighFitness_SelectsTopQuartile(t *testing.T) {
 		t.Fatalf("HarvestHighFitness: %v", err)
 	}
 
-	totalDNA := 4 * AmiiboPopSize
+	totalDNA := 4 * CursePopSize
 	expectedHarvest := int(float64(totalDNA) * 0.25)
 	// Allow +-1 due to ceiling.
 	if len(manifest.HarvestedDNA) < expectedHarvest-1 || len(manifest.HarvestedDNA) > expectedHarvest+1 {
@@ -127,7 +127,7 @@ func TestHarvestHighFitness_WithStrategyLookup(t *testing.T) {
 	SavePool(dir, &pool)
 
 	cfg := DistillationConfig{
-		AmiiboDir:         dir,
+		CurseDir:         dir,
 		TrainingDir:       filepath.Join(dir, "training"),
 		FitnessQuartile:   0.50,
 		MinPoolsForSeed:   1,
@@ -162,8 +162,8 @@ func TestHarvestHighFitness_WithStrategyLookup(t *testing.T) {
 	}
 }
 
-func TestDNAParamsFromAmiibo(t *testing.T) {
-	dna := AmiiboDNA{
+func TestDNAParamsFromCurse(t *testing.T) {
+	dna := CurseDNA{
 		Aggression:       0.1,
 		ComboPat:         0.2,
 		ThreatParanoia:   0.3,
@@ -172,10 +172,10 @@ func TestDNAParamsFromAmiibo(t *testing.T) {
 		DrainAffinity:    0.6,
 		ArtifactAffinity: 0.7,
 	}
-	params := DNAParamsFromAmiibo(&dna)
+	params := DNAParamsFromCurse(&dna)
 	expected := [7]float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7}
 	if params != expected {
-		t.Errorf("DNAParamsFromAmiibo = %v, want %v", params, expected)
+		t.Errorf("DNAParamsFromCurse = %v, want %v", params, expected)
 	}
 }
 
@@ -200,7 +200,7 @@ func TestFitnessToWeight(t *testing.T) {
 }
 
 func TestEnrichWithDNA(t *testing.T) {
-	dna := AmiiboDNA{
+	dna := CurseDNA{
 		Aggression:       0.8,
 		ComboPat:         0.3,
 		ThreatParanoia:   0.6,
@@ -265,7 +265,7 @@ func TestSeedDNAFromManifest_ArchetypeMatch(t *testing.T) {
 	dm.manifest = &DistillationManifest{
 		HarvestedDNA: []HighFitnessDNA{
 			{
-				DNA: AmiiboDNA{
+				DNA: CurseDNA{
 					Aggression: 0.2, ComboPat: 0.9, ThreatParanoia: 0.3,
 					ResourceGreed: 0.8, PoliticalMemory: 0.1, DrainAffinity: 0.4,
 					ArtifactAffinity: 0.5,
@@ -274,7 +274,7 @@ func TestSeedDNAFromManifest_ArchetypeMatch(t *testing.T) {
 				Bracket:   4,
 			},
 			{
-				DNA: AmiiboDNA{
+				DNA: CurseDNA{
 					Aggression: 0.4, ComboPat: 0.7, ThreatParanoia: 0.5,
 					ResourceGreed: 0.6, PoliticalMemory: 0.3, DrainAffinity: 0.2,
 					ArtifactAffinity: 0.3,
@@ -283,7 +283,7 @@ func TestSeedDNAFromManifest_ArchetypeMatch(t *testing.T) {
 				Bracket:   4,
 			},
 			{
-				DNA: AmiiboDNA{
+				DNA: CurseDNA{
 					Aggression: 0.9, ComboPat: 0.1, ThreatParanoia: 0.8,
 					ResourceGreed: 0.2, PoliticalMemory: 0.7, DrainAffinity: 0.1,
 					ArtifactAffinity: 0.1,
@@ -316,7 +316,7 @@ func TestSeedDNAFromManifest_BracketFallback(t *testing.T) {
 	dm.manifest = &DistillationManifest{
 		HarvestedDNA: []HighFitnessDNA{
 			{
-				DNA:       AmiiboDNA{Aggression: 0.7, ComboPat: 0.3},
+				DNA:       CurseDNA{Aggression: 0.7, ComboPat: 0.3},
 				Archetype: ArchetypeAggro,
 				Bracket:   3,
 			},
@@ -340,7 +340,7 @@ func TestInitPoolSeeded(t *testing.T) {
 	dm.manifest = &DistillationManifest{
 		HarvestedDNA: []HighFitnessDNA{
 			{
-				DNA: AmiiboDNA{
+				DNA: CurseDNA{
 					Aggression: 0.3, ComboPat: 0.8, ThreatParanoia: 0.5,
 					ResourceGreed: 0.7, PoliticalMemory: 0.4, DrainAffinity: 0.6,
 					ArtifactAffinity: 0.2,
@@ -384,7 +384,7 @@ func TestSaveAndLoadDistillationManifest(t *testing.T) {
 		TopFitness:  0.95,
 		HarvestedDNA: []HighFitnessDNA{
 			{
-				DNA:       AmiiboDNA{Aggression: 0.5, Fitness: 0.9},
+				DNA:       CurseDNA{Aggression: 0.5, Fitness: 0.9},
 				Archetype: ArchetypeMidrange,
 				Bracket:   3,
 				GenCount:  7,
@@ -421,7 +421,7 @@ func TestTryLoadManifest(t *testing.T) {
 	os.MkdirAll(trainingDir, 0755)
 
 	cfg := DistillationConfig{
-		AmiiboDir:       filepath.Join(dir, "amiibo"),
+		CurseDir:       filepath.Join(dir, "curse"),
 		TrainingDir:     trainingDir,
 		FitnessQuartile: 0.25,
 		CycleInterval:   time.Minute,
@@ -438,7 +438,7 @@ func TestTryLoadManifest(t *testing.T) {
 	manifest := &DistillationManifest{
 		TotalPools: 5,
 		HarvestedDNA: []HighFitnessDNA{
-			{DNA: AmiiboDNA{Aggression: 0.6}, Archetype: ArchetypeAggro},
+			{DNA: CurseDNA{Aggression: 0.6}, Archetype: ArchetypeAggro},
 		},
 	}
 	path := filepath.Join(trainingDir, "distillation_manifest.json")
@@ -456,7 +456,7 @@ func TestTryLoadManifest(t *testing.T) {
 func TestTryCycle_RespectsInterval(t *testing.T) {
 	dir := t.TempDir()
 	cfg := DistillationConfig{
-		AmiiboDir:         filepath.Join(dir, "amiibo"),
+		CurseDir:         filepath.Join(dir, "curse"),
 		TrainingDir:       filepath.Join(dir, "training"),
 		FitnessQuartile:   0.25,
 		MinPoolsForSeed:   1,
@@ -464,7 +464,7 @@ func TestTryCycle_RespectsInterval(t *testing.T) {
 		CycleInterval:     time.Hour, // long interval
 		ReseedThreshold:   0.35,
 	}
-	os.MkdirAll(cfg.AmiiboDir, 0755)
+	os.MkdirAll(cfg.CurseDir, 0755)
 	os.MkdirAll(cfg.TrainingDir, 0755)
 
 	rng := rand.New(rand.NewSource(42))
@@ -521,8 +521,8 @@ func TestAppendDNAEnrichedSamples(t *testing.T) {
 
 func TestReseedUnderperformers(t *testing.T) {
 	dir := t.TempDir()
-	amiiboDir := filepath.Join(dir, "amiibo")
-	os.MkdirAll(amiiboDir, 0755)
+	curseDir := filepath.Join(dir, "curse")
+	os.MkdirAll(curseDir, 0755)
 
 	rng := rand.New(rand.NewSource(42))
 
@@ -533,10 +533,10 @@ func TestReseedUnderperformers(t *testing.T) {
 		pool.Population[i].Fitness = 0.1 // very low
 		pool.Population[i].GamesPlayed = 50
 	}
-	SavePool(amiiboDir, &pool)
+	SavePool(curseDir, &pool)
 
 	cfg := DistillationConfig{
-		AmiiboDir:         amiiboDir,
+		CurseDir:         curseDir,
 		TrainingDir:       filepath.Join(dir, "training"),
 		FitnessQuartile:   0.25,
 		MinPoolsForSeed:   1,
@@ -551,7 +551,7 @@ func TestReseedUnderperformers(t *testing.T) {
 	dm.manifest = &DistillationManifest{
 		HarvestedDNA: []HighFitnessDNA{
 			{
-				DNA: AmiiboDNA{
+				DNA: CurseDNA{
 					Aggression: 0.7, ComboPat: 0.6, ThreatParanoia: 0.5,
 					ResourceGreed: 0.4, PoliticalMemory: 0.3, DrainAffinity: 0.8,
 					ArtifactAffinity: 0.9,
@@ -569,7 +569,7 @@ func TestReseedUnderperformers(t *testing.T) {
 	}
 
 	// Reload pool and verify some members were replaced.
-	loaded, err := LoadPool(amiiboDir, "bad-deck", rng)
+	loaded, err := LoadPool(curseDir, "bad-deck", rng)
 	if err != nil {
 		t.Fatalf("LoadPool: %v", err)
 	}
@@ -581,8 +581,8 @@ func TestReseedUnderperformers(t *testing.T) {
 			resetCount++
 		}
 	}
-	if resetCount < AmiiboPopSize/2 {
-		t.Errorf("expected at least %d reset members, got %d", AmiiboPopSize/2, resetCount)
+	if resetCount < CursePopSize/2 {
+		t.Errorf("expected at least %d reset members, got %d", CursePopSize/2, resetCount)
 	}
 }
 

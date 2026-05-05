@@ -145,7 +145,7 @@ After each game completes, the tournament runner executes this sequence:
 3. **Training Collector** finalizes samples with placement scores
 4. **Tesla** enriches samples with pivot distance
 5. **Self-Play Manager** writes enriched samples, checks training threshold
-6. **Amiibo Pool** records result, triggers evolution if threshold met
+6. **Curse Pool** records result, triggers evolution if threshold met
 7. **Heimdall Observer** records seed + routes observation to Huginn/Muninn
 8. **Ive** composes narrative (showmatch path only)
 
@@ -182,9 +182,9 @@ See [Tool - Muninn](Tool%20-%20Muninn.md) for details.
 
 The learning loop creates three feedback cycles:
 
-### Cycle 1: Amiibo Evolution
+### Cycle 1: Curse Evolution
 ```
-Game → placement score → AmiiboPool.RecordResult()
+Game → placement score → CursePool.RecordResult()
     → evolve() every 100 games
     → DimStats.WeightCorrections() → next game's eval weights
 ```
@@ -218,4 +218,4 @@ Timescale: hundreds of games per new Tier 3 pattern (~hours).
 - [Neural Evaluator](Neural%20Evaluator.md) — training data consumer
 - [Self-Play Loop](Self-Play%20Loop.md) — training coordination
 - [Ive Spectator](Ive%20Spectator.md) — narrative generation
-- [Genetic Amiibo](Genetic%20Amiibo.md) — per-deck evolution
+- [Genetic Curse](Genetic%20Curse.md) — per-deck evolution

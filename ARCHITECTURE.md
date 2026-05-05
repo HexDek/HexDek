@@ -105,7 +105,7 @@ Source: `internal/hat/` — single unified brain, every decision flows through o
 | **1** | YggdrasilHat core | 20-dim board evaluator, political multiplayer, budget-controlled search |
 | **2** | Combo Sequencer | SAT constraint solver for multi-card combo execution |
 | **2.5** | Hat State Machine | 6 game plans (Develop/Assemble/Execute/Disrupt/Pivot/Defend) with transitions |
-| **3** | Genetic Amiibo | Per-deck DNA evolution — 7-param genome, population of 8, persisted per deck |
+| **3** | Genetic Curse | Per-deck DNA evolution — 7-param genome, population of 8, persisted per deck |
 | **4** | IS-MCTS | Information-Set Monte Carlo tree search with determinization, 3 rollouts/candidate |
 | **5** | Neural Evaluator | 92-dim MLP, trained via self-play, 80/20 heuristic/neural blend |
 | **6** | Self-Play Loop | Auto training: sample threshold → PyTorch → hot-reload Go inference |
@@ -215,7 +215,7 @@ Production deployment: DARKSTAR (Ryzen 9 9950X, 64GB) runs the engine. MISTY hos
 | `scripts/mtg_ast.py` | Typed frozen-dataclass AST schema |
 | `scripts/extensions/` | ~50 grammar extension modules |
 | `internal/gameengine/` | Go game engine (production) |
-| `internal/hat/` | AI system (Yggdrasil, Amiibo, neural eval) |
+| `internal/hat/` | AI system (Yggdrasil, Curse, neural eval) |
 | `internal/tournament/` | Tournament runner, round-robin, swiss |
 | `internal/heimdall/` | Observation routing, seed buffering |
 | `internal/muninn/` | Persistent gap/crash memory |
@@ -226,4 +226,4 @@ Production deployment: DARKSTAR (Ryzen 9 9950X, 64GB) runs the engine. MISTY hos
 | `data/decks/` | Deck files (owner/deck.json) |
 | `data/rules/` | Scryfall data, comp rules, coverage reports |
 | `data/training/` | Neural evaluator training data + model |
-| `data/amiibo/` | Per-deck Amiibo DNA pools |
+| `data/curse/` | Per-deck Curse DNA pools |

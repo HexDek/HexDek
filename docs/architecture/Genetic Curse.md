@@ -1,16 +1,16 @@
-# Genetic Amiibo
+# Genetic Curse
 
-> Source: `internal/hat/amiibo.go` (377 lines)
+> Source: `internal/hat/curse.go` (377 lines)
 > Status: **Production** — evolving per-deck DNA across all game paths
 
-Genetic Amiibo is HexDek's per-deck personality evolution system. Each deck maintains a population of 8 DNA variants that compete, mutate, and evolve based on game outcomes. Over hundreds of games, each deck's Amiibo converges on the hat parameters that work best for *that specific pile*.
+Genetic Curse is HexDek's per-deck personality evolution system. Each deck maintains a population of 8 DNA variants that compete, mutate, and evolve based on game outcomes. Over hundreds of games, each deck's Curse converges on the hat parameters that work best for *that specific pile*.
 
-Named after Nintendo's Amiibo figures — physical objects that learn and adapt to their owner's playstyle.
+Named after Nintendo's Curse figures — physical objects that learn and adapt to their owner's playstyle.
 
 ## DNA Schema
 
 ```go
-type AmiiboDNA struct {
+type CurseDNA struct {
     DeckKey         string
     Generation      int
     GamesPlayed     int
@@ -34,17 +34,17 @@ Each parameter maps directly to a hat behavior. `Aggression` modulates attack th
 Each deck gets a pool of 8 DNA variants:
 
 ```go
-const AmiiboPopSize = 8
+const CursePopSize = 8
 ```
 
 Before each game, `SelectForGame()` picks one variant via fitness-proportional roulette selection — fitter variants get picked more often, but all variants get chances. This prevents premature convergence while still biasing toward winners.
 
 ## Evolution Loop
 
-Evolution triggers every 100 games (`AmiiboEvolveAt = 100`):
+Evolution triggers every 100 games (`CurseEvolveAt = 100`):
 
 1. Sort population by fitness (descending)
-2. Kill the bottom 2 (`AmiiboKillCount = 2`)
+2. Kill the bottom 2 (`CurseKillCount = 2`)
 3. Clone the top 2 into the empty slots
 4. Apply Gaussian mutation (σ = 0.05) to the clones
 5. Every 10 generations, inject one fully random immigrant to prevent convergent collapse
@@ -87,30 +87,30 @@ type DimensionStats struct {
 }
 ```
 
-After each game, `RecordGame(dimMeans, outcome)` updates the EMA (α = 0.04, ~25-game half-life). `WeightCorrections()` returns per-dimension multiplicative adjustments (±20% swing) based on Pearson correlation. If BoardPresence correlates negatively with winning for a voltron deck, the Amiibo learns to weight it down.
+After each game, `RecordGame(dimMeans, outcome)` updates the EMA (α = 0.04, ~25-game half-life). `WeightCorrections()` returns per-dimension multiplicative adjustments (±20% swing) based on Pearson correlation. If BoardPresence correlates negatively with winning for a voltron deck, the Curse learns to weight it down.
 
 These corrections are applied at hat construction, on top of the archetype defaults and Freya's static weights.
 
 ## Persistence
 
-Each deck's pool saves to `data/amiibo/<deckkey>.json`. Auto-saved after every evolution step. Loaded at server startup.
+Each deck's pool saves to `data/curse/<deckkey>.json`. Auto-saved after every evolution step. Loaded at server startup.
 
 ```go
-func SavePool(dir string, pool *AmiiboPool) error
-func LoadPool(dir, deckKey string) (*AmiiboPool, error)
-func SaveAllPools(dir string, pools map[string]*AmiiboPool) error
-func LoadAllPools(dir string) (map[string]*AmiiboPool, error)
+func SavePool(dir string, pool *CursePool) error
+func LoadPool(dir, deckKey string) (*CursePool, error)
+func SaveAllPools(dir string, pools map[string]*CursePool) error
+func LoadAllPools(dir string) (map[string]*CursePool, error)
 ```
 
 ## Integration
 
 - Tournament runner calls `SelectForGame()` pre-game, `RecordResult()` post-game
-- `AmiiboDNA` fields read by YggdrasilHat via `h.DNA` to modulate real-time decisions
+- `CurseDNA` fields read by YggdrasilHat via `h.DNA` to modulate real-time decisions
 - `DimStats.WeightCorrections()` feeds the evaluator at game start
 - `PlacementScore()` uses bracket-normalized fitness when bracket is set
 
 ## Related Docs
 
 - [YggdrasilHat](YggdrasilHat.md) — consumes DNA parameters
-- [Eval Weights and Archetypes](Eval%20Weights%20and%20Archetypes.md) — base weights that Amiibo modulates
+- [Eval Weights and Archetypes](Eval%20Weights%20and%20Archetypes.md) — base weights that Curse modulates
 - [Self-Play Loop](Self-Play%20Loop.md) — training loop that runs alongside evolution

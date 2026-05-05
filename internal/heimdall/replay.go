@@ -127,7 +127,7 @@ func ReadSeeds(path string, limit int) ([]GameSeed, error) {
 // an Observation that is forwarded to the Observer's sinks.
 //
 // The replay uses a simplified hat (YggdrasilHat with nil strategy, low
-// budget) instead of the full Amiibo/ELO-weighted hat used during live
+// budget) instead of the full Curse/ELO-weighted hat used during live
 // grinding. This is intentional: the replay system exists to extract
 // observations, not to produce tournament-accurate results. The game
 // outcome is deterministic given the same RNG seed and deck ordering
@@ -174,7 +174,7 @@ func ReplayWithObservation(rc *ReplayContext, seed GameSeed, obs *Observer) erro
 
 	// Assign simplified hats — YggdrasilHat with nil strategy and low
 	// budget. This produces reasonable play without needing Freya profiles
-	// or Amiibo DNA.
+	// or Curse DNA.
 	for i := 0; i < replaySeats; i++ {
 		gs.Seats[i].Hat = hat.NewYggdrasilHat(nil, 30)
 	}

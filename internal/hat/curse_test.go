@@ -29,7 +29,7 @@ func TestSelectForGame(t *testing.T) {
 	pool := InitPool("test", rng)
 
 	pool.Population[0].Fitness = 0.9
-	for i := 1; i < AmiiboPopSize; i++ {
+	for i := 1; i < CursePopSize; i++ {
 		pool.Population[i].Fitness = 0.01
 	}
 
@@ -77,17 +77,17 @@ func TestEvolution_TriggersAt100(t *testing.T) {
 	pool := InitPool("test", rng)
 
 	// Give population a clear fitness gradient so evolution has something to work with.
-	for i := 0; i < AmiiboPopSize; i++ {
-		pool.Population[i].Fitness = float64(i+1) / float64(AmiiboPopSize)
+	for i := 0; i < CursePopSize; i++ {
+		pool.Population[i].Fitness = float64(i+1) / float64(CursePopSize)
 	}
 
 	// Record 100 games to trigger evolution.
-	for i := 0; i < AmiiboEvolveAt; i++ {
+	for i := 0; i < CurseEvolveAt; i++ {
 		score := 0.0
 		if i%2 == 0 {
 			score = 1.0
 		}
-		pool.RecordResult(i%AmiiboPopSize, score)
+		pool.RecordResult(i%CursePopSize, score)
 	}
 
 	if pool.GameCount != 0 {
@@ -148,7 +148,7 @@ func TestSaveAndLoadAllPools(t *testing.T) {
 	dir := t.TempDir()
 	rng := rand.New(rand.NewSource(42))
 
-	pools := make(map[string]*AmiiboPool)
+	pools := make(map[string]*CursePool)
 	for _, key := range []string{"deck-a", "deck-b", "deck-c"} {
 		p := InitPool(key, rng)
 		pools[key] = &p
@@ -187,7 +187,7 @@ func TestLoadAllPools_EmptyDir(t *testing.T) {
 
 func TestLoadAllPools_NonexistentDir(t *testing.T) {
 	rng := rand.New(rand.NewSource(42))
-	pools, err := LoadAllPools("/tmp/nonexistent-amiibo-dir-12345", rng)
+	pools, err := LoadAllPools("/tmp/nonexistent-curse-dir-12345", rng)
 	if err != nil {
 		t.Fatalf("LoadAllPools nonexistent dir should not error: %v", err)
 	}

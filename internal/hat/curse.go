@@ -10,8 +10,8 @@ import (
 	"strings"
 )
 
-// AmiiboDNA holds the evolvable personality parameters for a single deck.
-type AmiiboDNA struct {
+// CurseDNA holds the evolvable personality parameters for a single deck.
+type CurseDNA struct {
 	DeckKey         string  `json:"deck_key"`
 	Generation      int     `json:"generation"`
 	GamesPlayed     int     `json:"games_played"`
@@ -27,11 +27,11 @@ type AmiiboDNA struct {
 }
 
 const (
-	AmiiboPopSize    = 8
-	AmiiboEvolveAt   = 100  // games per deck before evolution step
-	AmiiboMutationSD = 0.05 // gaussian mutation standard deviation
-	AmiiboKillCount  = 2    // bottom N killed per evolution
-	amiiboImmigrationInterval = 10 // every N generations, inject fresh random DNA
+	CursePopSize    = 8
+	CurseEvolveAt   = 100  // games per deck before evolution step
+	CurseMutationSD = 0.05 // gaussian mutation standard deviation
+	CurseKillCount  = 2    // bottom N killed per evolution
+	curseImmigrationInterval = 10 // every N generations, inject fresh random DNA
 	dimStatsAlpha    = 0.04 // EMA decay for dimension stats (~25-game half-life)
 	dimStatsMinN     = 20   // minimum games before applying corrections
 )
@@ -107,10 +107,10 @@ func (ds *DimensionStats) WeightCorrections() [NumDimensions]float64 {
 	return corr
 }
 
-// AmiiboPool maintains a population of DNA variants for a single deck.
-type AmiiboPool struct {
+// CursePool maintains a population of DNA variants for a single deck.
+type CursePool struct {
 	DeckKey    string                      `json:"deck_key"`
-	Population [AmiiboPopSize]AmiiboDNA    `json:"population"`
+	Population [CursePopSize]CurseDNA    `json:"population"`
 	GameCount  int                         `json:"game_count"`
 	Bracket    int                         `json:"bracket"`    // power bracket (1-5) for fitness normalization
 	GenCount   int                         `json:"gen_count"`  // total generations evolved
@@ -120,12 +120,12 @@ type AmiiboPool struct {
 
 // SetRNG assigns the random source used for selection and evolution.
 // Must be called after deserializing a pool from JSON.
-func (pool *AmiiboPool) SetRNG(rng *rand.Rand) {
+func (pool *CursePool) SetRNG(rng *rand.Rand) {
 	pool.rng = rng
 }
 
 // SelectForGame picks a DNA variant using fitness-proportional selection.
-func (pool *AmiiboPool) SelectForGame() (dna *AmiiboDNA, idx int) {
+func (pool *CursePool) SelectForGame() (dna *CurseDNA, idx int) {
 	totalFitness := 0.0
 	for i := range pool.Population {
 		f := pool.Population[i].Fitness
@@ -146,7 +146,7 @@ func (pool *AmiiboPool) SelectForGame() (dna *AmiiboDNA, idx int) {
 			return &pool.Population[i], i
 		}
 	}
-	return &pool.Population[AmiiboPopSize-1], AmiiboPopSize - 1
+	return &pool.Population[CursePopSize-1], CursePopSize - 1
 }
 
 // PlacementScore converts a 4-player finish position to a fitness value.
@@ -161,7 +161,7 @@ func PlacementScore(placement, totalPlayers int) float64 {
 // RecordResult updates fitness after a game and possibly triggers evolution.
 // score is a [0,1] fitness value — use PlacementScore() for 4-player games
 // instead of binary 0/1 to reduce variance.
-func (pool *AmiiboPool) RecordResult(idx int, score float64) {
+func (pool *CursePool) RecordResult(idx int, score float64) {
 	dna := &pool.Population[idx]
 	dna.GamesPlayed++
 	pool.GameCount++
@@ -186,7 +186,7 @@ func (pool *AmiiboPool) RecordResult(idx int, score float64) {
 		dna.Fitness = dna.Fitness*(1-alpha) + normalized*alpha
 	}
 
-	if pool.GameCount >= AmiiboEvolveAt {
+	if pool.GameCount >= CurseEvolveAt {
 		pool.evolve()
 	}
 }
@@ -211,15 +211,15 @@ func expectedBracketScore(bracket int) float64 {
 }
 
 // evolve runs one generation of genetic selection on the population.
-// Sort by fitness, kill bottom AmiiboKillCount, clone top AmiiboKillCount
+// Sort by fitness, kill bottom CurseKillCount, clone top CurseKillCount
 // into those slots, mutate clones, clamp, reset game counter.
-// Every amiiboImmigrationInterval generations, inject fresh random DNA
+// Every curseImmigrationInterval generations, inject fresh random DNA
 // to prevent convergent collapse.
-func (pool *AmiiboPool) evolve() {
+func (pool *CursePool) evolve() {
 	pool.GenCount++
 
 	// Build index sorted by fitness (ascending).
-	indices := make([]int, AmiiboPopSize)
+	indices := make([]int, CursePopSize)
 	for i := range indices {
 		indices[i] = i
 	}
@@ -228,31 +228,31 @@ func (pool *AmiiboPool) evolve() {
 	})
 
 	// Kill bottom, clone top into those slots.
-	for k := 0; k < AmiiboKillCount; k++ {
+	for k := 0; k < CurseKillCount; k++ {
 		loserIdx := indices[k]
-		donorIdx := indices[AmiiboPopSize-1-k]
+		donorIdx := indices[CursePopSize-1-k]
 
 		clone := pool.Population[donorIdx]
 		clone.GamesPlayed = 0
 		clone.Generation++
 
 		// Mutate each evolvable parameter.
-		clone.Aggression = clampUnit(clone.Aggression + pool.rng.NormFloat64()*AmiiboMutationSD)
-		clone.ComboPat = clampUnit(clone.ComboPat + pool.rng.NormFloat64()*AmiiboMutationSD)
-		clone.ThreatParanoia = clampUnit(clone.ThreatParanoia + pool.rng.NormFloat64()*AmiiboMutationSD)
-		clone.ResourceGreed = clampUnit(clone.ResourceGreed + pool.rng.NormFloat64()*AmiiboMutationSD)
-		clone.PoliticalMemory = clampUnit(clone.PoliticalMemory + pool.rng.NormFloat64()*AmiiboMutationSD)
-		clone.DrainAffinity = clampUnit(clone.DrainAffinity + pool.rng.NormFloat64()*AmiiboMutationSD)
-		clone.ArtifactAffinity = clampUnit(clone.ArtifactAffinity + pool.rng.NormFloat64()*AmiiboMutationSD)
+		clone.Aggression = clampUnit(clone.Aggression + pool.rng.NormFloat64()*CurseMutationSD)
+		clone.ComboPat = clampUnit(clone.ComboPat + pool.rng.NormFloat64()*CurseMutationSD)
+		clone.ThreatParanoia = clampUnit(clone.ThreatParanoia + pool.rng.NormFloat64()*CurseMutationSD)
+		clone.ResourceGreed = clampUnit(clone.ResourceGreed + pool.rng.NormFloat64()*CurseMutationSD)
+		clone.PoliticalMemory = clampUnit(clone.PoliticalMemory + pool.rng.NormFloat64()*CurseMutationSD)
+		clone.DrainAffinity = clampUnit(clone.DrainAffinity + pool.rng.NormFloat64()*CurseMutationSD)
+		clone.ArtifactAffinity = clampUnit(clone.ArtifactAffinity + pool.rng.NormFloat64()*CurseMutationSD)
 
 		pool.Population[loserIdx] = clone
 	}
 
 	// Immigration: every N generations, replace one mid-tier individual
 	// with fresh random DNA. Prevents convergent collapse.
-	if pool.GenCount%amiiboImmigrationInterval == 0 {
-		immigrantIdx := indices[AmiiboKillCount] // lowest non-killed slot
-		pool.Population[immigrantIdx] = AmiiboDNA{
+	if pool.GenCount%curseImmigrationInterval == 0 {
+		immigrantIdx := indices[CurseKillCount] // lowest non-killed slot
+		pool.Population[immigrantIdx] = CurseDNA{
 			DeckKey:          pool.DeckKey,
 			Aggression:       pool.rng.Float64(),
 			ComboPat:         pool.rng.Float64(),
@@ -269,10 +269,10 @@ func (pool *AmiiboPool) evolve() {
 }
 
 // InitPool creates a fresh population with random parameters for a new deck.
-func InitPool(deckKey string, rng *rand.Rand) AmiiboPool {
-	pool := AmiiboPool{DeckKey: deckKey, rng: rng}
+func InitPool(deckKey string, rng *rand.Rand) CursePool {
+	pool := CursePool{DeckKey: deckKey, rng: rng}
 	for i := range pool.Population {
-		pool.Population[i] = AmiiboDNA{
+		pool.Population[i] = CurseDNA{
 			DeckKey:          deckKey,
 			Aggression:       rng.Float64(),
 			ComboPat:         rng.Float64(),
@@ -288,7 +288,7 @@ func InitPool(deckKey string, rng *rand.Rand) AmiiboPool {
 }
 
 // InitPoolWithBracket creates a fresh population with bracket info for normalization.
-func InitPoolWithBracket(deckKey string, bracket int, rng *rand.Rand) AmiiboPool {
+func InitPoolWithBracket(deckKey string, bracket int, rng *rand.Rand) CursePool {
 	pool := InitPool(deckKey, rng)
 	pool.Bracket = bracket
 	return pool
@@ -312,7 +312,7 @@ func sanitizeKey(key string) string {
 }
 
 // SavePool writes a single pool to disk as JSON.
-func SavePool(dir string, pool *AmiiboPool) error {
+func SavePool(dir string, pool *CursePool) error {
 	os.MkdirAll(dir, 0755)
 	fname := filepath.Join(dir, sanitizeKey(pool.DeckKey)+".json")
 	data, err := json.Marshal(pool)
@@ -323,13 +323,13 @@ func SavePool(dir string, pool *AmiiboPool) error {
 }
 
 // LoadPool reads a single pool from disk and restores it.
-func LoadPool(dir, deckKey string, rng *rand.Rand) (*AmiiboPool, error) {
+func LoadPool(dir, deckKey string, rng *rand.Rand) (*CursePool, error) {
 	fname := filepath.Join(dir, sanitizeKey(deckKey)+".json")
 	data, err := os.ReadFile(fname)
 	if err != nil {
 		return nil, err
 	}
-	var pool AmiiboPool
+	var pool CursePool
 	if err := json.Unmarshal(data, &pool); err != nil {
 		return nil, err
 	}
@@ -338,7 +338,7 @@ func LoadPool(dir, deckKey string, rng *rand.Rand) (*AmiiboPool, error) {
 }
 
 // SaveAllPools writes every pool to disk.
-func SaveAllPools(dir string, pools map[string]*AmiiboPool) error {
+func SaveAllPools(dir string, pools map[string]*CursePool) error {
 	os.MkdirAll(dir, 0755)
 	for _, pool := range pools {
 		if err := SavePool(dir, pool); err != nil {
@@ -349,15 +349,15 @@ func SaveAllPools(dir string, pools map[string]*AmiiboPool) error {
 }
 
 // LoadAllPools reads all pool files from a directory.
-func LoadAllPools(dir string, rng *rand.Rand) (map[string]*AmiiboPool, error) {
+func LoadAllPools(dir string, rng *rand.Rand) (map[string]*CursePool, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return make(map[string]*AmiiboPool), nil
+			return make(map[string]*CursePool), nil
 		}
 		return nil, err
 	}
-	pools := make(map[string]*AmiiboPool, len(entries))
+	pools := make(map[string]*CursePool, len(entries))
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
@@ -366,7 +366,7 @@ func LoadAllPools(dir string, rng *rand.Rand) (map[string]*AmiiboPool, error) {
 		if err != nil {
 			continue
 		}
-		var pool AmiiboPool
+		var pool CursePool
 		if err := json.Unmarshal(data, &pool); err != nil {
 			continue
 		}

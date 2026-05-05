@@ -121,7 +121,7 @@ takes ~1ms per deck in Go. The system scales linearly with deck count.
 
 ## Relationship to Other Systems
 
-- **Genetic Amiibo (Level 4):** GA evolves 7 personality floats; MicroNet learns
+- **Genetic Curse (Level 4):** GA evolves 7 personality floats; MicroNet learns
   nonlinear patterns the GA can't represent. They're complementary — GA nudges
   behavior, MicroNet refines evaluation.
 - **Global Neural Evaluator (Level 5):** Learns universal patterns across all

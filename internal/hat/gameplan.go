@@ -38,7 +38,7 @@ type PlanState struct {
 	ComboTotal     int     // total pieces needed (from Freya)
 	ThreatLevel    float64 // highest opponent threat score
 	TurnsSincePlan int     // turns in current plan (for timeout transitions)
-	ComboPatience  int     // Amiibo-tuned Assemble→Pivot timeout (0 = use default 5)
+	ComboPatience  int     // Curse-tuned Assemble→Pivot timeout (0 = use default 5)
 }
 
 // Evaluate updates the plan state based on the current game situation and
@@ -181,7 +181,7 @@ func (ps *PlanState) PlanWeightMultipliers() EvalWeights {
 }
 
 // assembleTimeout returns the number of turns to wait in PlanAssemble
-// before pivoting to beatdown. Modulated by Amiibo ComboPat DNA:
+// before pivoting to beatdown. Modulated by Curse ComboPat DNA:
 // high patience → longer wait (up to 8 turns), low → shorter (3 turns).
 func (ps *PlanState) assembleTimeout() int {
 	if ps.ComboPatience > 0 {

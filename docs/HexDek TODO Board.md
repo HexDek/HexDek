@@ -18,10 +18,10 @@ kanban-plugin: board
 
 - [ ] **Mobile full pass** — leaderboard, spectate, operator, meta pages need individual mobile audit at 375px. Deck drilldown done, rest pending. #ui #mobile
 - [ ] **Global glossary disclosure system** — every stat/label/metric across all pages tap-to-expand inline explanation. One shared component + glossary data source. Replaces FAQ concept. #ui #ux #accessibility
-- [ ] **Curse Proficiency sigil** — cymatic SVG replacing amiibo section on deck page (circle → flower of life evolution, color-identity tinted). Part of "Hats" → "Curses" rebrand. #ui #design
+- [ ] **Curse Proficiency sigil** — cymatic SVG replacing curse section on deck page (circle → flower of life evolution, color-identity tinted). Part of "Hats" → "Curses" rebrand. #ui #design
 - [ ] **Action button context boxes** — brief TLDR above gauntlet/test variant/etc buttons for neurodivergent UX clarity. #ui #ux #accessibility
 - [ ] **Narrator enrichment** — detailed spell/ability resolution in spectator log (card names, effects, targets, results) instead of generic "resolves spell" messages. #ui #spectator
-- [ ] **"Hats" → "Curses" rename** — rebrand across entire codebase (hat → curse, amiibo section → curse proficiency). User-facing only — internal package names stay. #branding
+- [ ] **"Hats" → "Curses" rename** — rebrand across entire codebase (hat → curse, curse section → curse proficiency). User-facing only — internal package names stay. #branding
 
 
 ## High Priority — Learning Loop (Observability) — ALL PHASES DONE
@@ -33,7 +33,7 @@ kanban-plugin: board
 ## High Priority — Hat Intelligence — ALL LEVELS DONE
 
 *Ref: `docs/architecture-hat-evolution.md` Levels 2-3*
-*Level 2 (Combo Sequencer), Level 2.5 (State Machine), Level 3 (Genetic Amiibo) all complete 2026-05-02.*
+*Level 2 (Combo Sequencer), Level 2.5 (State Machine), Level 3 (Genetic Curse) all complete 2026-05-02.*
 
 
 ## High Priority — Telemetry — DONE
@@ -88,12 +88,12 @@ kanban-plugin: board
 
 - [x] **Deck import flow** — unified ImportModal with 3 input modes (paste/URL/file), real-time card validation against corpus, inline error surfacing, Freya progress indicator, success redirect with toast. Auth-gated. Replaces old piecemeal hooks. (2026-05-05) #ui #import
 - [x] **Card performance tracking** — `GET /api/card-stats/card/{cardName}` + `/by-commander`. Per-card win rate, inclusion rate, top commanders, bracket distribution. CardPage frontend panel added. (2026-05-05) #engine #analytics #cards
-- [x] **Ceiling calibration** — `cmd/hexdek-ceiling` CLI: scans B5 decks, cross-refs ELO + Amiibo fitness, runs focused gauntlet with accelerated evolution. `NormalizeRating()` maps ELO to 0-100 (floor=0, ceiling=100). `SkillPercentile()` letter grades. (2026-05-05) #rating #calibration
+- [x] **Ceiling calibration** — `cmd/hexdek-ceiling` CLI: scans B5 decks, cross-refs ELO + Curse fitness, runs focused gauntlet with accelerated evolution. `NormalizeRating()` maps ELO to 0-100 (floor=0, ceiling=100). `SkillPercentile()` letter grades. (2026-05-05) #rating #calibration
 - [x] **Hat evaluator P/T migration** — 23 call sites in yggdrasil.go + poker.go migrated from raw `p.Power()`/`p.Toughness()` to `gs.PowerOf(p)`/`gs.ToughnessOf(p)`. Evaluator now respects Layer 7 continuous effects. (2026-05-05) #engine #layers #hat
 - [x] **Layer 3 text-changing handlers** — full framework: 5 handlers (Swirl the Mists, Mind Bend, Magical Hack, Trait Doctoring, Painter's Servant), AST-driven registration, 14 tests. (2026-05-05) #engine #layers
 - [x] **Expand layer dispatch** — Caged Sun + Gauntlet of Power → Layer 7c continuous effects. March of the Machines → Layer 4 (type-changing) + Layer 7b (P/T = CMC). (2026-05-05) #engine #layers
 - [x] **BUG: MDFC permanent_types battlefield entry** — added proper `"battlefield"` case to `moveToZone`. EnsureBattlefieldFrontFace for MDFC type correction, CardCanEnterBattlefield gate, proper Permanent wrapper with ETB triggers. Eliminates ~80% of zone_accounting Feynman violations. 5 tests. (2026-05-05) #engine #bug #mdfc
-- [x] **Genetic→Neural distillation** — Amiibo→neural feedback loop: HarvestHighFitness (top-quartile DNA), EnrichWithDNA (fitness-weighted training samples), SeedDNAFromManifest (warm-start new pools from archetype centroids), TryCycle (non-blocking 30min cooldown, reseed underperformers). 17 tests. (2026-05-05) #research #selfplay
+- [x] **Genetic→Neural distillation** — Curse→neural feedback loop: HarvestHighFitness (top-quartile DNA), EnrichWithDNA (fitness-weighted training samples), SeedDNAFromManifest (warm-start new pools from archetype centroids), TryCycle (non-blocking 30min cooldown, reseed underperformers). 17 tests. (2026-05-05) #research #selfplay
 - [x] **N-card combo line detection** — Huginn N-tuple pipeline fully wired: `DetectCoTriggerNTuples()` → `PersistRawNTuples()` → `IngestNTuples()` → `tier3_ntuples_for_freya.json`. CLI ingest/prune/stats/list commands added. Freya reads both pairwise and N-tuple exports. (2026-05-05) #engine #huginn #combo
 - [x] **Muninn persist batching** — tournament runner wired to `Batcher` in all 3 paths (Run, runPool, runLazyPool). `feedBatcher()` streams parser gaps, crashes, concessions, dead triggers per-game. Auto-flush every 30s/100 games. `persistPostTournament()` for non-Muninn data. (2026-05-05) #engine #performance
 - [x] **Feynman outlier fixes** — zone accounting: asymmetric tolerance `diff < -3 || diff > 20` (copy/clone positive diffs normal, missing cards = real bugs). game_end: turn-capped games (≥80 turns) downgraded to "info". 4 new tests. (2026-05-05) #engine #hat #feynman
@@ -111,9 +111,9 @@ kanban-plugin: board
 
 ## Done — Session 2026-05-04 Day
 
-- [x] **Amiibo display on deck page** — `AmiiboDisplay` component renders per-deck DNA pool with 7-axis personality radar + 20-cell DimStats weight heatmap, generation count, best fitness, fitness sparkline (commit bf0f73d, 2026-05-04) #ui #amiibo #design
-- [x] **Amiibo fitness sparkline polish** — switched sparkline to per-generation best across last 20 generations (commit ea249a4, 2026-05-04) #ui #amiibo
-- [x] **BUG: AmiiboPanel `fitnessByRank` variable** — panel hardened against null / partial DNA snapshots; tile rendering survives empty-pool + missing-fitness shapes (commit 8dd7e72, 2026-05-04) #ui #amiibo #bug
+- [x] **Curse display on deck page** — `CurseDisplay` component renders per-deck DNA pool with 7-axis personality radar + 20-cell DimStats weight heatmap, generation count, best fitness, fitness sparkline (commit bf0f73d, 2026-05-04) #ui #curse #design
+- [x] **Curse fitness sparkline polish** — switched sparkline to per-generation best across last 20 generations (commit ea249a4, 2026-05-04) #ui #curse
+- [x] **BUG: CursePanel `fitnessByRank` variable** — panel hardened against null / partial DNA snapshots; tile rendering survives empty-pool + missing-fitness shapes (commit 8dd7e72, 2026-05-04) #ui #curse #bug
 - [x] Negative ELO shame badges — MID/DOWN BAD/COOKED/PACK IT UP/UNINSTALL ladder + Wall of Shame bottom-10 panel (2026-05-04) #ui #fun
 - [x] **Achievement badges** — milestone badges (first 10/100/1K users), rare/commendable action badges (first blood, comeback from <5 life, perfect sweep, etc). Earned-badge showcase on deck pages (commit ba6db99, 2026-05-04) #ui #badges #design
 - [x] **Volcano map smooth transition** — rAF-based heatmap interpolation, CSS transitions on seat-art opacity/filter (2026-05-04) #ui #spectator
@@ -186,7 +186,7 @@ kanban-plugin: board
 - [x] Watts confidence threshold dial + Shannon entropy tracking (2026-05-04) #engine #hat #staged
 - [x] IS-MCTS implementation + trigger conditions (2026-05-02) #engine #hat #mcts
 - [x] Heimdall Phase 1-3 (seed capture, Muninn+Huginn wiring, Huginn→Freya pipe) all complete (2026-05-02) #engine #heimdall
-- [x] Hat Level 2 (Combo Sequencer) + Level 2.5 (State Machine) + Level 3 (Genetic Amiibo) all complete (2026-05-02) #engine #hat
+- [x] Hat Level 2 (Combo Sequencer) + Level 2.5 (State Machine) + Level 3 (Genetic Curse) all complete (2026-05-02) #engine #hat
 - [x] GA4 Health Pulse (server + client telemetry) (2026-05-02) #infra #telemetry
 - [x] Neural Position Evaluator (Level 6) + Self-Play Loop (Level 7) (2026-05-02) #research #neural #selfplay
 - [x] Tesla Causal Graphs + Feynman Oracle + Lovelace Composer + Ive Spectator + Watts Soul Layer (2026-05-02) #research #skunkworks

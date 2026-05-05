@@ -18,13 +18,13 @@ import (
 // ---------------------------------------------------------------------------
 // Genetic→Neural Distillation
 //
-// The distillation loop creates a feedback cycle between the Amiibo genetic
+// The distillation loop creates a feedback cycle between the Curse genetic
 // algorithm (cheap per-deck parameter exploration) and the neural evaluator
 // (general position understanding):
 //
-//   1. Harvest: read evolved Amiibo pools, identify high-fitness DNA members
+//   1. Harvest: read evolved Curse pools, identify high-fitness DNA members
 //   2. Enrich: tag neural training samples with DNA params + fitness weight
-//   3. Seed: initialize new Amiibo pools using neural predictions instead of
+//   3. Seed: initialize new Curse pools using neural predictions instead of
 //      random params (warm start from generalized knowledge)
 //   4. Cycle: periodically trigger distillation when enough high-fitness data
 //      accumulates, re-seed underperforming pools
@@ -32,7 +32,7 @@ import (
 
 // DistillationConfig holds paths and tuning parameters for the distillation loop.
 type DistillationConfig struct {
-	AmiiboDir       string  // directory containing per-deck amiibo pool JSON files
+	CurseDir       string  // directory containing per-deck curse pool JSON files
 	TrainingDir     string  // directory for neural training data
 	ModelPath       string  // path to the neural evaluator model.json
 	FitnessQuartile float64 // top N% fitness threshold for harvesting (default 0.25 = top 25%)
@@ -45,7 +45,7 @@ type DistillationConfig struct {
 // DefaultDistillationConfig returns sensible defaults for the distillation system.
 func DefaultDistillationConfig(baseDir string) DistillationConfig {
 	return DistillationConfig{
-		AmiiboDir:         filepath.Join(baseDir, "data/amiibo"),
+		CurseDir:         filepath.Join(baseDir, "data/curse"),
 		TrainingDir:       filepath.Join(baseDir, "data/training"),
 		ModelPath:         filepath.Join(baseDir, "data/training/model.json"),
 		FitnessQuartile:   0.25,
@@ -57,9 +57,9 @@ func DefaultDistillationConfig(baseDir string) DistillationConfig {
 }
 
 // HighFitnessDNA represents a single high-performing DNA member extracted
-// from the Amiibo population, annotated with its source deck metadata.
+// from the Curse population, annotated with its source deck metadata.
 type HighFitnessDNA struct {
-	DNA       AmiiboDNA `json:"dna"`
+	DNA       CurseDNA `json:"dna"`
 	Archetype string    `json:"archetype"`
 	Bracket   int       `json:"bracket"`
 	GenCount  int       `json:"gen_count"`
@@ -108,19 +108,19 @@ func NewDistillationManager(cfg DistillationConfig, rng *rand.Rand) *Distillatio
 // 1. Distillation Harvester
 // ---------------------------------------------------------------------------
 
-// HarvestHighFitness reads all evolved Amiibo pools from disk, identifies
+// HarvestHighFitness reads all evolved Curse pools from disk, identifies
 // DNA members in the top quartile of fitness (across all decks), and returns
 // them as a DistillationManifest. Pools with fewer than MinGensForHarvest
 // generations are excluded (not enough evolution to be meaningful).
 func (dm *DistillationManager) HarvestHighFitness(strategyLookup func(deckKey string) *StrategyProfile) (*DistillationManifest, error) {
-	pools, err := LoadAllPools(dm.config.AmiiboDir, dm.rng)
+	pools, err := LoadAllPools(dm.config.CurseDir, dm.rng)
 	if err != nil {
 		return nil, err
 	}
 
 	// Collect all DNA with enough evolution history.
 	type annotatedDNA struct {
-		dna       AmiiboDNA
+		dna       CurseDNA
 		archetype string
 		bracket   int
 		genCount  int
@@ -207,8 +207,8 @@ func (dm *DistillationManager) HarvestHighFitness(strategyLookup func(deckKey st
 // 2. DNA→Training Enrichment
 // ---------------------------------------------------------------------------
 
-// DNAParamsFromAmiibo extracts the 7 evolvable parameters as a fixed array.
-func DNAParamsFromAmiibo(dna *AmiiboDNA) [7]float64 {
+// DNAParamsFromCurse extracts the 7 evolvable parameters as a fixed array.
+func DNAParamsFromCurse(dna *CurseDNA) [7]float64 {
 	return [7]float64{
 		dna.Aggression,
 		dna.ComboPat,
@@ -236,11 +236,11 @@ func FitnessToWeight(fitness float64) float64 {
 }
 
 // EnrichWithDNA takes pivot-enriched training samples and annotates them
-// with the DNA parameters and fitness weight from the Amiibo that played
+// with the DNA parameters and fitness weight from the Curse that played
 // the game. This provides the neural net with signal about which personality
 // configurations produce good outcomes.
-func EnrichWithDNA(samples []PivotEnrichedSample, dna *AmiiboDNA) []DNAEnrichedSample {
-	params := DNAParamsFromAmiibo(dna)
+func EnrichWithDNA(samples []PivotEnrichedSample, dna *CurseDNA) []DNAEnrichedSample {
+	params := DNAParamsFromCurse(dna)
 	weight := FitnessToWeight(dna.Fitness)
 
 	enriched := make([]DNAEnrichedSample, len(samples))
@@ -272,7 +272,7 @@ func AppendDNAEnrichedSamples(path string, samples []DNAEnrichedSample) error {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Neural→Amiibo Seeding
+// 3. Neural→Curse Seeding
 // ---------------------------------------------------------------------------
 
 // archetypeDNACentroid computes the average DNA parameters for a given
@@ -286,7 +286,7 @@ func archetypeDNACentroid(manifest *DistillationManifest, archetype string) ([7]
 		if !strings.EqualFold(h.Archetype, archetype) {
 			continue
 		}
-		params := DNAParamsFromAmiibo(&h.DNA)
+		params := DNAParamsFromCurse(&h.DNA)
 		for i := range sum {
 			sum[i] += params[i]
 		}
@@ -313,7 +313,7 @@ func bracketDNACentroid(manifest *DistillationManifest, bracket int) ([7]float64
 		if h.Bracket != bracket {
 			continue
 		}
-		params := DNAParamsFromAmiibo(&h.DNA)
+		params := DNAParamsFromCurse(&h.DNA)
 		for i := range sum {
 			sum[i] += params[i]
 		}
@@ -363,7 +363,7 @@ func (dm *DistillationManager) SeedDNAFromManifest(archetype string, bracket int
 	// Global centroid across all high-fitness DNA.
 	var sum [7]float64
 	for _, h := range manifest.HarvestedDNA {
-		params := DNAParamsFromAmiibo(&h.DNA)
+		params := DNAParamsFromCurse(&h.DNA)
 		for i := range sum {
 			sum[i] += params[i]
 		}
@@ -374,16 +374,16 @@ func (dm *DistillationManager) SeedDNAFromManifest(archetype string, bracket int
 	return sum
 }
 
-// InitPoolSeeded creates a new Amiibo pool with warm-started DNA parameters
+// InitPoolSeeded creates a new Curse pool with warm-started DNA parameters
 // derived from distilled high-fitness populations. The population is
 // initialized around the predicted centroid with slight gaussian noise to
 // maintain diversity.
-func (dm *DistillationManager) InitPoolSeeded(deckKey string, archetype string, bracket int, rng *rand.Rand) AmiiboPool {
+func (dm *DistillationManager) InitPoolSeeded(deckKey string, archetype string, bracket int, rng *rand.Rand) CursePool {
 	centroid := dm.SeedDNAFromManifest(archetype, bracket)
 
-	pool := AmiiboPool{DeckKey: deckKey, Bracket: bracket, rng: rng}
+	pool := CursePool{DeckKey: deckKey, Bracket: bracket, rng: rng}
 	for i := range pool.Population {
-		pool.Population[i] = AmiiboDNA{
+		pool.Population[i] = CurseDNA{
 			DeckKey:          deckKey,
 			Aggression:       clampUnit(centroid[0] + rng.NormFloat64()*0.1),
 			ComboPat:         clampUnit(centroid[1] + rng.NormFloat64()*0.1),
@@ -471,7 +471,7 @@ func (dm *DistillationManager) runCycle(strategyLookup func(string) *StrategyPro
 // seeded DNA based on the latest manifest. Returns the number of pools
 // reseeded.
 func (dm *DistillationManager) reseedUnderperformers(strategyLookup func(string) *StrategyProfile) int {
-	pools, err := LoadAllPools(dm.config.AmiiboDir, dm.rng)
+	pools, err := LoadAllPools(dm.config.CurseDir, dm.rng)
 	if err != nil {
 		return 0
 	}
@@ -495,7 +495,7 @@ func (dm *DistillationManager) reseedUnderperformers(strategyLookup func(string)
 		for _, dna := range pool.Population {
 			avgFitness += dna.Fitness
 		}
-		avgFitness /= float64(AmiiboPopSize)
+		avgFitness /= float64(CursePopSize)
 
 		if avgFitness >= dm.config.ReseedThreshold {
 			continue // performing adequately
@@ -515,7 +515,7 @@ func (dm *DistillationManager) reseedUnderperformers(strategyLookup func(string)
 
 		// Replace the bottom half of the population with seeded DNA.
 		centroid := dm.SeedDNAFromManifest(archetype, bracket)
-		indices := make([]int, AmiiboPopSize)
+		indices := make([]int, CursePopSize)
 		for i := range indices {
 			indices[i] = i
 		}
@@ -524,10 +524,10 @@ func (dm *DistillationManager) reseedUnderperformers(strategyLookup func(string)
 		})
 
 		// Replace bottom half.
-		replaceCount := AmiiboPopSize / 2
+		replaceCount := CursePopSize / 2
 		for k := 0; k < replaceCount; k++ {
 			idx := indices[k]
-			pool.Population[idx] = AmiiboDNA{
+			pool.Population[idx] = CurseDNA{
 				DeckKey:          pool.DeckKey,
 				Aggression:       clampUnit(centroid[0] + pool.rng.NormFloat64()*0.08),
 				ComboPat:         clampUnit(centroid[1] + pool.rng.NormFloat64()*0.08),
@@ -540,7 +540,7 @@ func (dm *DistillationManager) reseedUnderperformers(strategyLookup func(string)
 			}
 		}
 
-		if err := SavePool(dm.config.AmiiboDir, pool); err == nil {
+		if err := SavePool(dm.config.CurseDir, pool); err == nil {
 			reseeded++
 		}
 	}

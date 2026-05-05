@@ -2,7 +2,7 @@ import { Panel, KV, Tag } from './chrome'
 
 // 7 personality params, in radar-axis order. Order is the visual angle
 // around the chart, starting at 12 o'clock. Keys match the JSON shape
-// returned by /api/decks/:owner/:id/amiibo.
+// returned by /api/decks/:owner/:id/curse.
 const TRAITS = [
   { key: 'aggression',         label: 'AGGRESSION' },
   { key: 'combo_patience',     label: 'COMBO PAT.' },
@@ -190,10 +190,10 @@ function DimHeatmap({ corrections, labels, n }) {
   )
 }
 
-export default function AmiiboDisplay({ amiibo }) {
-  if (!amiibo || !amiibo.population || amiibo.population.length === 0) return null
+export default function CurseDisplay({ curse }) {
+  if (!curse || !curse.population || curse.population.length === 0) return null
 
-  const pop = amiibo.population
+  const pop = curse.population
   const sorted = [...pop].sort((a, b) => b.fitness - a.fitness)
   const top = sorted[0]
   const maxGen = pop.reduce((m, d) => Math.max(m, d.generation || 0), 0)
@@ -220,13 +220,13 @@ export default function AmiiboDisplay({ amiibo }) {
   return (
     <Panel
       code="04.AM"
-      title="AMIIBO / / GENETIC POPULATION"
+      title="CURSE / / GENETIC POPULATION"
       right={<Tag solid>{pop.length} DNA · GEN {maxGen}</Tag>}
     >
       <KV rows={[
         ['GENERATIONS', `${maxGen}`],
         ['POPULATION', `${pop.length}`],
-        ['GAMES LOGGED', `${(amiibo.game_count ?? 0).toLocaleString()}`],
+        ['GAMES LOGGED', `${(curse.game_count ?? 0).toLocaleString()}`],
         ['BEST FITNESS', <span style={{ color: bestFitness >= 1.0 ? 'var(--ok)' : 'var(--warn)', fontWeight: 700 }}>{bestFitness.toFixed(2)}</span>],
         ['AVG FITNESS', `${avgFitness.toFixed(2)}`],
         ['TOP GAMES', `${top.games_played ?? 0}`],
@@ -246,9 +246,9 @@ export default function AmiiboDisplay({ amiibo }) {
       <div className="hr" style={{ margin: '12px 0' }} />
       <div className="t-xs muted" style={{ marginBottom: 6 }}>EVAL DIMENSION CORRECTIONS · 20</div>
       <DimHeatmap
-        corrections={amiibo.dim_corrections}
-        labels={amiibo.dim_labels}
-        n={amiibo.dim_stats_n}
+        corrections={curse.dim_corrections}
+        labels={curse.dim_labels}
+        n={curse.dim_stats_n}
       />
     </Panel>
   )

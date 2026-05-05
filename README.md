@@ -19,7 +19,7 @@ The engine powers a live tournament forge that simulates tens of thousands of ga
 | Cards parsed | **50,000+** (100% of Scryfall bulk, zero parse errors) |
 | Engine throughput | **500+ games/sec** on a single machine |
 | Rating system | TrueSkill (Bayesian μ/σ) + standard ELO |
-| AI | YggdrasilHat — 20-dim evaluator, genetic Amiibo, neural eval, self-play |
+| AI | YggdrasilHat — 20-dim evaluator, genetic Curse, neural eval, self-play |
 | Format | Commander (4-player pods), 1v1, Archenemy |
 
 ---
@@ -64,7 +64,7 @@ The engine is written in Go for performance. The frontend is React + Vite with a
 | **YggdrasilHat** | Political AI: 20-dim board evaluator, threat scoring, grudge memory, budget system | [YggdrasilHat](docs/architecture/YggdrasilHat.md) |
 | **Hat State Machine** | 6 game plans (Develop/Assemble/Execute/Disrupt/Pivot/Defend) with transition rules | [Hat State Machine](docs/architecture/Hat%20State%20Machine.md) |
 | **Combo Sequencer** | SAT constraint solver for multi-card combo execution | [Hat State Machine](docs/architecture/Hat%20State%20Machine.md) |
-| **Genetic Amiibo** | Per-deck DNA evolution — 7-param genome, population of 8, persisted to disk | [Genetic Amiibo](docs/architecture/Genetic%20Amiibo.md) |
+| **Genetic Curse** | Per-deck DNA evolution — 7-param genome, population of 8, persisted to disk | [Genetic Curse](docs/architecture/Genetic%20Curse.md) |
 | **IS-MCTS** | Information-Set Monte Carlo tree search with determinization | [MCTS and Yggdrasil](docs/architecture/MCTS%20and%20Yggdrasil.md) |
 | **Shannon Entropy** | Opponent hand probability model, LikelyHasAnswer heuristic | [Shannon Entropy](docs/architecture/Shannon%20Entropy.md) |
 | **Neural Evaluator** | 92-dim MLP position evaluator, trained via self-play | [Neural Evaluator](docs/architecture/Neural%20Evaluator.md) |

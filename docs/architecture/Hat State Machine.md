@@ -30,7 +30,7 @@ stateDiagram-v2
     Develop --> Defend: 2+ opponents targeting us
 
     Assemble --> Execute: all pieces + mana
-    Assemble --> Pivot: timeout (3-8 turns, Amiibo-tuned)
+    Assemble --> Pivot: timeout (3-8 turns, Curse-tuned)
     Assemble --> Disrupt: threat > 0.7
 
     Execute --> Develop: combo fizzled
@@ -52,7 +52,7 @@ The state machine ticks once per turn (upkeep). `PlanState.Evaluate()` checks tr
 2. Assemble if one piece away
 3. Disrupt if any opponent's threat level > 0.7
 4. Fizzle back to Develop if combo assessment shows no progress
-5. Assemble timeout → Pivot (patience from Amiibo DNA)
+5. Assemble timeout → Pivot (patience from Curse DNA)
 6. Reactive plans (Disrupt/Defend) timeout to Develop after 3 turns
 
 ## Weight Multipliers
@@ -113,7 +113,7 @@ type ComboAssessment struct {
 func (ps *PlanState) assembleTimeout() int
 ```
 
-Returns 3–8 turns, modulated by `ComboPatience` from Amiibo DNA. Aggressive Amiibos pivot away from stalled combos faster; patient ones hold the line longer. Default is 5 turns when ComboPatience is 0.
+Returns 3–8 turns, modulated by `ComboPatience` from Curse DNA. Aggressive Curses pivot away from stalled combos faster; patient ones hold the line longer. Default is 5 turns when ComboPatience is 0.
 
 ## Integration
 
@@ -127,5 +127,5 @@ Returns 3–8 turns, modulated by `ComboPatience` from Amiibo DNA. Aggressive Am
 
 - [YggdrasilHat](YggdrasilHat.md) — parent system
 - [Eval Weights and Archetypes](Eval%20Weights%20and%20Archetypes.md) — weights being multiplied
-- [Genetic Amiibo](Genetic%20Amiibo.md) — tunes ComboPatience
+- [Genetic Curse](Genetic%20Curse.md) — tunes ComboPatience
 - [Shannon Entropy](Shannon%20Entropy.md) — gates Execute decisions

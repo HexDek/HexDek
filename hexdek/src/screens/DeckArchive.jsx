@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPie, computeColorByCmc } from '../components/chrome'
 import CardRolesGrid from '../components/CardRolesGrid'
 import CardLink from '../components/CardLink'
-import AmiiboDisplay from '../components/AmiiboDisplay'
+import CurseDisplay from '../components/CurseDisplay'
 import MatchupsPanel from '../components/MatchupsPanel'
 import ManaCost from '../components/ManaCost'
 import { AchievementsPanel, BadgeShowcase } from '../components/AchievementsPanel'
@@ -67,7 +67,7 @@ export default function DeckArchive() {
   const [exportOpen, setExportOpen] = useState(false)
   const [versions, setVersions] = useState([])
   const [gauntlet, setGauntlet] = useState(null)
-  const [amiibo, setAmiibo] = useState(null)
+  const [curse, setCurse] = useState(null)
   const [achievements, setAchievements] = useState(null)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
@@ -221,9 +221,9 @@ export default function DeckArchive() {
       api.getDeck(`${owner}/${id}`),
       api.getDeckAnalysis(`${owner}/${id}`),
       api.getGauntlet(`${owner}/${id}`),
-      api.getDeckAmiibo(`${owner}/${id}`),
+      api.getDeckCurse(`${owner}/${id}`),
       api.getAchievements(owner),
-    ]).then(([deckRes, analysisRes, gauntletRes, amiiboRes, achievementsRes]) => {
+    ]).then(([deckRes, analysisRes, gauntletRes, curseRes, achievementsRes]) => {
       if (deckRes.status === 'fulfilled') setDeck(deckRes.value)
       if (analysisRes.status === 'fulfilled') {
         const data = analysisRes.value
@@ -234,8 +234,8 @@ export default function DeckArchive() {
           setAnalysis(data)
         }
       }
-      if (amiiboRes.status === 'fulfilled' && amiiboRes.value && amiiboRes.value.population) {
-        setAmiibo(amiiboRes.value)
+      if (curseRes.status === 'fulfilled' && curseRes.value && curseRes.value.population) {
+        setCurse(curseRes.value)
       }
       if (achievementsRes.status === 'fulfilled' && achievementsRes.value) {
         setAchievements(achievementsRes.value)
@@ -648,7 +648,7 @@ export default function DeckArchive() {
             )}
           </Panel>
 
-          {amiibo && <AmiiboDisplay amiibo={amiibo} />}
+          {curse && <CurseDisplay curse={curse} />}
 
           {/* MATCHUPS — head-to-head record per opposing commander
               from showmatch_game history. Best/worst leaderboards

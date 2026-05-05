@@ -108,12 +108,12 @@ const num = (v, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback
 }
 
-export default function AmiiboPanel({ amiibo }) {
+export default function CursePanel({ curse }) {
   // Filter out null / undefined entries from the population snapshot —
   // a partially-populated pool from the backend would otherwise crash
   // on member.fitness / member.generation reads below.
-  const pop = (amiibo?.population || []).filter(d => d != null)
-  if (!amiibo || pop.length === 0) return null
+  const pop = (curse?.population || []).filter(d => d != null)
+  if (!curse || pop.length === 0) return null
 
   const sorted = [...pop].sort((a, b) => num(b.fitness) - num(a.fitness))
   const top = sorted[0]
@@ -141,7 +141,7 @@ export default function AmiiboPanel({ amiibo }) {
   return (
     <Panel
       code="04.AM"
-      title={`AMIIBO / / GENETIC POPULATION`}
+      title={`CURSE / / GENETIC POPULATION`}
       right={<Tag solid>{pop.length} DNA · GEN {maxGen}</Tag>}
     >
       <div className="t-xs muted" style={{ marginBottom: 4 }}>TOP MEMBER PERSONALITY</div>
@@ -150,7 +150,7 @@ export default function AmiiboPanel({ amiibo }) {
       <KV rows={[
         ['GENERATIONS', `${maxGen}`],
         ['POPULATION', `${pop.length}`],
-        ['GAMES LOGGED', `${(amiibo.game_count ?? 0).toLocaleString()}`],
+        ['GAMES LOGGED', `${(curse.game_count ?? 0).toLocaleString()}`],
         ['BEST FITNESS', <span style={{ color: bestFitness >= 1.0 ? 'var(--ok)' : 'var(--warn)', fontWeight: 700 }}>{bestFitness.toFixed(2)}</span>],
         ['AVG FITNESS', `${avgFitness.toFixed(2)}`],
         ['TOP GAMES', `${num(top.games_played).toLocaleString()}`],
@@ -165,7 +165,7 @@ export default function AmiiboPanel({ amiibo }) {
 
       <div className="hr" style={{ margin: '12px 0' }} />
       <div className="t-xs muted" style={{ marginBottom: 6 }}>TOP MEMBER TRAITS</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 6 }} className="amiibo-traits">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 6 }} className="curse-traits">
         {TRAITS.map(t => {
           const v = num(top[t.key])
           const pct = Math.max(0, Math.min(100, Math.round(v * 100)))

@@ -3,7 +3,7 @@
 A package-level architecture diagram of the HexDek engine, AI, and platform.
 All edges below were extracted from `import` blocks of the actual Go source
 files under `internal/` and `cmd/hexdek-freya/`. Sub-modules listed inside
-`internal/hat` (Amiibo, Tesla, Feynman, Ive, MicroNet, Octo, Poker, Neural)
+`internal/hat` (Curse, Tesla, Feynman, Ive, MicroNet, Octo, Poker, Neural)
 are individual `.go` files in `package hat`, not separate packages — they are
 shown as nodes for clarity.
 
@@ -36,7 +36,7 @@ flowchart TB
 
         subgraph IntelLearning["Learning — observation & evolution"]
             direction TB
-            amiibo["<b>hat/amiibo</b><br/><i>evolvable per-deck DNA + dimension EMA</i><br/>AmiiboDNA · DimensionStats"]
+            curse["<b>hat/curse</b><br/><i>evolvable per-deck DNA + dimension EMA</i><br/>CurseDNA · DimensionStats"]
             tesla["<b>hat/tesla</b><br/><i>causal pivot extraction (when did the game tilt?)</i><br/>CausalPivot"]
             feynman["<b>hat/feynman</b><br/><i>provably-correct invariant oracle</i><br/>OracleViolation · OracleResult"]
             ive["<b>hat/ive</b><br/><i>three-act spectator narrative builder</i><br/>GameNarrative · Act"]
@@ -85,7 +85,7 @@ flowchart TB
     strategy --> hat
     evaluator --> hat
     mcts --> hat
-    amiibo --> hat
+    curse --> hat
     tesla --> hat
     feynman --> hat
     ive --> hat
@@ -142,7 +142,7 @@ flowchart TB
     classDef platform fill:#5f3a1e,stroke:#f0ad4e,color:#fff
 
     class gameast,astload,deckparser,gameengine,tournament engine
-    class hat,strategy,evaluator,mcts,amiibo,tesla,feynman,ive,micronet,neural,octo,poker,freya intel
+    class hat,strategy,evaluator,mcts,curse,tesla,feynman,ive,micronet,neural,octo,poker,freya intel
     class heimdall,huginn,muninn discovery
     class analytics,telemetry,hexapi platform
 ```
@@ -167,7 +167,7 @@ flowchart TB
 | `hat/strategy` | `StrategyProfile` — Freya analysis injected into hat decisions. |
 | `hat/evaluator` | 8-dim board scoring with archetype-aware weights. |
 | `hat/mcts` | Monte Carlo tree search + rollout policies. |
-| `hat/amiibo` | Per-deck evolvable DNA; EMA correlations between dim scores and wins. |
+| `hat/curse` | Per-deck evolvable DNA; EMA correlations between dim scores and wins. |
 | `hat/tesla` | Causal pivot extraction — *when* did the game tilt? |
 | `hat/feynman` | Provably-correct invariant oracle (engine-bug detector). |
 | `hat/ive` | Three-act narrative builder for spectator UI. |

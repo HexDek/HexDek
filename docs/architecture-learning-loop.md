@@ -16,7 +16,7 @@ Phase 1: Heimdall package + seed capture        (1 week)
 Phase 2: Muninn + Huginn wiring                  (3-4 days)
 Phase 3: Huginn → Freya pipe                     (2-3 days)
 Phase 4: Hat state machine                       (2-3 weeks)
-Phase 5: Genetic Amiibo prototype                (2-3 weeks)
+Phase 5: Genetic Curse prototype                (2-3 weeks)
 Phase 6: GA4 telemetry bus                       (2-3 days)
 ```
 
@@ -284,14 +284,14 @@ Each plan biases the evaluation differently:
 
 ---
 
-## Phase 5: Genetic Amiibo
+## Phase 5: Genetic Curse
 
 ### Parameter Schema:
 
 ```go
 package hat
 
-type AmiiboDNA struct {
+type CurseDNA struct {
     DeckKey         string    `json:"deck_key"`
     Generation      int       `json:"generation"`
     GamesPlayed     int       `json:"games_played"`
@@ -320,11 +320,11 @@ type AmiiboDNA struct {
 
 type AmbiboPool struct {
     DeckKey    string
-    Population [8]AmiiboDNA
+    Population [8]CurseDNA
     GameCount  int
 }
 
-func (pool *AmbiboPool) SelectForGame(rng *rand.Rand) *AmiiboDNA {
+func (pool *AmbiboPool) SelectForGame(rng *rand.Rand) *CurseDNA {
     // Fitness-proportional selection
 }
 
@@ -336,7 +336,7 @@ func (pool *AmbiboPool) RecordResult(idx int, won bool) {
 ### Storage:
 
 ```
-data/amiibo/{deck_key}.json — population state per deck
+data/curse/{deck_key}.json — population state per deck
 ```
 
 Small: 8 × ~200 bytes = 1.6 KB per deck. 1196 decks = ~2 MB total.
@@ -348,7 +348,7 @@ In `runOneGameFast`, after picking decks but before creating hats:
 ```go
 for i := 0; i < showmatchSeats; i++ {
     dk := deckKeys[i]
-    dna := sm.amiiboPool[dk].SelectForGame(rng)
+    dna := sm.cursePool[dk].SelectForGame(rng)
     gs.Seats[i].Hat = hat.NewYggdrasilHatWithDNA(dna, freya[dk])
 }
 ```
@@ -404,7 +404,7 @@ GRINDER (runOneGameFast)
         └─ ComboHit/Miss ──→ Analytics ──→ API endpoints
 
 GENETIC LOOP (every 100 games per deck):
-    AmiiboDNA selected ──→ Hat plays game ──→ win/loss ──→ fitness update
+    CurseDNA selected ──→ Hat plays game ──→ win/loss ──→ fitness update
     Every 100 games: evolve population (kill worst, clone best, mutate)
 
 GA4 PULSE (every 60 seconds):

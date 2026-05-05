@@ -72,7 +72,7 @@ flowchart TB
     Y --> Log[DecisionLog<br/>diagnostic, optional]
     Y --> Lookups[Pre-computed sets:<br/>combo pieces,<br/>value engines,<br/>tutor targets,<br/>finishers]
     Y --> ThirdEye[3rd Eye:<br/>cardsSeen,<br/>threatTrajectory,<br/>politicalGraph,<br/>kingmakerTurn,<br/>lastAttackedUsTurn]
-    Y --> Amiibo[Genetic Amiibo<br/>per-deck DNA evolution]
+    Y --> Curse[Genetic Curse<br/>per-deck DNA evolution]
 ```
 
 Every field listed here exists on the actual struct (`yggdrasil.go:26-115`). The "3rd Eye" comment in source describes the omniscient-intelligence subsystem that tracks per-opponent history across the whole game.
@@ -292,7 +292,7 @@ Top winrate commanders (Yggdrasil at budget 50):
 
 **Remaining gaps:**
 
-- Partner-aware mulligan works but still generic for non-partner decks — doesn't read deck-specific signals about "what's a keepable opener for *this* deck" beyond what Amiibo DNA tunes.
+- Partner-aware mulligan works but still generic for non-partner decks — doesn't read deck-specific signals about "what's a keepable opener for *this* deck" beyond what Curse DNA tunes.
 - Alliance / betrayal politics is one-step. Multi-turn political reasoning ("if I help seat 2 kill seat 1, will seat 2 then win?") is heuristic, not search.
 - N-card combo lines: Huginn currently tracks pairwise co-triggers only. 3-5 card combos (e.g., Dramatic Reversal + Isochron Scepter + mana rock) need either N-tuple tracking or chained pairwise inference.
 

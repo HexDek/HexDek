@@ -1,9 +1,9 @@
 // hexdek-ceiling — Ceiling calibration: identify the best B5 combo deck after
-// extended Amiibo evolution as the upper-bound reference point for the rating system.
+// extended Curse evolution as the upper-bound reference point for the rating system.
 //
-// Scans all decks for bracket 5, cross-references Amiibo pool fitness and ELO
+// Scans all decks for bracket 5, cross-references Curse pool fitness and ELO
 // records, selects the top 5 candidates, runs a focused gauntlet with
-// accelerated Amiibo evolution, and writes the ceiling reference to
+// accelerated Curse evolution, and writes the ceiling reference to
 // data/calibration/ceiling.json.
 //
 // Usage:
@@ -11,7 +11,7 @@
 //	hexdek-ceiling                          # full pipeline: scan + gauntlet + emit
 //	hexdek-ceiling --scan-only             # just print top B5 candidates
 //	hexdek-ceiling --games 10000           # games in ceiling gauntlet (default 10000)
-//	hexdek-ceiling --evolve-every 50       # amiibo evolution interval (default 50)
+//	hexdek-ceiling --evolve-every 50       # curse evolution interval (default 50)
 //	hexdek-ceiling --top 5                 # number of candidates for gauntlet
 //	hexdek-ceiling --decks data/decks      # deck directory
 //	hexdek-ceiling --ast data/rules/ast_dataset.jsonl
@@ -57,7 +57,7 @@ type CeilingResult struct {
 	GauntletGames   int             `json:"gauntlet_games"`
 	GauntletWinRate float64         `json:"gauntlet_win_rate"`
 	Generation      int             `json:"generation"`
-	BestDNA         *hat.AmiiboDNA  `json:"best_dna"`
+	BestDNA         *hat.CurseDNA  `json:"best_dna"`
 	PowerPercentile int             `json:"power_percentile"`
 	GameplanSummary string          `json:"gameplan_summary"`
 	CalibratedAt    time.Time       `json:"calibrated_at"`
@@ -72,7 +72,7 @@ type RunnerUpEntry struct {
 	ELO       float64 `json:"elo"`
 }
 
-// CeilingCandidate is a B5 deck with combined scoring from Amiibo fitness + ELO.
+// CeilingCandidate is a B5 deck with combined scoring from Curse fitness + ELO.
 type CeilingCandidate struct {
 	DeckKey         string
 	DeckPath        string
@@ -85,10 +85,10 @@ type CeilingCandidate struct {
 	ComboCount      int
 	TutorCount      int
 
-	// From Amiibo pool (if available)
-	AmiiboFitness float64
-	AmiiboGen     int
-	BestDNA       *hat.AmiiboDNA
+	// From Curse pool (if available)
+	CurseFitness float64
+	CurseGen     int
+	BestDNA       *hat.CurseDNA
 
 	// From ELO records (if available)
 	ELO       float64
@@ -115,10 +115,10 @@ func main() {
 		astPath     = flag.String("ast", "data/rules/ast_dataset.jsonl", "AST dataset path")
 		oraclePath  = flag.String("oracle", "data/rules/oracle-cards.json", "Scryfall oracle-cards.json")
 		dbPath      = flag.String("db", "data/hexdek.db", "SQLite database path")
-		amiiboDir   = flag.String("amiibo", "data/amiibo", "Amiibo pool directory")
+		curseDir   = flag.String("curse", "data/curse", "Curse pool directory")
 		outPath     = flag.String("out", "data/calibration/ceiling.json", "output calibration file")
 		games       = flag.Int("games", defaultGauntletGames, "gauntlet games")
-		evolveEvery = flag.Int("evolve-every", defaultEvolveEvery, "amiibo evolution interval (accelerated)")
+		evolveEvery = flag.Int("evolve-every", defaultEvolveEvery, "curse evolution interval (accelerated)")
 		top         = flag.Int("top", defaultTopN, "number of top candidates for gauntlet")
 		workers     = flag.Int("workers", 0, "parallel workers (0 = NumCPU/2)")
 		scanOnly    = flag.Bool("scan-only", false, "just print candidates, don't run gauntlet")
@@ -141,12 +141,12 @@ func main() {
 	// Phase 1: Load ELO records from SQLite.
 	eloMap := loadELORecords(*dbPath)
 
-	// Phase 2: Load Amiibo pools.
+	// Phase 2: Load Curse pools.
 	rng := rand.New(rand.NewSource(*seed))
-	amiiboPools := loadAmiiboPools(*amiiboDir, rng)
+	cursePools := loadCursePools(*curseDir, rng)
 
 	// Phase 3: Scan all decks for B5 candidates.
-	candidates := scanB5Candidates(*decksDir, eloMap, amiiboPools)
+	candidates := scanB5Candidates(*decksDir, eloMap, cursePools)
 
 	if len(candidates) == 0 {
 		log.Fatal("ceiling: no B5 decks found")
@@ -178,8 +178,8 @@ func main() {
 			elo = fmt.Sprintf("%.0f", c.ELO)
 		}
 		fit := ""
-		if c.AmiiboFitness > 0 {
-			fit = fmt.Sprintf("%.3f", c.AmiiboFitness)
+		if c.CurseFitness > 0 {
+			fit = fmt.Sprintf("%.3f", c.CurseFitness)
 		}
 		fmt.Printf("%-4d  %-45s  %-25s  %-10s  %6s  %6s  %6s  %7.1f\n",
 			i+1, truncate(c.DeckKey, 45), truncate(c.Commander, 25),
@@ -235,12 +235,12 @@ func main() {
 		log.Fatalf("ceiling: only %d valid gauntlet decks, need at least %d", len(gauntletDecks), showmatchSeats)
 	}
 
-	// Phase 5: Run focused gauntlet with accelerated Amiibo evolution.
+	// Phase 5: Run focused gauntlet with accelerated Curse evolution.
 	log.Printf("ceiling: running gauntlet — %d games, %d decks, evolve every %d games, %d workers",
 		*games, len(gauntletDecks), *evolveEvery, *workers)
 
 	result := runCeilingGauntlet(gauntletDecks, gauntletKeys, gauntletStrategies,
-		amiiboPools, *games, *evolveEvery, *workers, *seed, corpus)
+		cursePools, *games, *evolveEvery, *workers, *seed, corpus)
 
 	// Phase 6: Determine ceiling deck.
 	var bestIdx int
@@ -354,16 +354,16 @@ func loadELORecords(dbPath string) map[string]*db.ELORecord {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2: Load Amiibo pools
+// Phase 2: Load Curse pools
 // ---------------------------------------------------------------------------
 
-func loadAmiiboPools(dir string, rng *rand.Rand) map[string]*hat.AmiiboPool {
+func loadCursePools(dir string, rng *rand.Rand) map[string]*hat.CursePool {
 	pools, err := hat.LoadAllPools(dir, rng)
 	if err != nil {
-		log.Printf("ceiling: load amiibo pools: %v (starting fresh)", err)
-		return make(map[string]*hat.AmiiboPool)
+		log.Printf("ceiling: load curse pools: %v (starting fresh)", err)
+		return make(map[string]*hat.CursePool)
 	}
-	log.Printf("ceiling: loaded %d amiibo pools", len(pools))
+	log.Printf("ceiling: loaded %d curse pools", len(pools))
 	return pools
 }
 
@@ -383,7 +383,7 @@ type strategyJSON struct {
 	PowerPercentile int      `json:"power_percentile"`
 }
 
-func scanB5Candidates(decksDir string, eloMap map[string]*db.ELORecord, amiiboPools map[string]*hat.AmiiboPool) []CeilingCandidate {
+func scanB5Candidates(decksDir string, eloMap map[string]*db.ELORecord, cursePools map[string]*hat.CursePool) []CeilingCandidate {
 	var candidates []CeilingCandidate
 
 	err := filepath.Walk(decksDir, func(path string, info os.FileInfo, err error) error {
@@ -448,13 +448,13 @@ func scanB5Candidates(decksDir string, eloMap map[string]*db.ELORecord, amiiboPo
 			}
 		}
 
-		// Cross-reference Amiibo pool.
-		if pool, ok := amiiboPools[deckKey]; ok {
-			c.AmiiboGen = pool.GenCount
+		// Cross-reference Curse pool.
+		if pool, ok := cursePools[deckKey]; ok {
+			c.CurseGen = pool.GenCount
 			// Find best fitness in population.
 			for i := range pool.Population {
-				if pool.Population[i].Fitness > c.AmiiboFitness {
-					c.AmiiboFitness = pool.Population[i].Fitness
+				if pool.Population[i].Fitness > c.CurseFitness {
+					c.CurseFitness = pool.Population[i].Fitness
 					dna := pool.Population[i]
 					c.BestDNA = &dna
 				}
@@ -464,7 +464,7 @@ func scanB5Candidates(decksDir string, eloMap map[string]*db.ELORecord, amiiboPo
 		// Compute combined score:
 		// - ELO contribution (normalized to 0-50 range, 1500 base)
 		// - Win rate contribution (0-30 range)
-		// - Amiibo fitness contribution (0-15 range)
+		// - Curse fitness contribution (0-15 range)
 		// - Combo density bonus (0-5 range)
 		eloScore := 0.0
 		if c.ELO > 0 && c.ELOGames >= 20 {
@@ -474,7 +474,7 @@ func scanB5Candidates(decksDir string, eloMap map[string]*db.ELORecord, amiiboPo
 		if c.ELOGames >= 20 {
 			wrScore = c.WinRate * 30
 		}
-		fitnessScore := c.AmiiboFitness * 15
+		fitnessScore := c.CurseFitness * 15
 		comboScore := math.Min(float64(c.ComboCount)*1.5, 5)
 
 		c.Score = eloScore + wrScore + fitnessScore + comboScore
@@ -490,21 +490,21 @@ func scanB5Candidates(decksDir string, eloMap map[string]*db.ELORecord, amiiboPo
 }
 
 // ---------------------------------------------------------------------------
-// Phase 5: Ceiling Gauntlet (accelerated Amiibo evolution)
+// Phase 5: Ceiling Gauntlet (accelerated Curse evolution)
 // ---------------------------------------------------------------------------
 
 type gauntletDeckResult struct {
 	Games      int
 	Wins       int
 	Generation int
-	BestDNA    *hat.AmiiboDNA
+	BestDNA    *hat.CurseDNA
 }
 
 func runCeilingGauntlet(
 	decks []*deckparser.TournamentDeck,
 	deckKeys []string,
 	strategies []*hat.StrategyProfile,
-	existingPools map[string]*hat.AmiiboPool,
+	existingPools map[string]*hat.CursePool,
 	totalGames, evolveEvery, numWorkers int,
 	seed int64,
 	corpus *astload.Corpus,
@@ -513,8 +513,8 @@ func runCeilingGauntlet(
 	nDecks := len(decks)
 	results := make([]gauntletDeckResult, nDecks)
 
-	// Create isolated Amiibo pools for the gauntlet with accelerated evolution.
-	pools := make([]*hat.AmiiboPool, nDecks)
+	// Create isolated Curse pools for the gauntlet with accelerated evolution.
+	pools := make([]*hat.CursePool, nDecks)
 	rng := rand.New(rand.NewSource(seed))
 	for i, key := range deckKeys {
 		if existing, ok := existingPools[key]; ok {
@@ -570,10 +570,10 @@ func runCeilingGauntlet(
 					seatIdxs[s] = idx
 				}
 
-				// Select Amiibo DNA for each seat.
+				// Select Curse DNA for each seat.
 				poolMu.Lock()
 				dnaIdxs := make([]int, seatCount)
-				dnaCopies := make([]hat.AmiiboDNA, seatCount)
+				dnaCopies := make([]hat.CurseDNA, seatCount)
 				for s := 0; s < seatCount; s++ {
 					dna, dnaIdx := pools[seatIdxs[s]].SelectForGame()
 					dnaIdxs[s] = dnaIdx
@@ -725,10 +725,10 @@ func runCeilingGauntlet(
 }
 
 // forceEvolve manually triggers one evolution step on a pool.
-// This replicates AmiiboPool.evolve() but is called externally for accelerated mode.
-func forceEvolve(pool *hat.AmiiboPool, rng *rand.Rand) {
+// This replicates CursePool.evolve() but is called externally for accelerated mode.
+func forceEvolve(pool *hat.CursePool, rng *rand.Rand) {
 	pool.SetRNG(rng)
-	// We trigger evolution by setting GameCount to AmiiboEvolveAt and calling RecordResult
+	// We trigger evolution by setting GameCount to CurseEvolveAt and calling RecordResult
 	// with score 0.5 on index 0. This is a hack but keeps us from exporting evolve().
 	// Actually, we just set game_count high enough that the next RecordResult triggers it.
 	// Better: just reset and let the pool track its own generation.
@@ -741,7 +741,7 @@ func forceEvolve(pool *hat.AmiiboPool, rng *rand.Rand) {
 		idx     int
 		fitness float64
 	}
-	pop := make([]indexed, hat.AmiiboPopSize)
+	pop := make([]indexed, hat.CursePopSize)
 	for i := range pop {
 		pop[i] = indexed{i, pool.Population[i].Fitness}
 	}
@@ -752,7 +752,7 @@ func forceEvolve(pool *hat.AmiiboPool, rng *rand.Rand) {
 	killCount := 2
 	for k := 0; k < killCount; k++ {
 		loserIdx := pop[k].idx
-		donorIdx := pop[hat.AmiiboPopSize-1-k].idx
+		donorIdx := pop[hat.CursePopSize-1-k].idx
 
 		clone := pool.Population[donorIdx]
 		clone.GamesPlayed = 0

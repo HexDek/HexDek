@@ -135,10 +135,10 @@ type YggdrasilHat struct {
 
 	// Conviction concession — sliding window of recent position evals.
 
-	// DNA — optional Amiibo personality parameters that nudge weights,
+	// DNA — optional Curse personality parameters that nudge weights,
 	// attack thresholds, combo patience, and political behavior.
 	// nil means no DNA influence (default behavior).
-	DNA *AmiiboDNA
+	DNA *CurseDNA
 
 	// confidenceThreshold controls how picky the hat is about which
 	// action to take. Set from StrategyProfile.Bracket:
@@ -275,7 +275,7 @@ func NewYggdrasilHatWithNoise(strategy *StrategyProfile, budget int, noise float
 }
 
 // NewYggdrasilHatWithDNA creates a YggdrasilHat whose behavior is nudged
-// by Amiibo DNA parameters. DNA values are [0,1] floats centered at 0.5
+// by Curse DNA parameters. DNA values are [0,1] floats centered at 0.5
 // (neutral); values above/below 0.5 push the hat's personality in the
 // corresponding direction without replacing the archetype-tuned baseline.
 //
@@ -285,7 +285,7 @@ func NewYggdrasilHatWithNoise(strategy *StrategyProfile, budget int, noise float
 //   - ThreatParanoia → scales ThreatExposure eval weight (+/- 40% from center)
 //   - ResourceGreed  → shifts CardAdvantage up and BoardPresence down (or vice versa)
 //   - PoliticalMemory → slows détente discount decay (stored as DNA, read in targeting)
-func NewYggdrasilHatWithDNA(dna *AmiiboDNA, sp *StrategyProfile, budget int) *YggdrasilHat {
+func NewYggdrasilHatWithDNA(dna *CurseDNA, sp *StrategyProfile, budget int) *YggdrasilHat {
 	h := NewYggdrasilHatWithNoise(sp, budget, 0.2)
 	if dna == nil {
 		return h
@@ -334,7 +334,7 @@ func NewYggdrasilHatWithDNA(dna *AmiiboDNA, sp *StrategyProfile, budget int) *Yg
 
 // NewYggdrasilHatWithPool creates a hat using DNA + learned dimension
 // corrections from the pool's outcome-correlation statistics (T3.2).
-func NewYggdrasilHatWithPool(dna *AmiiboDNA, sp *StrategyProfile, budget int, ds *DimensionStats) *YggdrasilHat {
+func NewYggdrasilHatWithPool(dna *CurseDNA, sp *StrategyProfile, budget int, ds *DimensionStats) *YggdrasilHat {
 	h := NewYggdrasilHatWithDNA(dna, sp, budget)
 	if ds == nil || ds.N < dimStatsMinN {
 		return h
@@ -559,7 +559,7 @@ func (h *YggdrasilHat) assessAllThreats(gs *gameengine.GameState, seatIdx int) [
 			st.RetaliationRisk = 2.0
 		}
 		// Grudge factor: opponents we've already hit are more likely
-		// to retaliate. Decay rate modulated by Amiibo PoliticalMemory:
+		// to retaliate. Decay rate modulated by Curse PoliticalMemory:
 		// high memory (→1) = slow decay (long grudge), low (→0) = fast decay.
 		if i < len(h.damageDealtTo) {
 			dealt := h.damageDealtTo[i]

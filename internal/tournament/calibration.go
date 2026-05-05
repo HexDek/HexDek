@@ -11,7 +11,7 @@ import (
 )
 
 // CalibrationCeiling is the loaded ceiling reference point (best B5 deck after
-// extended Amiibo evolution). Written by cmd/hexdek-ceiling.
+// extended Curse evolution). Written by cmd/hexdek-ceiling.
 type CalibrationCeiling struct {
 	DeckKey         string          `json:"deck_key"`
 	Commander       string          `json:"commander"`
@@ -26,7 +26,7 @@ type CalibrationCeiling struct {
 	GauntletGames   int             `json:"gauntlet_games"`
 	GauntletWinRate float64         `json:"gauntlet_win_rate"`
 	Generation      int             `json:"generation"`
-	BestDNA         *hat.AmiiboDNA  `json:"best_dna"`
+	BestDNA         *hat.CurseDNA  `json:"best_dna"`
 	PowerPercentile int             `json:"power_percentile"`
 	GameplanSummary string          `json:"gameplan_summary"`
 	CalibratedAt    time.Time       `json:"calibrated_at"`
