@@ -254,6 +254,35 @@ func TestPoker_ThreatScore_BoardPower(t *testing.T) {
 	}
 }
 
+// TestPoker_ThreatScore_PlaneswalkerCounted — opposing planeswalkers
+// must register on the threat radar. Pre-fix, boardPower only summed
+// creature power, so a ticking PW (Ajani Nacatl Pariah, etc.) was
+// invisible to opponents — the source of the 74% WR bug. A higher
+// loyalty value should also outscore a lower one.
+func TestPoker_ThreatScore_PlaneswalkerCounted(t *testing.T) {
+	gs := newTestGame(t, 2)
+	h := NewPokerHat()
+
+	empty := h.threatBreakdown(gs, 0, gs.Seats[1])
+
+	pw := newTestCardMinimal("Ajani, Nacatl Pariah", []string{"planeswalker"}, 3, nil)
+	perm := newTestPermanent(gs.Seats[1], pw, 0, 0)
+	perm.Counters = map[string]int{"loyalty": 3}
+	low := h.threatBreakdown(gs, 0, gs.Seats[1])
+	if low.Score <= empty.Score {
+		t.Fatalf("a 3-loyalty PW should outscore an empty board; pw=%+v empty=%+v", low, empty)
+	}
+	if low.Board <= 0 {
+		t.Fatalf("board dim must include PW threat; got %+v", low)
+	}
+
+	perm.Counters["loyalty"] = 6
+	high := h.threatBreakdown(gs, 0, gs.Seats[1])
+	if high.Board <= low.Board {
+		t.Fatalf("higher loyalty should produce higher board threat; low=%+v high=%+v", low, high)
+	}
+}
+
 // TestPoker_ThreatScore_GraveyardValue — a fat graveyard adds threat
 // (combo / reanimator signal).
 func TestPoker_ThreatScore_GraveyardValue(t *testing.T) {

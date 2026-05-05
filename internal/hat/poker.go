@@ -1833,10 +1833,30 @@ func boardPower(seat *gameengine.Seat) int {
 	}
 	n := 0
 	for _, p := range seat.Battlefield {
-		if p != nil && p.IsCreature() {
+		if p == nil {
+			continue
+		}
+		if p.IsCreature() {
 			if pw := p.Power(); pw > 0 {
 				n += pw
 			}
+		}
+		// Planeswalkers register as power-equivalent threat. Without this
+		// the AI never targets a ticking PW (no Power(), not flagged as
+		// a creature) and ultimates resolve unopposed — the source of the
+		// Ajani Nacatl Pariah 74% win rate. Loyalty proxies for "turns to
+		// ultimate" pressure; the +2 baseline accounts for the +/- ability
+		// firing the turn the PW lands and is independent of starting
+		// loyalty so 2-loyalty PWs still register.
+		if p.IsPlaneswalker() {
+			loy := 0
+			if p.Counters != nil {
+				loy = p.Counters["loyalty"]
+			}
+			if loy < 0 {
+				loy = 0
+			}
+			n += loy + 2
 		}
 	}
 	return n
