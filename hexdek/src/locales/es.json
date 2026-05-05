@@ -1,0 +1,70 @@
+{
+  "app": {
+    "brand": "HEXDEK//",
+    "build_label": "SYS.BUILD 25.04.28 · HEXDEK V0.10D",
+    "core_ready": "+ + +  NÚCLEO HEXDEK LISTO  + + +",
+    "tagline": "CÓDIGO ABIERTO / / SOSTENIDO POR DONACIONES / / SIN ANUNCIOS",
+    "guest": "INVITADO"
+  },
+  "nav": {
+    "decks": "MAZOS",
+    "leaderboard": "CLASIFICACIÓN",
+    "spectate": "OBSERVAR",
+    "my_decks": "MIS MAZOS",
+    "about": "ACERCA DE",
+    "feedback": "ERROR / SUGERENCIA",
+    "donate": "DONAR ♥",
+    "discord": "DISCORD",
+    "login": "INICIAR SESIÓN ↗",
+    "logout": "CERRAR SESIÓN"
+  },
+  "theme": {
+    "dark": "☽ OSCURO",
+    "light": "☀ CLARO"
+  },
+  "common": {
+    "save": "GUARDAR",
+    "cancel": "CANCELAR",
+    "delete": "ELIMINAR",
+    "confirm": "CONFIRMAR",
+    "edit": "EDITAR",
+    "export": "EXPORTAR",
+    "share": "COMPARTIR",
+    "copied": "¡COPIADO!",
+    "loading": "CARGANDO",
+    "saving": "GUARDANDO...",
+    "analyzing": "ANALIZANDO..."
+  },
+  "deck": {
+    "owner": "PROPIETARIO",
+    "cards": "CARTAS",
+    "bracket": "NIVEL",
+    "archetype": "ARQUETIPO",
+    "win_rate": "VICTORIAS",
+    "games": "PARTIDAS",
+    "record": "RESULTADO",
+    "no_analysis": "SIN ANÁLISIS DE FREYA"
+  },
+  "achievements": {
+    "title": "LOGROS",
+    "stats": {
+      "games": "PARTIDAS",
+      "wins": "VICTORIAS",
+      "streak": "RACHA",
+      "opponents": "OPONENTES"
+    },
+    "rarity": {
+      "common": "COMÚN",
+      "uncommon": "INFRECUENTE",
+      "rare": "RARO",
+      "mythic": "MÍTICO",
+      "secret": "SECRETO"
+    },
+    "secret_hidden": "Logro oculto.",
+    "secret_tooltip": "Logro oculto — sigue jugando."
+  },
+  "status": {
+    "no_game": "NO HAY PARTIDA EN CURSO",
+    "in_progress": "EN CURSO"
+  }
+}

@@ -19,9 +19,10 @@
 import { useSyncExternalStore } from 'react'
 
 import en from './locales/en.json'
+import es from './locales/es.json'
 
 // Add new languages here. Keep keys ISO 639-1 (en, de, ja, ...).
-const LOCALES = { en }
+const LOCALES = { en, es }
 const FALLBACK = 'en'
 const STORAGE_KEY = 'hexdek.locale'
 
