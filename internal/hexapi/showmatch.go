@@ -21,6 +21,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/hexdek/hexdek/internal/achievements"
 	"github.com/hexdek/hexdek/internal/astload"
 	"github.com/hexdek/hexdek/internal/db"
 	"github.com/hexdek/hexdek/internal/deckparser"
@@ -196,6 +197,7 @@ type Showmatch struct {
 	persistCh       chan persistJob
 	heimdall        *heimdall.Observer
 	muninnSink      *muninnAdapter
+	achievements    *achievements.Tracker
 
 	amiiboMu   sync.Mutex
 	amiiboPool map[string]*hat.AmiiboPool // deck key → genetic population
@@ -279,6 +281,11 @@ func NewShowmatch(astPath, oraclePath, decksDir string, database *sql.DB) *Showm
 	if loaded, err := hat.LoadAllPools(sm.amiiboDir, rand.New(rand.NewSource(42))); err == nil && len(loaded) > 0 {
 		sm.amiiboPool = loaded
 		log.Printf("amiibo: loaded %d deck pools from %s", len(loaded), sm.amiiboDir)
+	}
+	if tr, err := achievements.NewTracker("data/achievements"); err != nil {
+		log.Printf("achievements: init failed: %v", err)
+	} else {
+		sm.achievements = tr
 	}
 	go sm.loadAndRun(astPath, oraclePath, decksDir)
 	return sm
@@ -1617,6 +1624,7 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 }
 
 func (sm *Showmatch) persistGame(g CompletedGame) {
+	sm.recordAchievements(g)
 	if sm.sqlDB == nil {
 		return
 	}
@@ -2166,6 +2174,7 @@ func (sm *Showmatch) RegisterShowmatch(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/gauntlet/{owner}/{id}", sm.handleStartGauntlet)
 	mux.HandleFunc("GET /api/gauntlet/{owner}/{id}", sm.handleGetGauntlet)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/amiibo", sm.handleDeckAmiibo)
+	mux.HandleFunc("GET /api/achievements/{owner}", sm.handleAchievements)
 }
 
 var gauntletSem = make(chan struct{}, 2)
@@ -2270,6 +2279,51 @@ func (sm *Showmatch) handleDeckAmiibo(w http.ResponseWriter, r *http.Request) {
 	sm.amiiboMu.Unlock()
 
 	writeJSON(w, resp)
+}
+
+// recordAchievements maps a completed showmatch game into the
+// achievements package's seat outcome shape and feeds it to the tracker.
+// No-op when the tracker failed to initialize.
+func (sm *Showmatch) recordAchievements(g CompletedGame) {
+	if sm.achievements == nil {
+		return
+	}
+	seats := make([]achievements.SeatOutcome, 0, len(g.FinalSeats))
+	for i, seat := range g.FinalSeats {
+		if i >= len(g.DeckKeys) {
+			continue
+		}
+		deckKey := g.DeckKeys[i]
+		owner, _ := deckOwnerFromKey(deckKey)
+		if owner == "" {
+			continue
+		}
+		seats = append(seats, achievements.SeatOutcome{
+			Owner:     owner,
+			DeckKey:   deckKey,
+			Won:       i == g.Winner,
+			FinalLife: seat.Life,
+		})
+	}
+	if len(seats) == 0 {
+		return
+	}
+	if err := sm.achievements.OnGameComplete(achievements.GameOutcome{
+		Turns:      g.Turns,
+		Seats:      seats,
+		FinishedAt: g.FinishedAt,
+	}); err != nil {
+		log.Printf("achievements: record game: %v", err)
+	}
+}
+
+func (sm *Showmatch) handleAchievements(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	if sm.achievements == nil {
+		writeJSON(w, achievements.Snapshot{Owner: owner, Badges: []achievements.EarnedDetail{}})
+		return
+	}
+	writeJSON(w, sm.achievements.Snapshot(owner))
 }
 
 func (sm *Showmatch) handleLiveGame(w http.ResponseWriter, r *http.Request) {
