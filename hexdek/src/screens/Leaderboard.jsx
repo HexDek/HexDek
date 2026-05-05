@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Tape, Tag, ConfidenceDots } from '../components/chrome'
 import { useLiveSocket } from '../hooks/useLiveSocket'
+import { cardArtUrl } from '../services/api'
 
 const SORT_KEYS = [
   { key: 'hex_rating', label: 'HEXELO' },
@@ -278,49 +279,63 @@ export default function Leaderboard() {
 
         {/* Mobile card layout */}
         <div className="lb-cards">
-          {sorted.map((entry, i) => (
-            <div
-              key={entry.deck_id || i}
-              className="panel lb-card"
-              style={{ padding: 0, cursor: 'pointer' }}
-              onClick={() => handleRowClick(entry)}
-            >
-              <div className="panel-hd">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span className={i < 3 ? 'lb-medal' : ''} style={{ fontWeight: 700, minWidth: 18 }}>#{i + 1}</span>
-                  <span style={{ fontWeight: 700, color: 'var(--ink)' }}>
-                    {entry.commander || '--'}
-                    <BandTag band={entry.band} bracket={entry.bracket} />
-                    <ShameBadge rating={entry.rating} />
-                  </span>
-                </span>
-                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.1 }}>
-                  <span className="t-xs" style={{ fontWeight: 700 }}>
-                    HexELO {Math.round(entry.hex_rating || 0)}
-                  </span>
-                  <span className="t-xs muted-2">
-                    TS μ {Math.round(entry.mu || 0)}
-                  </span>
-                </span>
+          {sorted.map((entry, i) => {
+            const artUrl = cardArtUrl(entry.commander_card || entry.commander)
+            return (
+              <div
+                key={entry.deck_id || i}
+                className="panel lb-card"
+                style={{ padding: 0, cursor: 'pointer' }}
+                onClick={() => handleRowClick(entry)}
+              >
+                <div className="lb-card-row">
+                  <div className="lb-card-art">
+                    {artUrl && (
+                      <img
+                        src={artUrl}
+                        alt={entry.commander || ''}
+                        onError={e => { e.target.style.display = 'none'; e.target.parentElement.classList.add('hatch') }}
+                      />
+                    )}
+                    <span className={`lb-card-rank${i < 3 ? ' lb-medal' : ''}`}>#{i + 1}</span>
+                  </div>
+                  <div className="lb-card-body">
+                    <div className="panel-hd">
+                      <span style={{ fontWeight: 700, color: 'var(--ink)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {entry.commander || '--'}
+                        <BandTag band={entry.band} bracket={entry.bracket} />
+                        <ShameBadge rating={entry.rating} />
+                      </span>
+                      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.1 }}>
+                        <span className="t-xs" style={{ fontWeight: 700 }}>
+                          HexELO {Math.round(entry.hex_rating || 0)}
+                        </span>
+                        <span className="t-xs muted-2">
+                          TS μ {Math.round(entry.mu || 0)}
+                        </span>
+                      </span>
+                    </div>
+                    <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span className="t-xs muted">{entry.owner?.toUpperCase() || '--'}</span>
+                        <ConfidenceDots games={entry.games} showLabel />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <RecordDisplay wins={entry.wins || 0} losses={entry.losses || 0} />
+                        <span className="t-xs">
+                          {entry.win_rate != null ? `${entry.win_rate.toFixed(1)}%` : '--'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span className="t-xs muted">{entry.games || 0} GAMES</span>
+                        <DeltaDisplay delta={entry.delta} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span className="t-xs muted">{entry.owner?.toUpperCase() || '--'}</span>
-                  <ConfidenceDots games={entry.games} showLabel />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <RecordDisplay wins={entry.wins || 0} losses={entry.losses || 0} />
-                  <span className="t-xs">
-                    {entry.win_rate != null ? `${entry.win_rate.toFixed(1)}%` : '--'}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span className="t-xs muted">{entry.games || 0} GAMES</span>
-                  <DeltaDisplay delta={entry.delta} />
-                </div>
-              </div>
-            </div>
-          ))}
+            )
+          })}
           {sorted.length === 0 && (
             <div className="t-md muted" style={{ textAlign: 'center', padding: 36 }}>
               {elo?.length === 0

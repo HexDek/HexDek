@@ -816,6 +816,34 @@ body {
 .lb-sort-bar { display: flex; gap: 6px; flex-wrap: wrap; }
 .lb-cards { display: none; }
 
+.lb-card-row { display: flex; align-items: stretch; min-height: 84px; }
+.lb-card-art {
+  width: 84px;
+  flex: 0 0 84px;
+  position: relative;
+  overflow: hidden;
+  background: var(--panel-2);
+  border-right: 1px solid var(--rule-2);
+}
+.lb-card-art img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  filter: saturate(0.6) contrast(1.1);
+}
+.lb-card-rank {
+  position: absolute; top: 4px; left: 4px;
+  background: rgba(12, 13, 10, 0.78);
+  color: var(--ink);
+  padding: 1px 5px;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--rule-2);
+}
+.lb-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lb-card-body .panel-hd { border-bottom: 1px solid var(--rule-2); gap: 8px; }
+[data-theme="light"] .lb-card-rank { background: rgba(214, 210, 191, 0.85); color: var(--ink); }
+
 /* ── SEARCH BAR (overlay-style) ── */
 .searchbar-trigger {
   display: inline-flex; align-items: center; gap: 8px;
