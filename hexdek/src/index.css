@@ -386,6 +386,41 @@ body {
   margin: 2px 0;
 }
 
+/* ── GAME CHANGER CALLOUT ── */
+.gc-card {
+  position: relative;
+  background: rgba(212, 168, 67, 0.06);
+  border: 1px solid var(--warn);
+  box-shadow: 0 0 0 1px rgba(212, 168, 67, 0.35), 0 0 14px rgba(212, 168, 67, 0.18);
+  animation: gc-pulse 1.6s ease-in-out infinite;
+}
+@keyframes gc-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(212, 168, 67, 0.35), 0 0 6px rgba(212, 168, 67, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(212, 168, 67, 0.65), 0 0 18px rgba(212, 168, 67, 0.45);
+  }
+}
+.gc-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 5px;
+  margin-right: 6px;
+  background: var(--warn);
+  color: var(--inv-ink);
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--warn);
+  vertical-align: 1px;
+}
+.turn-bar-gc-pill {
+  margin: 0 8px 0 0;
+  padding: 2px 8px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
 /* ── ARCHIVE LAYOUT ── */
 .archive-layout {
   display: grid; grid-template-columns: 320px 1fr; flex: 1; overflow: hidden;

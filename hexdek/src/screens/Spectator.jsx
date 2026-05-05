@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape } from '../components/chrome'
 import { cardArtUrl, API_BASE } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
+import { findGameChangerInText } from '../data/gameChangers'
 
 const SPEED_MARKS = [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2]
 
@@ -316,6 +317,15 @@ export default function Spectator() {
   const log = game.log || []
   const numSeats = seats.length || 4
   const rt = (t) => `R${Math.ceil(t / numSeats)}T${t}`
+
+  // Most recent Game Changer on the current turn — drives the turn-bar callout.
+  let activeGameChanger = null
+  for (let i = log.length - 1; i >= 0; i--) {
+    const e = log[i]
+    if (e.turn !== game.turn) break
+    const gc = findGameChangerInText(e.action)
+    if (gc) { activeGameChanger = gc; break }
+  }
   const eloByCommander = {}
   for (const e of elo) {
     if (!eloByCommander[e.commander] || e.rating > eloByCommander[e.commander].rating) {
@@ -440,7 +450,12 @@ export default function Spectator() {
           </div>
 
           {/* Turn status — single compact line */}
-          <div className="turn-bar">
+          <div className={`turn-bar${activeGameChanger ? ' gc-card' : ''}`}>
+            {activeGameChanger && (
+              <span className="gc-pill turn-bar-gc-pill" title={`Game Changer: ${activeGameChanger}`}>
+                ★ GAME CHANGER · {activeGameChanger.toUpperCase()}
+              </span>
+            )}
             {game.finished ? (
               <>
                 <span className="turn-bar-left">
@@ -486,17 +501,22 @@ export default function Spectator() {
                     const isOldRound = entryRound < currentRound
                     const isElim = ELIMINATION_KINDS.has(entry.kind)
                     const elimReason = ELIMINATION_REASONS[entry.kind]
+                    const gc = findGameChangerInText(entry.action)
+                    const rowClasses = [
+                      isElim ? 'log-elimination' : null,
+                      gc ? 'gc-card' : null,
+                    ].filter(Boolean).join(' ') || undefined
                     return (
                       <div
                         key={i}
-                        className={isElim ? 'log-elimination' : undefined}
+                        className={rowClasses}
                         style={{
                           display: 'grid',
                           gridTemplateColumns: '50px 1fr',
                           gap: 8,
-                          padding: isElim ? '4px 0' : '2px 0',
+                          padding: isElim || gc ? '4px 6px' : '2px 0',
                           borderBottom: i < reversed.length - 1 ? '1px dotted var(--rule)' : 'none',
-                          opacity: isOldRound && !isElim ? 0.4 : 1,
+                          opacity: isOldRound && !isElim && !gc ? 0.4 : 1,
                         }}
                       >
                         <span className="muted-2" style={{ fontSize: 10 }}>{rt(entry.turn)}</span>
@@ -511,6 +531,7 @@ export default function Spectator() {
                           </span>
                         ) : (
                           <span style={{ color: LOG_COLORS[entry.kind] || 'var(--ink)', letterSpacing: '0.02em' }}>
+                            {gc && <span className="gc-pill" title="Game Changer">★ GC</span>}
                             &gt; {entry.action}
                           </span>
                         )}
