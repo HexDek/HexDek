@@ -11,7 +11,10 @@ kanban-plugin: board
 
 ## High Priority — Engine
 
-- [ ] **Remaining 276 commander handlers** — coverage at 447/652 files (681 registered names). Most remaining are 1-2 deck count. Template generator (`cmd/gen-handlers/main.go`) handles simple patterns. #engine #per_card
+- [ ] **Remaining 276 commander handlers** — coverage at 447/652 files (750 registered names covering all 652 pool commanders). Template generator (`cmd/gen-handlers/main.go`) handles simple patterns. Pool now at 1292 decks (threshold lowered 100→80, 2026-05-05). #engine #per_card
+- [~] **Hat evaluator P/T migration to layer-aware** — IN PROGRESS (2026-05-05): migrating 23 call sites in yggdrasil.go (15) + poker.go (8) from raw `p.Power()`/`p.Toughness()` to `gs.PowerOf(p)`/`gs.ToughnessOf(p)` so evaluator respects Layer 7 continuous effects. #engine #layers #hat
+- [~] **Layer 3 text-changing handlers** — IN PROGRESS (2026-05-05): building real framework for text-rewriting effects (land type word swaps, color word changes) beyond the original no-op stub. #engine #layers
+- [~] **Expand layer dispatch (Caged Sun, Gauntlet of Power, March of the Machines)** — IN PROGRESS (2026-05-05): migrating Caged Sun + Gauntlet of Power from trigger-based to Layer 7c continuous effects; March of the Machines as Layer 4 (type-changing) + Layer 7b (P/T setting). #engine #layers
 - [x] **BUG: Ajani Nacatl Pariah 74% WR** — PW threat scoring fix shipped: opponent threat assessment now counts planeswalkers, so the hat correctly prioritizes removal against an undefended Ajani (commit 217927f, 2026-05-04) #engine #bug #hat
 - [ ] **BUG: MDFC permanent_types back-face resolution on battlefield entry** — `moveToZone` (state.go) has no `"battlefield"` case so `MoveCard(..., toZone="battlefield", ...)` silently falls through to graveyard; back-face land MDFCs (Fell the Profane // Fell Mire, Valakut Awakening, Sejiri Shelter) carry the front-face instant/sorcery types onto the battlefield via the deck-parser type-line leak. `tryPlayLand` was patched (commit fa018fd) but the broader `MoveCard("battlefield")` fallthrough still corrupts ~80% of zone_accounting Feynman violations. See `docs/zone-accounting-analysis.md` for full trace. #engine #bug #mdfc #zones
 - [x] **BUG: MDFC permanent_types deep fix** — parser-side fix shipped: deckparser now extracts back-face metadata regardless of whether the back face has P/T data, so previously-skipped MDFC subsets (Malakir Rebirth // Malakir Mire, Sink into Stupor // Soaked Spireside) populate `BackFaceTypes` correctly and the existing battlefield-entry hooks (SwapToBackFace + StripAdventureHalfTypes) finish the job (commit 26b88ed, 2026-05-04) #engine #bug #mdfc #zones
@@ -28,6 +31,14 @@ kanban-plugin: board
 - [x] Operator platform page/tab — `/operator` profile page with deck shelf, match history, friends panel (commit e4d61b1, 2026-05-04) #ui #platform
 - [x] Friends system + player profiles — `/friends` pub-model page with search, add, browse; bidirectional friend list; ADD FRIEND button on deck pages; FRIENDS count in DECK SPECS sidebar (commit a609816, 2026-05-04) #ui #social
 - [x] Bracket-stratified leaderboard tabs — filter by B1-B5, separate rankings per bracket + band labels (2026-05-04) #ui
+- [x] **Tabs on deck drilldown** — Analysis / Deck List / Achievements tab layout on deck pages (2026-05-05) #ui #deck
+- [x] **Gauntlet button moved under Freya** — gauntlet trigger relocated with error state display for decks not in engine pool (2026-05-05) #ui
+- [x] **Win lines collapse** — 8 visible + "show more" toggle for long win-condition lists (2026-05-05) #ui #deck
+- [x] **Import auth gate** — sign-in required before deck import (2026-05-05) #ui #auth
+- [x] **Mobile hero layout** — card-centric 62/38 split for deck drilldown on mobile (2026-05-05) #ui #mobile
+- [x] **Header art blur** — backdrop-filter 4px on deck page header art (2026-05-05) #ui #deck #design
+- [x] **Card tap-to-popup on mobile** — popup first, CTA to full page (2026-05-05) #ui #mobile
+- [x] **Compare page mobile fix** — stacked heroes, 1fr 100px 1fr stats grid for 375px viewport (2026-05-05) #ui #mobile
 - [ ] **Deck import flow** — end-to-end UX overhaul of the import path: paste/URL/file inputs unified in a single ImportModal, real-time validation against the AST corpus, inline error surfacing (unresolved cards, illegal counts), Freya analyze-on-import progress indicator, success → DeckArchive redirect with celebratory toast. Replaces the current piecemeal hooks. #ui #import
 - [ ] **Card performance tracking** — per-card win-rate & inclusion-rate analytics: stats served at `/api/card-stats/{commander}` already exist but per-card historical performance across decks needs a dedicated CardPage panel ("appears in N decks at owner X / B-bracket Y, W/L Z"). Scaffolding lives at `internal/db/card_stats.go` + `internal/hexapi/cardstats.go`. #engine #analytics #cards
 - [x] Game Changer cards list on deck page — GC card names persisted to strategy.json + "GAME CHANGERS" panel with art thumbnails on deck drilldown (2026-05-04) #ui
@@ -202,8 +213,11 @@ kanban-plugin: board
 
 ## Medium Priority — Engine
 
-- [x] **N-card combo line detection** — Huginn expanded from pairwise to 3-5 card combo lines via direct N-tuple observation (2026-05-04) #engine #huginn #combo
-- [x] **Muninn persist batching** — per-game flush threshold + batched AutoArchive replaces per-game read-modify-write (2026-05-04) #engine #performance
+- [x] **N-card combo line detection** — Huginn N-tuple pipeline fully wired: `DetectCoTriggerNTuples()` → `PersistRawNTuples()` → `IngestNTuples()` → `tier3_ntuples_for_freya.json`. CLI ingest/prune/stats/list commands added. Freya reads both pairwise and N-tuple exports. (2026-05-05) #engine #huginn #combo
+- [x] **Muninn persist batching** — tournament runner wired to `Batcher` in all 3 paths (Run, runPool, runLazyPool). `feedBatcher()` streams parser gaps, crashes, concessions, dead triggers per-game. Auto-flush every 30s/100 games. `persistPostTournament()` for non-Muninn data. (2026-05-05) #engine #performance
+- [x] **Feynman outlier fixes** — zone accounting: asymmetric tolerance `diff < -3 || diff > 20` (copy/clone positive diffs normal, missing cards = real bugs). game_end: turn-capped games (≥80 turns) downgraded to "info". 4 new tests. (2026-05-05) #engine #hat #feynman
+- [x] **Gauntlet pool fix** — threshold 100→80, diagnostic logging for filtered decks (parse/noCmd/small/banned breakdown). Pool 1200→1292 decks. All 7174n1c decks now in engine. (2026-05-05) #engine #bug
+- [x] **Tesla ExtractPivot panic fix** — guard against `winnerSeat=-1` (turn-cap draw games with no winner). Was crashing server during gauntlet runs. (2026-05-05) #engine #bug
 - [ ] **Temporal Pincer** — anon UUID cookie → session tracking → on login stitch all anon device UUIDs to authenticated profile. No PII, all UUIDs. Powers P&R via GraphQL. #infra #platform
 
 
