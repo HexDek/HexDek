@@ -1567,8 +1567,9 @@ body {
 }
 .card-page-hero-scrim {
   position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(12,13,10,0.55) 0%, rgba(12,13,10,0.4) 30%, rgba(12,13,10,0.92) 100%);
-  backdrop-filter: blur(6px);
+  background: linear-gradient(180deg, rgba(12,13,10,0.7) 0%, rgba(12,13,10,0.55) 40%, rgba(12,13,10,0.95) 100%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 .card-page-hero-card {
   flex-shrink: 0;
@@ -1700,7 +1701,7 @@ body {
 [data-art-contrast="light"] { --hero-ink: #0c0d0a; --hero-shadow: 0 1px 3px rgba(255,255,255,0.85); }
 [data-art-contrast="light"] .deck-hero__scrim,
 [data-art-contrast="light"] .card-page-hero-scrim {
-  background: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.0) 30%, rgba(255,255,255,0.55) 100%);
+  background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 40%, rgba(255,255,255,0.7) 100%);
 }
 [data-art-contrast] .card-page-hero-title,
 [data-art-contrast] .deck-hero__title {
