@@ -17,6 +17,7 @@ const ROLE_ORDER = [
   'Recursion',
   'Utility',
   'Land',
+  'Other',
 ]
 
 const ROLE_LABELS = {
@@ -34,6 +35,7 @@ const ROLE_LABELS = {
   Recursion: 'RECURSION',
   Utility: 'UTILITY',
   Land: 'LANDS',
+  Other: 'OTHER',
 }
 
 const ROLE_KIND = {
@@ -87,66 +89,77 @@ function ToggleTag({ active, onClick, children }) {
   )
 }
 
+function cleanCardName(name) {
+  return (name || '').replace(/^COMMANDER:\s*/i, '').trim()
+}
+
 export default function CardRolesGrid({ cards = [], cardRoles, code = '04.R' }) {
   const hasRoles = cardRoles && typeof cardRoles === 'object' && Object.keys(cardRoles).length > 0
-  const [view, setView] = useState(hasRoles ? 'roles' : 'list')
+  const [view, setView] = useState('grid')
+
+  const sortedCards = useMemo(() => {
+    return [...cards]
+      .map(c => ({ ...c, displayName: cleanCardName(c.name) }))
+      .filter(c => c.displayName)
+      .sort((a, b) => a.displayName.localeCompare(b.displayName))
+  }, [cards])
+
+  const qtyByName = useMemo(() => {
+    const map = {}
+    for (const c of sortedCards) {
+      map[c.displayName] = (map[c.displayName] || 0) + (c.quantity || 1)
+    }
+    return map
+  }, [sortedCards])
 
   const groups = useMemo(() => {
-    if (!hasRoles) return null
     const g = {}
-    for (const [name, role] of Object.entries(cardRoles)) {
-      if (!role) continue
-      if (!g[role]) g[role] = []
-      g[role].push(name)
+    if (hasRoles) {
+      for (const [name, role] of Object.entries(cardRoles)) {
+        if (!role) continue
+        if (!g[role]) g[role] = []
+        g[role].push(name)
+      }
     }
-    for (const role of Object.keys(g)) g[role].sort((a, b) => a.localeCompare(b))
+    // Cards present in the decklist but missing a role assignment go into OTHER.
+    const tagged = new Set(Object.keys(cardRoles || {}))
+    for (const c of sortedCards) {
+      if (!tagged.has(c.displayName)) {
+        if (!g.Other) g.Other = []
+        g.Other.push(c.displayName)
+      }
+    }
+    for (const role of Object.keys(g)) {
+      // Dedupe (same card could appear via cardRoles and cards) and sort.
+      g[role] = Array.from(new Set(g[role])).sort((a, b) => a.localeCompare(b))
+    }
     return g
-  }, [cardRoles, hasRoles])
+  }, [cardRoles, hasRoles, sortedCards])
 
   const orderedRoles = useMemo(() => {
-    if (!groups) return []
     const known = ROLE_ORDER.filter(r => groups[r]?.length)
     const extra = Object.keys(groups).filter(r => !ROLE_ORDER.includes(r)).sort()
     return [...known, ...extra]
   }, [groups])
 
-  const qtyByName = useMemo(() => {
-    const map = {}
-    for (const c of cards) {
-      if (!c?.name) continue
-      const clean = c.name.replace(/^COMMANDER:\s*/i, '').trim()
-      map[clean] = (map[clean] || 0) + (c.quantity || 1)
-    }
-    return map
-  }, [cards])
+  const totalGrouped = orderedRoles.reduce((s, r) => s + groups[r].length, 0)
 
-  const sortedCards = useMemo(() => {
-    return [...cards]
-      .map(c => ({ ...c, displayName: c.name?.replace(/^COMMANDER:\s*/i, '').trim() || c.name }))
-      .filter(c => c.displayName)
-      .sort((a, b) => a.displayName.localeCompare(b.displayName))
-  }, [cards])
+  if (!sortedCards.length && !hasRoles) return null
 
-  const totalTagged = orderedRoles.reduce((s, r) => s + groups[r].length, 0)
-
-  if (!hasRoles && !cards.length) return null
-
-  const title = view === 'roles' && hasRoles
-    ? `CARDS / / ${orderedRoles.length} ROLES / / ${totalTagged} TAGGED`
+  const title = view === 'grid'
+    ? `CARDS / / ${orderedRoles.length} GROUPS / / ${totalGrouped} CARDS`
     : `CARDS / / ${sortedCards.length} ENTRIES`
 
   const toggle = (
     <span style={{ display: 'inline-flex', gap: 4 }}>
-      {hasRoles && (
-        <ToggleTag active={view === 'roles'} onClick={() => setView('roles')}>ROLES</ToggleTag>
-      )}
+      <ToggleTag active={view === 'grid'} onClick={() => setView('grid')}>GRID</ToggleTag>
       <ToggleTag active={view === 'list'} onClick={() => setView('list')}>LIST</ToggleTag>
     </span>
   )
 
   return (
     <Panel code={code} title={title} right={toggle}>
-      {view === 'roles' && hasRoles ? (
+      {view === 'grid' ? (
         orderedRoles.map((role, idx) => {
           const names = groups[role]
           const label = ROLE_LABELS[role] || role.toUpperCase()
@@ -155,8 +168,7 @@ export default function CardRolesGrid({ cards = [], cardRoles, code = '04.R' }) 
             <div key={role} style={{ marginTop: idx === 0 ? 0 : 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, paddingBottom: 4, borderBottom: '1px dashed var(--rule-2)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Tag solid kind={kind}>{label}</Tag>
-                  <span className="t-xs muted">{names.length} {names.length === 1 ? 'CARD' : 'CARDS'}</span>
+                  <Tag solid kind={kind}>{label} ({names.length})</Tag>
                 </div>
               </div>
               <div className="grid col-5 gap-2">
@@ -166,12 +178,41 @@ export default function CardRolesGrid({ cards = [], cardRoles, code = '04.R' }) 
           )
         })
       ) : (
-        <div className="grid col-5 gap-2">
-          {sortedCards.map((c, i) => (
-            <RoleThumb key={i} name={c.displayName} qty={c.quantity} />
-          ))}
-        </div>
+        <TextList cards={sortedCards} />
       )}
     </Panel>
+  )
+}
+
+function TextList({ cards }) {
+  return (
+    <div
+      style={{
+        columnCount: 2,
+        columnGap: 24,
+        fontSize: 11,
+        lineHeight: 1.5,
+      }}
+    >
+      {cards.map((c, i) => (
+        <div
+          key={i}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 8,
+            breakInside: 'avoid',
+            paddingBottom: 1,
+          }}
+        >
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {c.displayName}
+          </span>
+          {c.quantity > 1 && (
+            <span className="muted" style={{ flexShrink: 0 }}>×{c.quantity}</span>
+          )}
+        </div>
+      ))}
+    </div>
   )
 }
