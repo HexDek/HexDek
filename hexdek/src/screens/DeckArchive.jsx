@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPie, computeColorByCmc } from '../components/chrome'
 import CardRolesGrid from '../components/CardRolesGrid'
+import AmiiboPanel from '../components/AmiiboPanel'
 import { api, cardArtUrl } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useAuth } from '../context/AuthContext'
@@ -49,6 +50,7 @@ export default function DeckArchive() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [versions, setVersions] = useState([])
   const [gauntlet, setGauntlet] = useState(null)
+  const [amiibo, setAmiibo] = useState(null)
   const { elo } = useLiveSocket()
   const { user } = useAuth()
 
@@ -81,7 +83,8 @@ export default function DeckArchive() {
       api.getDeck(`${owner}/${id}`),
       api.getDeckAnalysis(`${owner}/${id}`),
       api.getGauntlet(`${owner}/${id}`),
-    ]).then(([deckRes, analysisRes, gauntletRes]) => {
+      api.getDeckAmiibo(`${owner}/${id}`),
+    ]).then(([deckRes, analysisRes, gauntletRes, amiiboRes]) => {
       if (deckRes.status === 'fulfilled') setDeck(deckRes.value)
       if (analysisRes.status === 'fulfilled') {
         const data = analysisRes.value
@@ -91,6 +94,9 @@ export default function DeckArchive() {
         } else {
           setAnalysis(data)
         }
+      }
+      if (amiiboRes.status === 'fulfilled' && amiiboRes.value && amiiboRes.value.population) {
+        setAmiibo(amiiboRes.value)
       }
       if (gauntletRes.status === 'fulfilled' && gauntletRes.value.status !== 'none') {
         setGauntlet(gauntletRes.value)
@@ -706,6 +712,9 @@ export default function DeckArchive() {
               ) : null}
             </Panel>
           )}
+
+          {/* Amiibo genetic population */}
+          {amiibo && <AmiiboPanel amiibo={amiibo} />}
 
           {/* Actions */}
           {owner && id && (
