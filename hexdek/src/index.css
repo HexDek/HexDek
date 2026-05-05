@@ -580,6 +580,71 @@ body {
 .lb-sort-bar { display: flex; gap: 6px; flex-wrap: wrap; }
 .lb-cards { display: none; }
 
+/* ── SEARCH BAR ── */
+.searchbar {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--rule-2);
+  background: var(--bg-2);
+  padding: 2px 6px;
+  min-width: 240px; max-width: 360px; flex: 1 1 280px;
+}
+.searchbar:focus-within { border-color: var(--ink); }
+.searchbar__icon {
+  color: var(--ink-2); font-size: 11px; line-height: 1;
+}
+.searchbar__input {
+  flex: 1; background: transparent; border: 0; outline: none;
+  color: var(--ink); font-family: inherit; font-size: 10px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 4px 0;
+}
+.searchbar__input::placeholder { color: var(--ink-3); letter-spacing: 0.1em; }
+.searchbar__hint {
+  font-size: 8px; letter-spacing: 0.1em; color: var(--ink-3);
+  border: 1px solid var(--rule-2); padding: 1px 4px;
+}
+.searchbar__dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: var(--bg); border: 1px solid var(--ink);
+  z-index: 50;
+  max-height: 360px; overflow-y: auto;
+  box-shadow: 4px 4px 0 0 var(--rule-2);
+}
+.searchbar__row {
+  display: grid;
+  grid-template-columns: 14px 44px 1fr auto;
+  gap: 8px; align-items: center;
+  width: 100%; text-align: left;
+  padding: 6px 8px;
+  background: transparent; border: 0;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink); font-family: inherit; font-size: 10px;
+  cursor: pointer;
+}
+.searchbar__row:last-child { border-bottom: 0; }
+.searchbar__row.is-active,
+.searchbar__row:hover { background: var(--bg-2); }
+.searchbar__row--note {
+  display: block; color: var(--ink-3); cursor: default;
+  font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.searchbar__row--note:hover { background: transparent; }
+.searchbar__glyph { color: var(--ink-2); font-size: 10px; line-height: 1; }
+.searchbar__kind {
+  font-size: 8px; letter-spacing: 0.1em; color: var(--ink-2);
+  text-transform: uppercase;
+}
+.searchbar__label {
+  color: var(--ink); text-transform: uppercase; letter-spacing: 0.04em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.searchbar__sub {
+  font-size: 8px; letter-spacing: 0.08em; color: var(--ink-3);
+  text-transform: uppercase;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 160px;
+}
+
 /* ── RESPONSIVE ── */
 @media (max-width: 768px) {
   body { font-size: 11px; }
@@ -587,6 +652,9 @@ body {
   .appbar { padding: 6px 10px; flex-wrap: wrap; gap: 6px; }
   .appbar nav { gap: 10px; flex-wrap: wrap; }
   .appbar > span:nth-child(2) { display: none; }
+
+  .searchbar { min-width: 0; max-width: none; flex: 1 1 100%; order: 2; }
+  .searchbar__hint { display: none; }
 
   .statusbar { display: none; }
 

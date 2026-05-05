@@ -92,6 +92,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/feedback", h.handleFeedback)
 	mux.HandleFunc("POST /api/kofi/webhook", h.handleKofiWebhook)
 	mux.HandleFunc("GET /api/donations/summary", h.handleDonationsSummary)
+	mux.HandleFunc("GET /api/search", h.handleSearch)
 }
 
 type DeckSummary struct {

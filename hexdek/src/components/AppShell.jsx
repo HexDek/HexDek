@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { Crops } from './chrome'
+import SearchBar from './SearchBar'
 import { useAuth } from '../context/AuthContext'
 
 const PUBLIC_NAV = [
@@ -66,6 +67,7 @@ export default function AppShell() {
               ))}
             </nav>
           </div>
+          <SearchBar />
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             SYS.BUILD 25.04.28 · HEXDEK V0.10D
             <button onClick={toggleTheme} className="btn--sm btn--ghost" style={{
