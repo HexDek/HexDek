@@ -1,11 +1,14 @@
 package hexapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/hexdek/hexdek/internal/userprofile"
 )
 
 // OwnerProfile is the public per-owner profile payload returned by
@@ -40,11 +43,18 @@ func (h *Handler) profilesDir() string {
 }
 
 // loadStoredCountry returns the stored country code for owner, or ""
-// if no profile file exists / the file is unreadable. Owner is
-// case-insensitive — the file is expected at lowercased(owner).json.
+// if no profile file exists / the file is unreadable. Reads the
+// SQLite user_profile table first when a DB is attached, then falls
+// back to the legacy JSON file at <profilesDir>/lowercased(owner).json
+// so manual overrides still work. Owner is case-insensitive.
 func (h *Handler) loadStoredCountry(owner string) string {
 	if owner == "" {
 		return ""
+	}
+	if h.db != nil {
+		if c, err := userprofile.GetCountry(context.Background(), h.db, owner); err == nil && c != "" {
+			return strings.ToUpper(c)
+		}
 	}
 	path := filepath.Join(h.profilesDir(), strings.ToLower(owner)+".json")
 	data, err := os.ReadFile(path)
@@ -93,11 +103,20 @@ func isAlpha(b byte) bool {
 // resolveCountry combines the stored-pref and Accept-Language paths.
 // Stored prefs always win; Accept-Language is the fallback so a brand
 // new owner shows a sensible flag the first time their page loads.
+//
+// When the country comes from Accept-Language and a SQLite store is
+// attached, we opportunistically persist it (first-write-wins) so the
+// next visit doesn't need to re-detect — satisfying the "store the
+// detected country code in the user's SQLite profile" requirement.
 func (h *Handler) resolveCountry(owner string, r *http.Request) string {
 	if c := h.loadStoredCountry(owner); c != "" {
 		return c
 	}
-	return parseAcceptLanguageCountry(r.Header.Get("Accept-Language"))
+	c := parseAcceptLanguageCountry(r.Header.Get("Accept-Language"))
+	if c != "" && h.db != nil && owner != "" {
+		_ = userprofile.SetCountryIfMissing(r.Context(), h.db, owner, c)
+	}
+	return c
 }
 
 // handleOwnerProfile implements GET /api/profile/{owner}.

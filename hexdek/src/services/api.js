@@ -55,6 +55,10 @@ export const api = {
   getDeckVersions: (id) => request(`/api/decks/${id}/versions`),
   getDeckAmiibo: (id) => request(`/api/decks/${id}/amiibo`),
   getAchievements: (owner) => request(`/api/achievements/${owner}`),
+  setUserCountry: (owner) => request(`/api/user/profile/country`, {
+    method: 'POST',
+    body: JSON.stringify({ owner }),
+  }),
   getOwnerProfile: (owner) => request(`/api/profile/${encodeURIComponent(owner)}`),
   getOwnerProfiles: (owners) => {
     const list = (owners || []).filter(Boolean).join(',')
