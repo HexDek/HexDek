@@ -1,2 +1,69 @@
+# Jarad, Relentless Rats
+# Source: https://moxfield.com/decks/wJOrteLnIk-HIR59wv1mhg
 COMMANDER: Jarad, Golgari Lich Lord
-# TODO: fill in 99-card decklist (Rats variant)
+1 Demonic Tutor
+1 Blast Zone
+1 Talisman of Resilience
+1 Bojuka Bog
+1 Vraska, Golgari Queen
+1 Urborg, Tomb of Yawgmoth
+1 Marsh Flats
+1 Ayara, First of Locthwain
+1 Gray Merchant of Asphodel
+1 Windswept Heath
+1 Genesis Wave
+1 Vizier of the Menagerie
+1 Bloodbond March
+1 Nykthos, Shrine to Nyx
+1 Yavimaya, Cradle of Growth
+1 Shamanic Revelation
+1 Cavern of Souls
+1 Midnight Reaper
+1 Vanquisher's Banner
+6 Swamp
+1 Putrefy
+1 Aluren
+1 Volrath's Stronghold
+1 Marrow-Gnawer
+1 Cabal Coffers
+1 Beast Whisperer
+1 Gaea's Cradle
+1 Bolas's Citadel
+1 Bontu's Monument
+1 Vorinclex, Voice of Hunger
+1 Erebos, Bleak-Hearted
+1 Ratcatcher
+1 Crop Rotation
+1 Krosan Grip
+1 Sylvan Library
+1 Selvala's Stampede
+1 Whip of Erebos
+1 Nyx Lotus
+1 Piper of the Swarm
+1 The Great Henge
+1 Overgrown Tomb
+1 Secret Salvage
+1 Shaman of Forgotten Ways
+6 Forest
+1 Grave Pact
+1 Tainted Wood
+1 Misty Rainforest
+1 Slate of Ancestry
+1 God-Eternal Rhonas
+1 Mana Reflection
+1 Pack Rat
+1 Llanowar Wastes
+1 Twilight Mire
+1 Wooded Foothills
+21 Relentless Rats
+1 Death's Presence
+1 Nylea, Keen-Eyed
+1 Sol Ring
+1 Golgari Signet
+1 Verdant Catacombs
+1 Realmwalker
+1 Nyxbloom Ancient
+1 Castle Locthwain
+1 Exsanguinate
+1 Bloodstained Mire
+1 Deserted Temple
