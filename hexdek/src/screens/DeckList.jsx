@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Tag, Btn, Tape } from '../components/chrome'
-import ImportModal from '../components/ImportModal'
+import { Tag, Tape } from '../components/chrome'
 import { api, cardArtUrl } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useLiveSocket } from '../hooks/useLiveSocket'
+import { useUploadDeck } from '../hooks/useUploadDeck'
 import { MOCK_DECKS } from '../services/mock'
 
 const VIEW_KEY = 'hexdek_deck_view'
@@ -16,7 +16,6 @@ export default function DeckList() {
   const [tab, setTab] = useState(searchParams.get('tab') === 'all' ? 'all' : 'mine')
   const [legalFilter, setLegalFilter] = useState('all')
   const [loading, setLoading] = useState(true)
-  const [showImport, setShowImport] = useState(false)
   const [viewMode, setViewMode] = useState(() => {
     if (typeof localStorage === 'undefined') return 'shelf'
     return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'shelf'
@@ -24,6 +23,7 @@ export default function DeckList() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { elo } = useLiveSocket()
+  const upload = useUploadDeck(() => loadDecks())
 
   useEffect(() => {
     if (typeof localStorage !== 'undefined') localStorage.setItem(VIEW_KEY, viewMode)
@@ -116,18 +116,15 @@ export default function DeckList() {
           <div style={{ width: 1, height: 16, background: 'var(--rule-2)' }} />
           <Tag solid={viewMode === 'shelf'} onClick={() => setViewMode('shelf')} style={{ cursor: 'pointer' }}>SHELF</Tag>
           <Tag solid={viewMode === 'list'} onClick={() => setViewMode('list')} style={{ cursor: 'pointer' }}>LIST</Tag>
-          {user && (
-            <Btn sm ghost arrow="↑" onClick={() => setShowImport(true)}>IMPORT</Btn>
-          )}
         </div>
 
         {/* Deck grid */}
         {loading ? (
           <div className="t-md muted" style={{ textAlign: 'center', padding: 36 }}>&gt; LOADING DECK ARCHIVE<span className="blink">_</span></div>
         ) : viewMode === 'shelf' ? (
-          <ShelfView decks={filtered.slice(0, 60)} eloByDeckId={eloByDeckId} navigate={navigate} />
+          <ShelfView decks={filtered.slice(0, 60)} eloByDeckId={eloByDeckId} navigate={navigate} onUpload={upload.open} />
         ) : (
-          <ListView decks={filtered.slice(0, 60)} eloByDeckId={eloByDeckId} navigate={navigate} />
+          <ListView decks={filtered.slice(0, 60)} eloByDeckId={eloByDeckId} navigate={navigate} onUpload={upload.open} />
         )}
 
         {filtered.length > 60 && (
@@ -137,12 +134,7 @@ export default function DeckList() {
         )}
       </div>
 
-      {showImport && (
-        <ImportModal
-          onClose={() => setShowImport(false)}
-          onImported={loadDecks}
-        />
-      )}
+      {upload.modal}
     </>
   )
 }
@@ -153,7 +145,51 @@ function deckBracketLabel(d) {
   return pls ? `B${pls}` : `B${wbs}`
 }
 
-function ShelfView({ decks, eloByDeckId, navigate }) {
+function UploadShelfCard({ onUpload }) {
+  return (
+    <div
+      onClick={onUpload}
+      style={{
+        cursor: 'pointer',
+        border: '2px dashed var(--rule-2)',
+        background: 'transparent',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center',
+        padding: 18,
+        minHeight: '100%',
+        transition: 'border-color 80ms ease, background 80ms ease, transform 80ms ease',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = 'var(--accent)'
+        e.currentTarget.style.background = 'rgba(255,255,255,0.02)'
+        e.currentTarget.style.transform = 'translateY(-2px)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = 'var(--rule-2)'
+        e.currentTarget.style.background = 'transparent'
+        e.currentTarget.style.transform = 'translateY(0)'
+      }}
+    >
+      <div style={{ fontSize: 48, lineHeight: 1, fontWeight: 900, color: 'var(--accent)' }}>+</div>
+      <div style={{
+        marginTop: 12,
+        fontSize: 13,
+        fontWeight: 800,
+        letterSpacing: '0.1em',
+        textTransform: 'uppercase',
+        color: 'var(--ink)',
+      }}>ADD YOUR DECK</div>
+      <div className="t-xs muted" style={{ marginTop: 6, lineHeight: 1.4 }}>
+        PASTE A LIST. FREYA<br />ANALYZES IN SECONDS.
+      </div>
+    </div>
+  )
+}
+
+function ShelfView({ decks, eloByDeckId, navigate, onUpload }) {
   return (
     <div
       style={{
@@ -162,6 +198,7 @@ function ShelfView({ decks, eloByDeckId, navigate }) {
         gap: 14,
       }}
     >
+      <UploadShelfCard onUpload={onUpload} />
       {decks.map((d) => {
         const deckKey = `${d.owner}/${d.id}`
         const deckElo = eloByDeckId[deckKey] || eloByDeckId[d.id]
@@ -295,7 +332,7 @@ function ShelfView({ decks, eloByDeckId, navigate }) {
   )
 }
 
-function ListView({ decks, eloByDeckId, navigate }) {
+function ListView({ decks, eloByDeckId, navigate, onUpload }) {
   return (
     <div className="panel" style={{ padding: 0 }}>
       <div
@@ -318,6 +355,36 @@ function ListView({ decks, eloByDeckId, navigate }) {
         <span>BRACKET</span>
         <span>ELO</span>
         <span>RECORD</span>
+      </div>
+      <div
+        onClick={onUpload}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 10,
+          padding: '10px',
+          borderBottom: '2px dashed var(--rule-2)',
+          background: 'transparent',
+          cursor: 'pointer',
+          color: 'var(--ink)',
+          fontWeight: 800,
+          letterSpacing: '0.1em',
+          fontSize: 12,
+          textTransform: 'uppercase',
+          transition: 'background 80ms ease, color 80ms ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--accent)'
+          e.currentTarget.style.color = 'var(--bg)'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent'
+          e.currentTarget.style.color = 'var(--ink)'
+        }}
+      >
+        <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 900 }}>+</span>
+        <span>ADD YOUR DECK</span>
       </div>
       {decks.map((d) => {
         const deckKey = `${d.owner}/${d.id}`

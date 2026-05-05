@@ -1,11 +1,10 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Panel, KV, Btn, Stripes, Tape } from '../components/chrome'
 import { useAuth } from '../context/AuthContext'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { AnimatedCounter } from '../hooks/useAnimatedCounter.jsx'
+import { useUploadDeck } from '../hooks/useUploadDeck'
 import FishtankEmbed from '../components/FishtankEmbed'
-import ImportModal from '../components/ImportModal'
 
 const RUNTIME_LABELS = {
   disconnected: 'DISCONNECTED',
@@ -17,7 +16,7 @@ export default function Splash() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { stats, elo, status } = useLiveSocket()
-  const [importOpen, setImportOpen] = useState(false)
+  const upload = useUploadDeck(() => navigate('/decks?tab=mine'))
 
   const gpm = stats?.games_per_min || 0
   const runtimeText = status === 'live'
@@ -51,8 +50,46 @@ export default function Splash() {
             </div>
           </div>
 
+          {/* Hero CTA — primary conversion: upload a deck */}
+          <button
+            onClick={upload.open}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 18,
+              width: '100%',
+              maxWidth: 540,
+              padding: '18px 22px',
+              background: 'var(--accent)',
+              color: 'var(--bg)',
+              border: '1px solid var(--accent)',
+              fontFamily: 'inherit',
+              fontSize: 20,
+              fontWeight: 800,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              boxShadow: '4px 4px 0 var(--rule-2)',
+              transition: 'transform 80ms ease, box-shadow 80ms ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translate(-2px, -2px)'
+              e.currentTarget.style.boxShadow = '6px 6px 0 var(--rule-2)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translate(0, 0)'
+              e.currentTarget.style.boxShadow = '4px 4px 0 var(--rule-2)'
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <span style={{ fontSize: 28, lineHeight: 1, fontWeight: 900 }}>+</span>
+              <span>UPLOAD YOUR DECK</span>
+            </span>
+            <span style={{ fontSize: 22, lineHeight: 1 }}>▶</span>
+          </button>
+
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Btn solid arrow="▶" onClick={() => setImportOpen(true)}>UPLOAD MY DECK</Btn>
             <Btn solid arrow="▶" onClick={() => navigate(user ? '/dash' : '/login')}>ENTER THE FORGE</Btn>
             <a href="https://github.com/hexdek-labs/HexDek#readme" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}><Btn ghost arrow="↗">DOCS / / README</Btn></a>
             <a href="https://github.com/hexdek-labs/HexDek" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}><Btn ghost arrow="↗">GITHUB / / SRC</Btn></a>
@@ -105,12 +142,7 @@ export default function Splash() {
         </div>
       </div>
 
-      {importOpen && (
-        <ImportModal
-          onClose={() => setImportOpen(false)}
-          onImported={() => navigate('/decks')}
-        />
-      )}
+      {upload.modal}
     </>
   )
 }
