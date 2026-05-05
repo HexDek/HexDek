@@ -4,7 +4,7 @@ import { Crops } from './chrome'
 import SearchBar from './SearchBar'
 import { ToastHost } from './Toast'
 import { useAuth } from '../context/AuthContext'
-import { useTranslation, LOCALE_NAMES } from '../i18n'
+import { useTranslation } from '../i18n'
 
 const PUBLIC_NAV = [
   { to: '/decks', key: 'nav.decks' },
@@ -91,7 +91,7 @@ export default function AppShell() {
               >
                 {availableLocales.map(l => (
                   <option key={l} value={l} style={{ background: 'var(--bg)', color: 'var(--ink)' }}>
-                    {LOCALE_NAMES[l] || l.toUpperCase()}
+                    {l.toUpperCase()}
                   </option>
                 ))}
               </select>

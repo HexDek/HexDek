@@ -1150,7 +1150,7 @@ body {
   font-family: inherit; font-size: 10px; letter-spacing: 0.1em;
   text-transform: uppercase;
   cursor: pointer;
-  min-width: 200px;
+  min-width: 140px;
 }
 .searchbar-trigger:hover { border-color: var(--ink); color: var(--ink); }
 .searchbar-trigger__label { flex: 1; text-align: left; }
