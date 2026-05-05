@@ -389,6 +389,15 @@ func InitDFCFaces(p *Permanent,
 // face's instant/sorcery types, which §205.2 forbids (and Feynman flags
 // as a critical permanent_types violation).
 //
+// REVERSE-MDFC GUARD: when the front face is already a land and the back
+// face is an instant/sorcery (e.g. "Midgar, City of Mako // Reactor
+// Raid"), swapping would discard the printed front-face land identity
+// and replace it with a non-permanent type — the exact §205.2 violation
+// the forward-direction swap is supposed to prevent. Refuse the swap.
+// All known call sites already gate against this case; the inline check
+// here is defensive depth so a future caller can't introduce the
+// regression.
+//
 // The combined "Front // Back" runtime type signature that the deck
 // parser produces (e.g. ["instant", "//", "land", "mountain"] from a
 // type_line of "Instant // Land — Mountain") is replaced wholesale by
@@ -401,10 +410,18 @@ func InitDFCFaces(p *Permanent,
 // fix that also swaps AST is deferred until the corpus loader carries a
 // per-face AST cache.
 //
-// Returns true on a successful swap, false if the card isn't an MDFC or
-// has no back-face data.
+// Returns true on a successful swap, false if the card isn't an MDFC,
+// has no back-face data, or is a reverse MDFC (front-land/back-spell).
 func SwapToBackFace(c *Card) bool {
 	if c == nil || !c.IsMDFC() {
+		return false
+	}
+	if IsReverseMDFC(c) {
+		// Reverse MDFC — front is the land we want to keep. Clear any
+		// transient CastingBackFace flag so a stale flip doesn't leak
+		// into a downstream consumer, but otherwise leave the card's
+		// Types/Name/TypeLine alone.
+		c.CastingBackFace = false
 		return false
 	}
 	c.Name = c.BackFaceName
@@ -419,6 +436,22 @@ func SwapToBackFace(c *Card) bool {
 	}
 	c.CastingBackFace = false
 	return true
+}
+
+// IsReverseMDFC reports whether an MDFC's printed FRONT face is a land
+// and the BACK face is NOT — the "Midgar, City of Mako // Reactor Raid"
+// shape. Battlefield-entry helpers use this to skip the back-face swap:
+// the front-face land is already the correct permanent identity, and
+// swapping to the spell-typed back face would trip §205.2.
+//
+// Returns false for non-MDFCs, land/land MDFCs, and the standard
+// spell-front/land-back MDFCs that SwapToBackFace was originally
+// written for.
+func IsReverseMDFC(c *Card) bool {
+	if c == nil || !c.IsMDFC() {
+		return false
+	}
+	return MDFCFrontFaceIsLand(c) && !MDFCBackFaceIsLand(c)
 }
 
 // MDFCFrontFaceIsLand reports whether an MDFC's printed FRONT face is a

@@ -374,6 +374,180 @@ func TestEnsureBattlefieldFrontFace_MDFCSwapWinsOverStrip(t *testing.T) {
 	}
 }
 
+// Reverse MDFC: front face is a land, back face is a sorcery
+// (e.g. "Midgar, City of Mako // Reactor Raid"). SwapToBackFace must
+// refuse — the front-face land is the correct permanent identity, and
+// the back-face sorcery types would trip the §205.2 permanent_types
+// invariant.
+func TestSwapToBackFace_ReverseMDFCRefused(t *testing.T) {
+	c := &Card{
+		Name:             "Midgar, City of Mako",
+		Types:            []string{"land"},
+		TypeLine:         "land",
+		CMC:              0,
+		BackFaceName:     "Reactor Raid",
+		BackFaceTypes:    []string{"sorcery"},
+		BackFaceTypeLine: "sorcery",
+		BackFaceCMC:      4,
+	}
+	if !c.IsMDFC() {
+		t.Fatalf("test setup: BackFaceCMC>0, IsMDFC must be true")
+	}
+	if !IsReverseMDFC(c) {
+		t.Fatalf("test setup: IsReverseMDFC should be true")
+	}
+	if got := SwapToBackFace(c); got != false {
+		t.Fatalf("SwapToBackFace returned %v, want false (refused)", got)
+	}
+	if c.Name != "Midgar, City of Mako" {
+		t.Errorf("Name = %q, want unchanged front-face name", c.Name)
+	}
+	if !equalStrSliceDFC(c.Types, []string{"land"}) {
+		t.Errorf("Types = %v, want [land] (unchanged)", c.Types)
+	}
+	if c.CMC != 0 {
+		t.Errorf("CMC = %d, want 0 (front-face)", c.CMC)
+	}
+	if c.CastingBackFace {
+		t.Errorf("CastingBackFace not cleared by refusal")
+	}
+}
+
+// Forward MDFC (the original design): front=instant/sorcery, back=land.
+// Regression guard — the reverse-MDFC fix must not break the forward
+// direction.
+func TestSwapToBackFace_ForwardMDFCStillSwaps(t *testing.T) {
+	c := &Card{
+		Name:             "Fell the Profane",
+		Types:            []string{"sorcery", "//", "land", "swamp"},
+		TypeLine:         "sorcery // land — swamp",
+		CMC:              4,
+		BackFaceName:     "Fell Mire",
+		BackFaceTypes:    []string{"land", "swamp"},
+		BackFaceTypeLine: "land — swamp",
+		BackFaceCMC:      0,
+	}
+	if !c.IsMDFC() {
+		// IsMDFC gate is BackFaceCMC > 0; some forward MDFCs have a
+		// back-face land with cost 0. Force the gate true for this
+		// test by setting a sentinel.
+		c.BackFaceCMC = 1
+	}
+	if IsReverseMDFC(c) {
+		t.Fatalf("test setup: IsReverseMDFC should be false (front is sorcery)")
+	}
+	if got := SwapToBackFace(c); got != true {
+		t.Fatalf("SwapToBackFace returned %v, want true", got)
+	}
+	if c.Name != "Fell Mire" {
+		t.Errorf("Name = %q, want Fell Mire", c.Name)
+	}
+	if !equalStrSliceDFC(c.Types, []string{"land", "swamp"}) {
+		t.Errorf("Types = %v, want [land swamp]", c.Types)
+	}
+}
+
+// EnsureMDFCBackFaceForBattlefield: reverse MDFCs are already gated by
+// MDFCBackFaceIsLand (which is false for reverse), so the helper
+// returns false without touching the card. This test pins that
+// behavior across the inner SwapToBackFace guard refactor.
+func TestEnsureMDFCBackFaceForBattlefield_ReverseMDFCNoOp(t *testing.T) {
+	c := &Card{
+		Name:             "Midgar, City of Mako",
+		Types:            []string{"land"},
+		TypeLine:         "land",
+		BackFaceName:     "Reactor Raid",
+		BackFaceTypes:    []string{"sorcery"},
+		BackFaceTypeLine: "sorcery",
+		BackFaceCMC:      4,
+	}
+	if got := EnsureMDFCBackFaceForBattlefield(c); got != false {
+		t.Fatalf("returned %v, want false (no-op)", got)
+	}
+	if !equalStrSliceDFC(c.Types, []string{"land"}) {
+		t.Errorf("Types = %v, want unchanged [land]", c.Types)
+	}
+}
+
+// EnsureBattlefieldFrontFace: full battlefield-entry pipeline run on a
+// reverse MDFC where the deckparser leaked the back-face type into
+// Types as ["land", "//", "sorcery"]. SwapToBackFace refuses; the
+// stripper drops the "// sorcery" leak; the result is a clean land.
+func TestEnsureBattlefieldFrontFace_ReverseMDFCStripsLeak(t *testing.T) {
+	c := &Card{
+		Name:             "Midgar, City of Mako",
+		Types:            []string{"land", "//", "sorcery"},
+		TypeLine:         "land // sorcery",
+		BackFaceName:     "Reactor Raid",
+		BackFaceTypes:    []string{"sorcery"},
+		BackFaceTypeLine: "sorcery",
+		BackFaceCMC:      4,
+	}
+	EnsureBattlefieldFrontFace(c)
+	if !equalStrSliceDFC(c.Types, []string{"land"}) {
+		t.Errorf("Types = %v, want [land] (front-face survives, leak stripped)", c.Types)
+	}
+	if c.Name != "Midgar, City of Mako" {
+		t.Errorf("Name = %q, want unchanged front-face name", c.Name)
+	}
+	if c.TypeLine != "land" {
+		t.Errorf("TypeLine = %q, want %q", c.TypeLine, "land")
+	}
+}
+
+// IsReverseMDFC: the four shapes it must classify correctly.
+func TestIsReverseMDFC_Classification(t *testing.T) {
+	cases := []struct {
+		name string
+		c    *Card
+		want bool
+	}{
+		{
+			name: "non-MDFC creature",
+			c:    &Card{Name: "Grizzly Bears", Types: []string{"creature"}, TypeLine: "creature"},
+			want: false,
+		},
+		{
+			name: "forward MDFC (sorcery front, land back)",
+			c: &Card{
+				Types: []string{"sorcery", "//", "land", "swamp"}, TypeLine: "sorcery // land — swamp",
+				BackFaceName:  "Fell Mire",
+				BackFaceTypes: []string{"land", "swamp"}, BackFaceTypeLine: "land — swamp",
+				BackFaceCMC: 1,
+			},
+			want: false,
+		},
+		{
+			name: "reverse MDFC (land front, sorcery back)",
+			c: &Card{
+				Name: "Midgar, City of Mako",
+				Types: []string{"land"}, TypeLine: "land // sorcery",
+				BackFaceName:  "Reactor Raid",
+				BackFaceTypes: []string{"sorcery"}, BackFaceTypeLine: "sorcery",
+				BackFaceCMC: 4,
+			},
+			want: true,
+		},
+		{
+			name: "land/land MDFC",
+			c: &Card{
+				Types: []string{"land", "//", "land"}, TypeLine: "land // land",
+				BackFaceName:  "Other Land",
+				BackFaceTypes: []string{"land"}, BackFaceTypeLine: "land",
+				BackFaceCMC: 1,
+			},
+			want: false, // back is also a land, so not "reverse" — front is fine, swap is also fine
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsReverseMDFC(tc.c); got != tc.want {
+				t.Errorf("IsReverseMDFC = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func equalStrSliceDFC(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
