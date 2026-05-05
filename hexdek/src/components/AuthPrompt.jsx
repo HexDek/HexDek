@@ -1,0 +1,104 @@
+import { useNavigate } from 'react-router-dom'
+import { Btn } from './chrome'
+
+// AuthPrompt — contextual sign-in modal triggered when an anon user
+// reaches for an auth-gated action (upload, import, save, etc.).
+//
+// Primary path is Firebase email magic-link. Discord OAuth is stubbed
+// (no provider configured) — when Discord auth lands, swap the disabled
+// onClick for a real handler and drop the `disabled` prop.
+export default function AuthPrompt({ onClose, action = 'continue' }) {
+  const navigate = useNavigate()
+  const goLogin = () => { onClose(); navigate('/login') }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }} onClick={onClose}>
+      <div className="panel" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, width: '100%' }}>
+        <div className="panel-hd">
+          <span>SIGN IN / / {action.toUpperCase()}</span>
+          <span style={{ cursor: 'pointer' }} onClick={onClose}>X</span>
+        </div>
+        <div className="panel-bd" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 22 }}>
+          <div className="t-md" style={{ lineHeight: 1.6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            &gt; SIGN IN TO UPLOAD DECKS, TRACK STATS, AND MORE.
+          </div>
+
+          {/* Primary: email magic-link */}
+          <button
+            onClick={goLogin}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '12px 16px',
+              background: 'var(--accent)',
+              color: 'var(--bg)',
+              border: '1px solid var(--accent)',
+              fontFamily: 'inherit',
+              fontSize: 13,
+              fontWeight: 800,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 16, lineHeight: 1 }}>✉</span>
+              <span>SIGN IN WITH EMAIL</span>
+            </span>
+            <span>↗</span>
+          </button>
+
+          {/* Stubbed: Discord OAuth — disabled until provider is wired. */}
+          <button
+            disabled
+            title="Discord OAuth coming soon — use email for now"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '12px 16px',
+              background: 'transparent',
+              color: 'var(--ink-2)',
+              border: '1px dashed var(--rule-2)',
+              fontFamily: 'inherit',
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              cursor: 'not-allowed',
+              opacity: 0.65,
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <DiscordGlyph />
+              <span>SIGN IN WITH DISCORD</span>
+            </span>
+            <span className="t-xs muted-2" style={{ letterSpacing: '0.1em' }}>SOON</span>
+          </button>
+
+          <div className="t-xs muted-2" style={{ lineHeight: 1.5 }}>
+            &gt; NO PASSWORD. NO SPAM. ONE CLICK TO YOUR ARCHIVE.
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <Btn sm ghost onClick={onClose}>CANCEL</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DiscordGlyph() {
+  return (
+    <svg width="16" height="12" viewBox="0 0 71 55" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M60.1 4.9A58.5 58.5 0 0 0 45.6.5l-.7 1a54.4 54.4 0 0 0-15.2 0l-.7-1a58.5 58.5 0 0 0-14.5 4.4A60 60 0 0 0 .5 41a58.9 58.9 0 0 0 18 9 43.4 43.4 0 0 0 3.8-6.3 38 38 0 0 1-6-2.9c.5-.4 1-.8 1.5-1.2a42 42 0 0 0 35.6 0l1.5 1.2a38 38 0 0 1-6 3 43.4 43.4 0 0 0 3.8 6.2 58.6 58.6 0 0 0 18-9A60 60 0 0 0 60.1 5ZM23.7 35.3c-3.5 0-6.4-3.3-6.4-7.3 0-4 2.8-7.3 6.4-7.3 3.6 0 6.5 3.3 6.4 7.3 0 4-2.8 7.3-6.4 7.3Zm23.6 0c-3.5 0-6.4-3.3-6.4-7.3 0-4 2.8-7.3 6.4-7.3 3.6 0 6.5 3.3 6.4 7.3 0 4-2.8 7.3-6.4 7.3Z"/>
+    </svg>
+  )
+}

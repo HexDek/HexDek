@@ -92,7 +92,7 @@ export default function AppShell() {
                   <a onClick={handleLogout} style={{ cursor: 'pointer', fontSize: 9, letterSpacing: '0.1em', color: 'var(--ink-2)' }}>LOGOUT</a>
                 </>
               ) : (
-                <NavLink to="/login" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--ink-2)', textDecoration: 'none' }}>LOGIN ↗</NavLink>
+                <NavLink to="/login" style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--accent)', textDecoration: 'none', fontWeight: 700, border: '1px solid var(--rule-2)', padding: '3px 8px' }}>SIGN IN ↗</NavLink>
               )}
             </span>
           )}
