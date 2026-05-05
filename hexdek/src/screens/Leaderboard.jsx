@@ -32,6 +32,25 @@ function BandTag({ band, bracket }) {
   )
 }
 
+function shameTier(rating) {
+  const r = rating ?? 0
+  if (r <= -300) return { label: 'PACK IT UP', kind: 'bad' }
+  if (r <= -200) return { label: 'COOKED', kind: 'bad' }
+  if (r <= -100) return { label: 'DOWN BAD', kind: 'bad' }
+  if (r <= 0) return { label: 'MID', kind: 'warn' }
+  return null
+}
+
+function ShameBadge({ rating }) {
+  const tier = shameTier(rating)
+  if (!tier) return null
+  return (
+    <Tag kind={tier.kind} solid style={{ fontSize: 8, padding: '1px 4px', marginLeft: 4 }}>
+      {tier.label}
+    </Tag>
+  )
+}
+
 function DeltaDisplay({ delta }) {
   if (delta == null || delta === 0) return <span className="muted-2">--</span>
   const positive = delta > 0
@@ -94,6 +113,14 @@ export default function Leaderboard() {
 
     return list
   }, [elo, filter, sortKey, sortAsc, bracket])
+
+  const wallOfShame = useMemo(() => {
+    let list = [...(elo || [])]
+    if (bracket != null) list = list.filter(e => e.bracket === bracket)
+    list = list.filter(e => (e.rating ?? 0) <= 0)
+    list.sort((a, b) => (a.rating ?? 0) - (b.rating ?? 0))
+    return list.slice(0, 10)
+  }, [elo, bracket])
 
   const sortArrow = (key) => {
     if (sortKey !== key) return ''
@@ -211,6 +238,7 @@ export default function Leaderboard() {
                   <td className="lb-td lb-td--cmdr" style={{ textDecoration: 'underline', textDecorationColor: 'var(--rule-2)' }}>
                     {entry.commander || '--'}
                     <BandTag band={entry.band} bracket={entry.bracket} />
+                    <ShameBadge rating={entry.rating} />
                   </td>
                   <td className="lb-td lb-td--owner muted">{entry.owner?.toUpperCase() || '--'}</td>
                   <td className="lb-td lb-td--rating">
@@ -258,6 +286,7 @@ export default function Leaderboard() {
                   <span style={{ fontWeight: 700, color: 'var(--ink)' }}>
                     {entry.commander || '--'}
                     <BandTag band={entry.band} bracket={entry.bracket} />
+                    <ShameBadge rating={entry.rating} />
                   </span>
                 </span>
                 <span className="t-xs" style={{ fontWeight: 700 }}>
@@ -291,6 +320,50 @@ export default function Leaderboard() {
             </div>
           )}
         </div>
+
+        {wallOfShame.length > 0 && (
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Tape
+              left={`WALL OF SHAME / ${bracketLabel} / BOTTOM ${wallOfShame.length}`}
+              mid="NEGATIVE ELO REGISTRY"
+              right="DOC HX-666"
+            />
+            <div className="panel" style={{ padding: 0 }}>
+              {wallOfShame.map((entry, i) => (
+                <div
+                  key={`shame-${entry.deck_id || i}`}
+                  className="lb-row"
+                  onClick={() => handleRowClick(entry)}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '6px 10px',
+                    gap: 10,
+                    borderTop: i === 0 ? 'none' : '1px solid var(--rule-2)',
+                    cursor: 'pointer',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
+                    <span className="muted-2" style={{ minWidth: 22, fontWeight: 700 }}>#{i + 1}</span>
+                    <span style={{ fontWeight: 700, color: 'var(--ink)' }}>
+                      {entry.commander || '--'}
+                    </span>
+                    <ShameBadge rating={entry.rating} />
+                    <span className="t-xs muted">{entry.owner?.toUpperCase() || '--'}</span>
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <RecordDisplay wins={entry.wins || 0} losses={entry.losses || 0} />
+                    <span style={{ color: 'var(--danger)', fontWeight: 700, minWidth: 48, textAlign: 'right' }}>
+                      {Math.round(entry.rating || 0)}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </>
   )
