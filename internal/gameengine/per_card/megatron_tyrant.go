@@ -29,7 +29,9 @@ import (
 // emitPartial.
 func registerMegatronTyrant(r *Registry) {
 	r.OnTrigger("Megatron, Tyrant", "postcombat_main_controller", megatronPostcombat)
+	r.OnTrigger("Megatron, Tyrant // Megatron, Destructive Force", "postcombat_main_controller", megatronPostcombat)
 	r.OnTrigger("Megatron, Destructive Force", "attacks", megatronBackAttacks)
+	r.OnTrigger("Megatron, Tyrant // Megatron, Destructive Force", "attacks", megatronBackAttacks)
 }
 
 func megatronPostcombat(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {

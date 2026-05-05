@@ -26,6 +26,7 @@ import (
 // counters, transform) that isn't fully wired — emitPartial.
 func registerEtaliPrimalConqueror(r *Registry) {
 	r.OnETB("Etali, Primal Conqueror", etaliPrimalConquerorETB)
+	r.OnETB("Etali, Primal Conqueror // Etali, Primal Sickness", etaliPrimalConquerorETB)
 }
 
 func etaliPrimalConquerorETB(gs *gameengine.GameState, perm *gameengine.Permanent) {

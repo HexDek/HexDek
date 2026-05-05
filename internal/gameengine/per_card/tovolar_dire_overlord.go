@@ -36,7 +36,9 @@ import (
 //   - Daybound/Nightbound transformation is engine-side state.
 func registerTovolarDireOverlord(r *Registry) {
 	r.OnTrigger("Tovolar, Dire Overlord", "creature_combat_damage_to_player", tovolarOnCombatDamage)
+	r.OnTrigger("Tovolar, Dire Overlord // Tovolar, the Midnight Scourge", "creature_combat_damage_to_player", tovolarOnCombatDamage)
 	r.OnTrigger("Tovolar, Dire Overlord", "upkeep_controller", tovolarUpkeepNight)
+	r.OnTrigger("Tovolar, Dire Overlord // Tovolar, the Midnight Scourge", "upkeep_controller", tovolarUpkeepNight)
 }
 
 func tovolarOnCombatDamage(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {

@@ -21,7 +21,9 @@ import (
 // Both activation paths and the additional combat phase are non-trivial.
 func registerBruceBanner(r *Registry) {
 	r.OnActivated("Bruce Banner", bruceBannerActivated)
+	r.OnActivated("Bruce Banner // The Incredible Hulk", bruceBannerActivated)
 	r.OnTrigger("The Incredible Hulk", "damaged", bruceBannerEnrage)
+	r.OnTrigger("Bruce Banner // The Incredible Hulk", "damaged", bruceBannerEnrage)
 }
 
 func bruceBannerActivated(gs *gameengine.GameState, src *gameengine.Permanent, abilityIdx int, ctx map[string]interface{}) {

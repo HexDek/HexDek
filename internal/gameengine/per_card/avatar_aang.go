@@ -23,6 +23,7 @@ import (
 // Bending mechanics aren't tracked at the engine level — emitPartial.
 func registerAvatarAang(r *Registry) {
 	r.OnETB("Avatar Aang", avatarAangStub)
+	r.OnETB("Avatar Aang // Aang, Master of Elements", avatarAangStub)
 }
 
 func avatarAangStub(gs *gameengine.GameState, perm *gameengine.Permanent) {

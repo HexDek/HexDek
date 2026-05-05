@@ -27,8 +27,11 @@ import (
 // outside the per-card pipeline. Register an ETB partial-flag marker.
 func registerSlicerHiredMuscle(r *Registry) {
 	r.OnETB("Slicer, Hired Muscle", slicerHiredMuscleETB)
+	r.OnETB("Slicer, Hired Muscle // Slicer, High-Speed Antagonist", slicerHiredMuscleETB)
 	r.OnTrigger("Slicer, Hired Muscle", "upkeep_opponent", slicerOpponentUpkeep)
+	r.OnTrigger("Slicer, Hired Muscle // Slicer, High-Speed Antagonist", "upkeep_opponent", slicerOpponentUpkeep)
 	r.OnTrigger("Slicer, Hired Muscle", "combat_damage_player", slicerCombatDamage)
+	r.OnTrigger("Slicer, Hired Muscle // Slicer, High-Speed Antagonist", "combat_damage_player", slicerCombatDamage)
 }
 
 func slicerHiredMuscleETB(gs *gameengine.GameState, perm *gameengine.Permanent) {

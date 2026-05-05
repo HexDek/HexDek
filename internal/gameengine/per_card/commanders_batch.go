@@ -851,7 +851,9 @@ func sorayaETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 
 func registerTergrid(r *Registry) {
 	r.OnTrigger("Tergrid, God of Fright", "permanent_sacrificed", tergridTrigger)
+	r.OnTrigger("Tergrid, God of Fright // Tergrid's Lantern", "permanent_sacrificed", tergridTrigger)
 	r.OnTrigger("Tergrid, God of Fright", "card_discarded", tergridDiscardTrigger)
+	r.OnTrigger("Tergrid, God of Fright // Tergrid's Lantern", "card_discarded", tergridDiscardTrigger)
 }
 
 func tergridTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {

@@ -36,6 +36,7 @@ import (
 // self-die path) or activated-only-after-damage-this-turn conditions.
 func registerOjerAxonil(r *Registry) {
 	r.OnETB("Ojer Axonil, Deepest Might", ojerAxonilETB)
+	r.OnETB("Ojer Axonil, Deepest Might // Temple of Power", ojerAxonilETB)
 }
 
 func ojerAxonilETB(gs *gameengine.GameState, perm *gameengine.Permanent) {

@@ -21,6 +21,7 @@ import (
 // engine doesn't yet support; emitPartial.
 func registerChandraFireOfKaladesh(r *Registry) {
 	r.OnETB("Chandra, Fire of Kaladesh", chandraFireStub)
+	r.OnETB("Chandra, Fire of Kaladesh // Chandra, Roaring Flame", chandraFireStub)
 }
 
 func chandraFireStub(gs *gameengine.GameState, perm *gameengine.Permanent) {

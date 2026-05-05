@@ -32,7 +32,9 @@ import (
 //     mechanics outside per-card scope — emitPartial.
 func registerJoshuaPhoenixsDominant(r *Registry) {
 	r.OnETB("Joshua, Phoenix's Dominant", joshuaPhoenixsETB)
+	r.OnETB("Joshua, Phoenix's Dominant // Phoenix, Warden of Fire", joshuaPhoenixsETB)
 	r.OnActivated("Joshua, Phoenix's Dominant", joshuaPhoenixsActivate)
+	r.OnActivated("Joshua, Phoenix's Dominant // Phoenix, Warden of Fire", joshuaPhoenixsActivate)
 }
 
 func joshuaPhoenixsETB(gs *gameengine.GameState, perm *gameengine.Permanent) {

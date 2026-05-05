@@ -33,8 +33,11 @@ import (
 //     replacement to exile" are static replacement effects not modeled.
 func registerEmetSelch(r *Registry) {
 	r.OnETB("Emet-Selch, Unsundered", emetSelchETB)
+	r.OnETB("Emet-Selch, Unsundered // Hades, Sorcerer of Eld", emetSelchETB)
 	r.OnTrigger("Emet-Selch, Unsundered", "creature_attacks", emetSelchAttacks)
+	r.OnTrigger("Emet-Selch, Unsundered // Hades, Sorcerer of Eld", "creature_attacks", emetSelchAttacks)
 	r.OnTrigger("Emet-Selch, Unsundered", "upkeep_controller", emetSelchUpkeep)
+	r.OnTrigger("Emet-Selch, Unsundered // Hades, Sorcerer of Eld", "upkeep_controller", emetSelchUpkeep)
 }
 
 func emetSelchETB(gs *gameengine.GameState, perm *gameengine.Permanent) {

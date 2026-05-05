@@ -19,6 +19,8 @@ import (
 //   - Menace handled by AST keyword pipeline.
 func registerGwenStacyGhostSpider(r *Registry) {
 	r.OnTrigger("Ghost-Spider, Gwen Stacy", "creature_attacks", gwenStacyAttack)
+	r.OnTrigger("Gwen Stacy // Ghost-Spider", "creature_attacks", gwenStacyAttack)
+	r.OnTrigger("Gwen Stacy", "creature_attacks", gwenStacyAttack)
 }
 
 func gwenStacyAttack(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {

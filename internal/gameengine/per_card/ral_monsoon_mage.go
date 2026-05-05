@@ -19,6 +19,7 @@ import (
 // the card is recognized and report the gap.
 func registerRalMonsoonMage(r *Registry) {
 	r.OnETB("Ral, Monsoon Mage", ralMonsoonMageETB)
+	r.OnETB("Ral, Monsoon Mage // Ral, Leyline Prodigy", ralMonsoonMageETB)
 }
 
 func ralMonsoonMageETB(gs *gameengine.GameState, perm *gameengine.Permanent) {

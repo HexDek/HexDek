@@ -30,6 +30,7 @@ import (
 //     by the engine — emitPartial.
 func registerGrubStoriedMatriarch(r *Registry) {
 	r.OnETB("Grub, Storied Matriarch", grubStoriedMatriarchETB)
+	r.OnETB("Grub, Storied Matriarch // Grub, Notorious Auntie", grubStoriedMatriarchETB)
 }
 
 func grubStoriedMatriarchETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
