@@ -9,12 +9,14 @@ import { useTranslation } from '../i18n'
 const PUBLIC_NAV = [
   { to: '/decks', key: 'nav.decks' },
   { to: '/leaderboard', key: 'nav.leaderboard' },
+  { to: '/meta', key: 'nav.meta' },
   { to: '/spectate', key: 'nav.spectate' },
 ]
 
 const AUTH_NAV = [
   { to: '/decks', key: 'nav.decks' },
   { to: '/leaderboard', key: 'nav.leaderboard' },
+  { to: '/meta', key: 'nav.meta' },
   { to: '/spectate', key: 'nav.spectate' },
   { to: '/decks?tab=mine', key: 'nav.my_decks' },
   { to: '/operator', key: 'nav.operator' },
