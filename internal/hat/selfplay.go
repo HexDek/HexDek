@@ -82,7 +82,7 @@ func (sp *SelfPlayManager) RecordSamples(n int) {
 	}
 	now := time.Now().Unix()
 	lastAttempt := atomic.LoadInt64(&sp.lastAttempt)
-	if now-lastAttempt < 300 {
+	if now-lastAttempt < 1800 {
 		return
 	}
 	if atomic.CompareAndSwapInt32(&sp.training, 0, 1) {
@@ -100,7 +100,8 @@ func (sp *SelfPlayManager) runTraining(sampleCountAtStart int64) {
 
 	t0 := time.Now()
 
-	cmd := exec.Command(sp.config.PythonBin, sp.config.TrainScript,
+	cmd := exec.Command("nice", "-n", "15",
+		sp.config.PythonBin, sp.config.TrainScript,
 		"--samples", sp.config.SamplesPath,
 		"--output", sp.config.ModelPath,
 		"--checkpoint-dir", sp.config.CheckpointDir,
@@ -139,9 +140,20 @@ func (sp *SelfPlayManager) runTraining(sampleCountAtStart int64) {
 	}
 }
 
+const maxSamplesFileSize = 50 * 1024 * 1024 // 50MB — rotate and restart
+
 // WriteEnrichedSamples writes pivot-enriched training samples and
-// increments the self-play sample counter.
+// increments the self-play sample counter. Rotates the file when it
+// exceeds 50MB to prevent unbounded growth.
 func (sp *SelfPlayManager) WriteEnrichedSamples(path string, samples []PivotEnrichedSample) error {
+	if fi, err := os.Stat(path); err == nil && fi.Size() > maxSamplesFileSize {
+		rotated := path + fmt.Sprintf(".%s", time.Now().Format("20060102-150405"))
+		os.Rename(path, rotated)
+		log.Printf("[selfplay] rotated samples file (%d MB) → %s",
+			fi.Size()/(1024*1024), filepath.Base(rotated))
+		cleanOldRotations(path, 3)
+	}
+
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
@@ -155,6 +167,27 @@ func (sp *SelfPlayManager) WriteEnrichedSamples(path string, samples []PivotEnri
 	}
 	sp.RecordSamples(len(samples))
 	return nil
+}
+
+func cleanOldRotations(basePath string, keep int) {
+	dir := filepath.Dir(basePath)
+	base := filepath.Base(basePath) + "."
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	var rotated []string
+	for _, e := range entries {
+		if !e.IsDir() && len(e.Name()) > len(base) && e.Name()[:len(base)] == base {
+			rotated = append(rotated, filepath.Join(dir, e.Name()))
+		}
+	}
+	if len(rotated) <= keep {
+		return
+	}
+	for i := 0; i < len(rotated)-keep; i++ {
+		os.Remove(rotated[i])
+	}
 }
 
 // Status returns a human-readable status string for logging/telemetry.
