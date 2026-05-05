@@ -4,6 +4,7 @@ import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPi
 import CardRolesGrid from '../components/CardRolesGrid'
 import CardLink from '../components/CardLink'
 import AmiiboPanel from '../components/AmiiboPanel'
+import ManaCost from '../components/ManaCost'
 import { AchievementsPanel, BadgeShowcase } from '../components/AchievementsPanel'
 import { toast } from '../components/Toast'
 import { api, cardArtUrl } from '../services/api'
@@ -13,6 +14,7 @@ import { useAuth } from '../context/AuthContext'
 import { trackEvent } from '../hooks/useAnalytics'
 import { MOCK_DECK_ANALYSIS } from '../services/mock'
 import { DeckPicker } from './DeckCompare'
+import DeckExportModal from '../components/DeckExportModal'
 
 const CardThumb = ({ name, cmc, score, compact }) => {
   const imgUrl = cardArtUrl(name)
@@ -61,6 +63,7 @@ export default function DeckArchive() {
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [comparePickerOpen, setComparePickerOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const [versions, setVersions] = useState([])
   const [gauntlet, setGauntlet] = useState(null)
   const [amiibo, setAmiibo] = useState(null)
@@ -71,6 +74,7 @@ export default function DeckArchive() {
   const [isFriend, setIsFriend] = useState(false)
   const [friendBusy, setFriendBusy] = useState(false)
   const [ownerFriendCount, setOwnerFriendCount] = useState(null)
+  const [similarDecks, setSimilarDecks] = useState(null) // null=loading, []=resolved
   const { elo } = useLiveSocket()
   const { user } = useAuth()
 
@@ -241,6 +245,17 @@ export default function DeckArchive() {
       }
       setLoading(false)
     })
+  }, [owner, id])
+
+  // Similar decks — independent fetch so the rest of the page renders
+  // immediately. Server scans DecksDir and returns a ranked top-5.
+  useEffect(() => {
+    if (!owner || !id) { setSimilarDecks([]); return }
+    let cancelled = false
+    api.getSimilarDecks(`${owner}/${id}`, 5)
+      .then(rows => { if (!cancelled) setSimilarDecks(Array.isArray(rows) ? rows : []) })
+      .catch(() => { if (!cancelled) setSimilarDecks([]) })
+    return () => { cancelled = true }
   }, [owner, id])
 
   const deckName = deck?.custom_name || deck?.commander || id?.replace(/_/g, ' ').toUpperCase() || 'DECK'
@@ -571,15 +586,8 @@ export default function DeckArchive() {
               )}
               <Btn ghost arrow="↗" onClick={() => {
                 if (!cards.length) return
-                const lines = cards.map(c => c.quantity > 1 ? `${c.quantity} ${c.name}` : `1 ${c.name}`)
-                const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = `${id || 'deck'}.txt`
-                a.click()
-                URL.revokeObjectURL(url)
-              }}>EXPORT .TXT</Btn>
+                setExportOpen(true)
+              }}>EXPORT</Btn>
               <Btn ghost arrow="↗" onClick={() => {
                 if (!owner || !id) return
                 setAnalyzing(true)
@@ -1147,6 +1155,13 @@ export default function DeckArchive() {
           {owner && <AchievementsPanel owner={owner} />}
         </div>
       </div>
+      {exportOpen && (
+        <DeckExportModal
+          deck={deck}
+          deckId={id}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
       {comparePickerOpen && (
         <DeckPicker
           excludeKey={`${owner}/${id}`}

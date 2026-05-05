@@ -1870,3 +1870,126 @@ body {
   .cmp-vs { flex-direction: row; padding: 4px 0; font-size: 18px; }
   .cmp-cards { grid-template-columns: 1fr; }
 }
+
+/* ── DECK EXPORT MODAL ── */
+.export-modal {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.7);
+  display: flex; justify-content: center; align-items: flex-start;
+  padding-top: 8vh;
+  animation: searchbar-fade 100ms ease-out;
+}
+.export-modal__panel {
+  width: min(720px, 94vw);
+  max-height: 85vh;
+  display: flex; flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  box-shadow: 6px 6px 0 0 var(--rule-2);
+}
+.export-modal__hd {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px;
+  font-size: 10px; letter-spacing: 0.12em;
+  color: var(--ink-2); text-transform: uppercase;
+  border-bottom: 1px solid var(--rule);
+}
+.export-modal__close {
+  cursor: pointer;
+  border: 1px solid var(--rule-2);
+  padding: 1px 5px;
+  font-size: 9px;
+}
+.export-modal__close:hover { color: var(--ink); border-color: var(--ink); }
+.export-modal__formats {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  border-bottom: 1px solid var(--rule);
+}
+.export-modal__fmt {
+  background: transparent; border: 0;
+  border-right: 1px solid var(--rule);
+  padding: 12px 14px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink-2);
+  display: flex; flex-direction: column; gap: 4px;
+  transition: background 80ms ease, color 80ms ease;
+}
+.export-modal__fmt:last-child { border-right: 0; }
+.export-modal__fmt:hover { background: var(--bg-2); color: var(--ink); }
+.export-modal__fmt.is-on {
+  background: var(--ink); color: var(--inv-ink);
+}
+.export-modal__fmt.is-on .export-modal__fmt-sub { color: var(--inv-ink); opacity: 0.75; }
+.export-modal__fmt-label {
+  font-size: 14px; font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.export-modal__fmt-sub {
+  font-size: 9px; letter-spacing: 0.06em;
+  color: var(--ink-3);
+  text-transform: uppercase;
+}
+.export-modal__warn {
+  padding: 8px 14px;
+  font-size: 10px; letter-spacing: 0.04em;
+  color: var(--warn);
+  background: rgba(212, 168, 67, 0.06);
+  border-bottom: 1px solid var(--rule);
+  text-transform: uppercase;
+}
+.export-modal__preview-wrap {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+}
+.export-modal__preview-hd {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 14px;
+  font-size: 9px; letter-spacing: 0.12em;
+  color: var(--ink-2); text-transform: uppercase;
+  border-bottom: 1px solid var(--rule);
+}
+.export-modal__preview {
+  flex: 1; min-height: 240px; max-height: 50vh;
+  margin: 0; padding: 12px 14px;
+  overflow: auto;
+  font-family: inherit; font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--bg-2);
+  white-space: pre;
+  border: 0;
+}
+.export-modal__actions {
+  display: flex; gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--rule);
+}
+.export-modal__btn {
+  flex: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font: inherit; font-size: 11px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  cursor: pointer;
+}
+.export-modal__btn:hover:not(:disabled) { background: var(--ink); color: var(--inv-ink); }
+.export-modal__btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.export-modal__btn--solid { background: var(--ink); color: var(--inv-ink); }
+.export-modal__btn--solid:hover:not(:disabled) { background: transparent; color: var(--ink); }
+.export-modal__btn--ghost { border-color: var(--rule-2); color: var(--ink-2); flex: 0 0 auto; }
+.export-modal__btn--ghost:hover { background: transparent; color: var(--ink); border-color: var(--ink); }
+.export-modal__btn .arr { font-size: 13px; }
+
+@media (max-width: 768px) {
+  .export-modal { padding-top: 4vh; }
+  .export-modal__panel { width: 96vw; max-height: 92vh; }
+  .export-modal__formats { grid-template-columns: 1fr; }
+  .export-modal__fmt { border-right: 0; border-bottom: 1px solid var(--rule); }
+  .export-modal__actions { flex-wrap: wrap; }
+  .export-modal__btn { flex: 1 1 100%; }
+}

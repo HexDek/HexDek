@@ -1,0 +1,149 @@
+import { useMemo, useState } from 'react'
+import { toast } from './Toast'
+import { trackEvent } from '../hooks/useAnalytics'
+
+const FORMATS = [
+  { id: 'mtgo', label: 'MTGO', sub: 'Magic Online .dec — commander in sideboard' },
+  { id: 'arena', label: 'ARENA', sub: 'MTG Arena import format with set codes' },
+  { id: 'raw',  label: 'RAW',   sub: 'Card names only, one per line' },
+]
+
+function buildLines(format, cards, commanderName) {
+  if (!Array.isArray(cards) || cards.length === 0) return ''
+  const cmdr = (commanderName || '').trim()
+  const isCmdr = (c) => cmdr && (c.name === cmdr || c.name?.split('//')[0]?.trim() === cmdr.split('//')[0]?.trim())
+  const main = cards.filter(c => !isCmdr(c))
+  const commanders = cards.filter(isCmdr)
+
+  const fmtMtgo = (c) => `${c.quantity || 1} ${c.name}`
+  const fmtArena = (c) => {
+    const set = (c.set || '').toUpperCase()
+    const cn = c.collector_number || c.cn || ''
+    if (set && cn) return `${c.quantity || 1} ${c.name} (${set}) ${cn}`
+    if (set)       return `${c.quantity || 1} ${c.name} (${set})`
+    return `${c.quantity || 1} ${c.name}`
+  }
+  const fmtRaw = (c) => c.name
+
+  if (format === 'raw') {
+    return cards.map(fmtRaw).join('\n')
+  }
+
+  const fmt = format === 'arena' ? fmtArena : fmtMtgo
+  const out = []
+  out.push(...main.map(fmt))
+  if (commanders.length) {
+    out.push('')
+    out.push(format === 'arena' ? 'Commander' : 'Sideboard')
+    out.push(...commanders.map(fmt))
+  }
+  return out.join('\n')
+}
+
+function copy(text) {
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text).then(() => true).catch(() => false)
+  }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return Promise.resolve(ok)
+  } catch {
+    return Promise.resolve(false)
+  }
+}
+
+function download(text, filename) {
+  const blob = new Blob([text], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+export default function DeckExportModal({ deck, deckId, onClose }) {
+  const [format, setFormat] = useState('mtgo')
+  const cards = deck?.cards || []
+  const commanderName = deck?.commander_card || deck?.commander || ''
+  const text = useMemo(() => buildLines(format, cards, commanderName), [format, cards, commanderName])
+  const lineCount = text ? text.split('\n').filter(l => l && !/^(Sideboard|Commander)$/.test(l)).length : 0
+  const hasArenaData = cards.some(c => c.set || c.collector_number || c.cn)
+  const baseFilename = (deckId || 'deck').replace(/[^a-z0-9_-]/gi, '_')
+  const ext = format === 'arena' ? '_arena.txt' : format === 'mtgo' ? '.dec' : '.txt'
+
+  const onCopy = async () => {
+    if (!text) return
+    const ok = await copy(text)
+    trackEvent('deck_export_copy', { format, lines: lineCount })
+    if (ok) toast.success(`COPIED ${format.toUpperCase()} (${lineCount} CARDS)`)
+    else    toast.error('COPY FAILED — TRY DOWNLOAD')
+  }
+  const onDownload = () => {
+    if (!text) return
+    download(text, `${baseFilename}${ext}`)
+    trackEvent('deck_export_download', { format, lines: lineCount })
+    toast.success(`DOWNLOADED ${baseFilename}${ext}`)
+  }
+
+  return (
+    <div className="export-modal" onMouseDown={onClose}>
+      <div className="export-modal__panel" onMouseDown={e => e.stopPropagation()}>
+        <div className="export-modal__hd">
+          <span>EXPORT DECK / / {(deckId || '?').toUpperCase()}</span>
+          <span className="export-modal__close" onClick={onClose}>ESC</span>
+        </div>
+
+        <div className="export-modal__formats">
+          {FORMATS.map(f => (
+            <button
+              key={f.id}
+              type="button"
+              className={`export-modal__fmt ${format === f.id ? 'is-on' : ''}`}
+              onClick={() => setFormat(f.id)}
+            >
+              <span className="export-modal__fmt-label">{f.label}</span>
+              <span className="export-modal__fmt-sub">{f.sub}</span>
+            </button>
+          ))}
+        </div>
+
+        {format === 'arena' && !hasArenaData && (
+          <div className="export-modal__warn">
+            &gt; SET / COLLECTOR DATA NOT IN DECK — ARENA OUTPUT FALLS BACK TO PLAIN NAMES.
+            <br />&gt; ARENA WILL STILL ACCEPT IT BUT MAY PICK A DEFAULT PRINTING.
+          </div>
+        )}
+
+        <div className="export-modal__preview-wrap">
+          <div className="export-modal__preview-hd">
+            <span>{format.toUpperCase()} PREVIEW</span>
+            <span className="t-xs muted">{lineCount} CARDS</span>
+          </div>
+          <pre className="export-modal__preview" aria-label="Decklist preview">{text || '— EMPTY DECK —'}</pre>
+        </div>
+
+        <div className="export-modal__actions">
+          <button type="button" className="export-modal__btn export-modal__btn--solid" onClick={onCopy} disabled={!text}>
+            COPY {format.toUpperCase()}<span className="arr">⎘</span>
+          </button>
+          <button type="button" className="export-modal__btn" onClick={onDownload} disabled={!text}>
+            DOWNLOAD {ext}<span className="arr">↓</span>
+          </button>
+          <button type="button" className="export-modal__btn export-modal__btn--ghost" onClick={onClose}>
+            CLOSE
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
