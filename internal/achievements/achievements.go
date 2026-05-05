@@ -66,6 +66,21 @@ var Catalog = map[string]Badge{
 		Description: "Sit across from 1,000 unique opponents.",
 		Rarity:      Rare, Icon: "👑",
 	},
+	"ten_games": {
+		ID: "ten_games", Name: "WARMED UP",
+		Description: "Play 10 games.",
+		Rarity:      Common, Icon: "🎲",
+	},
+	"hundred_games": {
+		ID: "hundred_games", Name: "SEASONED",
+		Description: "Play 100 games.",
+		Rarity:      Uncommon, Icon: "📚",
+	},
+	"thousand_games": {
+		ID: "thousand_games", Name: "GRINDER",
+		Description: "Play 1,000 games.",
+		Rarity:      Rare, Icon: "⚙️",
+	},
 	"early_win": {
 		ID: "early_win", Name: "BLITZ",
 		Description: "Win a game by turn 5.",
@@ -369,6 +384,17 @@ func applyGameToOwner(state *OwnerState, g GameOutcome, won bool, winSeat SeatOu
 	}
 	if n >= 1000 {
 		award("thousand_users")
+	}
+
+	switch {
+	case state.TotalGames >= 1000:
+		award("thousand_games")
+		fallthrough
+	case state.TotalGames >= 100:
+		award("hundred_games")
+		fallthrough
+	case state.TotalGames >= 10:
+		award("ten_games")
 	}
 }
 

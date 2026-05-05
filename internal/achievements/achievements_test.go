@@ -213,6 +213,34 @@ func TestAwardIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestGamesPlayedMilestones(t *testing.T) {
+	tr, _ := NewTracker(t.TempDir())
+
+	for i := 0; i < 9; i++ {
+		_ = tr.OnGameComplete(mkGame(8,
+			SeatOutcome{Owner: "alice", DeckKey: "alice/burn"},
+			SeatOutcome{Owner: "bob", Won: true, FinalLife: 22},
+		))
+	}
+	got := badgeIDs(tr.Snapshot("alice").Badges)
+	if contains(got, "ten_games") {
+		t.Errorf("ten_games awarded too early at 9 games: %v", got)
+	}
+
+	_ = tr.OnGameComplete(mkGame(8,
+		SeatOutcome{Owner: "alice", DeckKey: "alice/burn"},
+		SeatOutcome{Owner: "bob", Won: true, FinalLife: 22},
+	))
+	got = badgeIDs(tr.Snapshot("alice").Badges)
+	if !contains(got, "ten_games") {
+		t.Errorf("expected ten_games at 10 games, got %v", got)
+	}
+	// The 100/1000 tiers should not be premature.
+	if contains(got, "hundred_games") || contains(got, "thousand_games") {
+		t.Errorf("higher game milestones leaked at 10 games: %v", got)
+	}
+}
+
 func TestSnapshotIncludesSortedCatalog(t *testing.T) {
 	tr, _ := NewTracker(t.TempDir())
 	snap := tr.Snapshot("nobody")
