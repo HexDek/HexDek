@@ -38,6 +38,12 @@ const (
 
 	maxTier1And2 = 500
 
+	// N-card chain inference bounds.
+	chainMinLength      = 3
+	chainMaxLength      = 5
+	maxChainCandidates  = 50000 // hard stop to keep DFS bounded
+	maxChainsExport     = 200
+
 	rawObsFile          = "raw_observations.json"
 	learnedFile         = "learned_interactions.json"
 	tier3FreyaFile      = "tier3_for_freya.json"
@@ -51,6 +57,25 @@ type FreyaInteraction struct {
 	Pattern    string  `json:"pattern"`
 	AvgImpact  float64 `json:"avg_impact"`
 	Confidence int     `json:"observation_count"`
+}
+
+// FreyaChain is an N-card combo line (3-5 cards) inferred by chaining
+// consecutive tier 3 confirmed pairs through shared cards. If A+B and
+// B+C are both confirmed, A→B→C is emitted as a 3-card chain.
+type FreyaChain struct {
+	Cards         []string `json:"cards"`           // ordered chain; Cards[i] connects to Cards[i+1]
+	Patterns      []string `json:"patterns"`        // Patterns[i] is the resource flow between Cards[i] and Cards[i+1]
+	Length        int      `json:"length"`          // number of cards in the chain (3, 4, or 5)
+	AvgImpact     float64  `json:"avg_impact"`      // mean of segment avg impacts
+	MinConfidence int      `json:"min_confidence"`  // weakest segment's observation count
+}
+
+// Tier3Export is the on-disk shape of tier3_for_freya.json. Pairs holds
+// each tier 3 example pair (one entry per example card pair); Chains
+// holds N-card lines inferred from chained pairs.
+type Tier3Export struct {
+	Pairs  []FreyaInteraction `json:"pairs"`
+	Chains []FreyaChain       `json:"chains"`
 }
 
 // RawObservation is a single co-trigger observation persisted from a
@@ -389,10 +414,11 @@ func Stats(dir string) (tier1, tier2, tier3, total int, err error) {
 }
 
 // exportTier3ForFreya writes all tier 3 (confirmed) interactions to
-// tier3_for_freya.json. Each interaction is expanded: one FreyaInteraction
-// per example card pair, so Freya can match against deck contents directly.
+// tier3_for_freya.json as a Tier3Export object. Pairs holds one
+// FreyaInteraction per example card pair; Chains holds N-card lines
+// inferred from chained pairs.
 func exportTier3ForFreya(dir string, interactions []LearnedInteraction) error {
-	var exports []FreyaInteraction
+	var pairs []FreyaInteraction
 	for _, li := range interactions {
 		if li.Tier < TierConfirmed {
 			continue
@@ -402,7 +428,7 @@ func exportTier3ForFreya(dir string, interactions []LearnedInteraction) error {
 			if len(parts) != 2 {
 				continue
 			}
-			exports = append(exports, FreyaInteraction{
+			pairs = append(pairs, FreyaInteraction{
 				CardA:      parts[0],
 				CardB:      parts[1],
 				Pattern:    li.Pattern,
@@ -411,22 +437,217 @@ func exportTier3ForFreya(dir string, interactions []LearnedInteraction) error {
 			})
 		}
 	}
-	if len(exports) == 0 {
+	chains := InferChains(interactions)
+	if len(pairs) == 0 && len(chains) == 0 {
 		// Don't write an empty file; remove stale file if it exists.
 		os.Remove(filepath.Join(dir, tier3FreyaFile))
 		return nil
 	}
-	return atomicWriteJSON(filepath.Join(dir, tier3FreyaFile), exports)
+	return atomicWriteJSON(filepath.Join(dir, tier3FreyaFile), Tier3Export{Pairs: pairs, Chains: chains})
 }
 
-// ReadTier3ForFreya reads the tier 3 Freya export file. Returns nil
-// (not an error) if the file does not exist.
+// ReadTier3Export reads tier3_for_freya.json. Accepts both the current
+// object form ({pairs:[...], chains:[...]}) and the legacy bare-array
+// form (treated as Pairs). Returns a zero value if the file is missing.
+func ReadTier3Export(dir string) (Tier3Export, error) {
+	path := filepath.Join(dir, tier3FreyaFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Tier3Export{}, nil
+		}
+		return Tier3Export{}, fmt.Errorf("huginn: read %s: %w", path, err)
+	}
+	if len(data) == 0 {
+		return Tier3Export{}, nil
+	}
+	// Object form first.
+	var exp Tier3Export
+	if err := json.Unmarshal(data, &exp); err == nil && (exp.Pairs != nil || exp.Chains != nil) {
+		return exp, nil
+	}
+	// Legacy array form.
+	var pairs []FreyaInteraction
+	if err := json.Unmarshal(data, &pairs); err != nil {
+		return Tier3Export{}, fmt.Errorf("huginn: parse %s: %w", path, err)
+	}
+	return Tier3Export{Pairs: pairs}, nil
+}
+
+// ReadTier3ForFreya returns just the pair interactions from the tier 3
+// export. Kept for compatibility with callers that don't need chains.
 func ReadTier3ForFreya(dir string) ([]FreyaInteraction, error) {
-	var out []FreyaInteraction
-	if err := readJSON(filepath.Join(dir, tier3FreyaFile), &out); err != nil {
+	exp, err := ReadTier3Export(dir)
+	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return exp.Pairs, nil
+}
+
+// InferChains builds an undirected graph of tier 3 confirmed card pairs
+// (using each LearnedInteraction's ExampleCards) and enumerates simple
+// paths of length 3..5 cards. Each chain is canonicalized (lex-smaller
+// of forward/reverse), sorted by avg impact desc with deterministic
+// tiebreaks, and capped at maxChainsExport.
+//
+// The premise: if A+B and B+C are independently confirmed at tier 3,
+// the trio A→B→C is a plausible N-card combo line worth surfacing for
+// Freya's deck analysis even if it has never been directly observed.
+func InferChains(interactions []LearnedInteraction) []FreyaChain {
+	type chainEdge struct {
+		pattern    string
+		impact     float64
+		confidence int
+	}
+	adj := make(map[string]map[string]*chainEdge)
+	addEdge := func(a, b, pattern string, impact float64, conf int) {
+		if a == "" || b == "" || a == b {
+			return
+		}
+		if adj[a] == nil {
+			adj[a] = make(map[string]*chainEdge)
+		}
+		if adj[b] == nil {
+			adj[b] = make(map[string]*chainEdge)
+		}
+		// If the same card pair appears in multiple confirmed patterns,
+		// keep the strongest (by impact) edge.
+		if e, ok := adj[a][b]; !ok || impact > e.impact {
+			edge := &chainEdge{pattern: pattern, impact: impact, confidence: conf}
+			adj[a][b] = edge
+			adj[b][a] = edge
+		}
+	}
+	for _, li := range interactions {
+		if li.Tier < TierConfirmed {
+			continue
+		}
+		for _, ex := range li.ExampleCards {
+			parts := strings.SplitN(ex, " + ", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			addEdge(parts[0], parts[1], li.Pattern, li.AvgImpactScore, li.ObservationCount)
+		}
+	}
+	if len(adj) < chainMinLength {
+		return nil
+	}
+
+	cards := make([]string, 0, len(adj))
+	for c := range adj {
+		cards = append(cards, c)
+	}
+	sort.Strings(cards)
+
+	seen := make(map[string]bool)
+	var out []FreyaChain
+	hitCap := false
+
+	record := func(path []string) {
+		key := canonicalChainKey(path)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		segments := len(path) - 1
+		patterns := make([]string, segments)
+		var sumImpact float64
+		minConf := 0
+		for i := 0; i < segments; i++ {
+			e := adj[path[i]][path[i+1]]
+			patterns[i] = e.pattern
+			sumImpact += e.impact
+			if i == 0 || e.confidence < minConf {
+				minConf = e.confidence
+			}
+		}
+		out = append(out, FreyaChain{
+			Cards:         append([]string(nil), path...),
+			Patterns:      patterns,
+			Length:        len(path),
+			AvgImpact:     sumImpact / float64(segments),
+			MinConfidence: minConf,
+		})
+	}
+
+	var dfs func(path []string)
+	dfs = func(path []string) {
+		if hitCap {
+			return
+		}
+		if len(path) >= chainMinLength {
+			record(path)
+			if len(out) >= maxChainCandidates {
+				hitCap = true
+				return
+			}
+		}
+		if len(path) >= chainMaxLength {
+			return
+		}
+		last := path[len(path)-1]
+		nbrs := make([]string, 0, len(adj[last]))
+		for n := range adj[last] {
+			nbrs = append(nbrs, n)
+		}
+		sort.Strings(nbrs)
+		for _, n := range nbrs {
+			visited := false
+			for _, p := range path {
+				if p == n {
+					visited = true
+					break
+				}
+			}
+			if visited {
+				continue
+			}
+			next := make([]string, len(path)+1)
+			copy(next, path)
+			next[len(path)] = n
+			dfs(next)
+			if hitCap {
+				return
+			}
+		}
+	}
+
+	for _, c := range cards {
+		dfs([]string{c})
+		if hitCap {
+			break
+		}
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].AvgImpact != out[j].AvgImpact {
+			return out[i].AvgImpact > out[j].AvgImpact
+		}
+		if out[i].Length != out[j].Length {
+			return out[i].Length > out[j].Length
+		}
+		return strings.Join(out[i].Cards, "|") < strings.Join(out[j].Cards, "|")
+	})
+	if len(out) > maxChainsExport {
+		out = out[:maxChainsExport]
+	}
+	return out
+}
+
+// canonicalChainKey returns a stable identifier for a chain regardless
+// of traversal direction: A→B→C and C→B→A collapse to the same key.
+func canonicalChainKey(path []string) string {
+	fwd := strings.Join(path, "→")
+	rev := make([]string, len(path))
+	for i := range path {
+		rev[i] = path[len(path)-1-i]
+	}
+	revStr := strings.Join(rev, "→")
+	if fwd < revStr {
+		return fwd
+	}
+	return revStr
 }
 
 // atomicWriteJSON writes data as indented JSON via temp file + rename.
