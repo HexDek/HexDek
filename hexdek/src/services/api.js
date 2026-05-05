@@ -18,7 +18,13 @@ export function cardArtUrl(name) {
 export { API_BASE }
 
 export const api = {
-  getDecks: () => request('/api/decks'),
+  getDecks: (opts = {}) => {
+    const params = new URLSearchParams()
+    if (opts.owner) params.set('owner', opts.owner)
+    if (opts.contains) params.set('contains', opts.contains)
+    const qs = params.toString()
+    return request(`/api/decks${qs ? `?${qs}` : ''}`)
+  },
   getDeck: (id) => request(`/api/decks/${id}`),
   getDeckAnalysis: (id) => request(`/api/decks/${id}/analysis`),
   getProfile: () => request('/api/profile'),
@@ -44,6 +50,7 @@ export const api = {
   deleteDeck: (id) => request(`/api/decks/${id}`, { method: 'DELETE' }),
   getDeckVersions: (id) => request(`/api/decks/${id}/versions`),
   getDeckAmiibo: (id) => request(`/api/decks/${id}/amiibo`),
+  getAchievements: (owner) => request(`/api/achievements/${owner}`),
   startGauntlet: (id, games = 10000) => request(`/api/gauntlet/${id}?games=${games}`, { method: 'POST' }),
   getGauntlet: (id) => request(`/api/gauntlet/${id}`),
   getDonationsSummary: () => request('/api/donations/summary'),

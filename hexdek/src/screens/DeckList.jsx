@@ -10,10 +10,15 @@ import { MOCK_DECKS } from '../services/mock'
 const VIEW_KEY = 'hexdek_deck_view'
 
 export default function DeckList() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [decks, setDecks] = useState([])
   const [filter, setFilter] = useState(searchParams.get('q') || '')
-  const [tab, setTab] = useState(searchParams.get('tab') === 'all' ? 'all' : 'mine')
+  const ownerParam = searchParams.get('owner') || ''
+  const containsParam = searchParams.get('contains') || ''
+  const [tab, setTab] = useState(
+    ownerParam || containsParam ? 'all' :
+    (searchParams.get('tab') === 'all' ? 'all' : 'mine')
+  )
   const [legalFilter, setLegalFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState(() => {
@@ -36,13 +41,13 @@ export default function DeckList() {
 
   const loadDecks = () => {
     setLoading(true)
-    api.getDecks()
+    api.getDecks({ owner: ownerParam, contains: containsParam })
       .then(setDecks)
       .catch(() => setDecks(MOCK_DECKS.map(d => ({ ...d, owner: 'josh' }))))
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { loadDecks() }, [])
+  useEffect(() => { loadDecks() }, [ownerParam, containsParam])
 
   const eloByDeckId = {}
   for (const e of elo) {
@@ -75,6 +80,25 @@ export default function DeckList() {
       <Tape left={tapeLabel} mid={`${filtered.length} / ${decks.length} TOTAL`} right="DOC HX-400" />
 
       <div style={{ padding: 18, flex: 1, display: 'flex', flexDirection: 'column', gap: 14, overflow: 'auto' }}>
+        {(ownerParam || containsParam) && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-2)' }}>
+            <span>FILTER:</span>
+            {ownerParam && (
+              <Tag solid style={{ cursor: 'pointer' }} onClick={() => {
+                const next = new URLSearchParams(searchParams)
+                next.delete('owner')
+                setSearchParams(next, { replace: true })
+              }}>OWNER · {ownerParam.toUpperCase()} ✕</Tag>
+            )}
+            {containsParam && (
+              <Tag solid style={{ cursor: 'pointer' }} onClick={() => {
+                const next = new URLSearchParams(searchParams)
+                next.delete('contains')
+                setSearchParams(next, { replace: true })
+              }}>CONTAINS · {containsParam.toUpperCase()} ✕</Tag>
+            )}
+          </div>
+        )}
         {/* Tabs + Search */}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           {hasMyDecks && (
