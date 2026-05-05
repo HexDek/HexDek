@@ -57,7 +57,7 @@ export function ToastHost() {
   if (typeof document === 'undefined') return null
 
   return createPortal(
-    <div style={{
+    <div className="toast-host" style={{
       position: 'fixed',
       bottom: 18,
       right: 18,

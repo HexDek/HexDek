@@ -246,7 +246,7 @@ export default function OperatorProfile() {
           }
           right={<Tag solid>{upperOwner}</Tag>}
         >
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18 }}>
             <KV rows={[
               ['DISPLAY NAME',
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -302,7 +302,7 @@ export default function OperatorProfile() {
         </Panel>
 
         {/* Match History + Friends side by side */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
           <Panel code="OP.2" title="MATCH HISTORY" right={<span className="t-xs muted">{myGames.length} RECENT</span>}>
             {gamesLoading ? (
               <div className="t-md muted" style={{ textAlign: 'center', padding: 18 }}>
@@ -314,9 +314,8 @@ export default function OperatorProfile() {
               </div>
             ) : (
               <div>
-                <div style={{
+                <div className="op-match-row" style={{
                   display: 'grid',
-                  gridTemplateColumns: '60px 1fr 80px 60px 70px',
                   gap: 8,
                   padding: '4px 0',
                   borderBottom: '1px solid var(--rule-2)',
@@ -328,7 +327,7 @@ export default function OperatorProfile() {
                   <span>RESULT</span>
                   <span>OPPONENT</span>
                   <span style={{ textAlign: 'right' }}>TURNS</span>
-                  <span style={{ textAlign: 'right' }}>END</span>
+                  <span className="op-match-end" style={{ textAlign: 'right' }}>END</span>
                   <span style={{ textAlign: 'right' }}>DATE</span>
                 </div>
                 {myGames.map((g) => {
@@ -345,9 +344,9 @@ export default function OperatorProfile() {
                     <div
                       key={g.game_id}
                       onClick={() => navigate(`/report/${g.game_id}`)}
+                      className="op-match-row"
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: '60px 1fr 80px 60px 70px',
                         gap: 8,
                         padding: '6px 0',
                         borderBottom: '1px dashed var(--rule)',
@@ -363,7 +362,7 @@ export default function OperatorProfile() {
                         {opponents}
                       </span>
                       <span className="t-xs" style={{ textAlign: 'right' }}>T{g.turns ?? '—'}</span>
-                      <span className="t-xs muted" style={{ textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span className="t-xs muted op-match-end" style={{ textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {(g.end_reason || '').replace(/_/g, ' ').slice(0, 6).toUpperCase()}
                       </span>
                       <span className="t-xs muted" style={{ textAlign: 'right' }}>

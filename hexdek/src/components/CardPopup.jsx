@@ -48,23 +48,37 @@ const POPUP_W = 280
 const POPUP_H_MAX = 460
 const VIEWPORT_PAD = 12
 
+// effectiveWidth — the popup is normally POPUP_W, but on narrow viewports
+// (mobile portrait) we shrink to the available width minus padding so the
+// popup never overflows the screen. Returns both the width and the
+// computed position.
 function clampPosition(rect) {
-  // Place to the right of the trigger by default, fall back to left.
   const vw = window.innerWidth
   const vh = window.innerHeight
+  const effW = Math.min(POPUP_W, vw - VIEWPORT_PAD * 2)
+  // Below mobile breakpoint, anchor to the bottom of the viewport so it
+  // doesn't get pushed off-screen by a trigger near the top edge of a
+  // long page; this matches the iOS/Android quick-look pattern.
+  if (vw < 480) {
+    const left = Math.max(VIEWPORT_PAD, Math.round((vw - effW) / 2))
+    const maxH = Math.min(POPUP_H_MAX, vh - VIEWPORT_PAD * 2)
+    const top = Math.max(VIEWPORT_PAD, vh - maxH - VIEWPORT_PAD)
+    return { top, left, width: effW }
+  }
+  // Desktop: place to the right of the trigger by default, fall back to left.
   let left = rect.right + 8
-  if (left + POPUP_W > vw - VIEWPORT_PAD) {
-    left = rect.left - POPUP_W - 8
+  if (left + effW > vw - VIEWPORT_PAD) {
+    left = rect.left - effW - 8
   }
   if (left < VIEWPORT_PAD) {
-    left = Math.max(VIEWPORT_PAD, vw - POPUP_W - VIEWPORT_PAD)
+    left = Math.max(VIEWPORT_PAD, vw - effW - VIEWPORT_PAD)
   }
   let top = rect.top
   if (top + POPUP_H_MAX > vh - VIEWPORT_PAD) {
     top = Math.max(VIEWPORT_PAD, vh - POPUP_H_MAX - VIEWPORT_PAD)
   }
   if (top < VIEWPORT_PAD) top = VIEWPORT_PAD
-  return { top, left }
+  return { top, left, width: effW }
 }
 
 function CardPopupBody({ name, position, onClose, onNavigate }) {
@@ -107,8 +121,9 @@ function CardPopupBody({ name, position, onClose, onNavigate }) {
         position: 'fixed',
         top: position.top,
         left: position.left,
-        width: POPUP_W,
-        maxHeight: POPUP_H_MAX,
+        width: position.width || POPUP_W,
+        maxWidth: 'calc(100vw - 24px)',
+        maxHeight: 'min(70vh, 460px)',
         background: 'var(--bg)',
         border: '1px solid var(--ink)',
         boxShadow: '4px 4px 0 0 var(--rule-2)',
@@ -209,7 +224,7 @@ function CardPopupBody({ name, position, onClose, onNavigate }) {
 export function useCardPopup(name) {
   const [open, setOpen] = useState(false)
   const [latched, setLatched] = useState(false) // true after touch tap
-  const [position, setPosition] = useState({ top: 0, left: 0 })
+  const [position, setPosition] = useState({ top: 0, left: 0, width: POPUP_W })
   const triggerRef = useRef(null)
   const navigate = useNavigate()
 

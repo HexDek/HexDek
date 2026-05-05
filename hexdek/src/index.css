@@ -1531,3 +1531,23 @@ body {
   .card-page-hero { height: 200px; }
   .card-page-hero-title { font-size: 26px; }
 }
+
+/* Operator profile match-history row. Default 5 columns; on narrow
+   viewports drop the END column and shrink the fixed widths. */
+.op-match-row { grid-template-columns: 60px 1fr 80px 60px 70px; }
+@media (max-width: 540px) {
+  .op-match-row { grid-template-columns: 50px 1fr 44px 60px; }
+  .op-match-end { display: none; }
+}
+
+/* Toast host — pinned bottom-right on desktop; on mobile, span the full
+   viewport width so individual toasts wrap cleanly instead of squeezing
+   into a 360px column at the right edge. */
+@media (max-width: 480px) {
+  .toast-host {
+    left: 12px !important;
+    right: 12px !important;
+    bottom: 12px !important;
+    max-width: none !important;
+  }
+}
