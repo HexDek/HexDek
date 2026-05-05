@@ -163,6 +163,10 @@ type YggdrasilHat struct {
 	TurnBudget     int
 	turnEvalsSpent int
 	turnBudgetTurn int
+
+	// tierCounts tracks per-game decision routing. Indexed by DecisionTier.
+	// Reset by ResetMjolnirStats() and exposed via MjolnirStats().
+	tierCounts [numDecisionTiers]int
 }
 
 const (
@@ -174,6 +178,45 @@ const (
 	// single evaluator-path decision (clone + forward sim + eval).
 	rolloutEvalCost = 10
 )
+
+// DecisionTier names the compute path a decision takes. The hat already
+// has three implicit tiers; this type makes the routing explicit so the
+// distribution can be observed and tuned.
+type DecisionTier int
+
+const (
+	// TierMjolnir: cheap, deterministic heuristic. No evaluator, no rollout.
+	TierMjolnir DecisionTier = iota
+	// TierGungnir: evaluator-guided scoring with UCB1 exploration.
+	TierGungnir
+	// TierRagnarok: MCTS-style rollout (clone + forward sim + evaluate).
+	TierRagnarok
+
+	numDecisionTiers = 3
+)
+
+func (t DecisionTier) String() string {
+	switch t {
+	case TierMjolnir:
+		return "Mjolnir"
+	case TierGungnir:
+		return "Gungnir"
+	case TierRagnarok:
+		return "Ragnarok"
+	default:
+		return "Unknown"
+	}
+}
+
+// MjolnirStats reports per-tier decision counts for one game.
+type MjolnirStats struct {
+	Mjolnir  int
+	Gungnir  int
+	Ragnarok int
+}
+
+// Total returns the sum of decisions across all tiers.
+func (s MjolnirStats) Total() int { return s.Mjolnir + s.Gungnir + s.Ragnarok }
 
 type evalCacheKey struct {
 	seat int
@@ -211,7 +254,8 @@ func BudgetForPower(baseBudget int, powerPercentile int) int {
 	return baseBudget
 }
 
-func (h *YggdrasilHat) EvalsSpent() int { return h.turnEvalsSpent }
+func (h *YggdrasilHat) EvalsSpent() int  { return h.turnEvalsSpent }
+func (h *YggdrasilHat) PlanCurrent() GamePlan { return h.planState.Current }
 
 func NewYggdrasilHatWithNoise(strategy *StrategyProfile, budget int, noise float64) *YggdrasilHat {
 	h := &YggdrasilHat{
@@ -999,11 +1043,27 @@ func (h *YggdrasilHat) evalPosition(gs *gameengine.GameState, seatIdx int) float
 	if v, ok := h.evalCache[key]; ok {
 		return v
 	}
-	v := h.Evaluator.Evaluate(gs, seatIdx)
-	if h.NeuralEval != nil {
-		nv := h.NeuralEval.Evaluate(EncodeState(gs, seatIdx))
-		v = v*0.8 + nv*0.2
+
+	var v float64
+	if h.MicroNet != nil {
+		detailed := h.Evaluator.EvaluateDetailed(gs, seatIdx)
+		v = detailed.Score
+		microInput := EncodeMicroInput(gs, seatIdx, detailed, h.planState.Current)
+		mv := h.MicroNet.Forward(microInput)
+		if h.NeuralEval != nil {
+			nv := h.NeuralEval.Evaluate(EncodeState(gs, seatIdx))
+			v = v*0.6 + mv*0.2 + nv*0.2
+		} else {
+			v = v*0.7 + mv*0.3
+		}
+	} else {
+		v = h.Evaluator.Evaluate(gs, seatIdx)
+		if h.NeuralEval != nil {
+			nv := h.NeuralEval.Evaluate(EncodeState(gs, seatIdx))
+			v = v*0.8 + nv*0.2
+		}
 	}
+
 	h.evalCache[key] = v
 	return v
 }
@@ -1072,6 +1132,100 @@ func (h *YggdrasilHat) turnRemaining(gs *gameengine.GameState) int {
 		return 0
 	}
 	return rem
+}
+
+// classifyDecision predicts which DecisionTier a decision at the current
+// game state will use. It is purely advisory — the existing decision
+// pipeline still makes the final budget choice. Logic mirrors
+// effectiveBudget plus the rollout precondition in ChooseCastFromHand.
+//
+// Inputs considered:
+//   - h.Budget: hard ceiling on tier (Budget=0 → Mjolnir only).
+//   - board complexity: total permanents across all seats.
+//   - per-turn budget: exhaustion forces Mjolnir.
+//   - combo assembly: when a combo is one piece away or executable,
+//     the routing prefers more compute and ignores the complexity
+//     degrade so we don't punt on the winning turn.
+func (h *YggdrasilHat) classifyDecision(gs *gameengine.GameState) DecisionTier {
+	if h == nil || h.Budget <= 0 {
+		return TierMjolnir
+	}
+
+	comboPriority := h.comboAssembling(gs)
+
+	total := 0
+	if gs != nil {
+		for _, s := range gs.Seats {
+			if s == nil {
+				continue
+			}
+			total += len(s.Battlefield)
+		}
+	}
+	if total >= adaptiveBudgetComplexityThreshold && !comboPriority {
+		return TierMjolnir
+	}
+	if h.TurnBudget > 0 && h.turnRemaining(gs) <= 0 && !comboPriority {
+		return TierMjolnir
+	}
+
+	canRagnarok := h.Budget >= rolloutBudgetGe && h.TurnRunner != nil
+	if canRagnarok {
+		if h.TurnBudget > 0 && h.turnRemaining(gs) < rolloutEvalCost {
+			return TierGungnir
+		}
+		return TierRagnarok
+	}
+	return TierGungnir
+}
+
+// comboAssembling reports whether the active seat has a combo line that
+// is executable now or one tutor away. Used by classifyDecision to bias
+// toward more compute on combo-critical turns.
+func (h *YggdrasilHat) comboAssembling(gs *gameengine.GameState) bool {
+	if h == nil || h.comboSeq == nil || gs == nil {
+		return false
+	}
+	seat := gs.Active
+	if seat < 0 || seat >= len(gs.Seats) || gs.Seats[seat] == nil {
+		return false
+	}
+	a := h.comboSeq.Evaluate(gs, seat)
+	return a.Executable || a.Assembling
+}
+
+// recordDecisionTier increments the per-tier counter. Safe to call from
+// any decision entry point.
+func (h *YggdrasilHat) recordDecisionTier(t DecisionTier) {
+	if h == nil {
+		return
+	}
+	if t < 0 || int(t) >= numDecisionTiers {
+		return
+	}
+	h.tierCounts[t]++
+}
+
+// MjolnirStats returns the per-tier decision distribution for this hat
+// since the last reset (or hat construction).
+func (h *YggdrasilHat) MjolnirStats() MjolnirStats {
+	if h == nil {
+		return MjolnirStats{}
+	}
+	return MjolnirStats{
+		Mjolnir:  h.tierCounts[TierMjolnir],
+		Gungnir:  h.tierCounts[TierGungnir],
+		Ragnarok: h.tierCounts[TierRagnarok],
+	}
+}
+
+// ResetMjolnirStats zeroes the per-tier counters. Tests use this to
+// isolate samples; production code can call it at game-start.
+func (h *YggdrasilHat) ResetMjolnirStats() {
+	if h == nil {
+		return
+	}
+	h.tierCounts = [numDecisionTiers]int{}
 }
 
 // spendTurnBudget deducts cost from the per-turn evaluation budget.
@@ -2182,6 +2336,7 @@ func (h *YggdrasilHat) ChooseLandToPlay(gs *gameengine.GameState, seatIdx int, l
 // -- Interface: ChooseCastFromHand --
 
 func (h *YggdrasilHat) ChooseCastFromHand(gs *gameengine.GameState, seatIdx int, castable []*gameengine.Card) *gameengine.Card {
+	h.recordDecisionTier(h.classifyDecision(gs))
 	h.explorationFactor(gs, seatIdx)
 
 	pool := make([]*gameengine.Card, 0, len(castable))
@@ -2589,6 +2744,7 @@ func (h *YggdrasilHat) ChooseActivation(gs *gameengine.GameState, seatIdx int, o
 	if len(options) == 0 {
 		return nil
 	}
+	h.recordDecisionTier(h.classifyDecision(gs))
 
 	// Combo sequencer override: if a combo is executable and the next
 	// action matches an activation (already on battlefield), prefer it.
@@ -2820,6 +2976,7 @@ func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, le
 	if len(legal) == 0 {
 		return nil
 	}
+	h.recordDecisionTier(h.classifyDecision(gs))
 
 	pos := h.evalPosition(gs, seatIdx)
 	relPos := h.relativePosition(gs, seatIdx)
@@ -3319,6 +3476,7 @@ func (h *YggdrasilHat) ChooseResponse(gs *gameengine.GameState, seatIdx int, top
 	if top.Controller == seatIdx || top.Countered {
 		return nil
 	}
+	h.recordDecisionTier(h.classifyDecision(gs))
 	if gameengine.SplitSecondActive(gs) {
 		return nil
 	}
