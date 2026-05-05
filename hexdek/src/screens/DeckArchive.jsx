@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPie, computeColorByCmc } from '../components/chrome'
+import CardRolesGrid from '../components/CardRolesGrid'
 import { api, cardArtUrl } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useAuth } from '../context/AuthContext'
@@ -139,6 +140,7 @@ export default function DeckArchive() {
   const cheapInteraction = analysis?.cheap_interaction ?? null
   const emergentSynergies = analysis?.emergent_synergies || []
   const metaMatchups = analysis?.meta_matchups || []
+  const cardRoles = analysis?.card_roles || null
 
   const clientCurve = (() => {
     if (!cards.length) return null
@@ -601,6 +603,11 @@ export default function DeckArchive() {
                 ))}
               </div>
             </Panel>
+          )}
+
+          {/* Card roles grid */}
+          {cardRoles && Object.keys(cardRoles).length > 0 && (
+            <CardRolesGrid cardRoles={cardRoles} />
           )}
 
           {/* Emergent synergies */}
