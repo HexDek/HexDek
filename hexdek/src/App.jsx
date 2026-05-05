@@ -1,7 +1,12 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import AppShell from './components/AppShell'
 import { useAuth } from './context/AuthContext'
 import { usePageTracking } from './hooks/useAnalytics'
+
+// CardPage hits Scryfall on mount and then fans out per-deck Freya
+// fetches; lazy-load it so it doesn't bloat the Splash bundle.
+const CardPage = lazy(() => import('./screens/CardPage'))
 import Splash from './screens/Splash'
 import Dashboard from './screens/Dashboard'
 import DeckArchive from './screens/DeckArchive'
@@ -37,6 +42,14 @@ export default function App() {
         <Route path="dash" element={<Dashboard />} />
         <Route path="decks" element={<DeckList />} />
         <Route path="decks/:owner/:id" element={<DeckArchive />} />
+        <Route
+          path="cards/:cardName"
+          element={
+            <Suspense fallback={null}>
+              <CardPage />
+            </Suspense>
+          }
+        />
         <Route path="play" element={<GameBoard />} />
         <Route path="forge" element={<Forge />} />
         <Route path="leaderboard" element={<Leaderboard />} />

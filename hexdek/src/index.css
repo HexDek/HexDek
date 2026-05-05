@@ -1442,3 +1442,92 @@ body {
   margin: 0 auto;
   padding: 18px 24px 24px;
 }
+
+/* ── CARD PAGE (/cards/:cardName) ── */
+.card-page-hero {
+  position: relative;
+  height: 280px;
+  background-size: cover;
+  background-position: center 30%;
+  border-bottom: 1px solid var(--rule-2);
+}
+.card-page-hero-scrim {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(12,13,10,0.35) 0%, rgba(12,13,10,0.0) 30%, rgba(12,13,10,0.85) 100%);
+}
+.card-page-hero-corner {
+  position: absolute;
+  font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-2);
+  background: rgba(12,13,10,0.6);
+  padding: 3px 8px;
+  border: 1px solid var(--rule-2);
+}
+.card-page-hero-corner--tl { top: 10px; left: 10px; }
+.card-page-hero-corner--tr { top: 10px; right: 10px; }
+.card-page-hero-body {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 14px 24px 18px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.card-page-hero-meta {
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+.card-page-hero-title {
+  font-size: 38px; font-weight: 800; letter-spacing: -0.02em;
+  color: var(--ink); margin: 0;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+}
+.card-page-hero-sub {
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-2);
+}
+.card-page-layout {
+  display: grid; grid-template-columns: 320px 1fr;
+  flex: 1; min-height: 0;
+}
+.card-page-sidebar {
+  padding: 18px; display: flex; flex-direction: column; gap: 14px;
+  border-right: 1px solid var(--rule-2);
+  overflow: auto;
+}
+.card-page-main {
+  padding: 18px; display: flex; flex-direction: column; gap: 14px;
+  overflow: auto;
+}
+.card-page-deck-tile {
+  display: block;
+  border: 1px solid var(--rule-2);
+  background: var(--bg);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease;
+  overflow: hidden;
+}
+.card-page-deck-tile:hover { border-color: var(--ink); }
+.card-page-deck-art {
+  height: 70px;
+  background-size: cover;
+  background-position: center 30%;
+  background-color: var(--bg-2);
+  border-bottom: 1px solid var(--rule-2);
+  filter: grayscale(0.3) contrast(1.05);
+}
+.card-page-deck-meta {
+  padding: 6px 8px;
+}
+.card-page-deck-name {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--ink); text-transform: uppercase;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.card-page-deck-owner {
+  font-size: 8px; letter-spacing: 0.08em; color: var(--ink-2);
+  margin-top: 2px;
+}
+@media (max-width: 720px) {
+  .card-page-layout { grid-template-columns: 1fr; }
+  .card-page-sidebar { border-right: none; border-bottom: 1px solid var(--rule-2); }
+  .card-page-hero { height: 200px; }
+  .card-page-hero-title { font-size: 26px; }
+}
