@@ -52,6 +52,14 @@ func MoveCard(gs *GameState, card *Card, ownerSeat int, fromZone, toZone, reason
 		// A §614 replacement cancelled the zone change entirely.
 		return ""
 	}
+	// Ramp / recursion / "put onto the battlefield" effects bypass
+	// tryPlayLand and resolvePermanentSpellETB, so an MDFC with a
+	// land back face would otherwise enter under its front-face
+	// (instant/sorcery) identity. Swap before triggers fire so ETB
+	// observers see the land identity.
+	if dest == "battlefield" && MDFCBackFaceIsLand(card) {
+		SwapToBackFace(card)
+	}
 	FireZoneChangeTriggers(gs, nil, card, fromZone, dest)
 
 	if fromZone == "graveyard" {
