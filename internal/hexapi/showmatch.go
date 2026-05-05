@@ -39,7 +39,7 @@ import (
 const (
 	showmatchSeats   = 4
 	showmatchMaxTurn = 80
-	maxLogEntries    = 40
+	maxLogEntries    = 80
 )
 
 var phaseDelays = map[string]time.Duration{
@@ -93,11 +93,15 @@ type PermanentSnapshot struct {
 }
 
 type LogEntry struct {
-	Turn   int    `json:"turn"`
-	Seat   int    `json:"seat"`
-	Action string `json:"action"`
-	Detail string `json:"detail,omitempty"`
-	Kind   string `json:"kind"`
+	Turn    int      `json:"turn"`
+	Seat    int      `json:"seat"`
+	Action  string   `json:"action"`
+	Detail  string   `json:"detail,omitempty"`
+	Kind    string   `json:"kind"`
+	Source  string   `json:"source,omitempty"`
+	Targets []string `json:"targets,omitempty"`
+	Amount  int      `json:"amount,omitempty"`
+	Count   int      `json:"count,omitempty"`
 }
 
 type GameSnapshot struct {
@@ -2725,96 +2729,288 @@ func (sm *Showmatch) extractEvents(gs *gameengine.GameState, fromIdx int, comman
 			entries = append(entries, entry)
 		}
 	}
-	return entries
+	return coalesceEntries(dedupEntries(entries))
+}
+
+func commanderLabel(seat int, commanders []string) string {
+	if seat >= 0 && seat < len(commanders) {
+		parts := strings.Split(commanders[seat], ",")
+		cmdr := strings.TrimSpace(parts[0])
+		if len(cmdr) > 20 {
+			cmdr = cmdr[:20]
+		}
+		return strings.ToUpper(cmdr)
+	}
+	return "SYSTEM"
+}
+
+func targetLabel(seat int, commanders []string) string {
+	if seat >= 0 && seat < len(commanders) {
+		return strings.ToUpper(strings.TrimSpace(strings.Split(commanders[seat], ",")[0]))
+	}
+	return ""
 }
 
 func formatEvent(ev gameengine.Event, commanders []string, turn int) (LogEntry, bool) {
 	seat := ev.Seat
-	cmdr := "SYSTEM"
-	if seat >= 0 && seat < len(commanders) {
-		parts := strings.Split(commanders[seat], ",")
-		cmdr = strings.TrimSpace(parts[0])
-		if len(cmdr) > 20 {
-			cmdr = cmdr[:20]
-		}
-		cmdr = strings.ToUpper(cmdr)
-	}
+	cmdr := commanderLabel(seat, commanders)
 
 	switch ev.Kind {
 	case "cast":
-		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " CASTS " + strings.ToUpper(ev.Source), Kind: "cast"}, true
+		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " CASTS " + strings.ToUpper(ev.Source), Kind: "cast", Source: ev.Source, Amount: 1}, true
 	case "play_land":
-		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " PLAYS LAND: " + strings.ToUpper(ev.Source), Kind: "land"}, true
+		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " PLAYS LAND: " + strings.ToUpper(ev.Source), Kind: "land", Source: ev.Source}, true
 	case "declare_attackers":
 		n := ev.Amount
 		if n <= 0 {
 			n = 1
 		}
 		target := ""
+		var targets []string
 		if ev.Target >= 0 && ev.Target < len(commanders) {
-			target = " → " + strings.ToUpper(strings.Split(commanders[ev.Target], ",")[0])
+			target = " → " + targetLabel(ev.Target, commanders)
+			targets = []string{targetLabel(ev.Target, commanders)}
 		}
-		return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s ATTACKS WITH %d CREATURE(S)%s", cmdr, n, target), Kind: "combat"}, true
+		return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s ATTACKS WITH %d CREATURE(S)%s", cmdr, n, target), Kind: "combat", Amount: n, Targets: targets}, true
 	case "damage":
-		target := ""
-		if ev.Target >= 0 && ev.Target < len(commanders) {
-			target = strings.ToUpper(strings.Split(commanders[ev.Target], ",")[0])
-		}
-		if ev.Amount > 0 && target != "" {
-			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s DEALS %d DAMAGE TO %s", cmdr, ev.Amount, target), Detail: ev.Source, Kind: "damage"}, true
+		tgt := targetLabel(ev.Target, commanders)
+		if ev.Amount > 0 && tgt != "" {
+			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s DEALS %d DAMAGE TO %s", cmdr, ev.Amount, tgt), Detail: ev.Source, Kind: "damage", Source: ev.Source, Targets: []string{tgt}, Amount: ev.Amount}, true
 		}
 	case "counter_spell":
-		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " COUNTERS " + strings.ToUpper(ev.Source), Kind: "counter"}, true
+		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " COUNTERS " + strings.ToUpper(ev.Source), Kind: "counter", Source: ev.Source}, true
+	case "counter_spell_fizzle":
+		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " — SPELL FIZZLES (no legal targets)", Kind: "counter", Source: ev.Source}, true
 	case "create_token":
-		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " CREATES TOKEN: " + strings.ToUpper(ev.Source), Kind: "token"}, true
+		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " CREATES TOKEN: " + strings.ToUpper(ev.Source), Kind: "token", Source: ev.Source, Amount: 1}, true
 	case "destroy":
-		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " DESTROYS " + strings.ToUpper(ev.Source), Kind: "removal"}, true
+		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " DESTROYS " + strings.ToUpper(ev.Source), Kind: "removal", Source: ev.Source}, true
 	case "sacrifice":
-		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " SACRIFICES " + strings.ToUpper(ev.Source), Kind: "removal"}, true
+		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " SACRIFICES " + strings.ToUpper(ev.Source), Kind: "removal", Source: ev.Source}, true
+	case "exile":
+		if ev.Source != "" {
+			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " EXILES " + strings.ToUpper(ev.Source), Kind: "removal", Source: ev.Source}, true
+		}
+	case "bounce":
+		if ev.Source != "" {
+			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " BOUNCES " + strings.ToUpper(ev.Source), Kind: "removal", Source: ev.Source}, true
+		}
+	case "flicker":
+		if ev.Source != "" {
+			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " FLICKERS " + strings.ToUpper(ev.Source), Kind: "removal", Source: ev.Source}, true
+		}
 	case "gain_life":
 		if ev.Amount > 0 {
-			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s GAINS %d LIFE", cmdr, ev.Amount), Kind: "life"}, true
+			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s GAINS %d LIFE", cmdr, ev.Amount), Kind: "life", Amount: ev.Amount}, true
 		}
 	case "lose_life":
 		if ev.Amount > 0 {
-			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s LOSES %d LIFE", cmdr, ev.Amount), Kind: "life"}, true
+			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s LOSES %d LIFE", cmdr, ev.Amount), Kind: "life", Amount: ev.Amount}, true
+		}
+	case "pay_life":
+		if ev.Amount > 0 {
+			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s PAYS %d LIFE", cmdr, ev.Amount), Kind: "life", Source: ev.Source, Amount: ev.Amount}, true
 		}
 	case "draw":
 		if ev.Amount > 1 {
-			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s DRAWS %d CARDS", cmdr, ev.Amount), Kind: "draw"}, true
+			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s DRAWS %d CARDS", cmdr, ev.Amount), Kind: "draw", Amount: ev.Amount}, true
+		}
+		if ev.Amount == 1 {
+			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " DRAWS A CARD", Kind: "draw", Amount: 1}, true
+		}
+	case "discard":
+		if ev.Source != "" {
+			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " DISCARDS " + strings.ToUpper(ev.Source), Kind: "discard", Source: ev.Source, Amount: ev.Amount}, true
+		}
+		if ev.Amount > 0 {
+			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s DISCARDS %d CARDS", cmdr, ev.Amount), Kind: "discard", Amount: ev.Amount}, true
+		}
+	case "scry":
+		if ev.Amount > 0 {
+			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s SCRIES %d", cmdr, ev.Amount), Kind: "scry", Amount: ev.Amount}, true
+		}
+	case "surveil":
+		if ev.Amount > 0 {
+			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s SURVEILS %d", cmdr, ev.Amount), Kind: "surveil", Amount: ev.Amount}, true
+		}
+	case "tutor":
+		dest := ""
+		if ev.Details != nil {
+			if d, ok := ev.Details["destination"].(string); ok {
+				dest = " TO " + strings.ToUpper(d)
+			}
+		}
+		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " TUTORS" + dest, Kind: "search", Source: ev.Source, Amount: ev.Amount}, true
+	case "shuffle":
+		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " SHUFFLES LIBRARY", Kind: "shuffle"}, true
+	case "untap_done":
+		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " UNTAPS " + strings.ToUpper(ev.Source), Kind: "untap", Source: ev.Source, Amount: 1}, true
+	case "untap":
+		if ev.Source != "" {
+			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " UNTAPS " + strings.ToUpper(ev.Source), Kind: "untap", Source: ev.Source, Amount: 1}, true
+		}
+	case "tap":
+		if ev.Source != "" {
+			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " TAPS " + strings.ToUpper(ev.Source), Kind: "tap", Source: ev.Source, Amount: 1}, true
+		}
+	case "equip", "attach":
+		if ev.Source != "" {
+			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " EQUIPS " + strings.ToUpper(ev.Source), Kind: "equip", Source: ev.Source}, true
 		}
 	case "seat_eliminated", "lose_game":
-		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " IS ELIMINATED", Kind: "elimination"}, true
+		reason := ""
+		if ev.Details != nil {
+			if r, ok := ev.Details["reason"].(string); ok {
+				reason = r
+			}
+		}
+		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " IS ELIMINATED", Detail: reason, Kind: "elimination"}, true
 	case "enter_battlefield":
 		if ev.Source != "" {
-			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " → ETB: " + strings.ToUpper(ev.Source), Kind: "etb"}, true
+			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " → ETB: " + strings.ToUpper(ev.Source), Kind: "etb", Source: ev.Source}, true
 		}
 	case "triggered_ability", "triggered":
 		if ev.Source != "" {
-			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " TRIGGERS " + strings.ToUpper(ev.Source), Kind: "trigger"}, true
+			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " TRIGGERS " + strings.ToUpper(ev.Source), Kind: "trigger", Source: ev.Source}, true
 		}
-	case "activate_ability":
+	case "activate_ability", "activated":
 		if ev.Source != "" {
-			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " ACTIVATES " + strings.ToUpper(ev.Source), Kind: "activate"}, true
-		}
-	case "exile":
-		if ev.Source != "" {
-			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " EXILES " + strings.ToUpper(ev.Source), Kind: "removal"}, true
+			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " ACTIVATES " + strings.ToUpper(ev.Source), Kind: "activate", Source: ev.Source}, true
 		}
 	case "mill":
 		if ev.Amount > 0 {
-			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s MILLS %d CARDS", cmdr, ev.Amount), Kind: "mill"}, true
+			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s MILLS %d CARDS", cmdr, ev.Amount), Kind: "mill", Amount: ev.Amount}, true
 		}
 	case "search_library", "search":
 		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " SEARCHES LIBRARY", Kind: "search"}, true
 	case "reanimate":
-		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " REANIMATES " + strings.ToUpper(ev.Source), Kind: "reanimate"}, true
+		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " REANIMATES " + strings.ToUpper(ev.Source), Kind: "reanimate", Source: ev.Source}, true
+	case "return_to_hand":
+		if ev.Source != "" {
+			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " RETURNS " + strings.ToUpper(ev.Source) + " TO HAND", Kind: "bounce", Source: ev.Source}, true
+		}
 	case "extra_turn":
 		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " TAKES AN EXTRA TURN", Kind: "extra_turn"}, true
 	case "commander_cast_from_command_zone":
-		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " CASTS COMMANDER FROM COMMAND ZONE", Kind: "cast"}, true
+		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " CASTS COMMANDER FROM COMMAND ZONE", Kind: "cast", Source: ev.Source}, true
+	case "become_monarch":
+		return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " BECOMES THE MONARCH", Kind: "monarch"}, true
+	case "cascade_hit":
+		if ev.Source != "" {
+			return LogEntry{Turn: turn, Seat: seat, Action: cmdr + " CASCADE → " + strings.ToUpper(ev.Source), Kind: "cast", Source: ev.Source}, true
+		}
+	case "annihilator":
+		if ev.Amount > 0 {
+			tgt := targetLabel(ev.Target, commanders)
+			return LogEntry{Turn: turn, Seat: seat, Action: fmt.Sprintf("%s ANNIHILATOR %d → %s", cmdr, ev.Amount, tgt), Kind: "combat", Amount: ev.Amount, Targets: []string{tgt}}, true
+		}
 	}
 	return LogEntry{}, false
+}
+
+// dedupEntries removes redundant entries where a cast is immediately
+// followed by an ETB for the same card from the same seat (the cast
+// already implies the ETB for narration purposes).
+func dedupEntries(entries []LogEntry) []LogEntry {
+	if len(entries) <= 1 {
+		return entries
+	}
+	result := make([]LogEntry, 0, len(entries))
+	for i := 0; i < len(entries); i++ {
+		if entries[i].Kind == "etb" && i > 0 {
+			prev := entries[i-1]
+			if prev.Seat == entries[i].Seat && prev.Kind == "cast" &&
+				strings.EqualFold(prev.Source, entries[i].Source) {
+				continue
+			}
+		}
+		result = append(result, entries[i])
+	}
+	return result
+}
+
+// coalesceEntries merges consecutive same-seat same-kind entries into
+// grouped entries with Count > 1 and aggregated Targets.
+func coalesceEntries(entries []LogEntry) []LogEntry {
+	if len(entries) <= 1 {
+		return entries
+	}
+
+	coalescible := map[string]bool{
+		"untap":   true,
+		"tap":     true,
+		"trigger": true,
+		"draw":    true,
+		"token":   true,
+	}
+
+	result := make([]LogEntry, 0, len(entries))
+	i := 0
+	for i < len(entries) {
+		e := entries[i]
+		if !coalescible[e.Kind] {
+			result = append(result, e)
+			i++
+			continue
+		}
+
+		// Collect consecutive same-seat same-kind entries.
+		j := i + 1
+		for j < len(entries) && entries[j].Seat == e.Seat && entries[j].Kind == e.Kind {
+			j++
+		}
+		count := j - i
+		if count == 1 {
+			result = append(result, e)
+			i++
+			continue
+		}
+
+		// Merge: aggregate targets and amounts.
+		var targets []string
+		totalAmount := 0
+		seen := map[string]bool{}
+		for k := i; k < j; k++ {
+			totalAmount += entries[k].Amount
+			if entries[k].Source != "" && !seen[entries[k].Source] {
+				targets = append(targets, entries[k].Source)
+				seen[entries[k].Source] = true
+			}
+		}
+
+		// Build coalesced action string.
+		cmdr := ""
+		if idx := strings.Index(e.Action, " "); idx > 0 {
+			cmdr = e.Action[:idx]
+		}
+		var action string
+		switch e.Kind {
+		case "untap":
+			action = fmt.Sprintf("%s UNTAPS %d PERMANENTS", cmdr, count)
+		case "tap":
+			action = fmt.Sprintf("%s TAPS %d PERMANENTS", cmdr, count)
+		case "trigger":
+			action = fmt.Sprintf("%s TRIGGERS %d ABILITIES", cmdr, count)
+		case "draw":
+			action = fmt.Sprintf("%s DRAWS %d CARDS", cmdr, totalAmount)
+		case "token":
+			action = fmt.Sprintf("%s CREATES %d TOKENS", cmdr, count)
+		default:
+			action = fmt.Sprintf("%s ×%d", e.Action, count)
+		}
+
+		result = append(result, LogEntry{
+			Turn:    e.Turn,
+			Seat:    e.Seat,
+			Action:  action,
+			Kind:    e.Kind,
+			Targets: targets,
+			Amount:  totalAmount,
+			Count:   count,
+		})
+		i = j
+	}
+	return result
 }
 
 func nextLiving(gs *gameengine.GameState) int {

@@ -147,14 +147,77 @@ function narrate(entry, seats) {
       if (m) return { text: `${actor} mills ${m[1]} card${m[1] === '1' ? '' : 's'}.`, tone: 'event' }
       return null
     }
-    case 'draw':
-    case 'life':
-    case 'trigger':
-    case 'activate':
+    case 'draw': {
+      const m = tail.match(/DRAWS? (\d+) CARDS?/i) || tail.match(/DRAWS? A CARD/i)
+      if (m) {
+        const n = m[1] ? parseInt(m[1], 10) : 1
+        return { text: `${actor} draws ${n} card${n === 1 ? '' : 's'}.`, tone: 'event' }
+      }
+      return null
+    }
+    case 'discard': {
+      const m = tail.match(/DISCARDS? (.+)$/i)
+      if (m) return { text: `${actor} discards ${titleCase(m[1])}.`, tone: 'event' }
+      return null
+    }
+    case 'scry': {
+      const m = tail.match(/SCRIES? (\d+)/i)
+      if (m) return { text: `${actor} scries ${m[1]}.`, tone: 'event' }
+      return null
+    }
+    case 'surveil': {
+      const m = tail.match(/SURVEILS? (\d+)/i)
+      if (m) return { text: `${actor} surveils ${m[1]}.`, tone: 'event' }
+      return null
+    }
+    case 'untap': {
+      const m = tail.match(/UNTAPS? (\d+) PERMANENTS?/i)
+      if (m) return { text: `${actor} untaps ${m[1]} permanents.`, tone: 'event' }
+      const m2 = tail.match(/UNTAPS? (.+)$/i)
+      if (m2) return { text: `${actor} untaps ${titleCase(m2[1])}.`, tone: 'event' }
+      return null
+    }
+    case 'tap': {
+      const m = tail.match(/TAPS? (\d+) PERMANENTS?/i)
+      if (m) return { text: `${actor} taps ${m[1]} permanents.`, tone: 'event' }
+      const m2 = tail.match(/TAPS? (.+)$/i)
+      if (m2) return { text: `${actor} taps ${titleCase(m2[1])}.`, tone: 'event' }
+      return null
+    }
+    case 'bounce': {
+      const m = tail.match(/(?:BOUNCES?|RETURNS?) (.+?)(?:\s+TO HAND)?$/i)
+      if (m) return { text: `${actor} bounces ${titleCase(m[1])}.`, tone: 'event' }
+      return null
+    }
+    case 'equip': {
+      const m = tail.match(/EQUIPS? (.+)$/i)
+      if (m) return { text: `${actor} equips ${titleCase(m[1])}.`, tone: 'event' }
+      return null
+    }
+    case 'shuffle':
+      return { text: `${actor} shuffles.`, tone: 'event' }
+    case 'monarch':
+      return { text: `${actor} becomes the monarch.`, tone: 'changer' }
+    case 'life': {
+      const mg = tail.match(/GAINS? (\d+) LIFE/i)
+      if (mg) return { text: `${actor} gains ${mg[1]} life.`, tone: 'event' }
+      const ml = tail.match(/(?:LOSES?|PAYS?) (\d+) LIFE/i)
+      if (ml) return { text: `${actor} loses ${ml[1]} life.`, tone: 'event' }
+      return null
+    }
+    case 'trigger': {
+      const m = tail.match(/TRIGGERS? (.+)$/i)
+      if (m) return { text: `${actor} triggers ${titleCase(m[1])}.`, tone: 'event' }
+      return null
+    }
+    case 'activate': {
+      const m = tail.match(/ACTIVATES? (.+)$/i)
+      if (m) return { text: `${actor} activates ${titleCase(m[1])}.`, tone: 'event' }
+      return null
+    }
     case 'search':
+      return { text: `${actor} searches their library.`, tone: 'event' }
     default:
-      // Skip the chatter; the four spec'd kinds plus changer/etb/etc.
-      // are already covered. Returning null keeps the strip uncluttered.
       return null
   }
 }

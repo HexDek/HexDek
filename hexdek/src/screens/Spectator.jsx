@@ -70,23 +70,9 @@ function drawEvalContour(canvas, ev, lost) {
   }
   const img = ctx.createImageData(S, S)
   const d = img.data
-  const ISO = [0.25, 0.45, 0.65, 0.85]
   for (let i = 0; i < S * S; i++) {
     const [r, gr, b] = magma(buf[i])
     d[i * 4] = r; d[i * 4 + 1] = gr; d[i * 4 + 2] = b; d[i * 4 + 3] = 210
-    const x = i % S, y = i / S | 0
-    if (x > 0 || y > 0) {
-      for (const th of ISO) {
-        if ((x > 0 && (buf[y * S + x - 1] < th) !== (buf[i] < th)) ||
-            (y > 0 && (buf[(y - 1) * S + x] < th) !== (buf[i] < th))) {
-          d[i * 4] = Math.min(255, r + 55)
-          d[i * 4 + 1] = Math.min(255, gr + 55)
-          d[i * 4 + 2] = Math.min(255, b + 55)
-          d[i * 4 + 3] = 240
-          break
-        }
-      }
-    }
   }
   ctx.putImageData(img, 0, 0)
 }
@@ -146,7 +132,23 @@ const LOG_COLORS = {
   reanimate: 'var(--warn)',
   extra_turn: 'var(--danger)',
   mill: 'var(--ink-2)',
+  untap: 'var(--ink-2)',
+  tap: 'var(--ink-2)',
+  discard: 'var(--warn)',
+  scry: 'var(--ink)',
+  surveil: 'var(--ink)',
+  shuffle: 'var(--ink-2)',
+  bounce: 'var(--warn)',
+  equip: 'var(--ink)',
+  monarch: 'var(--warn)',
 }
+
+const SEAT_COLORS = [
+  '#6ee7b7', // seat 0 — emerald
+  '#93c5fd', // seat 1 — sky
+  '#fca5a5', // seat 2 — rose
+  '#fcd34d', // seat 3 — amber
+]
 
 const ELIMINATION_KINDS = new Set([
   'elimination', 'sba_704_5a', 'sba_704_5b', 'sba_704_5c', 'sba_704_5d',
@@ -369,7 +371,7 @@ export default function Spectator() {
   }
   const eloByCommander = {}
   for (const e of elo) {
-    if (!eloByCommander[e.commander] || e.rating > eloByCommander[e.commander].rating) {
+    if (!eloByCommander[e.commander] || (e.hex_rating || 0) > (eloByCommander[e.commander].hex_rating || 0)) {
       eloByCommander[e.commander] = e
     }
   }
@@ -394,8 +396,8 @@ export default function Spectator() {
             {[0, 1, 3, 2].filter(i => i < seats.length).map(i => {
               const s = seats[i]
               const e = eloByCommander[s.commander] || {}
-              const delta = e.delta || 0
-              const rating = e.rating ? Math.round(e.rating) : 1500
+              const delta = e.hex_delta || e.delta || 0
+              const rating = e.hex_rating ? Math.round(e.hex_rating) : 1500
               const perms = s.battlefield || []
               const isActive = i === game.active_seat && !game.finished
               const isWinner = game.finished && game.winner === i
@@ -537,6 +539,7 @@ export default function Spectator() {
                 ) : (() => {
                   const currentRound = Math.ceil(game.turn / numSeats)
                   const reversed = [...log].reverse()
+                  let lastTurn = -1
                   return reversed.map((entry, i) => {
                     const entryRound = Math.ceil(entry.turn / numSeats)
                     const isOldRound = entryRound < currentRound
@@ -544,65 +547,83 @@ export default function Spectator() {
                     const elimReason = ELIMINATION_REASONS[entry.kind]
                     const gc = findGameChangerInText(entry.action)
                     const narrated = narrate(entry, seats)
+                    const seatColor = SEAT_COLORS[entry.seat] || 'var(--ink-2)'
+                    const showTurnHeader = entry.turn !== lastTurn
+                    lastTurn = entry.turn
                     const rowClasses = [
                       isElim ? 'log-elimination' : null,
                       gc ? 'gc-card' : null,
                     ].filter(Boolean).join(' ') || undefined
                     return (
-                      <div
-                        key={i}
-                        className={rowClasses}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '50px 1fr',
-                          gap: 8,
-                          padding: isElim || gc ? '4px 6px' : '2px 0',
-                          borderBottom: i < reversed.length - 1 ? '1px dotted var(--rule)' : 'none',
-                          opacity: isOldRound && !isElim && !gc ? 0.4 : 1,
-                        }}
-                      >
-                        <span className="muted-2" style={{ fontSize: 10 }}>{rt(entry.turn)}</span>
-                        <div>
-                          {narrated ? (
-                            <span style={{
-                              color: narrated.tone === 'combat' ? 'var(--danger)'
-                                : narrated.tone === 'elim' ? 'var(--danger)'
-                                : narrated.tone === 'changer' ? 'var(--warn)'
-                                : 'var(--ink)',
-                              fontStyle: 'italic',
-                              letterSpacing: '0.01em',
-                            }}>
-                              {gc && <span className="gc-pill" title="Game Changer">★ GC</span>}
-                              {narrated.text}
-                            </span>
-                          ) : isElim ? (
-                            <span style={{
-                              color: 'var(--danger)',
-                              letterSpacing: '0.04em',
-                              fontWeight: 700,
-                              fontSize: 12,
-                            }}>
-                              &gt;&gt;&gt; {entry.action}{elimReason ? ` [${elimReason}]` : ''}
-                            </span>
-                          ) : (
-                            <span style={{ color: LOG_COLORS[entry.kind] || 'var(--ink)', letterSpacing: '0.02em' }}>
-                              {gc && <span className="gc-pill" title="Game Changer">★ GC</span>}
-                              {(() => {
-                                const { prefix, cardName } = linkifyAction(entry.action)
-                                if (!cardName) return <>&gt; {entry.action}</>
-                                return (
-                                  <>
-                                    &gt; {prefix}
-                                    <CardLink name={cardName} style={{ color: 'inherit', borderBottom: '1px dotted currentColor' }}>
-                                      {cardName}
-                                    </CardLink>
-                                  </>
-                                )
-                              })()}
-                            </span>
-                          )}
+                      <Fragment key={i}>
+                        {showTurnHeader && (
+                          <div style={{
+                            fontSize: 9,
+                            color: 'var(--ink-3)',
+                            padding: '4px 0 2px',
+                            borderTop: i > 0 ? '1px solid var(--rule-2)' : 'none',
+                            letterSpacing: '0.08em',
+                            fontWeight: 600,
+                          }}>
+                            ── {rt(entry.turn)} ──
+                          </div>
+                        )}
+                        <div
+                          className={rowClasses}
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '4px 1fr',
+                            gap: 8,
+                            padding: isElim || gc ? '4px 6px' : '2px 4px',
+                            opacity: isOldRound && !isElim && !gc ? 0.5 : 1,
+                            borderLeft: `3px solid ${seatColor}`,
+                            marginBottom: 1,
+                          }}
+                        >
+                          <span />
+                          <div>
+                            {narrated ? (
+                              <span style={{
+                                color: narrated.tone === 'combat' ? 'var(--danger)'
+                                  : narrated.tone === 'elim' ? 'var(--danger)'
+                                  : narrated.tone === 'changer' ? 'var(--warn)'
+                                  : 'var(--ink)',
+                                letterSpacing: '0.01em',
+                              }}>
+                                {gc && <span className="gc-pill" title="Game Changer">★ GC</span>}
+                                {entry.count > 1 && <span style={{ background: 'var(--ink-3)', color: 'var(--bg)', borderRadius: 3, padding: '0 4px', fontSize: 9, marginRight: 4, fontWeight: 700 }}>×{entry.count}</span>}
+                                {narrated.text}
+                              </span>
+                            ) : isElim ? (
+                              <span style={{
+                                color: 'var(--danger)',
+                                letterSpacing: '0.04em',
+                                fontWeight: 700,
+                                fontSize: 12,
+                              }}>
+                                &gt;&gt;&gt; {entry.action}{elimReason ? ` [${elimReason}]` : ''}
+                              </span>
+                            ) : (
+                              <span style={{ color: LOG_COLORS[entry.kind] || 'var(--ink)', letterSpacing: '0.02em' }}>
+                                {gc && <span className="gc-pill" title="Game Changer">★ GC</span>}
+                                {entry.count > 1 && <span style={{ background: 'var(--ink-3)', color: 'var(--bg)', borderRadius: 3, padding: '0 4px', fontSize: 9, marginRight: 4, fontWeight: 700 }}>×{entry.count}</span>}
+                                {(() => {
+                                  const { prefix, cardName } = linkifyAction(entry.action)
+                                  if (!cardName) return entry.action
+                                  return (
+                                    <>
+                                      {prefix}
+                                      <CardLink name={cardName} style={{ color: 'inherit', borderBottom: '1px dotted currentColor' }}>
+                                        {cardName}
+                                      </CardLink>
+                                    </>
+                                  )
+                                })()}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      </Fragment>
                     )
                   })
                 })()}
@@ -738,15 +759,15 @@ export default function Spectator() {
                         <span className="t-xs" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160, textDecoration: 'underline', textDecorationColor: 'var(--rule-2)' }}>
                           {r.commander?.toUpperCase() || r.deck_id?.toUpperCase()}
                         </span>
-                        <span className="t-xs" style={{ color: r.delta >= 0 ? 'var(--ok)' : 'var(--danger)', whiteSpace: 'nowrap' }}>
-                          {Math.round(r.rating)} ({r.delta >= 0 ? '+' : ''}{r.delta})
+                        <span className="t-xs" style={{ color: (r.hex_delta || r.delta) >= 0 ? 'var(--ok)' : 'var(--danger)', whiteSpace: 'nowrap' }}>
+                          {Math.round(r.hex_rating || r.rating || 1500)} ({(r.hex_delta || r.delta) >= 0 ? '+' : ''}{Math.round(r.hex_delta || r.delta || 0)})
                         </span>
                       </div>
                       {r.owner && (
                         <div className="t-xs muted-2" style={{ fontSize: 9, marginTop: 1 }}>{r.owner?.toUpperCase()} / {r.wins}W-{r.losses}L</div>
                       )}
                       <div style={{ transition: 'width 0.3s ease' }}>
-                        <Bar value={Math.max(0, (r.rating - 1300) / 4)} />
+                        <Bar value={Math.max(0, ((r.hex_rating || r.rating || 1500) - 1300) / 4)} />
                       </div>
                     </div>
                   ))
