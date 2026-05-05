@@ -195,6 +195,7 @@ type Showmatch struct {
 	sqlDB           *sql.DB
 	persistCh       chan persistJob
 	heimdall        *heimdall.Observer
+	muninnSink      *muninnAdapter
 
 	amiiboMu   sync.Mutex
 	amiiboPool map[string]*hat.AmiiboPool // deck key → genetic population
@@ -239,6 +240,7 @@ type sessionState struct {
 }
 
 func NewShowmatch(astPath, oraclePath, decksDir string, database *sql.DB) *Showmatch {
+	muninnSink := newMuninnAdapter("data/muninn")
 	sm := &Showmatch{
 		elo:             make(map[string]*eloState),
 		bracketCache:    make(map[string]int),
@@ -248,7 +250,8 @@ func NewShowmatch(astPath, oraclePath, decksDir string, database *sql.DB) *Showm
 		persistCh:       make(chan persistJob, 512),
 		spectators:      make(map[*spectatorConn]struct{}),
 		gauntlets:       make(map[string]*GauntletResult),
-		heimdall:        heimdall.New("data", &huginnAdapter{dataDir: "data"}, &muninnAdapter{dataDir: "data"}, newTelemetrySink()),
+		heimdall:        heimdall.New("data", &huginnAdapter{dataDir: "data"}, muninnSink, newTelemetrySink()),
+		muninnSink:      muninnSink,
 		amiiboPool:      make(map[string]*hat.AmiiboPool),
 		amiiboDir:       "data/amiibo",
 		trainingDir:     "data/training",
@@ -950,6 +953,11 @@ func (sm *Showmatch) Shutdown() {
 	sm.flushELO()
 	if sm.heimdall != nil {
 		sm.heimdall.Flush()
+	}
+	if sm.muninnSink != nil {
+		if err := sm.muninnSink.Close(); err != nil {
+			log.Printf("muninn: close error: %v", err)
+		}
 	}
 	sm.amiiboMu.Lock()
 	pools := sm.amiiboPool
