@@ -51,6 +51,7 @@ export const api = {
   getDeckVersions: (id) => request(`/api/decks/${id}/versions`),
   getDeckAmiibo: (id) => request(`/api/decks/${id}/amiibo`),
   getAchievements: (owner) => request(`/api/achievements/${owner}`),
+  getImports: (owner, limit = 10) => request(`/api/imports/${encodeURIComponent(owner)}?limit=${limit}`),
   startGauntlet: (id, games = 10000) => request(`/api/gauntlet/${id}?games=${games}`, { method: 'POST' }),
   getGauntlet: (id) => request(`/api/gauntlet/${id}`),
   getDonationsSummary: () => request('/api/donations/summary'),

@@ -3,18 +3,19 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Crops } from './chrome'
 import SearchBar from './SearchBar'
 import { useAuth } from '../context/AuthContext'
+import { useTranslation } from '../i18n'
 
 const PUBLIC_NAV = [
-  { to: '/decks', label: 'DECKS' },
-  { to: '/leaderboard', label: 'RANKINGS' },
-  { to: '/spectate', label: 'SPECTATE' },
+  { to: '/decks', key: 'nav.decks' },
+  { to: '/leaderboard', key: 'nav.leaderboard' },
+  { to: '/spectate', key: 'nav.spectate' },
 ]
 
 const AUTH_NAV = [
-  { to: '/decks', label: 'DECKS' },
-  { to: '/leaderboard', label: 'RANKINGS' },
-  { to: '/spectate', label: 'SPECTATE' },
-  { to: '/decks?tab=mine', label: 'MY DECKS' },
+  { to: '/decks', key: 'nav.decks' },
+  { to: '/leaderboard', key: 'nav.leaderboard' },
+  { to: '/spectate', key: 'nav.spectate' },
+  { to: '/decks?tab=mine', key: 'nav.my_decks' },
 ]
 
 function useTheme() {
@@ -34,6 +35,7 @@ export default function AppShell() {
   const location = useLocation()
   const nav = user ? AUTH_NAV : PUBLIC_NAV
   const [theme, toggleTheme] = useTheme()
+  const { t } = useTranslation()
 
   const isNavActive = (to) => {
     const [path, query = ''] = to.split('?')
@@ -62,15 +64,15 @@ export default function AppShell() {
 
         <div className="appbar">
           <div className="flex items-center gap-4">
-            <NavLink to={user ? '/dash' : '/'} className="brand" style={{ textDecoration: 'none' }}>HEXDEK//</NavLink>
+            <NavLink to={user ? '/dash' : '/'} className="brand" style={{ textDecoration: 'none' }}>{t('app.brand')}</NavLink>
             <nav>
               {nav.map(n => (
                 <NavLink
-                  key={n.label}
+                  key={n.key}
                   to={n.to}
                   className={isNavActive(n.to) ? 'on' : ''}
                 >
-                  {n.label}
+                  {t(n.key)}
                 </NavLink>
               ))}
             </nav>

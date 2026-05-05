@@ -1,0 +1,70 @@
+{
+  "app": {
+    "brand": "HEXDEK//",
+    "build_label": "SYS.BUILD 25.04.28 · HEXDEK V0.10D",
+    "core_ready": "+ + +  HEXDEK CORE READY  + + +",
+    "tagline": "OPEN SOURCE / / DONATIONS-POWERED / / NO ADS",
+    "guest": "GUEST"
+  },
+  "nav": {
+    "decks": "DECKS",
+    "leaderboard": "RANKINGS",
+    "spectate": "SPECTATE",
+    "my_decks": "MY DECKS",
+    "about": "ABOUT",
+    "feedback": "BUG / SUGGESTION",
+    "donate": "DONATE ♥",
+    "discord": "DISCORD",
+    "login": "SIGN IN ↗",
+    "logout": "LOGOUT"
+  },
+  "theme": {
+    "dark": "☽ DARK",
+    "light": "☀ LIGHT"
+  },
+  "common": {
+    "save": "SAVE",
+    "cancel": "CANCEL",
+    "delete": "DELETE",
+    "confirm": "CONFIRM",
+    "edit": "EDIT",
+    "export": "EXPORT",
+    "share": "SHARE",
+    "copied": "COPIED!",
+    "loading": "LOADING",
+    "saving": "SAVING...",
+    "analyzing": "ANALYZING..."
+  },
+  "deck": {
+    "owner": "OWNER",
+    "cards": "CARDS",
+    "bracket": "BRACKET",
+    "archetype": "ARCHETYPE",
+    "win_rate": "WIN RATE",
+    "games": "GAMES",
+    "record": "RECORD",
+    "no_analysis": "NO FREYA ANALYSIS ON FILE"
+  },
+  "achievements": {
+    "title": "ACHIEVEMENTS",
+    "stats": {
+      "games": "GAMES",
+      "wins": "WINS",
+      "streak": "STREAK",
+      "opponents": "OPPONENTS"
+    },
+    "rarity": {
+      "common": "COMMON",
+      "uncommon": "UNCOMMON",
+      "rare": "RARE",
+      "mythic": "MYTHIC",
+      "secret": "SECRET"
+    },
+    "secret_hidden": "Hidden achievement.",
+    "secret_tooltip": "Hidden achievement — keep playing."
+  },
+  "status": {
+    "no_game": "NO GAME IN PROGRESS",
+    "in_progress": "IN PROGRESS"
+  }
+}
