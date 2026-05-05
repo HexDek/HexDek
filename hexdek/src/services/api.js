@@ -55,6 +55,12 @@ export const api = {
   getDeckVersions: (id) => request(`/api/decks/${id}/versions`),
   getDeckAmiibo: (id) => request(`/api/decks/${id}/amiibo`),
   getAchievements: (owner) => request(`/api/achievements/${owner}`),
+  getOwnerProfile: (owner) => request(`/api/profile/${encodeURIComponent(owner)}`),
+  getOwnerProfiles: (owners) => {
+    const list = (owners || []).filter(Boolean).join(',')
+    if (!list) return Promise.resolve({})
+    return request(`/api/profiles?owners=${encodeURIComponent(list)}`)
+  },
   getImports: (owner, limit = 10) => request(`/api/imports/${encodeURIComponent(owner)}?limit=${limit}`),
   startGauntlet: (id, games = 10000) => request(`/api/gauntlet/${id}?games=${games}`, { method: 'POST' }),
   getGauntlet: (id) => request(`/api/gauntlet/${id}`),

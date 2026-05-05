@@ -91,6 +91,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// pick up per-deck previews.
 	mux.HandleFunc("GET /decks/{owner}/{id}", h.handleDeckSharePage)
 	mux.HandleFunc("GET /api/profile", h.handleProfile)
+	mux.HandleFunc("GET /api/profile/{owner}", h.handleOwnerProfile)
+	mux.HandleFunc("GET /api/profiles", h.handleOwnerProfilesBatch)
 	mux.HandleFunc("GET /api/card-art/{name}", h.handleCardArt)
 	mux.HandleFunc("GET /api/card-stats/{commander}", h.handleCardWinStats)
 	mux.HandleFunc("GET /api/rivalry/{owner}/{id}", h.handleRivalry)

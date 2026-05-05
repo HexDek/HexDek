@@ -4,6 +4,7 @@ import { Panel, KV, Tape, Tag } from '../components/chrome'
 import DeckShelf from '../components/DeckShelf'
 import { api } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
+import { countryFlagEmoji } from '../lib/flag'
 
 // PublicProfile — read-only player page at /profile/:owner.
 // Aggregates data from three sources:
@@ -79,6 +80,7 @@ export default function PublicProfile() {
   const [decksLoading, setDecksLoading] = useState(true)
   const [achievements, setAchievements] = useState(null)
   const [achLoading, setAchLoading] = useState(true)
+  const [profile, setProfile] = useState(null)
 
   useEffect(() => {
     if (!owner) return
@@ -96,6 +98,13 @@ export default function PublicProfile() {
       .then(setAchievements)
       .catch(() => setAchievements(null))
       .finally(() => setAchLoading(false))
+  }, [owner])
+
+  useEffect(() => {
+    if (!owner) return
+    api.getOwnerProfile(owner)
+      .then(setProfile)
+      .catch(() => setProfile(null))
   }, [owner])
 
   // Filter ELO entries to this owner so per-deck rating/record overlays
@@ -169,6 +178,7 @@ export default function PublicProfile() {
 
   const memberSince = fmtMemberSince(decks)
   const upperOwner = owner.toUpperCase()
+  const flag = countryFlagEmoji(profile?.country)
   const earnedById = useMemo(() => {
     const m = {}
     for (const b of achievements?.badges || []) m[b.id] = b
@@ -179,7 +189,7 @@ export default function PublicProfile() {
   return (
     <>
       <Tape
-        left={`PROFILE / / ${upperOwner}`}
+        left={`PROFILE / / ${upperOwner}${flag ? ' ' + flag : ''}`}
         mid={achLoading || decksLoading ? 'LOADING' : 'PUBLIC RECORD'}
         right="DOC HX-500"
       />
@@ -187,10 +197,34 @@ export default function PublicProfile() {
       <div style={{ padding: 18, flex: 1, display: 'flex', flexDirection: 'column', gap: 14, overflow: 'auto' }}>
 
         {/* Header — name + summary stats */}
-        <Panel code="USR.0" title="PLAYER RECORD" right={<Tag solid>{upperOwner}</Tag>}>
+        <Panel
+          code="USR.0"
+          title={
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              {flag && (
+                <span
+                  className="player-flag"
+                  title={profile?.country}
+                  aria-label={`Country: ${profile?.country || 'unknown'}`}
+                  style={{ fontSize: 18, lineHeight: 1 }}
+                >
+                  {flag}
+                </span>
+              )}
+              PLAYER RECORD
+            </span>
+          }
+          right={<Tag solid>{upperOwner}</Tag>}
+        >
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
             <KV rows={[
-              ['DISPLAY NAME', upperOwner],
+              ['DISPLAY NAME',
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {flag && <span style={{ fontSize: 14, lineHeight: 1 }}>{flag}</span>}
+                  {upperOwner}
+                </span>,
+              ],
+              ['COUNTRY', profile?.country || '—'],
               ['MEMBER SINCE', memberSince],
               ['DECKS', String(decks.length)],
               ['OPPONENTS FACED', String(achievements?.opponents_faced ?? '—')],
