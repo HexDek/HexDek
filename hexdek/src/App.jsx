@@ -16,6 +16,7 @@ import BugReport from './screens/BugReport'
 import Donations from './screens/Donations'
 import Profile from './screens/Profile'
 import PublicProfile from './screens/PublicProfile'
+import OperatorProfile from './screens/OperatorProfile'
 import Login from './screens/Login'
 import AuthCallback from './screens/AuthCallback'
 
@@ -47,6 +48,8 @@ export default function App() {
         <Route path="donations" element={<Donations />} />
         <Route path="profile" element={<Profile />} />
         <Route path="profile/:owner" element={<PublicProfile />} />
+        <Route path="operator" element={<RequireAuth><OperatorProfile /></RequireAuth>} />
+        <Route path="me" element={<Navigate to="/operator" replace />} />
       </Route>
     </Routes>
   )
