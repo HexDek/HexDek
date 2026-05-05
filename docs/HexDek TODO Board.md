@@ -16,7 +16,12 @@ kanban-plugin: board
 
 ## High Priority — Platform
 
-*No open items — all shipped.*
+- [ ] **Mobile full pass** — leaderboard, spectate, operator, meta pages need individual mobile audit at 375px. Deck drilldown done, rest pending. #ui #mobile
+- [ ] **Global glossary disclosure system** — every stat/label/metric across all pages tap-to-expand inline explanation. One shared component + glossary data source. Replaces FAQ concept. #ui #ux #accessibility
+- [ ] **Curse Proficiency sigil** — cymatic SVG replacing amiibo section on deck page (circle → flower of life evolution, color-identity tinted). Part of "Hats" → "Curses" rebrand. #ui #design
+- [ ] **Action button context boxes** — brief TLDR above gauntlet/test variant/etc buttons for neurodivergent UX clarity. #ui #ux #accessibility
+- [ ] **Narrator enrichment** — detailed spell/ability resolution in spectator log (card names, effects, targets, results) instead of generic "resolves spell" messages. #ui #spectator
+- [ ] **"Hats" → "Curses" rename** — rebrand across entire codebase (hat → curse, amiibo section → curse proficiency). User-facing only — internal package names stay. #branding
 
 
 ## High Priority — Learning Loop (Observability) — ALL PHASES DONE
@@ -50,6 +55,9 @@ kanban-plugin: board
 ## Medium Priority — Engine
 
 - [ ] **Temporal Pincer** — anon UUID cookie → session tracking → on login stitch all anon device UUIDs to authenticated profile. No PII, all UUIDs. Powers P&R via GraphQL. #infra #platform
+- [ ] **BUG: Esika/Prismatic Bridge 9.2% WR** — systemic B5 combo execution issue. Bridge should flip and cast free spells every upkeep but combo assembly/sequencing not firing correctly. #engine #bug #per_card
+- [ ] **BUG: Multiple B5 decks at 13-14% WR** — combo execution ceiling across several B5 commanders. Likely related to Esika issue — combo sequencer not recognizing all win-line piece states. #engine #bug #combo
+- [ ] **34K corpus audit** — auto-verify every Scryfall card against its AST: outcome + CR pathway compliance. 4 era batches. Validates parser coverage claims at scale. #engine #qa
 
 
 ## Medium Priority — Platform
@@ -163,8 +171,7 @@ kanban-plugin: board
 - [x] **zone_accounting fix** — defensive sweep + library/command_zone arms (commit fb100ce, 2026-05-04) #engine #zones
 - [x] **34+ new commander handlers** — 10 manual + 12 manual + 14 MDFC aliases (commits f464b43 + 49c882f + d1294ea, 2026-05-04) #engine #per_card
 
-*Items the user listed for this section that don't yet have a commit:*
-- Card Synergy Analytics — files exist (`internal/db/card_stats.go`, `internal/hexapi/cardstats.go`) but unstaged; not yet shipped.
+*Items not yet committed:*
 - Spectator narrator — `hexdek/src/components/NarratorOverlay.jsx` exists and is imported by Spectator.jsx, but the file itself isn't committed yet.
 
 
