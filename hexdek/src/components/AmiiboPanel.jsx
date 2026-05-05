@@ -119,32 +119,28 @@ export default function AmiiboPanel({ amiibo }) {
       title={`AMIIBO / / GENETIC POPULATION`}
       right={<Tag solid>{pop.length} DNA · GEN {maxGen}</Tag>}
     >
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 18, alignItems: 'start' }} className="amiibo-grid">
-        <div>
-          <div className="t-xs muted" style={{ marginBottom: 4 }}>TOP MEMBER PERSONALITY</div>
-          <RadarChart values={topValues} />
-        </div>
-        <div>
-          <KV rows={[
-            ['GENERATIONS', `${maxGen}`],
-            ['POPULATION', `${pop.length}`],
-            ['GAMES LOGGED', `${(amiibo.game_count ?? 0).toLocaleString()}`],
-            ['BEST FITNESS', <span style={{ color: bestFitness >= 1.0 ? 'var(--ok)' : 'var(--warn)', fontWeight: 700 }}>{bestFitness.toFixed(2)}</span>],
-            ['AVG FITNESS', `${avgFitness.toFixed(2)}`],
-            ['TOP GAMES', `${top.games_played ?? 0}`],
-          ]} />
-          <div className="hr" style={{ margin: '10px 0' }} />
-          <div className="t-xs muted" style={{ marginBottom: 4 }}>FITNESS BY RANK (POP SORTED ↓)</div>
-          <FitnessSparkline values={fitnessByRank} />
-          <div className="t-xs muted" style={{ marginTop: 2 }}>
-            DASHED LINE = BRACKET PAR (1.00) · GREEN DOTS ABOVE PAR
-          </div>
-        </div>
+      <div className="t-xs muted" style={{ marginBottom: 4 }}>TOP MEMBER PERSONALITY</div>
+      <RadarChart values={topValues} />
+
+      <KV rows={[
+        ['GENERATIONS', `${maxGen}`],
+        ['POPULATION', `${pop.length}`],
+        ['GAMES LOGGED', `${(amiibo.game_count ?? 0).toLocaleString()}`],
+        ['BEST FITNESS', <span style={{ color: bestFitness >= 1.0 ? 'var(--ok)' : 'var(--warn)', fontWeight: 700 }}>{bestFitness.toFixed(2)}</span>],
+        ['AVG FITNESS', `${avgFitness.toFixed(2)}`],
+        ['TOP GAMES', `${top.games_played ?? 0}`],
+      ]} />
+
+      <div className="hr" style={{ margin: '10px 0' }} />
+      <div className="t-xs muted" style={{ marginBottom: 4 }}>FITNESS BY RANK (POP SORTED ↓)</div>
+      <FitnessSparkline values={fitnessByRank} />
+      <div className="t-xs muted" style={{ marginTop: 2 }}>
+        DASHED = PAR (1.00) · GREEN DOTS ABOVE PAR
       </div>
 
       <div className="hr" style={{ margin: '12px 0' }} />
       <div className="t-xs muted" style={{ marginBottom: 6 }}>TOP MEMBER TRAITS</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }} className="amiibo-traits">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 6 }} className="amiibo-traits">
         {TRAITS.map(t => {
           const v = top[t.key] ?? 0
           return (

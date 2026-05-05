@@ -598,6 +598,8 @@ export default function DeckArchive() {
               </div>
             </Panel>
           )}
+
+          {amiibo && <AmiiboPanel amiibo={amiibo} />}
         </div>
 
         <div className="archive-main">
@@ -1003,9 +1005,6 @@ export default function DeckArchive() {
               ) : null}
             </Panel>
           )}
-
-          {/* Amiibo genetic population */}
-          {amiibo && <AmiiboPanel amiibo={amiibo} />}
 
           {/* Achievement badges */}
           {achievements && achievements.catalog?.length > 0 && (
