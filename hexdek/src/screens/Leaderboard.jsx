@@ -34,6 +34,7 @@ function BandTag({ band, bracket }) {
 
 function shameTier(rating) {
   const r = rating ?? 0
+  if (r <= -500) return { label: 'UNINSTALL', kind: 'bad' }
   if (r <= -300) return { label: 'PACK IT UP', kind: 'bad' }
   if (r <= -200) return { label: 'COOKED', kind: 'bad' }
   if (r <= -100) return { label: 'DOWN BAD', kind: 'bad' }
