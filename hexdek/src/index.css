@@ -1563,10 +1563,12 @@ body {
   background-size: cover;
   background-position: center 30%;
   border-bottom: 1px solid var(--rule-2);
+  overflow: hidden;
 }
 .card-page-hero-scrim {
   position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(12,13,10,0.35) 0%, rgba(12,13,10,0.0) 20%, rgba(12,13,10,0.9) 100%);
+  background: linear-gradient(180deg, rgba(12,13,10,0.55) 0%, rgba(12,13,10,0.4) 30%, rgba(12,13,10,0.92) 100%);
+  backdrop-filter: blur(6px);
 }
 .card-page-hero-card {
   flex-shrink: 0;
@@ -1592,7 +1594,7 @@ body {
 .card-page-hero-corner--tr { top: 10px; right: 10px; }
 .card-page-hero-body {
   position: absolute; left: 0; right: 0; bottom: 0;
-  padding: 14px 24px 18px;
+  padding: 40px 24px 24px;
   display: flex; flex-direction: row; align-items: flex-end; gap: 24px;
 }
 .card-page-hero-meta {
