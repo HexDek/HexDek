@@ -26,6 +26,7 @@ import (
 	"github.com/hexdek/hexdek/internal/moxfield"
 	"github.com/hexdek/hexdek/internal/oracle"
 	"github.com/hexdek/hexdek/internal/party"
+	"github.com/hexdek/hexdek/internal/pincer"
 	"github.com/hexdek/hexdek/internal/shuffle"
 	"github.com/hexdek/hexdek/internal/ws"
 )
@@ -35,6 +36,8 @@ func main() {
 	deckPath := flag.String("deck", "data/decks/yuriko_v1.json", "Path to test deck JSON file")
 	dbPath := flag.String("db", "data/hexdek.db", "SQLite path (use :memory: for ephemeral)")
 	indexHTML := flag.String("index-html", "", "Path to built SPA index.html for share-page OG injection (optional)")
+	pincerAdminToken := flag.String("pincer-admin-token", os.Getenv("PINCER_ADMIN_TOKEN"), "Bearer token gating /api/analytics/sessions (env: PINCER_ADMIN_TOKEN)")
+	pincerSecure := flag.Bool("pincer-secure-cookie", false, "Set Secure flag on hexdek_session cookie (true behind HTTPS)")
 	flag.Parse()
 
 	// Open SQLite
@@ -126,12 +129,23 @@ func main() {
 		http.ServeFile(w, r, "data/decks/yuriko_v1.json")
 	})
 
+	// Temporal Pincer: anonymous UUID session tracking + auth stitching.
+	// Registers /api/analytics/sessions (admin-gated) and /api/pincer/stitch.
+	pincerTracker, err := pincer.New(database, pincer.Options{
+		AdminToken:   *pincerAdminToken,
+		SecureCookie: *pincerSecure,
+	})
+	if err != nil {
+		log.Fatalf("pincer init: %v", err)
+	}
+	pincerTracker.Register(mux)
+
 	log.Printf("listening on %s", *addr)
 	log.Printf("Ship 1: curl http://%s/game/test/library/top/3", *addr)
 	log.Printf("Ship 2: curl -XPOST http://%s/api/device/register -d '{\"display_name\":\"Hex\"}'", *addr)
 	log.Printf("Ship 3: ws://%s/ws/party/{id}?token={token}", *addr)
 
-	handler := corsMiddleware(mux)
+	handler := corsMiddleware(pincerTracker.Middleware(mux))
 	if err := http.ListenAndServe(*addr, handler); err != nil {
 		log.Fatalf("server: %v", err)
 	}
