@@ -51,6 +51,7 @@ func CheckGame(gs *gameengine.GameState) OracleResult {
 		checkExactlyOneWinner,
 		checkTurnBounds,
 		checkNoNegativeCounters,
+		checkPermanentTypes,
 	}
 	for _, check := range checks {
 		check(gs, &result)
@@ -291,6 +292,78 @@ func checkNoNegativeCounters(gs *gameengine.GameState, r *OracleResult) {
 			}
 		}
 	}
+}
+
+// §205 — Type-line consistency. Every permanent on the battlefield must
+// have at least one permanent type (artifact, creature, enchantment,
+// planeswalker, land, battle) and must NOT have a non-permanent type
+// (instant, sorcery). Runtime Card.Types tracks type-changing effects
+// (Blood Moon adds "mountain", Humility / type-stripping continuous
+// effects). We only flag states that are impossible under any effect:
+// a card whose runtime types include "instant"/"sorcery", or a card whose
+// printed Scryfall type line names no permanent type yet sits on the
+// battlefield. Tokens are skipped — they have engine-assigned types and
+// no Scryfall record.
+func checkPermanentTypes(gs *gameengine.GameState, r *OracleResult) {
+	for i, s := range gs.Seats {
+		if s == nil {
+			continue
+		}
+		for _, p := range s.Battlefield {
+			if p == nil || p.Card == nil {
+				continue
+			}
+			if p.IsToken() {
+				continue
+			}
+			for _, t := range p.Card.Types {
+				lower := strings.ToLower(t)
+				if lower == "instant" || lower == "sorcery" {
+					r.Violations = append(r.Violations, OracleViolation{
+						Rule: "permanent_types",
+						Description: fmt.Sprintf("permanent %q has type %q (instants and sorceries cannot be permanents)",
+							p.Card.DisplayName(), t),
+						Seat:     i,
+						Severity: "critical",
+						Details: map[string]interface{}{
+							"card": p.Card.DisplayName(), "type": t,
+						},
+					})
+				}
+			}
+			if tl := p.Card.TypeLine; tl != "" && !typeLineHasPermanentType(tl) {
+				r.Violations = append(r.Violations, OracleViolation{
+					Rule: "permanent_types",
+					Description: fmt.Sprintf("permanent %q has printed type line %q which has no permanent type",
+						p.Card.DisplayName(), tl),
+					Seat:     i,
+					Severity: "critical",
+					Details: map[string]interface{}{
+						"card": p.Card.DisplayName(), "type_line": tl,
+					},
+				})
+			}
+		}
+	}
+}
+
+// typeLineHasPermanentType reports whether a Scryfall-style printed type
+// line contains at least one permanent type. Only the portion before the
+// em dash is examined; subtypes after the dash are subtype-only tokens
+// (e.g. "— Bear") and don't determine permanent-ness.
+func typeLineHasPermanentType(typeLine string) bool {
+	head := strings.ToLower(typeLine)
+	if i := strings.Index(head, "—"); i >= 0 {
+		head = head[:i]
+	} else if i := strings.Index(head, "-"); i >= 0 {
+		head = head[:i]
+	}
+	for _, t := range []string{"artifact", "creature", "enchantment", "planeswalker", "land", "battle"} {
+		if strings.Contains(head, t) {
+			return true
+		}
+	}
+	return false
 }
 
 // FormatViolations returns a human-readable summary of all violations.

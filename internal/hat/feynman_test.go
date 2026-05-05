@@ -111,6 +111,115 @@ func TestFeynman_NoWinner(t *testing.T) {
 	}
 }
 
+func TestFeynman_PermanentTypes_Clean(t *testing.T) {
+	gs := newFeynmanGame(t, 2)
+	creature := &gameengine.Card{
+		Name:     "Llanowar Elves",
+		Owner:    0,
+		Types:    []string{"creature"},
+		TypeLine: "Creature — Elf Druid",
+	}
+	newTestPermanent(gs.Seats[0], creature, 1, 1)
+	// Blood-Moon-style: a non-basic land gains the Mountain subtype.
+	// Runtime types ["land","mountain"] and a "Land" type line are both
+	// valid permanent shapes.
+	moonLand := &gameengine.Card{
+		Name:     "Reflecting Pool",
+		Owner:    0,
+		Types:    []string{"land", "mountain"},
+		TypeLine: "Land",
+	}
+	newTestPermanent(gs.Seats[0], moonLand, 0, 0)
+	gs.Seats[1].Lost = true
+	gs.Turn = 5
+
+	result := CheckGame(gs)
+	for _, v := range result.Violations {
+		if v.Rule == "permanent_types" {
+			t.Errorf("clean board should not have permanent_types violation: %v", v)
+		}
+	}
+}
+
+func TestFeynman_PermanentTypes_InstantOnBattlefield(t *testing.T) {
+	gs := newFeynmanGame(t, 2)
+	bogus := &gameengine.Card{
+		Name:     "Lightning Bolt",
+		Owner:    0,
+		Types:    []string{"instant"},
+		TypeLine: "Instant",
+	}
+	newTestPermanent(gs.Seats[0], bogus, 0, 0)
+	gs.Seats[1].Lost = true
+	gs.Turn = 5
+
+	result := CheckGame(gs)
+	foundType, foundTypeLine := false, false
+	for _, v := range result.Violations {
+		if v.Rule != "permanent_types" {
+			continue
+		}
+		if v.Severity != "critical" {
+			t.Errorf("expected critical severity, got %s", v.Severity)
+		}
+		if got, _ := v.Details["type"].(string); got == "instant" {
+			foundType = true
+		}
+		if got, _ := v.Details["type_line"].(string); got == "Instant" {
+			foundTypeLine = true
+		}
+	}
+	if !foundType {
+		t.Error("expected permanent_types violation for runtime type=instant")
+	}
+	if !foundTypeLine {
+		t.Error("expected permanent_types violation for printed TypeLine=Instant")
+	}
+}
+
+func TestFeynman_PermanentTypes_HumilityToleratesStrippedCreatureType(t *testing.T) {
+	gs := newFeynmanGame(t, 2)
+	// Type-stripping continuous effect: runtime "creature" type was
+	// removed but the printed type line still says Creature. Legal
+	// post-effect state — must NOT be flagged.
+	stripped := &gameengine.Card{
+		Name:     "Grizzly Bears",
+		Owner:    0,
+		Types:    []string{},
+		TypeLine: "Creature — Bear",
+	}
+	newTestPermanent(gs.Seats[0], stripped, 2, 2)
+	gs.Seats[1].Lost = true
+	gs.Turn = 5
+
+	result := CheckGame(gs)
+	for _, v := range result.Violations {
+		if v.Rule == "permanent_types" {
+			t.Errorf("type-stripped creature should not be flagged: %v", v)
+		}
+	}
+}
+
+func TestFeynman_PermanentTypes_TokenSkipped(t *testing.T) {
+	gs := newFeynmanGame(t, 2)
+	tok := &gameengine.Card{
+		Name:     "Soldier Token",
+		Owner:    0,
+		Types:    []string{"creature", "token"},
+		TypeLine: "",
+	}
+	newTestPermanent(gs.Seats[0], tok, 1, 1)
+	gs.Seats[1].Lost = true
+	gs.Turn = 5
+
+	result := CheckGame(gs)
+	for _, v := range result.Violations {
+		if v.Rule == "permanent_types" {
+			t.Errorf("token should be skipped, got: %v", v)
+		}
+	}
+}
+
 func TestFeynman_FormatViolations(t *testing.T) {
 	violations := []OracleViolation{
 		{Rule: "704.5a", Description: "test", Seat: 0, Severity: "critical"},
