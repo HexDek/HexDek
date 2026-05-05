@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Panel, KV, Tag, Tape, Btn, Bar } from '../components/chrome'
+import ManaCost from '../components/ManaCost'
 import { API_BASE, cardArtUrl } from '../services/api'
 import { useArtContrast } from '../hooks/useArtContrast'
 import { useLiveSocket } from '../hooks/useLiveSocket'
@@ -251,7 +252,11 @@ export default function CardPage() {
         <div className="card-page-hero-body">
           <div className="card-page-hero-meta">
             {typeLine !== '—' && <Tag solid>{typeLine.toUpperCase()}</Tag>}
-            {manaCost && <Tag>{manaCost}</Tag>}
+            {manaCost && (
+              <Tag>
+                <ManaCost cost={manaCost} size={14} />
+              </Tag>
+            )}
             {price !== '—' && <Tag kind="ok">{price}</Tag>}
           </div>
           <h1 className="card-page-hero-title">{upperName}</h1>
@@ -267,7 +272,7 @@ export default function CardPage() {
             <KV rows={[
               ['NAME', upperName],
               ['TYPE', typeLine],
-              ['MANA', manaCost || '—'],
+              ['MANA', manaCost ? <ManaCost cost={manaCost} size={16} /> : '—'],
               ['CMC', cmc != null ? `${cmc}` : '—'],
               ['SET', setCode || '—'],
               ...(source === 'scryfall' ? [['PRICE (USD)', price]] : []),

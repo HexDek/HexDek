@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { cardArtUrl } from '../services/api'
 import { useArtContrast } from '../hooks/useArtContrast'
+import ManaCost from './ManaCost'
 
 // CardPopup — hover (desktop) / tap (mobile) preview for any card name.
 //
@@ -157,18 +158,7 @@ function CardPopupBody({ name, position, onClose, onNavigate }) {
             {data?.name || name}
           </span>
           {data?.mana_cost && (
-            <span
-              style={{
-                fontFamily: 'inherit',
-                fontSize: 10,
-                letterSpacing: '0.04em',
-                border: '1px solid var(--rule-2)',
-                padding: '1px 5px',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {data.mana_cost}
-            </span>
+            <ManaCost cost={data.mana_cost} size={14} />
           )}
         </div>
         {loading ? (

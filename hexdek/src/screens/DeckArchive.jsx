@@ -631,11 +631,14 @@ export default function DeckArchive() {
                   // CardLink target is the raw card name Scryfall knows.
                   const linkName = (c.name || '').replace(/^COMMANDER:\s*/i, '').trim()
                   return (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: i < cards.length - 1 ? '1px dotted var(--rule)' : 'none' }}>
-                      <CardLink name={linkName} className="t-xs" style={{ borderBottom: 'none' }}>
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '3px 0', borderBottom: i < cards.length - 1 ? '1px dotted var(--rule)' : 'none' }}>
+                      <CardLink name={linkName} className="t-xs" style={{ borderBottom: 'none', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {c.name}
                       </CardLink>
-                      <span className="t-xs muted">{c.quantity > 1 ? `×${c.quantity}` : ''}</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                        {c.mana_cost && <ManaCost cost={c.mana_cost} size={12} gap={1} />}
+                        <span className="t-xs muted">{c.quantity > 1 ? `×${c.quantity}` : ''}</span>
+                      </span>
                     </div>
                   )
                 })}
@@ -644,6 +647,90 @@ export default function DeckArchive() {
           )}
 
           {amiibo && <AmiiboPanel amiibo={amiibo} />}
+
+          {/* SIMILAR DECKS — server-ranked by shared-card overlap with
+              bonuses for matching commander / archetype / bracket. The
+              endpoint already drops noise (≤10 shared cards and no
+              bonus); an empty response means we genuinely have nothing
+              to recommend yet. */}
+          <Panel
+            code="04.SIM"
+            title={`SIMILAR DECKS / / ${similarDecks == null ? '…' : similarDecks.length}`}
+            right={similarDecks && similarDecks.length > 0 ? <Tag solid>{similarDecks.length}</Tag> : null}
+          >
+            {similarDecks == null ? (
+              <div className="t-xs muted" style={{ padding: '10px 0', textAlign: 'center' }}>
+                &gt; SCANNING DECK INDEX<span className="blink">_</span>
+              </div>
+            ) : similarDecks.length === 0 ? (
+              <div className="t-xs muted" style={{ padding: '10px 0', textAlign: 'center', lineHeight: 1.6 }}>
+                &gt; NO SIMILAR DECKS FOUND.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {similarDecks.map((d, i) => {
+                  const cmdrArt = d.commander_card ? cardArtUrl(d.commander_card) : null
+                  const showName = (d.commander || d.name || d.id || '').toUpperCase()
+                  const tags = []
+                  if (d.same_commander) tags.push('CMDR')
+                  if (d.same_archetype) tags.push('ARCHE')
+                  if (d.same_bracket)   tags.push(`B${d.bracket}`)
+                  return (
+                    <Link
+                      key={`${d.owner}/${d.id}`}
+                      to={`/decks/${d.owner}/${d.id}`}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '52px 1fr',
+                        gap: 8,
+                        padding: 4,
+                        border: '1px solid var(--rule-2)',
+                        textDecoration: 'none',
+                        color: 'var(--ink)',
+                        background: i === 0 ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent',
+                      }}
+                      title={`${showName} · ${d.shared_cards} shared`}
+                    >
+                      <div
+                        className={cmdrArt ? '' : 'hatch'}
+                        style={{
+                          width: 52, height: 40, overflow: 'hidden',
+                          backgroundImage: cmdrArt ? `url(${cmdrArt})` : undefined,
+                          backgroundSize: 'cover', backgroundPosition: 'center 30%',
+                          filter: 'saturate(0.6) contrast(1.05)',
+                        }}
+                      />
+                      <div style={{ minWidth: 0 }}>
+                        <div className="t-xs" style={{
+                          fontWeight: 700, letterSpacing: '0.04em',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {showName}
+                        </div>
+                        <div className="t-xs muted-2" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {(d.owner || '').toUpperCase()}
+                        </div>
+                        <div className="t-xs" style={{
+                          marginTop: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+                        }}>
+                          <span style={{ color: 'var(--ok)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                            {d.shared_cards} SHARED
+                          </span>
+                          {tags.map(t => (
+                            <span key={t} style={{
+                              fontSize: 8, letterSpacing: '0.08em', padding: '0 4px',
+                              border: '1px solid color-mix(in srgb, var(--accent) 50%, var(--rule-2))',
+                              color: 'var(--ink-2)',
+                            }}>{t}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </Panel>
         </div>
 
         <div className="archive-main">
