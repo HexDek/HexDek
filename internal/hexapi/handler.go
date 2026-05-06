@@ -30,6 +30,7 @@ type Handler struct {
 	IndexHTMLPath string
 	cardDB        map[string]oracleCard
 	db            *sql.DB // optional — used for deck_meta (custom name, etc.)
+	ownerAliases  map[string]string // email prefix → owner slug
 
 	deckSubsMu sync.RWMutex
 	deckSubs   map[string]map[chan deckEvent]struct{}
@@ -77,6 +78,44 @@ func (h *Handler) LoadCardDB(path string) {
 		}
 	}
 	log.Printf("carddb: loaded %d cards", len(h.cardDB))
+}
+
+func (h *Handler) LoadOwnerAliases(path string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		h.ownerAliases = make(map[string]string)
+		log.Printf("owner-aliases: no file at %s, starting empty", path)
+		return
+	}
+	var aliases map[string]string
+	if err := json.Unmarshal(data, &aliases); err != nil {
+		log.Printf("owner-aliases: parse error: %v", err)
+		h.ownerAliases = make(map[string]string)
+		return
+	}
+	h.ownerAliases = make(map[string]string, len(aliases))
+	for k, v := range aliases {
+		h.ownerAliases[strings.ToLower(k)] = strings.ToLower(v)
+	}
+	log.Printf("owner-aliases: loaded %d mappings", len(h.ownerAliases))
+}
+
+func (h *Handler) handleResolveOwner(w http.ResponseWriter, r *http.Request) {
+	email := strings.TrimSpace(r.URL.Query().Get("email"))
+	if email == "" {
+		http.Error(w, "email required", http.StatusBadRequest)
+		return
+	}
+	prefix := strings.ToLower(strings.Split(email, "@")[0])
+	prefix = strings.Split(prefix, ".")[0]
+
+	owner := prefix
+	if mapped, ok := h.ownerAliases[prefix]; ok {
+		owner = mapped
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"owner": owner})
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -127,6 +166,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/analytics/cards", h.handleCardAnalytics)
 	mux.HandleFunc("POST /api/telemetry/pageview", h.handlePageview)
 	mux.HandleFunc("POST /api/telemetry/stitch", h.handleStitch)
+	mux.HandleFunc("GET /api/resolve-owner", h.handleResolveOwner)
 }
 
 type DeckSummary struct {

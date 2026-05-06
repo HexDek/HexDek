@@ -116,6 +116,7 @@ func main() {
 		log.Fatalf("deck_meta schema: %v", err)
 	}
 	hexAPI.LoadCardDB("data/rules/oracle-cards.json")
+	hexAPI.LoadOwnerAliases("data/owner-aliases.json")
 	hexAPI.Register(mux)
 	log.Printf("showmatch: loading in background — live games at /api/live/game")
 

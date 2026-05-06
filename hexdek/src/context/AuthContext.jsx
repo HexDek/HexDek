@@ -18,6 +18,15 @@ function ownerSlug(u) {
   return slug.toLowerCase()
 }
 
+async function resolveAndStoreOwner(email) {
+  try {
+    const res = await fetch(`/api/resolve-owner?email=${encodeURIComponent(email)}`)
+    if (!res.ok) return
+    const { owner } = await res.json()
+    if (owner) localStorage.setItem('hexdek_owner', owner)
+  } catch { /* best effort */ }
+}
+
 const DEV_USER = {
   uid: 'dev-local',
   email: 'dev@localhost',
@@ -35,6 +44,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (isLocalhost) return
     const unsub = onAuthChange((u) => {
+      if (u?.email) resolveAndStoreOwner(u.email)
       setUser(u)
       setLoading(false)
     })
