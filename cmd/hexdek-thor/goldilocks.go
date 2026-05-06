@@ -2649,6 +2649,27 @@ func testGoldilocksCard(oc *oracleCard) (result *failure) {
 	tr.Record("SETUP", "battlefield seat=0 size=%d srcPerm=%v",
 		len(gs.Seats[0].Battlefield), srcPerm != nil)
 
+	// Adversarial seat auto-detect: stage opponent actions before the
+	// effect resolves so opponent-conditioned triggers on the source
+	// can fire. Runs BEFORE the event-log clear so the opponent-action
+	// events don't pollute the post-resolution diff.
+	if oc.ast != nil {
+		needs := detectOpponentNeeds(oc.ast, oc.OracleText)
+		if needs.hasAny() {
+			applyAdversarialSetup(gs, oc, needs, tr)
+		}
+	}
+
+	// Trigger-condition priming. For triggered abilities, place the
+	// missing precondition entities (victim creature, opponent cards,
+	// libraries to draw from) BEFORE the snapshot so fireTriggerEvent
+	// below has the entities it needs to fire the actual event.
+	// On unrecognised events this is a no-op — fireTriggerEvent's
+	// existing logic still handles the firing as a fallback.
+	if info.abilityKind == "triggered" {
+		primeTriggerCondition(gs, info, srcPerm, tr)
+	}
+
 	// Clear event log before resolution so we only check new events.
 	gs.EventLog = gs.EventLog[:0]
 

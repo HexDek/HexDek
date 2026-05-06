@@ -597,6 +597,15 @@ func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction) (r
 		oc.Name, oc.Types, perm.Power(), perm.Toughness())
 	tr.Record("SETUP", "place opponent=%q seat=1 power=2 toughness=2", "Opponent Bear")
 
+	// Adversarial seat auto-detect: if the card references opponents,
+	// stage opponent actions so listening triggers can fire.
+	if oc.ast != nil {
+		needs := detectOpponentNeeds(oc.ast, oc.OracleText)
+		if needs.hasAny() {
+			applyAdversarialSetup(gs, oc, needs, tr)
+		}
+	}
+
 	bfBefore := totalBattlefield(gs)
 	eventsBefore := len(gs.EventLog)
 
