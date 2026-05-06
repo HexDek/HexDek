@@ -448,6 +448,12 @@ export default function DeckArchive() {
 
   const deckName = deck?.custom_name || deck?.commander || id?.replace(/_/g, ' ').toUpperCase() || 'DECK'
 
+  useEffect(() => {
+    if (!deckName) return
+    const ownerLabel = owner ? ` · ${owner.toUpperCase()}` : ''
+    document.title = `${deckName}${ownerLabel} — HEXDEK`
+  }, [deckName, owner])
+
   const cardCount = deck?.card_count || deck?.cards?.length || 99
   const userBracket = deck?.bracket || '?'
   const wbs = analysis?.bracket || userBracket

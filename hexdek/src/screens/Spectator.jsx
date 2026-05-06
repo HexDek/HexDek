@@ -228,6 +228,10 @@ export default function Spectator() {
   const [heatmapTip, setHeatmapTip] = useState(null)
   const error = status === 'disconnected' ? 'WebSocket disconnected' : null
 
+  useEffect(() => {
+    document.title = 'HEXDEK Live'
+  }, [])
+
   const handleHeatmapHover = useCallback((e, seatIdx) => {
     const canvas = heatmapRefs.current[seatIdx]
     if (!canvas) return

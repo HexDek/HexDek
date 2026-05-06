@@ -136,6 +136,11 @@ export default function CardPage() {
     return () => { cancelled = true }
   }, [cardName])
 
+  useEffect(() => {
+    if (!cardName) return
+    document.title = `${cardName} — HEXDEK`
+  }, [cardName])
+
   if (!cardName) {
     return (
       <>

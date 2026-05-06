@@ -206,6 +206,12 @@ export default function OperatorProfile() {
   const memberSince = fmtMemberSince(decks)
   const upperOwner = (owner || 'OPERATOR').toUpperCase()
 
+  useEffect(() => {
+    if (!owner) { document.title = 'HEXDEK Operator'; return }
+    const rating = bestRating?.rating ? ` · ${Math.round(bestRating.rating)} ELO` : ''
+    document.title = `${upperOwner}${rating} — HEXDEK`
+  }, [owner, upperOwner, bestRating])
+
   const earnedById = useMemo(() => {
     const m = {}
     for (const b of achievements?.badges || []) m[b.id] = b

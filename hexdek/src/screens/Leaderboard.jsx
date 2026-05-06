@@ -99,6 +99,10 @@ export default function Leaderboard() {
 }
 
 function LeaderboardContent() {
+  useEffect(() => {
+    document.title = 'HEXDEK Leaderboard'
+  }, [])
+
   const [filter, setFilter] = useState('')
   const [sortKey, setSortKey] = useState('hex_rating')
   const [sortAsc, setSortAsc] = useState(false)
