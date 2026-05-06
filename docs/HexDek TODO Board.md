@@ -62,7 +62,13 @@ kanban-plugin: board
 - [ ] **Temporal Pincer** — anon UUID cookie → session tracking → on login stitch all anon device UUIDs to authenticated profile. No PII, all UUIDs. Powers P&R via GraphQL. #infra #platform
 - [ ] **BUG: Esika/Prismatic Bridge 9.2% WR** — systemic B5 combo execution issue. Bridge should flip and cast free spells every upkeep but combo assembly/sequencing not firing correctly. #engine #bug #per_card
 - [ ] **BUG: Multiple B5 decks at 13-14% WR** — combo execution ceiling across several B5 commanders. Likely related to Esika issue — combo sequencer not recognizing all win-line piece states. #engine #bug #combo
-- [ ] **34K corpus audit** — auto-verify every Scryfall card against its AST: outcome + CR pathway compliance. 4 era batches. Validates parser coverage claims at scale. #engine #qa
+- [ ] **34K corpus audit — DONE (initial run)** — 31,963 cards tested, 181 unique failures (99.4% card coverage). Full report: `data/corpus-audit-full-report.md`. Remaining work is handler coverage for the 181 failing cards. #engine #qa
+- [ ] **Corpus audit: draw handler gaps (2,032 failures)** — conditional draw triggers not firing in test harness. Top cards: Solemn Simulacrum, Kindred Discovery, Veil of Summer, Keldon Raider, etc. Mix of test scaffolding issues (conditions not met) and missing handlers. #engine #handlers #draw
+- [ ] **Corpus audit: lifegain/lifeloss gaps (1,612 failures)** — gain_life (1,101) + lose_life (511). Cards like Bloodchief Ascension, Grave Venerations, Senu. Triggered effects needing condition setup or handler wiring. #engine #handlers #life
+- [ ] **Corpus audit: damage gaps (1,095 failures)** — damage effects parsed but not executing. Need to distinguish test harness setup issues from real handler gaps. #engine #handlers #damage
+- [ ] **Corpus audit: discard/mill/buff gaps (534 failures)** — discard (305), mill (148), buff (81). Lower volume, mixed causes. #engine #handlers #misc
+- [ ] **Thor test harness: conditional trigger setup** — many "failures" are Thor not meeting trigger conditions (e.g. "when a creature dies" but nothing dies). Improve test board scaffolding to exercise conditional triggers. #engine #qa #thor
+- [ ] **Muninn-Thor mismatch audit** — 121 Muninn live-game gaps vs 181 Thor failures. Cross-reference to find cards that fail in real games but pass Thor (false negatives) and vice versa. #engine #qa
 
 
 ## Medium Priority — Platform
