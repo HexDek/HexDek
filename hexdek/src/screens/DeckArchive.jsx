@@ -17,6 +17,184 @@ import { MOCK_DECK_ANALYSIS } from '../services/mock'
 import { DeckPicker } from './DeckCompare'
 import DeckExportModal from '../components/DeckExportModal'
 
+// Brutalist stat-summary panel: mana curve, card-type breakdown, color
+// pips. Computed entirely from the in-memory deck card list — no extra
+// API roundtrip, so it renders instantly even when Freya analysis hasn't
+// run yet. The deeper Freya-driven curve / color charts live in the
+// ANALYSIS tab; this is the always-visible top-of-page summary.
+const TYPE_BUCKETS = [
+  // Highest priority first — a card lands in the first bucket whose
+  // keyword appears in its type_line. Land beats everything (so artifact
+  // lands count as lands), Creature beats Artifact/Enchantment (so
+  // enchantment-creatures and artifact-creatures count as creatures —
+  // matches EDHREC convention).
+  { key: 'land',         label: 'LANDS',        match: /\bland\b/i,         color: '#8a9682' },
+  { key: 'planeswalker', label: 'PLANESWALKERS', match: /\bplaneswalker\b/i, color: '#cda73c' },
+  { key: 'creature',     label: 'CREATURES',    match: /\bcreature\b/i,     color: '#82C472' },
+  { key: 'enchantment',  label: 'ENCHANTMENTS', match: /\benchantment\b/i,  color: '#b48ad6' },
+  { key: 'artifact',     label: 'ARTIFACTS',    match: /\bartifact\b/i,     color: '#9aa6b8' },
+  { key: 'sorcery',      label: 'SORCERIES',    match: /\bsorcery\b/i,      color: '#cc5c4a' },
+  { key: 'instant',      label: 'INSTANTS',     match: /\binstant\b/i,      color: '#6e8fa0' },
+]
+const PIP_COLORS = { W: '#E0EBD3', U: '#6E8FA0', B: '#3a3628', R: '#CC5C4A', G: '#82C472' }
+
+function computeDeckStats(cards) {
+  const curve = [0, 0, 0, 0, 0, 0, 0, 0] // 0..6, 7+
+  const types = Object.fromEntries(TYPE_BUCKETS.map(b => [b.key, 0]))
+  let typesTotal = 0
+  const pips = { W: 0, U: 0, B: 0, R: 0, G: 0 }
+  let pipsTotal = 0
+
+  for (const c of cards || []) {
+    const qty = c.quantity || 1
+    const typeStr = (c.type_line || (Array.isArray(c.types) ? c.types.join(' ') : '') || '').toLowerCase()
+    const isLand = /\bland\b/.test(typeStr) || ((c.cmc ?? -1) === 0 && !c.mana_cost && !typeStr)
+
+    // Mana curve — non-land only.
+    if (!isLand) {
+      const cmc = Math.max(0, Math.min(7, c.cmc ?? 0))
+      curve[cmc] += qty
+    }
+
+    // Type bucket — first match wins.
+    if (typeStr) {
+      const bucket = TYPE_BUCKETS.find(b => b.match.test(typeStr))
+      if (bucket) {
+        types[bucket.key] += qty
+        typesTotal += qty
+      }
+    } else if (isLand) {
+      types.land += qty
+      typesTotal += qty
+    }
+
+    // Color pips — count {W}{U}{B}{R}{G} in mana_cost, including hybrid
+    // halves like {W/U} (each half scores once for its color).
+    if (c.mana_cost) {
+      const matches = c.mana_cost.match(/[WUBRG]/gi) || []
+      for (const m of matches) {
+        const k = m.toUpperCase()
+        if (pips[k] != null) { pips[k] += qty; pipsTotal += qty }
+      }
+    }
+  }
+
+  return { curve, types, typesTotal, pips, pipsTotal }
+}
+
+function DeckStatsSummary({ cards }) {
+  const { curve, types, typesTotal, pips, pipsTotal } = computeDeckStats(cards)
+  const curveMax = Math.max(1, ...curve)
+  const curveLabels = ['0', '1', '2', '3', '4', '5', '6', '7+']
+
+  // Pie geometry — one circle, segments drawn as stroked arcs via
+  // stroke-dasharray. circumference 2πr; r=15.9155 keeps circumference≈100
+  // so dasharray values are simply percentages.
+  const segments = TYPE_BUCKETS.map(b => ({
+    bucket: b,
+    count: types[b.key],
+    pct: typesTotal > 0 ? (types[b.key] / typesTotal) * 100 : 0,
+  })).filter(s => s.count > 0)
+  let pieOffset = 25 // shift starting angle to 12 o'clock
+  const pieSegs = segments.map(s => {
+    const seg = { ...s, offset: pieOffset }
+    pieOffset += s.pct
+    return seg
+  })
+
+  const pipMax = Math.max(1, ...Object.values(pips))
+
+  return (
+    <Panel code="04.S" title="DECK STATS" right={<span className="t-xs muted">{cards?.length || 0} CARDS</span>}>
+      <div className="deck-stats-summary">
+        {/* Mana curve histogram */}
+        <div className="deck-stats-summary__col">
+          <div className="t-xs muted" style={{ marginBottom: 6 }}>MANA CURVE / / NONLAND CMC</div>
+          <svg viewBox="0 0 200 90" preserveAspectRatio="none" style={{ width: '100%', height: 90, display: 'block', border: '1px solid var(--rule-2)' }}>
+            {curve.map((n, i) => {
+              const w = 200 / curve.length
+              const x = i * w
+              const h = (n / curveMax) * 70
+              const y = 80 - h
+              return (
+                <g key={i}>
+                  <rect x={x + 2} y={y} width={w - 4} height={h} fill="var(--accent, var(--ink))" />
+                  {n > 0 && (
+                    <text x={x + w / 2} y={y - 2} textAnchor="middle" fontSize="7" fill="var(--ink-2)" fontFamily="inherit">{n}</text>
+                  )}
+                  <text x={x + w / 2} y={88} textAnchor="middle" fontSize="8" fill="var(--ink-3)" fontFamily="inherit" letterSpacing="0.05em">{curveLabels[i]}</text>
+                </g>
+              )
+            })}
+          </svg>
+        </div>
+
+        {/* Card type breakdown — pie + legend */}
+        <div className="deck-stats-summary__col">
+          <div className="t-xs muted" style={{ marginBottom: 6 }}>CARD TYPES / / {typesTotal}</div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <svg viewBox="0 0 42 42" style={{ width: 90, height: 90, flexShrink: 0 }}>
+              <circle cx="21" cy="21" r="15.9155" fill="var(--bg-2, #181915)" stroke="var(--rule-2)" strokeWidth="0.4" />
+              {pieSegs.map(s => (
+                <circle
+                  key={s.bucket.key}
+                  cx="21" cy="21" r="15.9155"
+                  fill="transparent"
+                  stroke={s.bucket.color}
+                  strokeWidth="9"
+                  strokeDasharray={`${s.pct.toFixed(2)} ${(100 - s.pct).toFixed(2)}`}
+                  strokeDashoffset={(100 - s.offset).toFixed(2)}
+                  transform="rotate(-90 21 21)"
+                >
+                  <title>{`${s.bucket.label}: ${s.count} (${s.pct.toFixed(1)}%)`}</title>
+                </circle>
+              ))}
+            </svg>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '2px 6px', flex: 1, fontSize: 9, alignContent: 'center' }}>
+              {TYPE_BUCKETS.map(b => {
+                const n = types[b.key]
+                if (n === 0) return null
+                const pct = typesTotal > 0 ? (n / typesTotal) * 100 : 0
+                return (
+                  <div key={b.key} style={{ display: 'contents' }}>
+                    <span style={{ width: 8, height: 8, background: b.color, border: '1px solid var(--rule-2)', alignSelf: 'center' }} />
+                    <span style={{ letterSpacing: '0.05em' }}>{b.label}</span>
+                    <span style={{ fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{n} · {pct.toFixed(0)}%</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Color pip distribution */}
+        <div className="deck-stats-summary__col">
+          <div className="t-xs muted" style={{ marginBottom: 6 }}>COLOR PIPS / / {pipsTotal}</div>
+          {pipsTotal === 0 ? (
+            <div className="t-xs muted-2" style={{ padding: '14px 0', textAlign: 'center' }}>— COLORLESS —</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {Object.entries(pips).filter(([, n]) => n > 0).map(([color, n]) => {
+                const pct = (n / pipsTotal) * 100
+                const barW = (n / pipMax) * 100
+                return (
+                  <div key={color} style={{ display: 'grid', gridTemplateColumns: '14px 1fr 56px', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, textAlign: 'center' }}>{color}</span>
+                    <div style={{ height: 10, border: '1px solid var(--rule-2)', background: 'var(--bg-2, rgba(0,0,0,0.2))', position: 'relative' }}>
+                      <div style={{ position: 'absolute', inset: 0, width: `${barW}%`, background: PIP_COLORS[color], opacity: 0.85 }} />
+                    </div>
+                    <span className="t-xs" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{n} · {pct.toFixed(0)}%</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
 const CardThumb = ({ name, cmc, score, compact }) => {
   const imgUrl = cardArtUrl(name)
   // Whole tile is a CardLink. underline=false because the click
@@ -73,6 +251,7 @@ export default function DeckArchive() {
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
   const [winLinesExpanded, setWinLinesExpanded] = useState(false)
+  const [cloning, setCloning] = useState(false)
   const [isFriend, setIsFriend] = useState(false)
   const [friendBusy, setFriendBusy] = useState(false)
   const [ownerFriendCount, setOwnerFriendCount] = useState(null)
@@ -553,6 +732,11 @@ export default function DeckArchive() {
         </div>
       </div>
 
+      {/* Deck stats summary — always visible between hero and main columns. */}
+      <div className="deck-stats-summary-row">
+        <DeckStatsSummary cards={cards} />
+      </div>
+
       <div className="archive-layout">
         <div className="archive-sidebar">
           <Panel code="04.A" title="DECK SPECS" solid>
@@ -623,6 +807,22 @@ export default function DeckArchive() {
               }}>{analyzing ? 'ANALYZING...' : 'RUN FREYA'}</Btn>
               {owner && id && (
                 <Btn ghost arrow="↗" onClick={() => navigate(`/forge?deck=${owner}/${id}`)}>OPEN IN FORGE</Btn>
+              )}
+              {owner && id && !isOwner && user && (
+                <Btn solid arrow="⎘" disabled={cloning} onClick={() => {
+                  if (cloning) return
+                  setCloning(true)
+                  trackEvent('clone_deck', { deck: `${owner}/${id}` })
+                  api.cloneDeck(`${owner}/${id}`).then(res => {
+                    toast.success('DECK CLONED')
+                    navigate(`/decks/${res.owner}/${res.id}`)
+                  }).catch(err => {
+                    const msg = String(err?.message || '')
+                    if (msg.includes('401')) toast.error('SIGN IN TO CLONE')
+                    else toast.error('CLONE FAILED')
+                    setCloning(false)
+                  })
+                }}>{cloning ? 'CLONING...' : 'CLONE DECK'}</Btn>
               )}
               {owner && id && (
                 <>
