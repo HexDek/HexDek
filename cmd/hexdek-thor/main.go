@@ -48,6 +48,7 @@ type failure struct {
 	Message     string
 	Panicked    bool
 	PanicMsg    string
+	AbilityKind string
 }
 
 func main() {
@@ -96,6 +97,7 @@ func main() {
 
 	traceFlag := flag.Bool("trace", false, "write per-test execution traces to data/thor-traces/ for failing tests")
 	traceDirFlag := flag.String("trace-dir", "data/thor-traces", "directory for --trace output files")
+	failuresCsv := flag.String("failures-csv", "", "write all failures to CSV file (no truncation)")
 
 	flag.Parse()
 
@@ -492,6 +494,20 @@ func main() {
 		log.Printf("  report:        %s", *reportPath)
 	}
 
+	if *failuresCsv != "" {
+		csvF, err := os.Create(*failuresCsv)
+		if err == nil {
+			fmt.Fprintf(csvF, "card,interaction,ability_kind,invariant,message\n")
+			for _, fl := range failures {
+				msg := strings.ReplaceAll(fl.Message, "\"", "\"\"")
+				card := strings.ReplaceAll(fl.CardName, "\"", "\"\"")
+				fmt.Fprintf(csvF, "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n", card, fl.Interaction, fl.AbilityKind, fl.Invariant, msg)
+			}
+			csvF.Close()
+			log.Printf("  failures csv:  %s (%d rows)", *failuresCsv, len(failures))
+		}
+	}
+
 	// Print top failing cards.
 	printTopFailures(failures)
 }
@@ -752,11 +768,12 @@ func testPhases(oc *oracleCard, ast *gameast.CardAST) (fails []failure) {
 
 func makeGameState(oc *oracleCard, ast *gameast.CardAST) *gameengine.GameState {
 	gs := &gameengine.GameState{
-		Turn:   1,
-		Active: 0,
-		Phase:  "precombat_main",
-		Step:   "",
-		Flags:  map[string]int{},
+		Turn:         1,
+		Active:       0,
+		Phase:        "precombat_main",
+		Step:         "",
+		Flags:        map[string]int{},
+		RetainEvents: true,
 	}
 
 	// 4 seats with basic setup.

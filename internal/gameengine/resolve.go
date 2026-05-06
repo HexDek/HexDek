@@ -414,6 +414,31 @@ func evalCondition(gs *GameState, src *Permanent, c *gameast.Condition) bool {
 		// MVP: default true (mana tracking not fully implemented)
 		return true
 
+	case "self_was_cast":
+		// CR §603.6c — true iff the source permanent entered via the cast
+		// pipeline (resolvePermanentSpellETB sets the flag). Args[0] is a
+		// bool: when true, also require cast_from_hand (Cyclone Summoner,
+		// Breaching Leviathan, Wild Pair).
+		if src == nil || src.Flags == nil {
+			return false
+		}
+		if src.Flags["was_cast"] == 0 {
+			return false
+		}
+		if len(c.Args) > 0 {
+			if fromHand, _ := c.Args[0].(bool); fromHand {
+				return src.Flags["cast_from_hand"] >= 1
+			}
+		}
+		return true
+
+	case "self_was_not_cast":
+		// Inverse of self_was_cast — Preston the Vanisher, etc.
+		if src == nil || src.Flags == nil {
+			return true
+		}
+		return src.Flags["was_cast"] == 0
+
 	case "raw":
 		// Unknown condition — default true (conservative)
 		return true

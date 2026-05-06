@@ -54,6 +54,7 @@ type corpusAuditResult struct {
 	cardName    string
 	cardTypes   []string
 	effectKind  string
+	abilityKind string // "triggered", "activated", "static", "spell_effect"
 	failureMode string // "" if pass
 	message     string
 	panicked    bool
@@ -260,6 +261,7 @@ func auditSingleEffect(oc *oracleCard, leaf leafEffect) (result corpusAuditResul
 	result.cardName = oc.Name
 	result.cardTypes = oc.Types
 	result.effectKind = leaf.effect.Kind()
+	result.abilityKind = leaf.abilityKind
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -436,7 +438,13 @@ func assertOutcome(gs *gameengine.GameState, before, after goldilocksSnapshot, b
 		// Accept if hand grew by at least N or library shrunk by at least N
 		// (cards may have been drawn and immediately discarded by other effects).
 		if delta < n && libDelta < n {
-			// Check event log for draw events as fallback.
+			// Check event log for draw events as fallback. Accept if any draw
+			// event logged Amount >= N (brainstorm-style "draw N put M back"
+			// resolves the full sequence, so net hand change < N is expected).
+			if countEventsOfKindWithAmount(gs, "draw", n) > 0 {
+				return ""
+			}
+			// Also accept if total draw event count meets threshold.
 			drawCount := countEventsOfKind(gs, "draw")
 			if drawCount >= n {
 				return ""
@@ -1169,6 +1177,7 @@ func runCorpusAuditWithEra(corpus *astload.Corpus, oracleCards []*oracleCard, er
 							Message:     r.message,
 							Panicked:    r.panicked,
 							PanicMsg:    r.panicMsg,
+							AbilityKind: r.abilityKind,
 						})
 					}
 					mu.Unlock()

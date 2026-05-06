@@ -14,6 +14,9 @@ package main
 // entities.
 
 import (
+	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/hexdek/hexdek/internal/gameast"
@@ -345,7 +348,365 @@ func primeTriggerCondition(gs *gameengine.GameState, info *effectInfo, srcPerm *
 		cardName = srcPerm.Card.Name
 	}
 	tr.Record("TRIGGER_FIRE", "%s primed on %q", slug, cardName)
+
+	// Layer the intervening-if priming on top of the event-based action.
+	// Most "if X this turn / if you have the city's blessing / if you
+	// control another <subtype>" conditions live in the conditional_effect
+	// args text, not in trigger.Condition (which the parser leaves null
+	// for these cards). The two priming layers are orthogonal.
+	primeInterveningIf(gs, info, srcPerm, tr)
 	return true
+}
+
+// ---------------------------------------------------------------------------
+// Intervening-if priming.
+//
+// For triggered abilities of shape "AT/WHENEVER trigger, IF condition,
+// EFFECT" the parser emits the trigger as Trigger{Event=phase/etb/...} and
+// the rest as a single Modification(kind="conditional_effect",
+// args=["if X, Y"]) at the effect slot. trigger.Condition and
+// intervening_if are both null. Without priming, evalCondition's "raw"
+// fallback defaults to TRUE so the effect fires anyway, but the resulting
+// trace is misleading and any per-card listener that reads concrete state
+// (Lathiel's lathiel_life_gained_this_turn flag, Sorin's seat
+// life_gained_this_turn counter, Twilight Prophet's citys_blessing) will
+// silently fail.
+//
+// primeInterveningIf walks info.condition and the conditional_effect text
+// and applies the appropriate setup so both the engine's evalCondition
+// path AND any per-card flag-reading handler observe the condition as
+// satisfied.
+// ---------------------------------------------------------------------------
+
+var (
+	reLifeMoreStarting = regexp.MustCompile(`at least (\d+) life more than your starting life total`)
+	reControlAnother   = regexp.MustCompile(`you control another ([a-z][a-z\- ]*?)(?:[,.]| and| or|$)`)
+	reControlSubtype   = regexp.MustCompile(`you control a ([a-z][a-z\- ]*?)(?:[,.]| and| or|$)`)
+)
+
+// extractInterveningText returns the lower-cased "if ..." clause text from
+// either info.condition (typed Condition AST) or from a conditional_effect
+// ModificationEffect's args[0].
+func extractInterveningText(info *effectInfo) string {
+	if info == nil {
+		return ""
+	}
+	if info.condition != nil {
+		// A typed Condition. Stringify Kind+Args so downstream
+		// substring matchers pick up "raw" args[0] verbatim AND
+		// well-known kinds via their Kind tag.
+		parts := []string{strings.ToLower(info.condition.Kind)}
+		for _, a := range info.condition.Args {
+			parts = append(parts, strings.ToLower(fmt.Sprintf("%v", a)))
+		}
+		return strings.Join(parts, " ")
+	}
+	if t := conditionalEffectText(info.effect); t != "" {
+		return t
+	}
+	return conditionalEffectText(info.fullEffect)
+}
+
+// conditionalEffectText extracts args[0] from a *gameast.ModificationEffect
+// whose ModKind is "conditional_effect", recursively descending Sequence
+// and Optional wrappers.
+func conditionalEffectText(eff gameast.Effect) string {
+	if eff == nil {
+		return ""
+	}
+	switch e := eff.(type) {
+	case *gameast.ModificationEffect:
+		if e.ModKind == "conditional_effect" && len(e.Args) > 0 {
+			if s, ok := e.Args[0].(string); ok {
+				return strings.ToLower(s)
+			}
+		}
+	case *gameast.Sequence:
+		for _, item := range e.Items {
+			if t := conditionalEffectText(item); t != "" {
+				return t
+			}
+		}
+	case *gameast.Optional_:
+		return conditionalEffectText(e.Body)
+	}
+	return ""
+}
+
+// primeInterveningIf applies state mutations that satisfy embedded "if X"
+// clauses found in info. Returns true when at least one prime was applied.
+func primeInterveningIf(gs *gameengine.GameState, info *effectInfo, srcPerm *gameengine.Permanent, tr *Tracer) bool {
+	text := extractInterveningText(info)
+	if text == "" {
+		return false
+	}
+
+	primed := false
+
+	// Life gain/loss this turn. Order matters: the combined "gained or
+	// lost" form must be checked before the individual matchers so we
+	// don't double-apply.
+	switch {
+	case strings.Contains(text, "gained or lost life this turn"):
+		primeGainedLife(gs, 3)
+		primeLostLife(gs, 1)
+		tr.Record("CONDITION_SETUP",
+			"%q → GainLife(seat0, 3) + LoseLife(seat0, 1)",
+			"gained or lost life this turn")
+		primed = true
+	case strings.Contains(text, "gained life this turn"):
+		primeGainedLife(gs, 3)
+		tr.Record("CONDITION_SETUP",
+			"%q → GainLife(seat0, 3)",
+			"gained life this turn")
+		primed = true
+	case strings.Contains(text, "lost life this turn"):
+		primeLostLife(gs, 2)
+		tr.Record("CONDITION_SETUP",
+			"%q → LoseLife(seat0, 2)",
+			"lost life this turn")
+		primed = true
+	}
+
+	// Counter placement this turn. Lasting Tarfire, Lord Jyscal Guado.
+	if strings.Contains(text, "put a counter") && strings.Contains(text, "this turn") {
+		primeCounterPlaced(gs)
+		tr.Record("CONDITION_SETUP",
+			"%q → +1/+1 counter on friendly creature",
+			"put a counter on a creature this turn")
+		primed = true
+	}
+
+	// Life-vs-starting threshold. Angel of Destiny: "at least 15 life
+	// more than your starting life total".
+	if m := reLifeMoreStarting.FindStringSubmatch(text); m != nil {
+		n, _ := strconv.Atoi(m[1])
+		primeLifeMoreThanStarting(gs, n)
+		tr.Record("CONDITION_SETUP",
+			"%q → set seat0 Life=%d",
+			fmt.Sprintf("at least %d life more than starting", n),
+			gs.Seats[0].Life)
+		primed = true
+	}
+
+	// Ascend / city's blessing. Twilight Prophet.
+	if strings.Contains(text, "city's blessing") || strings.Contains(text, "citys blessing") {
+		primeAscend(gs)
+		tr.Record("CONDITION_SETUP",
+			"%q → 10 permanents on seat0, citys_blessing flag set",
+			"city's blessing (ascend)")
+		primed = true
+	}
+
+	// Subtype control. Acclaimed Contender ("if you control another
+	// Knight"). The "another <subtype>" matcher takes precedence over
+	// the bare "a <subtype>" matcher because a card can satisfy both
+	// clauses ("control another Knight" implies "control a Knight").
+	if m := reControlAnother.FindStringSubmatch(text); m != nil {
+		subtype := strings.TrimSpace(m[1])
+		if subtype != "" && !isGenericWord(subtype) {
+			placeNamedFriendlyCreatureWithSubtype(gs,
+				strings.Title(subtype)+" Buddy", subtype)
+			tr.Record("CONDITION_SETUP",
+				"%q → placed %s creature on seat0",
+				"control another "+subtype, subtype)
+			primed = true
+		}
+	} else if m := reControlSubtype.FindStringSubmatch(text); m != nil {
+		subtype := strings.TrimSpace(m[1])
+		if subtype != "" && !isGenericWord(subtype) {
+			placeNamedFriendlyCreatureWithSubtype(gs,
+				strings.Title(subtype)+" Buddy", subtype)
+			tr.Record("CONDITION_SETUP",
+				"%q → placed %s creature on seat0",
+				"you control a "+subtype, subtype)
+			primed = true
+		} else if subtype == "creature" {
+			// Birthing Ritual ("if you control a creature"). The
+			// source itself usually counts (creatures bring their
+			// own permanent), but enchantment sources need a
+			// separate witness.
+			if primeFriendlyCreatureIfMissing(gs) {
+				tr.Record("CONDITION_SETUP",
+					"%q → placed witness creature on seat0",
+					"you control a creature")
+				primed = true
+			}
+		}
+	}
+
+	// Exile linkage. Smirking Spelljacker ("if a card is exiled with
+	// it"). Place a card in seat0's exile and tag the source with a
+	// has-exiled-card flag so the per-card handler can find it.
+	if (strings.Contains(text, "exiled with it") ||
+		strings.Contains(text, "exiled with this") ||
+		strings.Contains(text, "card is exiled with")) && srcPerm != nil {
+		primeExiledWith(gs, srcPerm)
+		tr.Record("CONDITION_SETUP",
+			"%q → exile-linked card placed",
+			"a card is exiled with it")
+		primed = true
+	}
+
+	return primed
+}
+
+// ---------------------------------------------------------------------------
+// Intervening-if priming helpers.
+// ---------------------------------------------------------------------------
+
+// primeGainedLife fires GainLife so per-card listeners (Lathiel, Heliod,
+// Vito) increment their own counters, AND tops up seat.Flags so handlers
+// (Sorin, Shanna) that read the seat-level flag directly see the gain.
+// Both paths matter because the engine has not centralised turn-scoped
+// life tracking.
+func primeGainedLife(gs *gameengine.GameState, amount int) {
+	if gs == nil || amount <= 0 || len(gs.Seats) == 0 || gs.Seats[0] == nil {
+		return
+	}
+	gameengine.GainLife(gs, 0, amount, "thor_priming")
+	if gs.Seats[0].Flags == nil {
+		gs.Seats[0].Flags = map[string]int{}
+	}
+	gs.Seats[0].Flags["life_gained_this_turn"] += amount
+}
+
+// primeLostLife decrements seat 0 life and sets the seat-level flag. The
+// engine has no public LoseLife helper, so we mutate Life and synthesise
+// the trigger event for any per-card listeners.
+func primeLostLife(gs *gameengine.GameState, amount int) {
+	if gs == nil || amount <= 0 || len(gs.Seats) == 0 || gs.Seats[0] == nil {
+		return
+	}
+	gs.Seats[0].Life -= amount
+	if gs.Seats[0].Flags == nil {
+		gs.Seats[0].Flags = map[string]int{}
+	}
+	gs.Seats[0].Flags["life_lost_this_turn"] += amount
+	gs.Seats[0].Flags["lost_life_this_turn"] += amount
+	gameengine.FireCardTrigger(gs, "life_lost", map[string]interface{}{
+		"seat":   0,
+		"amount": amount,
+		"source": "thor_priming",
+	})
+}
+
+// primeCounterPlaced ensures a friendly creature has a +1/+1 counter
+// placed on it during the current turn and fires the engine's
+// counter_placed trigger so listeners increment their this-turn flags.
+func primeCounterPlaced(gs *gameengine.GameState) {
+	if gs == nil || len(gs.Seats) == 0 || gs.Seats[0] == nil {
+		return
+	}
+	var target *gameengine.Permanent
+	for _, p := range gs.Seats[0].Battlefield {
+		if p != nil && p.IsCreature() {
+			target = p
+			break
+		}
+	}
+	if target == nil {
+		target = placeNamedFriendlyCreature(gs, "Counter Recipient")
+	}
+	target.AddCounter("+1/+1", 1)
+	if gs.Seats[0].Flags == nil {
+		gs.Seats[0].Flags = map[string]int{}
+	}
+	gs.Seats[0].Flags["counter_placed_this_turn"] = 1
+	if gs.Flags == nil {
+		gs.Flags = map[string]int{}
+	}
+	gs.Flags["counter_placed_this_turn"] = 1
+	gameengine.FireCardTrigger(gs, "counter_placed", map[string]interface{}{
+		"target_perm":  target,
+		"target_seat":  0,
+		"counter_kind": "+1/+1",
+		"amount":       1,
+		"source_card":  "thor_priming",
+		"source_seat":  0,
+	})
+}
+
+// primeLifeMoreThanStarting raises seat 0 life so it sits exactly n above
+// StartingLife. Falls back to a Commander default of 40 when StartingLife
+// is unset (the goldilocks factory builds seats at Life=20 without
+// populating StartingLife).
+func primeLifeMoreThanStarting(gs *gameengine.GameState, n int) {
+	if gs == nil || len(gs.Seats) == 0 || gs.Seats[0] == nil {
+		return
+	}
+	starting := gs.Seats[0].StartingLife
+	if starting <= 0 {
+		starting = 40
+	}
+	target := starting + n
+	if gs.Seats[0].Life < target {
+		gs.Seats[0].Life = target
+	}
+}
+
+// primeAscend places enough vanilla permanents on seat 0 to satisfy the
+// 10-permanent threshold and eagerly sets the citys_blessing flag so
+// readers that bypass CheckAscend (Twilight Prophet's intervening-if
+// path) still observe the blessing.
+func primeAscend(gs *gameengine.GameState) {
+	if gs == nil || len(gs.Seats) == 0 || gs.Seats[0] == nil {
+		return
+	}
+	seat := gs.Seats[0]
+	for len(seat.Battlefield) < 10 {
+		seat.Battlefield = append(seat.Battlefield, &gameengine.Permanent{
+			Card: &gameengine.Card{
+				Name:  fmt.Sprintf("Ascend Filler %d", len(seat.Battlefield)),
+				Owner: 0,
+				Types: []string{"land"},
+			},
+			Controller: 0,
+			Owner:      0,
+			Flags:      map[string]int{},
+			Counters:   map[string]int{},
+		})
+	}
+	if seat.Flags == nil {
+		seat.Flags = map[string]int{}
+	}
+	seat.Flags["citys_blessing"] = 1
+	gameengine.CheckAscend(gs, 0)
+}
+
+// primeFriendlyCreatureIfMissing places a witness creature on seat 0 only
+// when none currently exists. Returns true if a creature was placed.
+// Intended for "if you control a creature" preconditions on
+// non-creature sources (Birthing Ritual is an enchantment).
+func primeFriendlyCreatureIfMissing(gs *gameengine.GameState) bool {
+	if gs == nil || len(gs.Seats) == 0 || gs.Seats[0] == nil {
+		return false
+	}
+	for _, p := range gs.Seats[0].Battlefield {
+		if p != nil && p.IsCreature() {
+			return false
+		}
+	}
+	placeNamedFriendlyCreature(gs, "Creature Witness")
+	return true
+}
+
+// primeExiledWith places a card in seat 0's exile and flags srcPerm as
+// having an exiled-with companion. Smirking Spelljacker and similar
+// imprint-style cards check for this on attack.
+func primeExiledWith(gs *gameengine.GameState, srcPerm *gameengine.Permanent) {
+	if gs == nil || srcPerm == nil || len(gs.Seats) == 0 || gs.Seats[0] == nil {
+		return
+	}
+	gs.Seats[0].Exile = append(gs.Seats[0].Exile, &gameengine.Card{
+		Name:  "Exiled Companion",
+		Owner: 0,
+		Types: []string{"instant"},
+	})
+	if srcPerm.Flags == nil {
+		srcPerm.Flags = map[string]int{}
+	}
+	srcPerm.Flags["card_exiled_with"] = 1
 }
 
 // placeNamedFriendlyCreature is a tiny variant of placeFriendlyCreature
@@ -368,4 +729,350 @@ func placeNamedFriendlyCreature(gs *gameengine.GameState, name string) *gameengi
 	}
 	gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, perm)
 	return perm
+}
+
+// ---------------------------------------------------------------------------
+// Raw-condition scaffolding (Category B / D fix).
+//
+// The parser surfaces "if ..." and "as long as ..." clauses as Conditions
+// with kind = intervening_if / as_long_as / conditional and the verbatim
+// English in args[0]. The existing setupCondition switch only handles
+// canonicalised kinds (fateful_hour, threshold, morbid, etc.), so cards
+// like Land Tax ("if an opponent controls more lands than you...") and
+// Oversold Cemetery ("if there are four or more creature cards in your
+// graveyard...") never had their preconditions satisfied.
+//
+// detectConditionScaffold inspects the raw text and returns a shape; apply
+// mutates gs accordingly; describe returns a one-line summary used for
+// CONDITION_SETUP traces.
+// ---------------------------------------------------------------------------
+
+type conditionScaffoldKind int
+
+const (
+	condScaffoldNone conditionScaffoldKind = iota
+	condScaffoldOpponentMoreLands
+	condScaffoldYouControlSubtype
+	condScaffoldCreatureDiedThisTurn
+	condScaffoldCreatureCardsInGraveyard
+	condScaffoldCardInGraveyard
+	condScaffoldEnergyThreshold
+)
+
+type conditionScaffold struct {
+	kind        conditionScaffoldKind
+	description string // populated lazily by apply
+	rawText     string
+
+	// Shape-specific payload.
+	subtype string // for condScaffoldYouControlSubtype: e.g. "wizard"
+	count   int    // for graveyard count / energy threshold
+}
+
+var (
+	rawTribalRe = regexp.MustCompile(`(?:another|a|an)\s+([a-z]+)`)
+	energyAmtRe = regexp.MustCompile(`(\d+)\s+or\s+more\s+energy`)
+	graveCntRe  = regexp.MustCompile(`(?:(\d+)|one|two|three|four|five|six|seven)\s*(?:or\s+more\s+)?creature\s+cards?`)
+)
+
+func conditionRawText(cond *gameast.Condition) string {
+	if cond == nil || len(cond.Args) == 0 {
+		return ""
+	}
+	s, _ := cond.Args[0].(string)
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+// detectConditionScaffold examines a raw-text condition and returns the
+// shape that scaffolding should match. The shape is then handed to apply
+// or describe — both share this detection so the trace text and the
+// mutation always agree.
+func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
+	if cond == nil {
+		return conditionScaffold{}
+	}
+	switch strings.ToLower(cond.Kind) {
+	case "intervening_if", "as_long_as", "conditional", "raw":
+		// proceed
+	default:
+		return conditionScaffold{}
+	}
+	txt := conditionRawText(cond)
+	if txt == "" {
+		return conditionScaffold{}
+	}
+	cs := conditionScaffold{rawText: txt}
+
+	// "an opponent controls more lands than you" / "more lands than you do"
+	if (strings.Contains(txt, "more land") || strings.Contains(txt, "controls more")) &&
+		strings.Contains(txt, "than you") {
+		cs.kind = condScaffoldOpponentMoreLands
+		return cs
+	}
+
+	// "if/as long as a creature died this turn"
+	if strings.Contains(txt, "died this turn") {
+		cs.kind = condScaffoldCreatureDiedThisTurn
+		return cs
+	}
+
+	// Graveyard count: "four or more creature cards in your graveyard"
+	if strings.Contains(txt, "graveyard") &&
+		(strings.Contains(txt, "creature card") || strings.Contains(txt, "creatures in")) {
+		cs.kind = condScaffoldCreatureCardsInGraveyard
+		cs.count = parseGraveyardCount(txt)
+		if cs.count < 4 {
+			cs.count = 4
+		}
+		return cs
+	}
+
+	// Generic "card in your graveyard" — Necromancy, return-from-graveyard.
+	if strings.Contains(txt, "graveyard") {
+		cs.kind = condScaffoldCardInGraveyard
+		return cs
+	}
+
+	// Energy counter threshold ("if you have N or more energy counters").
+	if strings.Contains(txt, "energy") {
+		n := 30
+		if m := energyAmtRe.FindStringSubmatch(txt); len(m) > 1 {
+			if v, err := strconv.Atoi(m[1]); err == nil && v > 0 {
+				n = v
+			}
+		}
+		cs.kind = condScaffoldEnergyThreshold
+		cs.count = n
+		return cs
+	}
+
+	// Tribal: "if you control another <subtype>" / "if you control a <subtype>".
+	// Run last because it's the most permissive matcher.
+	if strings.Contains(txt, "you control") {
+		// Strip the leading "you control" segment so we match the subtype.
+		idx := strings.Index(txt, "you control")
+		tail := txt[idx+len("you control"):]
+		if m := rawTribalRe.FindStringSubmatch(strings.TrimSpace(tail)); len(m) > 1 {
+			subtype := m[1]
+			// Filter out generic words that happen to follow "another"/"a".
+			if !isGenericWord(subtype) {
+				cs.kind = condScaffoldYouControlSubtype
+				cs.subtype = subtype
+				return cs
+			}
+		}
+	}
+
+	return conditionScaffold{}
+}
+
+func isGenericWord(s string) bool {
+	switch s {
+	case "creature", "permanent", "card", "spell", "ability",
+		"player", "opponent", "thing", "land", "artifact",
+		"enchantment", "planeswalker":
+		return true
+	}
+	return false
+}
+
+func parseGraveyardCount(txt string) int {
+	if m := graveCntRe.FindStringSubmatch(txt); len(m) > 0 {
+		if m[1] != "" {
+			if v, err := strconv.Atoi(m[1]); err == nil {
+				return v
+			}
+		}
+		// Word-form numbers.
+		for word, n := range map[string]int{
+			"one": 1, "two": 2, "three": 3, "four": 4,
+			"five": 5, "six": 6, "seven": 7,
+		} {
+			if strings.Contains(m[0], word) {
+				return n
+			}
+		}
+	}
+	return 0
+}
+
+// applyConditionScaffolding mutates gs to satisfy the condition's shape.
+// Returns the same scaffold descriptor with description populated, or a
+// zero-value when nothing applied. Idempotent across types where it
+// matters (it tops up rather than appending unconditionally).
+func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition, srcPerm *gameengine.Permanent) conditionScaffold {
+	cs := detectConditionScaffold(cond)
+	if cs.kind == condScaffoldNone || gs == nil {
+		return conditionScaffold{}
+	}
+
+	switch cs.kind {
+	case condScaffoldOpponentMoreLands:
+		seedSeatLands(gs, 1, 6, "Plains", "plains")
+		cs.description = "seeded 6 Plains on seat 1"
+
+	case condScaffoldYouControlSubtype:
+		placeNamedFriendlyCreatureWithSubtype(gs, "Tribal "+cs.subtype, cs.subtype)
+		cs.description = fmt.Sprintf("placed %s creature on seat 0", cs.subtype)
+
+	case condScaffoldCreatureDiedThisTurn:
+		// Engine reads gs.Flags["creature_died_this_turn"] for morbid-style
+		// checks. Also place a creature card in the graveyard so any
+		// graveyard scan sees a death event from this turn.
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["creature_died_this_turn"] = 1
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Graveyard = append(gs.Seats[0].Graveyard, &gameengine.Card{
+				Name:          "Died Setup",
+				Owner:         0,
+				Types:         []string{"creature"},
+				BasePower:     1,
+				BaseToughness: 1,
+			})
+		}
+		cs.description = "set creature_died_this_turn flag + added creature to graveyard"
+
+	case condScaffoldCreatureCardsInGraveyard:
+		topUpGraveyardCreatures(gs, 0, cs.count)
+		cs.description = fmt.Sprintf("populated seat 0 graveyard with %d creature cards", cs.count)
+
+	case condScaffoldCardInGraveyard:
+		topUpGraveyardCreatures(gs, 0, 1)
+		cs.description = "placed creature card in seat 0 graveyard"
+
+	case condScaffoldEnergyThreshold:
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["energy_counters"] = cs.count
+		}
+		cs.description = fmt.Sprintf("set seat 0 energy counters to %d", cs.count)
+	}
+	return cs
+}
+
+// traceConditionScaffolding emits a CONDITION_SETUP entry describing the
+// scaffold that would be / was applied for cond. Pure observation — no
+// mutation. Safe to call with a nil tracer (no-op).
+func traceConditionScaffolding(cond *gameast.Condition, tr *Tracer) {
+	if tr == nil {
+		return
+	}
+	cs := detectConditionScaffold(cond)
+	if cs.kind == condScaffoldNone {
+		return
+	}
+	// Build the description without mutating; mirrors apply's switch.
+	desc := ""
+	switch cs.kind {
+	case condScaffoldOpponentMoreLands:
+		desc = "seeded 6 Plains on seat 1"
+	case condScaffoldYouControlSubtype:
+		desc = fmt.Sprintf("placed %s creature on seat 0", cs.subtype)
+	case condScaffoldCreatureDiedThisTurn:
+		desc = "set creature_died_this_turn flag + added creature to graveyard"
+	case condScaffoldCreatureCardsInGraveyard:
+		desc = fmt.Sprintf("populated seat 0 graveyard with %d creature cards", cs.count)
+	case condScaffoldCardInGraveyard:
+		desc = "placed creature card in seat 0 graveyard"
+	case condScaffoldEnergyThreshold:
+		desc = fmt.Sprintf("set seat 0 energy counters to %d", cs.count)
+	}
+	tr.Record("CONDITION_SETUP", "%q → %s", cs.rawText, desc)
+}
+
+// ---------------------------------------------------------------------------
+// Mutation helpers used by applyConditionScaffolding.
+// ---------------------------------------------------------------------------
+
+// seedSeatLands tops up `seat` so it controls at least `count` basic lands
+// of the given subtype. Existing matching lands are kept; only the deficit
+// is appended.
+func seedSeatLands(gs *gameengine.GameState, seat, count int, name, subtype string) {
+	if seat >= len(gs.Seats) || gs.Seats[seat] == nil {
+		return
+	}
+	have := 0
+	for _, p := range gs.Seats[seat].Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		isLand := false
+		for _, t := range p.Card.Types {
+			if t == "land" {
+				isLand = true
+				break
+			}
+		}
+		if isLand {
+			have++
+		}
+	}
+	for i := have; i < count; i++ {
+		perm := &gameengine.Permanent{
+			Card: &gameengine.Card{
+				Name:  fmt.Sprintf("%s %d", name, i),
+				Owner: seat,
+				Types: []string{"land", subtype},
+			},
+			Controller: seat,
+			Owner:      seat,
+			Flags:      map[string]int{},
+			Counters:   map[string]int{},
+		}
+		gs.Seats[seat].Battlefield = append(gs.Seats[seat].Battlefield, perm)
+	}
+}
+
+// placeNamedFriendlyCreatureWithSubtype is like placeNamedFriendlyCreature
+// but appends a creature subtype (Wizard, Knight, etc.) so "you control
+// another <subtype>" checks resolve true.
+func placeNamedFriendlyCreatureWithSubtype(gs *gameengine.GameState, name, subtype string) *gameengine.Permanent {
+	perm := &gameengine.Permanent{
+		Card: &gameengine.Card{
+			Name:          name,
+			Owner:         0,
+			Types:         []string{"creature", subtype},
+			BasePower:     1,
+			BaseToughness: 1,
+		},
+		Controller: 0,
+		Owner:      0,
+		Flags:      map[string]int{},
+		Counters:   map[string]int{},
+	}
+	gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, perm)
+	return perm
+}
+
+// topUpGraveyardCreatures ensures `seat`'s graveyard contains at least n
+// creature cards, appending tokens-by-name when short.
+func topUpGraveyardCreatures(gs *gameengine.GameState, seat, n int) {
+	if seat >= len(gs.Seats) || gs.Seats[seat] == nil {
+		return
+	}
+	have := 0
+	for _, c := range gs.Seats[seat].Graveyard {
+		if c == nil {
+			continue
+		}
+		for _, t := range c.Types {
+			if t == "creature" {
+				have++
+				break
+			}
+		}
+	}
+	for i := have; i < n; i++ {
+		gs.Seats[seat].Graveyard = append(gs.Seats[seat].Graveyard, &gameengine.Card{
+			Name:          fmt.Sprintf("GraveCreatureSetup %d-%d", seat, i),
+			Owner:         seat,
+			Types:         []string{"creature"},
+			BasePower:     2,
+			BaseToughness: 2,
+		})
+	}
 }

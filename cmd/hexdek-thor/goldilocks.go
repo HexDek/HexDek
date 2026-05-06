@@ -484,11 +484,12 @@ func unwrapEffect(eff gameast.Effect) gameast.Effect {
 
 func makeGoldilocksState(oc *oracleCard, info *effectInfo) *gameengine.GameState {
 	gs := &gameengine.GameState{
-		Turn:   1,
-		Active: 0,
-		Phase:  "precombat_main",
-		Step:   "",
-		Flags:  map[string]int{},
+		Turn:         1,
+		Active:       0,
+		Phase:        "precombat_main",
+		Step:         "",
+		Flags:        map[string]int{},
+		RetainEvents: true,
 	}
 
 	// Build 4 seats with generous resources.
@@ -1325,6 +1326,13 @@ func hasOpponentCreature(gs *gameengine.GameState) bool {
 
 func setupCondition(gs *gameengine.GameState, cond *gameast.Condition) {
 	if cond == nil {
+		return
+	}
+	// Raw-text conditions ("intervening_if", "as_long_as", "conditional")
+	// are handled by the dedicated scaffolder in conditional_setup.go.
+	// applyConditionScaffolding returns a zero-value scaffold for all
+	// other kinds, so the canonical switch below still runs in those cases.
+	if cs := applyConditionScaffolding(gs, cond, nil); cs.kind != condScaffoldNone {
 		return
 	}
 	switch cond.Kind {
@@ -2670,6 +2678,25 @@ func testGoldilocksCard(oc *oracleCard) (result *failure) {
 		primeTriggerCondition(gs, info, srcPerm, tr)
 	}
 
+	// Emit a CONDITION_SETUP trace for raw-text conditions whose
+	// scaffolding ran inside makeGoldilocksState's setupCondition call
+	// above (applyConditionScaffolding has no tracer there). This
+	// mirrors what was done so the trace explains the seeded entities.
+	if info.condition != nil {
+		traceConditionScaffolding(info.condition, tr)
+	}
+
+	// Cast-path rewiring for "if you cast it" ETB cards (CR §603.6c).
+	// When applicable, configureForCastPath moves srcPerm back to hand
+	// and stages mana; resolution below replaces fireTriggerEvent with
+	// gameengine.CastSpell so the natural cast pipeline fires ETB
+	// triggers and stamps perm.Flags["was_cast"]=1 on the resolved
+	// permanent.
+	castCard, useCastPath := configureForCastPath(gs, oc, srcPerm, info, tr)
+	if useCastPath {
+		srcPerm = nil // re-found after cast resolves
+	}
+
 	// Clear event log before resolution so we only check new events.
 	gs.EventLog = gs.EventLog[:0]
 
@@ -2685,8 +2712,36 @@ func testGoldilocksCard(oc *oracleCard) (result *failure) {
 		info.kind, info.fullEffect != nil)
 
 	// Resolve based on ability kind.
-	switch info.abilityKind {
-	case "triggered":
+	switch {
+	case useCastPath:
+		tr.Record("HANDLER_ENTER", "CastSpell srcCard=%q (cast-conditional ETB)", oc.Name)
+		if err := gameengine.CastSpell(gs, 0, castCard, nil); err != nil {
+			tr.Record("CAST_FAILED", "err=%v — falling back to direct ETB", err)
+			// Fall back: put on battlefield and fire ETB hook directly so
+			// the test still exercises something rather than dropping.
+			gs.Seats[0].Hand = removeCardFromHand(gs.Seats[0].Hand, castCard)
+			perm := &gameengine.Permanent{
+				Card:       castCard,
+				Controller: 0,
+				Owner:      0,
+				Flags:      map[string]int{},
+			}
+			gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, perm)
+			srcPerm = perm
+			gameengine.InvokeETBHook(gs, srcPerm)
+			if resolveEff != nil {
+				gameengine.ResolveEffect(gs, srcPerm, resolveEff)
+			}
+		} else {
+			// Re-find the source on the battlefield after cast resolution.
+			for _, p := range gs.Seats[0].Battlefield {
+				if p.Card == castCard {
+					srcPerm = p
+					break
+				}
+			}
+		}
+	case info.abilityKind == "triggered":
 		evName := "(none)"
 		if info.trigger != nil {
 			evName = info.trigger.Event
@@ -2694,7 +2749,7 @@ func testGoldilocksCard(oc *oracleCard) (result *failure) {
 		tr.Record("TRIGGER_CHECK", "event=%q resolving via fireTriggerEvent", evName)
 		tr.Record("HANDLER_ENTER", "fireTriggerEvent srcPerm=%q", oc.Name)
 		fireTriggerEvent(gs, srcPerm, info)
-	case "activated":
+	case info.abilityKind == "activated":
 		tr.Record("HANDLER_ENTER", "InvokeActivatedHook srcPerm=%q index=0", oc.Name)
 		gameengine.InvokeActivatedHook(gs, srcPerm, 0, map[string]interface{}{
 			"controller": 0,

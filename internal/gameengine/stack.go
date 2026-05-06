@@ -1159,6 +1159,21 @@ func resolvePermanentSpellETB(gs *GameState, item *StackItem) *Permanent {
 	if perm.Owner < 0 {
 		perm.Owner = seatIdx
 	}
+	// Cast-tracking for "if you cast it" / "if it was cast" intervening-if
+	// conditions (CR §603.6c). A permanent reaching this stack-resolution
+	// path was cast unless it's a copy (§706.10a token copies). CastZone
+	// captures the origin zone for "if you cast it from your hand" gates
+	// (Cyclone Summoner, Breaching Leviathan, Wild Pair).
+	if !item.IsCopy {
+		perm.Flags["was_cast"] = 1
+		castZone := item.CastZone
+		if castZone == "" {
+			castZone = "hand"
+		}
+		if castZone == "hand" {
+			perm.Flags["cast_from_hand"] = 1
+		}
+	}
 	// §306.5b planeswalker loyalty counter initialization. We don't carry
 	// starting_loyalty on Card today — fall back to CMC-ish heuristic so
 	// planeswalkers at least start with a positive counter.

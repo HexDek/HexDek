@@ -133,6 +133,14 @@ var (
 	reCounterOnSelf   = regexp.MustCompile(`^(?:it|~|this creature) has (?:a |an |one or more )?(\+\d+/\+\d+|\-\d+/\-\d+|\w+) counters? on it`)
 	reNoCounterOnSelf = regexp.MustCompile(`^(?:it|~|this creature) (?:has|had) no (\+\d+/\+\d+|\-\d+/\-\d+|\w+) counters? on it`)
 	reManaSpent       = regexp.MustCompile(`^at least (\d+) (\w+) mana was spent`)
+	// CR §603.6c "if you cast it" intervening-if. Matches "you cast it",
+	// "you cast this", "it was cast", and "it was cast from your hand"
+	// variants. The inverse forms ("wasn't cast", "you didn't cast it")
+	// are handled by reSelfNotCast below.
+	reYouCastIt   = regexp.MustCompile(`^you cast (?:it|this|~|this (?:creature|spell|permanent))(?: from your hand)?$`)
+	reSelfWasCast = regexp.MustCompile(`^(?:it|~|this (?:creature|spell|permanent)) was cast(?: from your hand)?$`)
+	reSelfNotCast = regexp.MustCompile(`^(?:(?:it|~|this (?:creature|spell|permanent)) (?:wasn'?t|was not) cast|you (?:didn'?t|did not) cast (?:it|this|~))$`)
+	reCastFromHand = regexp.MustCompile(`from your hand`)
 )
 
 // parseConditionText converts condition text into a structured Condition.
@@ -144,6 +152,16 @@ func parseConditionText(cond string) *gameast.Condition {
 	}
 	if reKicked.MatchString(cond) {
 		return &gameast.Condition{Kind: "kicked", Args: []interface{}{1}}
+	}
+
+	// "you cast it [from your hand]" / "it was cast [from your hand]".
+	if reYouCastIt.MatchString(cond) || reSelfWasCast.MatchString(cond) {
+		fromHand := reCastFromHand.MatchString(cond)
+		return &gameast.Condition{Kind: "self_was_cast", Args: []interface{}{fromHand}}
+	}
+	// "it wasn't cast" / "you didn't cast it" — inverse.
+	if reSelfNotCast.MatchString(cond) {
+		return &gameast.Condition{Kind: "self_was_not_cast"}
 	}
 
 	if m := reYouControl.FindStringSubmatch(cond); m != nil {
