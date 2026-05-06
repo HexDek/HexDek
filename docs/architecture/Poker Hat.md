@@ -1,7 +1,8 @@
 # Poker Hat
 
 > Source: `internal/hat/poker.go` (1956 lines)
-> Status: **Deprecated**, superseded by [YggdrasilHat](YggdrasilHat.md)
+> Status: **BURIED** — deprecated 2026-04-26. See [Graveyard](Graveyard.md).
+> Superseded by: [YggdrasilHat](YggdrasilHat.md)
 
 HOLD/CALL/RAISE adaptive hat. The mode is internal — engine doesn't know it exists. Mirrors Python `scripts/extensions/policies/poker.py` v2.
 

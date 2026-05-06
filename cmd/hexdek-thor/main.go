@@ -94,7 +94,19 @@ func main() {
 
 	comboDemo := flag.Bool("combo-demo", false, "run combo resolution demos")
 
+	traceFlag := flag.Bool("trace", false, "write per-test execution traces to data/thor-traces/ for failing tests")
+	traceDirFlag := flag.String("trace-dir", "data/thor-traces", "directory for --trace output files")
+
 	flag.Parse()
+
+	if *traceFlag {
+		traceEnabled = true
+		traceDir = *traceDirFlag
+		if err := os.MkdirAll(traceDir, 0o755); err != nil {
+			log.Fatalf("trace: cannot create %s: %v", traceDir, err)
+		}
+		log.Printf("  trace mode: ON (writing to %s)", traceDir)
+	}
 
 	if *comboDemo {
 		runComboDemo()
@@ -557,8 +569,11 @@ func testCard(oc *oracleCard, ast *gameast.CardAST, interactions []interaction, 
 }
 
 func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction) (result *failure) {
+	tr := NewTracer()
 	defer func() {
 		if r := recover(); r != nil {
+			tr.Record("PANIC", "interaction=%s err=%v", inter.Name, r)
+			tr.Flush(oc.Name, "panic_"+inter.Name)
 			result = &failure{
 				CardName:    oc.Name,
 				Interaction: inter.Name,
@@ -578,12 +593,34 @@ func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction) (r
 		return nil
 	}
 
+	tr.Record("SETUP", "place card=%q seat=0 types=%v power=%d toughness=%d",
+		oc.Name, oc.Types, perm.Power(), perm.Toughness())
+	tr.Record("SETUP", "place opponent=%q seat=1 power=2 toughness=2", "Opponent Bear")
+
+	bfBefore := totalBattlefield(gs)
+	eventsBefore := len(gs.EventLog)
+
+	tr.Record("EFFECT_ATTEMPT", "interaction=%s", inter.Name)
 	inter.Fn(gs, perm)
 
 	gameengine.StateBasedActions(gs)
 
+	bfAfter := totalBattlefield(gs)
+	newEvents := gs.EventLog[eventsBefore:]
+	tr.Record("STATE_CHANGE", "events=%d battlefield_delta=%d", len(newEvents), bfAfter-bfBefore)
+	for i, ev := range newEvents {
+		if i >= 8 {
+			tr.Record("STATE_CHANGE", "... %d more events truncated", len(newEvents)-i)
+			break
+		}
+		tr.Record("EVENT", "kind=%s source=%q seat=%d target=%d amount=%d",
+			ev.Kind, ev.Source, ev.Seat, ev.Target, ev.Amount)
+	}
+
 	violations := gameengine.RunAllInvariants(gs)
 	if len(violations) > 0 {
+		tr.Record("ASSERT_FAIL", "invariant=%s msg=%s", violations[0].Name, violations[0].Message)
+		tr.Flush(oc.Name, "interaction_"+inter.Name)
 		return &failure{
 			CardName:    oc.Name,
 			Interaction: inter.Name,
@@ -592,7 +629,19 @@ func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction) (r
 		}
 	}
 
+	tr.Record("ASSERT_PASS", "no invariant violations")
 	return nil
+}
+
+// totalBattlefield returns the count of all permanents across all seats.
+func totalBattlefield(gs *gameengine.GameState) int {
+	n := 0
+	for _, s := range gs.Seats {
+		if s != nil {
+			n += len(s.Battlefield)
+		}
+	}
+	return n
 }
 
 func testPhases(oc *oracleCard, ast *gameast.CardAST) (fails []failure) {

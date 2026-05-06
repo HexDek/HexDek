@@ -1,7 +1,25 @@
 # Tool - Loki
 
 > Source: `cmd/hexdek-loki/main.go` (1374 lines), `internal/gameengine/chaos.go` (~600 lines)
-> Status: Production. 10K games + 50K nightmare boards = ZERO violations on the v10d release.
+> Status: **LEGACY** (retired 2026-05-06). Superseded by the Feynman + Muninn + Heimdall observability stack.
+> Final stats: 10K games + 50K nightmare boards = ZERO violations on the v10d release.
+
+## Why Loki Was Retired
+
+Loki's two core contributions — random-composition stress testing and invariant verification — are now handled better by tools that didn't exist when Loki was built:
+
+| Loki's Job | Now Covered By | Why It's Better |
+|---|---|---|
+| Random card combinations | **Tournament Runner (fishtank)** — 1292 real decks in 24/7 random pods | Real decks with real hat decisions, not synthetic GreedyHat play |
+| Invariant checking per action | **Feynman** — runs during EVERY live game | Same 20 Odin invariants, but with full Heimdall telemetry attached to every violation |
+| Crash detection | **Muninn** — persistent crash memory | Append-only log with card context, auto-correlates with parser gaps |
+| Bug reproduction | **Thor + Judge** — targeted per-card testing | Thor 2.0 action traces show exactly where the chain breaks |
+
+The fatal weakness: when Loki *did* find a violation, it reported "ZoneConservation failed on turn 14 in a random pod" with no diagnostic context. No trace, no event chain, no way to isolate which interaction caused it without manually reconstructing the game state. The fishtank + Feynman catches the same bugs with full observability — violations come with Heimdall telemetry, Muninn context, and reproducible seeds.
+
+**If you need chaos-composition coverage in the future**, the plan is `thor --chaos` mode: random board generation using Thor's trace infrastructure so failures are immediately diagnosable.
+
+---
 
 Loki is the chaos gauntlet. It picks 4 random commanders from the full ~36K oracle corpus, builds 99-card decks matching their color identity, runs 4-seat games with [GreedyHat](Greedy%20Hat.md), and checks all 20 [Odin invariants](Invariants%20Odin.md) after every action. The point is to surface engine bugs caused by *card combinations nobody designed test cases for* — bugs only visible when specific real cards interact.
 

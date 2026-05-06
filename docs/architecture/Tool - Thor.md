@@ -281,10 +281,12 @@ flowchart LR
     Thor2 --> Regression[Verify no card regressed]
     PreTour[Before tournament] --> Thor3[--corpus-audit --coverage-depth<br/>--oracle-compliance --ast-fidelity]
     Thor3 --> Clean[Verify corpus is clean]
-    LokiBug[Loki found a violation] --> Thor4[--card 'suspect card']
-    Thor4 --> Narrow[Narrow to specific interaction]
+    MuninnGap[Muninn flagged a gap] --> Thor4[--card 'suspect card' --trace]
+    Thor4 --> Narrow[Trace shows exact break point]
     NewMod[Adding a new module] --> Thor5[--module-flag]
     Thor5 --> Iterate[Iterate just that module]
+    SetRelease[New set / errata] --> Thor6[hexdek-oracle-sync --promote<br/>then --card-list changed.txt --trace]
+    Thor6 --> Validate[Validate changed cards]
 ```
 
 | Situation | Thor invocation |
@@ -292,22 +294,25 @@ flowchart LR
 | Adding a per-card handler | `--card "Card Name"` (full battery on one card) |
 | Adding an AST node type | `--all` (full regression across modules) |
 | Pre-tournament validation | `--corpus-audit --coverage-depth --oracle-compliance --ast-fidelity` |
-| Loki found an invariant violation | `--card "suspect"` to narrow down deterministically |
+| Muninn flagged a live-game gap | `--card "suspect" --trace` to see exact break point |
 | Iterating on a single module | `--<module-flag>` (e.g. `--goldilocks`) |
-| Custom subset | `--card-list /tmp/file.txt` |
+| Custom subset | `--card-list /tmp/file.txt --trace` |
+| New set release / WotC errata | `hexdek-oracle-sync` then `--card-list changed.txt --trace` |
 
-## Difference from Loki
+## Difference from Loki (Legacy)
 
-| | Thor | Loki |
-|---|---|---|
-| Card selection | Every card in corpus | Random subset |
-| Interaction selection | Every interaction type | Random sequence in real game |
-| Determinism | Deterministic | Seed-driven random |
-| Output style | Per-card hit list | Per-game violation log |
-| Workflow position | Pre-flight | Continuous chaos exploration |
-| Bug class found | Card-specific | Combination-specific |
+> **Note:** Loki was retired 2026-05-06. Its functions are now covered by the fishtank (Tournament Runner 24/7 random pods) + Feynman (runtime invariants) + Muninn (persistent crash memory). See [Tool - Loki](Tool%20-%20Loki.md) for the full retirement rationale.
 
-Both lean on the same 20 [Odin invariants](Invariants%20Odin.md). Thor finds *card-specific* bugs ("Sphere of Resistance breaks when paired with Lightning Bolt"); Loki finds *combination* bugs ("this 4-deck pod with these specific shuffle seeds produces an SBA violation on turn 17"). They're complementary.
+| | Thor | Loki (retired) | What replaced Loki |
+|---|---|---|---|
+| Card selection | Every card in corpus | Random subset | Fishtank: 1292 real decks |
+| Interaction selection | Every interaction type | Random sequence in real game | Feynman: invariants on every action |
+| Determinism | Deterministic | Seed-driven random | Heimdall: seed ring buffer |
+| Output style | Per-card hit list | Per-game violation log | Muninn: persistent gap memory |
+| Workflow position | Pre-flight + diagnostic | Continuous chaos exploration | Tournament Runner: continuous |
+| Bug class found | Card-specific | Combination-specific | Huginn: emergent interaction discovery |
+
+Thor is now the sole dedicated testing tool. With 2.0's action traces and conditional scaffolding, it covers most of what Loki uniquely offered (exercising card interactions) but with full diagnostic context.
 
 ## Usage
 
@@ -337,17 +342,81 @@ go run ./cmd/hexdek-thor \
 go run ./cmd/hexdek-thor --corpus-audit --corpus-era era3
 ```
 
-## Current State (2026-04-28)
+## Current State (2026-05-06)
 
-- 541K base interaction tests, ~50 goldilocks failures (effects newly firing — recent additions exposing gaps to fix)
-- Corpus audit: 100% / 100% / 100% / 100% across the four phases (memory: `project_hexdek_corpus_audit.md`)
-- Full suite with `--all`: ~96,159 tests at the audit-only level, 0 failures, ~2.2s wall-clock, ~43K tests/sec
+- 541K base interaction tests across 36,083 cards
+- Corpus audit (2026-05-05): 31,963 cards tested, 181 unique failures (99.4% card coverage)
+  - Draw handler gaps: 2,032 failures (conditional draw triggers)
+  - Lifegain/lifeloss gaps: 1,612 failures (triggered effects needing condition setup)
+  - Damage gaps: 1,095 failures (effects parsed but not executing)
+  - Discard/mill/buff: 534 failures (mixed causes)
+  - Goldilocks dead effects: 30 failures (board set up but nothing changed)
+- Full suite with `--all`: ~1M+ tests, ~2.2s wall-clock, ~43K tests/sec on 32 workers
 - Zero panics across the full corpus
+- Full report: `data/corpus-audit-full-report.md`
+
+## Thor 2.0 — In Progress (2026-05-06)
+
+Thor 1.0 finds failures. Thor 2.0 *explains* them. The upgrade adds diagnostic infrastructure that turns "card X failed interaction Y" into a full execution trace showing exactly where the chain broke.
+
+### What's changing
+
+| Thor 1.0 (current) | Thor 2.0 (building) | Why |
+|---|---|---|
+| Binary pass/fail per card | **Action traces** — step-by-step event chain dump | Know WHERE the chain broke (condition? handler? resolver?) |
+| Single-seat board setup | **Opponent auto-detect** — AST-parsed "opponent" references auto-spawn adversarial seat | Cards like "whenever an opponent casts" get exercised without manual curation |
+| Static board setup for triggers | **Conditional trigger scaffolding** — parse trigger conditions from AST, auto-generate setup actions | "when a creature dies" → Thor kills a creature first. "when you gain life" → Thor gains life first |
+| Stale oracle text until manual pull | **Oracle errata pipeline** — Scryfall bulk diff → re-parse → re-Thor on changed set | Catch WotC errata automatically, validated within minutes of set release |
+| No cross-reference with live games | **Muninn cross-reference** — diff Thor results against Muninn live-game gaps | Find false negatives (fail in games but pass Thor) and false positives |
+
+### Action traces (hex-dev-5, building now)
+
+Per-card `.trace` files dumping the full event chain for every failing test:
+
+```
+[001] SETUP: add_creature seat=0 name="Soldier Token" power=1 toughness=1
+[002] SETUP: set_zone card="Tolsimir, Midnights Light" zone=battlefield
+[003] TRIGGER_CHECK: "when ~ or another Wolf enters" → condition=true
+[004] HANDLER_ENTER: tolsimir_midnights_light.go:OnETB
+[005] EFFECT_ATTEMPT: fight target="Soldier Token"
+[006] STATE_CHANGE: none (target already dead? or fight not resolved?)
+[007] ASSERT_FAIL: goldilocks_dead_effect expected board change, got delta=0
+```
+
+Enables: categorizing failures by WHERE they break (condition check vs handler entry vs effect resolution), pattern-hunting across failure classes, batch-fixing entire categories instead of card-by-card whack-a-mole.
+
+### Oracle errata pipeline (hex-dev-6, building now)
+
+Standalone CLI: `cmd/hexdek-oracle-sync`
+
+```
+hexdek-oracle-sync [--dry-run] [--promote] [--verbose]
+```
+
+Flow: Scryfall bulk pull → diff against local oracle-cards.json → re-parse changed cards through AST → run Thor on changed set → report. ~15 sec runtime, 80MB bandwidth, zero LLM tokens. Triggered manually when set releases drop.
+
+### Post-2.0 workflow
+
+```mermaid
+flowchart TD
+    Release[WotC set release / errata] --> Sync[hexdek-oracle-sync --dry-run]
+    Sync --> Diff[Report: N cards changed]
+    Diff --> Promote[hexdek-oracle-sync --promote]
+    Promote --> Thor[thor --card-list changed.txt --trace]
+    Thor --> Traces[data/thor-traces/*.trace]
+    Traces --> Categorize[Group by failure pattern]
+    Categorize --> Batch[Batch fix: one code change → 50 cards fixed]
+    Categorize --> Edge[Edge cases: 1-by-1 review]
+    Edge --> Muninn[Cross-reference Muninn live-game gaps]
+    Muninn --> Ship[Ship fixes, re-run full corpus]
+```
 
 ## Related
 
-- [Tool - Loki](Tool%20-%20Loki.md) — chaos counterpart
-- [Tool - Odin](Tool%20-%20Odin.md) — overnight invariant fuzzer
+- [Tool - Muninn](Tool%20-%20Muninn.md) — persistent crash/gap memory (cross-referenced by Thor 2.0)
+- [Tool - Huginn](Tool%20-%20Huginn.md) — emergent interaction discovery from live games
+- [Feynman Oracle](Feynman%20Oracle.md) — runtime invariant checker (replaces Loki's invariant role)
 - [Invariants Odin](Invariants%20Odin.md) — the 20 predicates
 - [Card AST and Parser](Card%20AST%20and%20Parser.md) — what Goldilocks reads
 - [Per-Card Handlers](Per-Card%20Handlers.md) — what Goldilocks tests against
+- ~~[Tool - Loki](Tool%20-%20Loki.md)~~ — retired, see legacy notes

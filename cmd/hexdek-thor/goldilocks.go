@@ -2604,8 +2604,11 @@ var verifiableEffects = map[string]bool{
 // ---------------------------------------------------------------------------
 
 func testGoldilocksCard(oc *oracleCard) (result *failure) {
+	tr := NewTracer()
 	defer func() {
 		if r := recover(); r != nil {
+			tr.Record("PANIC", "goldilocks err=%v", r)
+			tr.Flush(oc.Name, "panic_goldilocks")
 			result = &failure{
 				CardName:    oc.Name,
 				Interaction: "goldilocks",
@@ -2628,6 +2631,8 @@ func testGoldilocksCard(oc *oracleCard) (result *failure) {
 		return nil // skip effect types we can't verify
 	}
 
+	tr.Record("SETUP", "card=%q kind=%s abilityKind=%s", oc.Name, info.kind, info.abilityKind)
+
 	gs := makeGoldilocksState(oc, info)
 	if gs == nil {
 		return nil
@@ -2641,6 +2646,8 @@ func testGoldilocksCard(oc *oracleCard) (result *failure) {
 			break
 		}
 	}
+	tr.Record("SETUP", "battlefield seat=0 size=%d srcPerm=%v",
+		len(gs.Seats[0].Battlefield), srcPerm != nil)
 
 	// Clear event log before resolution so we only check new events.
 	gs.EventLog = gs.EventLog[:0]
@@ -2653,21 +2660,31 @@ func testGoldilocksCard(oc *oracleCard) (result *failure) {
 	if info.fullEffect != nil {
 		resolveEff = info.fullEffect
 	}
+	tr.Record("EFFECT_ATTEMPT", "kind=%s usingFullEffect=%v",
+		info.kind, info.fullEffect != nil)
 
 	// Resolve based on ability kind.
 	switch info.abilityKind {
 	case "triggered":
+		evName := "(none)"
+		if info.trigger != nil {
+			evName = info.trigger.Event
+		}
+		tr.Record("TRIGGER_CHECK", "event=%q resolving via fireTriggerEvent", evName)
+		tr.Record("HANDLER_ENTER", "fireTriggerEvent srcPerm=%q", oc.Name)
 		fireTriggerEvent(gs, srcPerm, info)
 	case "activated":
-		// Try activating through the hook system.
+		tr.Record("HANDLER_ENTER", "InvokeActivatedHook srcPerm=%q index=0", oc.Name)
 		gameengine.InvokeActivatedHook(gs, srcPerm, 0, map[string]interface{}{
 			"controller": 0,
 		})
 		// Fallback: resolve the full effect tree if hook didn't fire.
 		if len(gs.EventLog) == 0 && resolveEff != nil {
+			tr.Record("HANDLER_ENTER", "fallback ResolveEffect (activated hook produced no events)")
 			gameengine.ResolveEffect(gs, srcPerm, resolveEff)
 		}
 	default:
+		tr.Record("HANDLER_ENTER", "ResolveEffect (static/default path)")
 		gameengine.ResolveEffect(gs, srcPerm, resolveEff)
 	}
 	gameengine.StateBasedActions(gs)
@@ -2688,9 +2705,23 @@ func testGoldilocksCard(oc *oracleCard) (result *failure) {
 	// Snapshot after.
 	after := takeSnapshot(gs)
 
+	tr.Record("STATE_CHANGE", "events=%d changed=%v",
+		len(gs.EventLog), snapshotChanged(before, after))
+	for i, ev := range gs.EventLog {
+		if i >= 8 {
+			tr.Record("STATE_CHANGE", "... %d more events truncated", len(gs.EventLog)-i)
+			break
+		}
+		tr.Record("EVENT", "kind=%s source=%q seat=%d target=%d amount=%d",
+			ev.Kind, ev.Source, ev.Seat, ev.Target, ev.Amount)
+	}
+
 	// Check invariants.
 	violations := gameengine.RunAllInvariants(gs)
 	if len(violations) > 0 {
+		tr.Record("ASSERT_FAIL", "goldilocks_invariant invariant=%s msg=%s",
+			violations[0].Name, violations[0].Message)
+		tr.Flush(oc.Name, "goldilocks_invariant")
 		return &failure{
 			CardName:    oc.Name,
 			Interaction: "goldilocks_invariant",
@@ -2720,6 +2751,9 @@ func testGoldilocksCard(oc *oracleCard) (result *failure) {
 		case *gameast.Fight:
 			filterBase = fmt.Sprintf("A=%s B=%s", e.A.Base, e.B.Base)
 		}
+		tr.Record("ASSERT_FAIL", "goldilocks_dead_effect effect=%s abilityKind=%s filterBase=%q",
+			info.kind, info.abilityKind, filterBase)
+		tr.Flush(oc.Name, "goldilocks_dead_effect")
 		return &failure{
 			CardName:    oc.Name,
 			Interaction: "goldilocks_dead_effect",
@@ -2727,6 +2761,7 @@ func testGoldilocksCard(oc *oracleCard) (result *failure) {
 		}
 	}
 
+	tr.Record("ASSERT_PASS", "effect verified")
 	return nil
 }
 

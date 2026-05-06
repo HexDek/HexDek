@@ -1,7 +1,8 @@
 # Greedy Hat
 
 > Source: `internal/hat/greedy.go` (1059 lines)
-> Status: **Deprecated**, kept for [Tool - Parity](Tool%20-%20Parity.md) byte-equivalence
+> Status: **BURIED** — deprecated 2026-04-26, fully retired 2026-05-06. See [Graveyard](Graveyard.md).
+> Superseded by: [YggdrasilHat](YggdrasilHat.md)
 
 Stateless baseline. Byte-equivalent to pre-Phase-10 inline engine heuristics. Two `GreedyHat` instances are interchangeable, so a single `*GreedyHat` is shared across seats with no per-seat state.
 

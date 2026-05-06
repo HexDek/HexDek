@@ -70,6 +70,14 @@ kanban-plugin: board
 - [ ] **Thor test harness: conditional trigger setup** — many "failures" are Thor not meeting trigger conditions (e.g. "when a creature dies" but nothing dies). Improve test board scaffolding to exercise conditional triggers. #engine #qa #thor
 - [ ] **Muninn-Thor mismatch audit** — 121 Muninn live-game gaps vs 181 Thor failures. Cross-reference to find cards that fail in real games but pass Thor (false negatives) and vice versa. #engine #qa
 
+## High Priority — Thor 2.0 (7174n1c, 2026-05-06)
+
+- [ ] **Action traces** — per-card `.trace` files dumping the full event chain step-by-step for every test. Shows WHERE the chain broke (condition check failed? handler entered but draw returned nil?). Layers on top of all existing modules. #thor #diagnostics
+- [ ] **Opponent auto-detect** — oracle text containing "opponent(s)" auto-spawns an active adversarial seat. Parse AST target references for `opponent` condition/target → add a second seat that casts, attacks, controls creatures, loses life, etc. No manual curation. #thor #scaffolding
+- [ ] **Conditional trigger scaffolding** — upgrade Goldilocks board setup: parse trigger conditions from AST and auto-generate the setup action. "when a creature dies" → add creature + kill it. "when you gain life" → gain life first. "whenever you cast" → cast a spell first. #thor #scaffolding
+- [ ] **Oracle Errata Pipeline** — on-demand Scryfall bulk pull → diff against local `oracle-cards.json` → re-parse changed cards through AST → re-run Thor on changed set → report. CLI: `hexdek-oracle-sync [--live|--dry-run]`. Triggered manually when set releases drop (pre-release = 1 week before street date). ~15 sec runtime, 80MB bandwidth, zero LLM tokens. #thor #pipeline #infra
+- [ ] **Muninn cross-reference** — post-Thor-run diff against Muninn live-game gaps. Flag false negatives (fail in games, pass Thor) and false positives (pass in games, fail Thor). #thor #qa
+
 
 ## Medium Priority — Platform
 
