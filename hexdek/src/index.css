@@ -217,6 +217,26 @@ body {
 .appbar nav a { color: var(--ink-2); text-decoration: none; cursor: pointer; }
 .appbar nav a.on { color: var(--ink); border-bottom: 1px solid var(--ink); padding-bottom: 1px; }
 
+.logout-confirm-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+}
+.logout-confirm {
+  background: var(--bg); border: 1px solid var(--rule);
+  padding: 24px 32px; text-align: center;
+  font-family: var(--mono, monospace); font-size: 11px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.logout-confirm p { margin: 0 0 16px; color: var(--ink); font-weight: 700; }
+.logout-confirm button {
+  height: 28px; padding: 0 16px; cursor: pointer;
+  border: 1px solid var(--rule-2); background: transparent;
+  color: var(--ink-2); font-family: inherit; font-size: 9px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.logout-confirm button:first-child { color: var(--danger); border-color: var(--danger); }
+
 .statusbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 6px 14px;

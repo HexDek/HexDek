@@ -54,7 +54,10 @@ export default function AppShell() {
     return location.pathname === to.split('?')[0]
   }
 
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+
   const handleLogout = async () => {
+    setShowLogoutConfirm(false)
     await logout()
     navigate('/')
   }
@@ -99,7 +102,7 @@ export default function AppShell() {
             )}
             {!loading && (
               user ? (
-                <a onClick={handleLogout}>LOGOUT</a>
+                <a onClick={() => setShowLogoutConfirm(true)}>LOGOUT</a>
               ) : (
                 <NavLink to="/login" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 700 }}>SIGN IN ↗</NavLink>
               )
@@ -137,6 +140,17 @@ export default function AppShell() {
         </div>
       </div>
       <ToastHost />
+      {showLogoutConfirm && (
+        <div className="logout-confirm-overlay" onClick={() => setShowLogoutConfirm(false)}>
+          <div className="logout-confirm" onClick={e => e.stopPropagation()}>
+            <p>DISCONNECT SESSION?</p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={handleLogout}>YES, LOG OUT</button>
+              <button onClick={() => setShowLogoutConfirm(false)}>CANCEL</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
