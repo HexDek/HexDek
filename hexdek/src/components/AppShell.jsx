@@ -34,7 +34,16 @@ function useTheme() {
 
 export default function AppShell() {
   const { user, loading, logout } = useAuth()
-  const { status: wsStatus } = useLiveSocket()
+  const { status: wsStatus, reconnectAttempt, nextRetryAt } = useLiveSocket()
+  const [, setCountdownTick] = useState(0)
+  useEffect(() => {
+    if (wsStatus !== 'disconnected') return
+    const id = setInterval(() => setCountdownTick(t => t + 1), 250)
+    return () => clearInterval(id)
+  }, [wsStatus])
+  const retrySecs = wsStatus === 'disconnected' && nextRetryAt
+    ? Math.max(0, Math.ceil((nextRetryAt - Date.now()) / 1000))
+    : 0
   const navigate = useNavigate()
   const location = useLocation()
   const nav = user ? AUTH_NAV : PUBLIC_NAV
@@ -110,7 +119,11 @@ export default function AppShell() {
               {wsStatus === 'live' && '+ + +  HEXDEK CORE READY  + + +'}
               {wsStatus === 'contacting' && 'CONTACTING SERVER...'}
               {wsStatus === 'initializing' && 'INITIALIZING...'}
-              {wsStatus === 'disconnected' && 'DISCONNECTED — RECONNECTING...'}
+              {wsStatus === 'disconnected' && (
+                reconnectAttempt > 0
+                  ? `RECONNECTING (ATTEMPT ${reconnectAttempt}) ... ${retrySecs}s`
+                  : 'DISCONNECTED — RECONNECTING...'
+              )}
             </span>
             <span>OPEN SOURCE / / DONATIONS-POWERED / / NO ADS</span>
             <span>{user ? `USR.${user.email?.split('@')[0]?.toUpperCase()}` : 'GUEST'}</span>

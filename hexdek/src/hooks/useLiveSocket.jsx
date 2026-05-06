@@ -28,6 +28,8 @@ function saveCache(patch) {
 
 const LiveCtx = createContext(null)
 
+const RECONNECT_DELAY_MS = 2000
+
 // status: 'disconnected' | 'contacting' | 'initializing' | 'live'
 export function LiveProvider({ children }) {
   const cached = useRef(loadCached()).current
@@ -37,9 +39,12 @@ export function LiveProvider({ children }) {
   const [history, setHistory] = useState([])
   const [speed, setSpeed] = useState(1)
   const [status, setStatus] = useState('disconnected')
+  const [reconnectAttempt, setReconnectAttempt] = useState(0)
+  const [nextRetryAt, setNextRetryAt] = useState(0)
   const wsRef = useRef(null)
   const reconnectRef = useRef(null)
   const gotFirstStats = useRef(!!cached?.stats)
+  const attemptRef = useRef(0)
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
@@ -50,6 +55,9 @@ export function LiveProvider({ children }) {
 
     ws.onopen = () => {
       setStatus('initializing')
+      attemptRef.current = 0
+      setReconnectAttempt(0)
+      setNextRetryAt(0)
       if (reconnectRef.current) {
         clearTimeout(reconnectRef.current)
         reconnectRef.current = null
@@ -84,7 +92,10 @@ export function LiveProvider({ children }) {
       setStatus('disconnected')
       wsRef.current = null
       gotFirstStats.current = false
-      reconnectRef.current = setTimeout(connect, 2000)
+      attemptRef.current += 1
+      setReconnectAttempt(attemptRef.current)
+      setNextRetryAt(Date.now() + RECONNECT_DELAY_MS)
+      reconnectRef.current = setTimeout(connect, RECONNECT_DELAY_MS)
     }
 
     ws.onerror = () => {
@@ -109,7 +120,7 @@ export function LiveProvider({ children }) {
   }, [connect])
 
   return (
-    <LiveCtx.Provider value={{ game, elo, stats, history, speed, status }}>
+    <LiveCtx.Provider value={{ game, elo, stats, history, speed, status, reconnectAttempt, nextRetryAt }}>
       {children}
     </LiveCtx.Provider>
   )
