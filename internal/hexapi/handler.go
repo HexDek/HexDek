@@ -135,6 +135,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/matchups", h.handleDeckMatchups)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/upgrade", h.handleDeckUpgrade)
 	mux.HandleFunc("POST /api/decks/{owner}/{id}/analyze", h.handleRunAnalysis)
+	mux.HandleFunc("POST /api/decks/{owner}/{id}/clone", h.handleCloneDeck)
 	// SPA share page with OG meta injection — Caddy can route /decks/{owner}/{id}
 	// here for crawler User-Agents (or unconditionally) so Discord/Twitter unfurls
 	// pick up per-deck previews.
@@ -541,6 +542,130 @@ func (h *Handler) handleDeleteDeck(w http.ResponseWriter, r *http.Request) {
 	os.Remove(strategyFile)
 
 	writeJSON(w, map[string]any{"deleted": true, "id": id, "owner": owner})
+}
+
+func (h *Handler) handleCloneDeck(w http.ResponseWriter, r *http.Request) {
+	srcOwner := r.PathValue("owner")
+	srcID := r.PathValue("id")
+	if !validatePathComponent(srcOwner) || !validatePathComponent(srcID) {
+		http.Error(w, "invalid owner or id", http.StatusBadRequest)
+		return
+	}
+
+	caller := strings.TrimSpace(strings.ToLower(r.Header.Get("X-HexDek-Owner")))
+	if caller == "" {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	dstOwner := sanitizeFilename(caller)
+	if dstOwner == "" {
+		http.Error(w, "invalid caller", http.StatusBadRequest)
+		return
+	}
+
+	srcPath := findDeckFile(h.DecksDir, srcOwner, srcID)
+	if srcPath == "" {
+		http.Error(w, "deck not found", http.StatusNotFound)
+		return
+	}
+
+	dstDir := filepath.Join(h.DecksDir, dstOwner)
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		http.Error(w, "cannot create deck directory", http.StatusInternalServerError)
+		return
+	}
+
+	ext := filepath.Ext(srcPath)
+	dstID := srcID + "_clone"
+	dstPath := filepath.Join(dstDir, dstID+ext)
+	for i := 2; ; i++ {
+		if _, err := os.Stat(dstPath); os.IsNotExist(err) {
+			break
+		}
+		dstID = fmt.Sprintf("%s_clone%d", srcID, i)
+		dstPath = filepath.Join(dstDir, dstID+ext)
+		if i > 100 {
+			http.Error(w, "too many clones with the same name", http.StatusConflict)
+			return
+		}
+	}
+
+	deckBytes, err := os.ReadFile(srcPath)
+	if err != nil {
+		http.Error(w, "cannot read source deck", http.StatusInternalServerError)
+		return
+	}
+	if err := os.WriteFile(dstPath, deckBytes, 0644); err != nil {
+		http.Error(w, "cannot write deck file", http.StatusInternalServerError)
+		return
+	}
+
+	srcFreyaDir := filepath.Join(h.DecksDir, srcOwner, "freya")
+	dstFreyaDir := filepath.Join(dstDir, "freya")
+	freyaCopies := map[string]string{
+		filepath.Join(srcFreyaDir, srcID+".strategy.json"): filepath.Join(dstFreyaDir, dstID+".strategy.json"),
+		filepath.Join(srcFreyaDir, srcID+"_freya.md"):      filepath.Join(dstFreyaDir, dstID+"_freya.md"),
+	}
+	freyaMade := false
+	for src, dst := range freyaCopies {
+		data, err := os.ReadFile(src)
+		if err != nil {
+			continue
+		}
+		if !freyaMade {
+			os.MkdirAll(dstFreyaDir, 0755)
+			freyaMade = true
+		}
+		os.WriteFile(dst, data, 0644)
+	}
+
+	var cards []map[string]any
+	if strings.HasSuffix(dstPath, ".json") {
+		cards = parseDeckJSON(deckBytes)
+	} else {
+		cards = parseDeckList(string(deckBytes))
+	}
+	cmdrCard := ""
+	for _, line := range strings.Split(string(deckBytes), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "COMMANDER:") {
+			cmdrCard = strings.TrimSpace(strings.TrimPrefix(line, "COMMANDER:"))
+			break
+		}
+	}
+	var cardNames []string
+	for _, c := range cards {
+		if n, ok := c["name"].(string); ok {
+			cardNames = append(cardNames, n)
+		}
+	}
+	go h.registerDeckVersion(dstOwner, dstID, cmdrCard, cardNames)
+
+	srcCustom := h.loadCustomName(r.Context(), srcOwner, srcID)
+	cloneName := srcCustom
+	if cloneName == "" {
+		cloneName = strings.ToUpper(srcID)
+	}
+	cloneName = cloneName + " (CLONE)"
+	h.saveCustomName(r.Context(), dstOwner, dstID, cloneName)
+
+	h.logImport(r.Context(), db.ImportLogEntry{
+		Owner:     dstOwner,
+		DeckKey:   dstOwner + "/" + dstID,
+		DeckName:  cloneName,
+		Commander: cmdrCard,
+		Source:    "clone:" + srcOwner + "/" + srcID,
+		CardCount: len(cards),
+	})
+
+	writeJSON(w, map[string]any{
+		"id":             dstID,
+		"owner":          dstOwner,
+		"name":           cloneName,
+		"commander_card": cmdrCard,
+		"card_count":     len(cards),
+		"source":         srcOwner + "/" + srcID,
+	})
 }
 
 func (h *Handler) handleListVersions(w http.ResponseWriter, r *http.Request) {

@@ -79,6 +79,7 @@ export const api = {
     body: JSON.stringify({ deck_list: deckList }),
   }),
   deleteDeck: (id) => authedRequest(`/api/decks/${id}`, { method: 'DELETE' }),
+  cloneDeck: (id) => authedRequest(`/api/decks/${id}/clone`, { method: 'POST' }),
   patchDeck: (id, fields) => authedRequest(`/api/decks/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(fields),
