@@ -40,8 +40,10 @@ import (
 // gives the damaged player poison counters equal to the damage dealt.
 func registerEtali(r *Registry) {
 	r.OnETB("Etali, Primal Conqueror", etaliETB)
+	r.OnETB("Etali, Primal Conqueror // Etali, Primal Sickness", etaliETB)
 	r.OnActivated("Etali, Primal Conqueror", etaliActivate)
 	r.OnTrigger("Etali, Primal Conqueror", "combat_damage_player", etaliPoisonTrigger)
+	r.OnTrigger("Etali, Primal Conqueror // Etali, Primal Sickness", "combat_damage_player", etaliPoisonTrigger)
 }
 
 func etaliETB(gs *gameengine.GameState, perm *gameengine.Permanent) {

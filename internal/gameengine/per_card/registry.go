@@ -1326,7 +1326,6 @@ func registerDefaults() {
 	registerEowynShieldmaiden(Global())
 	registerErisRoarOfTheStorm(Global())
 	registerEshkiTemursRoar(Global())
-	registerEtaliPrimalConqueror(Global())
 	registerEtrataDeadlyFugitive(Global())
 	registerEtrataTheSilencer(Global())
 	registerExcavaTheRisenPast(Global())
