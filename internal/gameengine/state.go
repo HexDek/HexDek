@@ -395,8 +395,14 @@ func (gs *GameState) NextTimestamp() int {
 func (gs *GameState) LogEvent(ev Event) {
 	var evPtr *Event
 	if gs.RetainEvents {
-		gs.EventLog = append(gs.EventLog, ev)
-		evPtr = &gs.EventLog[len(gs.EventLog)-1]
+		const maxEventLog = 50000
+		if len(gs.EventLog) < maxEventLog {
+			gs.EventLog = append(gs.EventLog, ev)
+			evPtr = &gs.EventLog[len(gs.EventLog)-1]
+		} else {
+			gs.lastEvent = ev
+			evPtr = &gs.lastEvent
+		}
 	} else {
 		gs.lastEvent = ev
 		evPtr = &gs.lastEvent

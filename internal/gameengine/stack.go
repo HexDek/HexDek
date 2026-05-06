@@ -61,6 +61,23 @@ const maxDrainRecursion = 10
 // stack for DrainStack's iterative loop to resolve.
 const maxResolveDepth = 50
 
+// maxTriggerFiresPerTurn caps total trigger firings within one turn to
+// prevent infinite trigger loops from consuming unbounded memory.
+// A typical complex turn fires 20-50 triggers; 1000 is pathological.
+const maxTriggerFiresPerTurn = 1000
+
+// triggerCapForGame returns the per-turn trigger fire limit. MCTS rollout
+// clones set _rollout_trigger_cap for a tighter budget since rollouts are
+// approximations and don't need full trigger fidelity.
+func triggerCapForGame(gs *GameState) int {
+	if gs.Flags != nil {
+		if cap := gs.Flags["_rollout_trigger_cap"]; cap > 0 {
+			return cap
+		}
+	}
+	return maxTriggerFiresPerTurn
+}
+
 // DrainStack resolves items until the stack is empty, with loop detection
 // (CR §727) and an iteration safety cap. Used by all cast/activation paths.
 func DrainStack(gs *GameState) {
@@ -154,6 +171,24 @@ func PushStackItem(gs *GameState, item *StackItem) *StackItem {
 // single-threaded. A future "pending triggers" queue is a Phase 7 concern.
 func PushTriggeredAbility(gs *GameState, src *Permanent, effect gameast.Effect) *StackItem {
 	if gs == nil || src == nil || effect == nil {
+		return nil
+	}
+	if gs.Flags == nil {
+		gs.Flags = map[string]int{}
+	}
+	if gs.Flags["ended"] == 1 {
+		return nil
+	}
+	gs.Flags["_trigger_fires_this_turn"]++
+	if gs.Flags["_trigger_fires_this_turn"] > triggerCapForGame(gs) {
+		for i, s := range gs.Seats {
+			if s != nil && !s.Lost && !s.Won {
+				s.Lost = true
+				gs.LogEvent(Event{Kind: "game_draw", Seat: i, Details: map[string]interface{}{"reason": "trigger_loop_cap"}})
+			}
+		}
+		gs.Stack = gs.Stack[:0]
+		gs.Flags["ended"] = 1
 		return nil
 	}
 	item := &StackItem{
@@ -849,6 +884,9 @@ func isCounterSpellEffect(e gameast.Effect) bool {
 // round — CastSpell loops until empty.
 func ResolveStackTop(gs *GameState) {
 	if gs == nil || len(gs.Stack) == 0 {
+		return
+	}
+	if gs.Flags != nil && gs.Flags["ended"] == 1 {
 		return
 	}
 	item := gs.Stack[len(gs.Stack)-1]

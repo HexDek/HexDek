@@ -44,6 +44,13 @@ func (h *MCTSHat) simulateRollout(gs *gameengine.GameState, seatIdx int, actionF
 		}
 	}
 
+	// Rollouts are approximations — use a tighter trigger cap so
+	// pathological cascades don't burn 30s per rollout turn.
+	if clone.Flags == nil {
+		clone.Flags = map[string]int{}
+	}
+	clone.Flags["_rollout_trigger_cap"] = 200
+
 	actionFn(clone)
 
 	// Resolve any items we just pushed onto the stack before running

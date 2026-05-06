@@ -38,6 +38,9 @@ func StateBasedActions(gs *GameState) bool {
 	if gs == nil {
 		return false
 	}
+	if gs.Flags != nil && gs.Flags["ended"] == 1 {
+		return false
+	}
 	// Stack trace: log SBA check for CR audit.
 	GlobalStackTrace.Log("sba_check", "", -1, len(gs.Stack), "checking_sbas")
 	const maxPasses = 40 // CR §704.3 safety cap (matches Python).

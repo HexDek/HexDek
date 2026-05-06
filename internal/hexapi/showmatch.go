@@ -269,6 +269,9 @@ func NewShowmatch(astPath, oraclePath, decksDir string, database *sql.DB) *Showm
 		trainingDir:     "data/training",
 	}
 	if database != nil {
+		if err := db.EnsureCardStatsSchema(context.Background(), database); err != nil {
+			log.Printf("showmatch: card_stats schema: %v", err)
+		}
 		sm.loadPersistedState()
 		go sm.persistWorker()
 	}
@@ -1245,6 +1248,13 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 	bracketEvalCollector := hat.NewEvalSnapshotCollector()
 
 	bracketETBs := make(map[int][]string)
+	var heapBaseline uint64
+	{
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		heapBaseline = m.HeapAlloc
+	}
+	const maxHeapPerGame = 2 * 1024 * 1024 * 1024 // 2GB per game
 	for turn := 1; turn <= showmatchMaxTurn; turn++ {
 		gs.Turn = turn
 		preBF := heimdall.SnapshotBattlefieldNames(gs)
@@ -1262,6 +1272,14 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 
 		if gs.CheckEnd() {
 			break
+		}
+		if turn%10 == 0 {
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			if m.HeapAlloc > heapBaseline+maxHeapPerGame {
+				log.Printf("grinder: aborting game at turn %d — heap delta %.0fMB exceeds budget", turn, float64(m.HeapAlloc-heapBaseline)/1e6)
+				break
+			}
 		}
 		gs.Active = nextLiving(gs)
 	}

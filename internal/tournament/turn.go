@@ -91,10 +91,11 @@ func takeTurnImpl(gs *gameengine.GameState, hook func(*gameengine.GameState)) {
 		},
 	})
 
-	// Reset per-seat draws-this-turn counters (Narset draw suppression).
+	// Reset per-turn counters.
 	if gs.Flags == nil {
 		gs.Flags = map[string]int{}
 	}
+	gs.Flags["_trigger_fires_this_turn"] = 0
 	for i := range gs.Seats {
 		gs.Flags["draws_this_turn_seat_"+strconv.Itoa(i)] = 0
 	}

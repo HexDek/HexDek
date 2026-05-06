@@ -28,6 +28,24 @@ func PushPerCardTrigger(gs *GameState, perm *Permanent, handler func(*GameState,
 	if gs == nil || perm == nil || handler == nil {
 		return
 	}
+	if gs.Flags == nil {
+		gs.Flags = map[string]int{}
+	}
+	if gs.Flags["ended"] == 1 {
+		return
+	}
+	gs.Flags["_trigger_fires_this_turn"]++
+	if gs.Flags["_trigger_fires_this_turn"] > triggerCapForGame(gs) {
+		for i, s := range gs.Seats {
+			if s != nil && !s.Lost && !s.Won {
+				s.Lost = true
+				gs.LogEvent(Event{Kind: "game_draw", Seat: i, Details: map[string]interface{}{"reason": "trigger_loop_cap"}})
+			}
+		}
+		gs.Stack = gs.Stack[:0]
+		gs.Flags["ended"] = 1
+		return
+	}
 	cardName := ""
 	if perm.Card != nil {
 		cardName = perm.Card.DisplayName()
