@@ -87,6 +87,7 @@ kanban-plugin: board
 
 - [ ] **i18n — IN PROGRESS** — scaffolding shipped (i18n.js + locales/ + useT() hook + URL/navigator detection across 8 locales, commit 059a9d1, 2026-05-04). Content translation remaining: ~500 UI keys × 8+ languages still need professional translation; Scryfall localized card names integration also pending. #platform
 - [ ] Multi-format support beyond Commander (Modern, Legacy deck ratings) #engine
+- [ ] **Tournament prize pools** — hat-vs-hat bracket tournaments with cash prizes (1st/2nd/3rd/4th splits). Starcraft model: deckbuilding is the skill, hat execution is the layer. Legally sound as skill competition (no entry-fee model safest, donations-funded). Needs: bracket system, payout logic, age verification (18+), tax reporting (>$600). #platform #economy #future
 
 
 ## Done — Session 2026-05-05 Evening (UI/UX Sprint)
