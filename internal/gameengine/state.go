@@ -527,9 +527,12 @@ type Seat struct {
 	// SBA that caused the loss; empty when Lost==false.
 	LossReason string
 
-	// SBA704_5a_emitted prevents the 704.5a loss event from spamming the
-	// stream each pass after a player is already lost. Mirrors Python's
-	// `_sba_704_5a_emitted` attr.
+	// SBA704_5a_emitted is the per-drop log-spam guard for §704.5a. Set
+	// when the SBA either marks the player Lost or logs a loss_prevented
+	// (Platinum Angel etc.) event. Cleared by sba704_5a once life is
+	// positive again so the next drop produces a fresh audit entry.
+	// Does NOT gate the SBA itself — the dying check uses `!Lost` so the
+	// loss-prevention chain re-fires on every priority pass per CR §704.3.
 	SBA704_5a_emitted bool
 
 	// CommanderDamageNextSeq is the next EventLog index that §704.6c has

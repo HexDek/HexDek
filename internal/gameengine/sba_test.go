@@ -59,6 +59,106 @@ func TestSBA_704_5a_NegativeLifeLoses(t *testing.T) {
 	}
 }
 
+// Regression: the §704.5a check must not be one-shot. If the prior pass
+// somehow set SBA704_5a_emitted but didn't mark the seat Lost (e.g. a stale
+// flag carried over after a partial state reset), a subsequent SBA call
+// must still complete the loss. The fix moved the flag from a gate to a
+// log-spam guard; the dying check is now `!s.Lost`.
+func TestSBA_704_5a_StaleEmittedFlagStillLoses(t *testing.T) {
+	gs := newFixtureGame(t)
+	gs.Seats[0].Life = -3
+	gs.Seats[0].SBA704_5a_emitted = true // simulate stale guard
+	StateBasedActions(gs)
+	if !gs.Seats[0].Lost {
+		t.Fatal("stale SBA704_5a_emitted must not block the loss")
+	}
+}
+
+// Regression: two seats simultaneously at <=0 life must both be marked
+// Lost in a single SBA cycle. Catches an iteration bug where the loop
+// short-circuited on the first kill.
+func TestSBA_704_5a_SimultaneousLosses(t *testing.T) {
+	gs := newFixtureGame(t)
+	gs.Seats[0].Life = -1
+	gs.Seats[1].Life = 0
+	StateBasedActions(gs)
+	if !gs.Seats[0].Lost || !gs.Seats[1].Lost {
+		t.Fatalf("both seats should be Lost: seat0=%v seat1=%v",
+			gs.Seats[0].Lost, gs.Seats[1].Lost)
+	}
+}
+
+// Platinum Angel keeps the player alive at negative life AND emits a
+// loss_prevented audit event so the Feynman oracle can downgrade the
+// would-be violation to "info". Covers the audit gap that left negative-
+// life seats with no event trail explaining why they survived.
+func TestSBA_704_5a_PlatinumAngelEmitsLossPrevented(t *testing.T) {
+	gs := newFixtureGame(t)
+	angel := registerAt(gs, 0, "Platinum Angel", 4, 4, "creature", "artifact")
+	_ = angel
+	gs.Seats[0].Life = -5
+	StateBasedActions(gs)
+	if gs.Seats[0].Lost {
+		t.Fatal("Platinum Angel should keep seat 0 alive at -5 life")
+	}
+	if countEvents(gs, "loss_prevented") == 0 {
+		t.Fatal("missing loss_prevented audit event for Platinum Angel save")
+	}
+	if !gs.Seats[0].SBA704_5a_emitted {
+		t.Fatal("SBA704_5a_emitted should be set as log-spam guard after first save")
+	}
+	// Re-running the SBA must NOT emit another loss_prevented entry while
+	// the player is still continuously at <=0 life.
+	preCount := countEvents(gs, "loss_prevented")
+	StateBasedActions(gs)
+	if countEvents(gs, "loss_prevented") != preCount {
+		t.Fatal("loss_prevented should be emitted at most once per drop episode")
+	}
+}
+
+// Once life recovers above 0 and drops back to <=0, the SBA must produce
+// a fresh loss_prevented entry — i.e. the spam guard resets.
+func TestSBA_704_5a_FlagResetsOnRecovery(t *testing.T) {
+	gs := newFixtureGame(t)
+	_ = registerAt(gs, 0, "Platinum Angel", 4, 4, "creature", "artifact")
+	gs.Seats[0].Life = -2
+	StateBasedActions(gs)
+	if !gs.Seats[0].SBA704_5a_emitted {
+		t.Fatal("flag should be set after first save")
+	}
+	// Lifegain back above 0 — SBA should clear the spam guard.
+	gs.Seats[0].Life = 5
+	StateBasedActions(gs)
+	if gs.Seats[0].SBA704_5a_emitted {
+		t.Fatal("flag should reset once life recovers above 0")
+	}
+	// Drop back to <=0 — fresh loss_prevented entry expected.
+	preCount := countEvents(gs, "loss_prevented")
+	gs.Seats[0].Life = -1
+	StateBasedActions(gs)
+	if countEvents(gs, "loss_prevented") <= preCount {
+		t.Fatal("expected a fresh loss_prevented entry after life dropped again")
+	}
+}
+
+// Lich's Mastery currently registers a flag but no would_lose_game
+// replacement, so the §704.5a SBA must still kill the player. This pins
+// the current (partial) behavior so a future Lich's Mastery wiring change
+// is forced to update both the registration and this test together.
+func TestSBA_704_5a_LichsMasteryFlagAloneDoesNotPrevent(t *testing.T) {
+	gs := newFixtureGame(t)
+	if gs.Flags == nil {
+		gs.Flags = map[string]int{}
+	}
+	gs.Flags["lichs_mastery_seat_0"] = 1
+	gs.Seats[0].Life = -4
+	StateBasedActions(gs)
+	if !gs.Seats[0].Lost {
+		t.Fatal("Lich's Mastery flag without a registered would_lose_game " +
+			"replacement must NOT suppress §704.5a")
+	}
+}
+
 // -----------------------------------------------------------------------------
 // §704.5b — drew from empty library → loss.
 // -----------------------------------------------------------------------------

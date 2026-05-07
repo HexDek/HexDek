@@ -236,36 +236,59 @@ func StateBasedActions(gs *GameState) bool {
 
 // sba704_5a: "If a player has 0 or less life, that player loses the game."
 // (CR §704.5a, rules file line 5453.)
+//
+// CR §704.3 mandates the SBA be re-evaluated every priority pass until no
+// change. The previous implementation gated on `!SBA704_5a_emitted`, which
+// short-circuited the check forever once the emitted flag was set — even
+// when Lost was somehow still false. The flag is now used for log-spam
+// suppression only; the dying gate is `!s.Lost` so the check always fires
+// while the player remains alive at <=0 life. The flag resets when life
+// rises back above 0 so a fresh drop produces a fresh loss_prevented entry.
 func sba704_5a(gs *GameState) bool {
 	changed := false
 	for _, s := range gs.Seats {
-		if s == nil {
+		if s == nil || s.Lost {
 			continue
 		}
-		if s.Life <= 0 && !s.SBA704_5a_emitted {
-			// §614: would_lose_game — Platinum Angel cancels.
-			if FireLoseGameEvent(gs, s.Idx) {
-				// Don't emit the SBA event or mark Lost; Platinum Angel
-				// kept the player alive at negative life.
-				continue
+		// Reset the spam-suppression flag once life is positive again so a
+		// future drop emits a new loss_prevented audit entry.
+		if s.Life > 0 {
+			if s.SBA704_5a_emitted {
+				s.SBA704_5a_emitted = false
 			}
-			s.SBA704_5a_emitted = true
-			gs.LogEvent(Event{
-				Kind:   "sba_704_5a",
-				Seat:   s.Idx,
-				Target: -1,
-				Amount: s.Life,
-				Details: map[string]interface{}{
-					"rule":   "704.5a",
-					"reason": "life_total_zero_or_less",
-				},
-			})
-			if !s.Lost {
-				s.Lost = true
-				s.LossReason = "life total 0 or less (CR 704.5a)"
-				changed = true
-			}
+			continue
 		}
+		// §614: would_lose_game — Platinum Angel etc. cancel.
+		if FireLoseGameEvent(gs, s.Idx) {
+			if !s.SBA704_5a_emitted {
+				gs.LogEvent(Event{
+					Kind:   "loss_prevented",
+					Seat:   s.Idx,
+					Target: -1,
+					Amount: s.Life,
+					Details: map[string]interface{}{
+						"rule":   "704.5a",
+						"reason": "would_lose_game_replaced",
+					},
+				})
+				s.SBA704_5a_emitted = true
+			}
+			continue
+		}
+		s.SBA704_5a_emitted = true
+		gs.LogEvent(Event{
+			Kind:   "sba_704_5a",
+			Seat:   s.Idx,
+			Target: -1,
+			Amount: s.Life,
+			Details: map[string]interface{}{
+				"rule":   "704.5a",
+				"reason": "life_total_zero_or_less",
+			},
+		})
+		s.Lost = true
+		s.LossReason = "life total 0 or less (CR 704.5a)"
+		changed = true
 	}
 	return changed
 }

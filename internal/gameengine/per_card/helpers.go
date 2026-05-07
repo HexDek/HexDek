@@ -291,6 +291,16 @@ func createPermanent(gs *gameengine.GameState, seat int, card *gameengine.Card, 
 	if !gameengine.CardCanEnterBattlefield(card) {
 		return nil
 	}
+	// Dedup: if MoveCard already placed this card on THIS seat's
+	// battlefield, return the existing Permanent rather than creating a
+	// duplicate. Only checks the target seat so control-change patterns
+	// (MoveCard to owner's seat, then ETB under a different controller)
+	// still work correctly.
+	for _, p := range gs.Seats[seat].Battlefield {
+		if p != nil && p.Card == card {
+			return p
+		}
+	}
 	// Sweep from the OWNER's private zones (controller and owner can
 	// differ on stolen permanents; reanimation pulls from the owner's
 	// graveyard regardless of who casts the reanimate).

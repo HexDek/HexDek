@@ -347,11 +347,11 @@ func TestRepl_PlatinumAngel_LossAfterRemoval(t *testing.T) {
 	if gs.Seats[0].Lost {
 		t.Fatal("still alive while Angel present")
 	}
-	// Angel dies — SBA should now flag Lost.
+	// Angel dies — SBA should now flag Lost without any manual flag reset.
+	// Per CR §704.3 + the §704.5a fix, the SBA re-evaluates every pass
+	// while the player is alive at <=0 life.
 	gs.removePermanent(angel)
 	gs.UnregisterReplacementsForPermanent(angel)
-	// Reset the "already emitted" guard so sba704_5a can re-fire.
-	gs.Seats[0].SBA704_5a_emitted = false
 	StateBasedActions(gs)
 	if !gs.Seats[0].Lost {
 		t.Fatal("without Angel, seat 0 should lose to negative life")
