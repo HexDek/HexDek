@@ -111,9 +111,10 @@ func TestFeynman_NoWinner(t *testing.T) {
 	}
 }
 
-func TestFeynman_TurnCapped_DowngradeToInfo(t *testing.T) {
+func TestFeynman_TurnCapped_PartialLosersIsWarning(t *testing.T) {
 	gs := newFeynmanGame(t, 4)
-	// Turn-capped game: 2 seats lost (tied leaders), expected 3.
+	// Turn-capped game with only 2 of 3 expected seats lost is now a real
+	// bug (runner always resolves N-1 losers). Should be flagged as warning.
 	gs.Seats[1].Lost = true
 	gs.Seats[2].Lost = true
 	gs.Turn = 80
@@ -123,13 +124,13 @@ func TestFeynman_TurnCapped_DowngradeToInfo(t *testing.T) {
 	for _, v := range result.Violations {
 		if v.Rule == "game_end" {
 			found = true
-			if v.Severity != "info" {
-				t.Errorf("turn-capped game with partial losers should be info, got %s", v.Severity)
+			if v.Severity != "warning" {
+				t.Errorf("turn-capped partial losers should be warning, got %s", v.Severity)
 			}
 		}
 	}
 	if !found {
-		t.Error("expected game_end violation (info) for turn-capped game")
+		t.Error("expected game_end violation for turn-capped game with partial losers")
 	}
 }
 

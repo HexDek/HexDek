@@ -249,18 +249,13 @@ func checkExactlyOneWinner(gs *gameengine.GameState, r *OracleResult) {
 			severity = "critical"
 		}
 
-		// Games that hit the turn cap (80 turns) are force-stopped before a
-		// natural conclusion. In turn_cap_tie scenarios, multiple living seats
-		// remain (tied on life), so fewer than N-1 seats are lost. This is
-		// expected behavior, not a bug — downgrade to "info" unless truly
-		// pathological (nobody lost or everyone lost).
+		// Turn-cap games now resolve a winner via seat-order tiebreak,
+		// so they should always satisfy N-1 Lost. No downgrade needed.
 		turnCapped := gs.Turn >= 80
 		if !turnCapped && gs.Flags != nil && gs.Flags["turn_capped"] > 0 {
 			turnCapped = true
 		}
-		if turnCapped && lost < expected && severity != "critical" {
-			severity = "info"
-		}
+		_ = turnCapped
 
 		r.Violations = append(r.Violations, OracleViolation{
 			Rule:        "game_end",

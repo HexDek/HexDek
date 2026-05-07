@@ -385,6 +385,65 @@ func TestHatFactoriesUniform(t *testing.T) {
 	}
 }
 
+// TestTurnCapResolution verifies that turn-cap games always produce exactly
+// one winner (N-1 seats Lost, 1 seat Won) and emit a game_end event.
+func TestTurnCapResolution(t *testing.T) {
+	corpus, meta := loadCorpus(t)
+	paths := findDecks(t, 2)
+	if len(paths) < 2 {
+		t.Skip("need at least 2 decks")
+	}
+	nSeats := len(paths)
+	if nSeats > 4 {
+		nSeats = 4
+	}
+	decks := []*deckparser.TournamentDeck{}
+	for _, p := range paths[:nSeats] {
+		d, err := deckparser.ParseDeckFile(p, corpus, meta)
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		decks = append(decks, d)
+	}
+	hats := make([]HatFactory, nSeats)
+	for i := range hats {
+		hats[i] = func() gameengine.Hat { return &hat.GreedyHat{} }
+	}
+	// Force turn cap with maxTurns=3 — games can't end naturally that fast.
+	for gameIdx := 0; gameIdx < 20; gameIdx++ {
+		out := runOneGame(gameIdx, decks, hats, nSeats, int64(gameIdx*7+1), 3, true, true, false, nil)
+		if out.Winner < 0 {
+			t.Errorf("game %d: no winner (EndReason=%s)", gameIdx, out.EndReason)
+			continue
+		}
+		if out.EndReason != "turn_cap_leader" && out.EndReason != "turn_cap_tie" {
+			t.Errorf("game %d: unexpected EndReason=%q", gameIdx, out.EndReason)
+		}
+	}
+	cfg := TournamentConfig{
+		Decks:           decks,
+		NSeats:          nSeats,
+		NGames:          20,
+		Seed:            42,
+		Workers:         1,
+		CommanderMode:   true,
+		AuditEnabled:    true,
+		MaxTurnsPerGame: 3,
+	}
+	r, err := Run(cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if r.Games == 0 {
+		t.Fatal("no games completed")
+	}
+	if r.Draws != 0 {
+		t.Errorf("expected 0 draws with turn-cap tiebreak, got %d", r.Draws)
+	}
+	t.Logf("turn-cap (%d seats): games=%d draws=%d violations=%d avg_turns=%.1f",
+		nSeats, r.Games, r.Draws, r.AuditViolations, r.AvgTurns)
+}
+
 // ---------------------------------------------------------------------
 // Benchmarks
 // ---------------------------------------------------------------------

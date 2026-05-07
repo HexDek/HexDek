@@ -467,7 +467,12 @@ func runOneGame(gameIdx int, decks []*deckparser.TournamentDeck, hats []HatFacto
 		}
 	}
 	if !ended {
-		// Turn-cap tiebreak: highest-life living seat wins.
+		if gs.Flags == nil {
+			gs.Flags = make(map[string]int)
+		}
+		gs.Flags["turn_capped"] = 1
+		gs.Flags["ended"] = 1
+
 		living := []int{}
 		for i, s := range gs.Seats {
 			if s != nil && !s.Lost {
@@ -476,6 +481,13 @@ func runOneGame(gameIdx int, decks []*deckparser.TournamentDeck, hats []HatFacto
 		}
 		if len(living) == 0 {
 			out.EndReason = "turn_cap_all_dead"
+			gs.LogEvent(gameengine.Event{
+				Kind: "game_end", Seat: -1, Target: -1,
+				Details: map[string]interface{}{
+					"reason": "turn_cap_all_dead",
+					"winner": -1,
+				},
+			})
 		} else {
 			topLife := gs.Seats[living[0]].Life
 			for _, i := range living[1:] {
@@ -489,23 +501,35 @@ func runOneGame(gameIdx int, decks []*deckparser.TournamentDeck, hats []HatFacto
 					leaders = append(leaders, i)
 				}
 			}
-			// Eliminate every living seat below the top life. When there's
-			// exactly one leader the remaining survivor count drops to one
-			// (Feynman's checkExactlyOneWinner invariant: N-1 seats Lost).
-			// Tied leaders stay alive — the result is genuinely a draw.
 			for _, i := range living {
 				if gs.Seats[i].Life < topLife {
 					gs.Seats[i].Lost = true
 					gs.Seats[i].LossReason = "turn_cap"
 				}
 			}
-			if len(leaders) == 1 {
-				out.Winner = leaders[0]
-				out.WinnerCommanderIdx = originalIdxForSeat[leaders[0]]
-				out.EndReason = "turn_cap_leader"
-			} else {
+			// Seat-order tiebreak: lowest seat index among tied leaders wins.
+			winner := leaders[0]
+			if len(leaders) > 1 {
+				for _, i := range leaders[1:] {
+					gs.Seats[i].Lost = true
+					gs.Seats[i].LossReason = "turn_cap_tie"
+				}
 				out.EndReason = "turn_cap_tie"
+			} else {
+				out.EndReason = "turn_cap_leader"
 			}
+			out.Winner = winner
+			out.WinnerCommanderIdx = originalIdxForSeat[winner]
+			gs.Seats[winner].Won = true
+			gs.Flags["winner"] = winner
+			gs.LogEvent(gameengine.Event{
+				Kind: "game_end", Seat: winner, Target: -1,
+				Details: map[string]interface{}{
+					"reason": out.EndReason,
+					"winner": winner,
+					"life":   topLife,
+				},
+			})
 		}
 	}
 	// Fill any still-alive seats into the last elimination slot so the
