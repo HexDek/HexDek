@@ -148,6 +148,75 @@ func TestMDFC_ValakutAwakening_BackFaceLandHasOnlyLandTypes(t *testing.T) {
 	}
 }
 
+// reverseMDFCLand builds a synthetic reverse-MDFC card mirroring the
+// Final Fantasy land cycle (Midgar/Lindblum/Ishgard/Jidoor/Zanarkand):
+// front face is a printed land, back face is a sorcery. The combined
+// type_line "Land // Sorcery" parses into Types=["land","//","sorcery"]
+// — the leaked "sorcery" token is what trips §205.2 / Feynman's
+// permanent_types invariant when the land enters the battlefield.
+func reverseMDFCLand(frontName, backName string, frontTypes []string, frontTypeLine string) *gameengine.Card {
+	combinedTypes := append(append([]string{}, frontTypes...), "//", "sorcery")
+	return &gameengine.Card{
+		Name:             frontName + " // " + backName,
+		Types:            combinedTypes,
+		TypeLine:         frontTypeLine + " // sorcery",
+		CMC:              0,
+		BackFaceName:     backName,
+		BackFaceCMC:      4,
+		BackFaceTypes:    []string{"sorcery"},
+		BackFaceTypeLine: "sorcery",
+	}
+}
+
+// TestMDFC_ReverseMDFC_FFLandsStripBackFaceSpellTypes covers the Final
+// Fantasy reverse-MDFC land cycle (front=land/back=sorcery). After
+// playing the land, the permanent must carry only the front-face land
+// types — no leaked "sorcery" or "//" pseudo-token. Pre-fix, tryPlayLand
+// only swapped forward MDFCs (gated by MDFCBackFaceIsLand) and the
+// reverse-MDFC leak survived, producing 339 permanent_types violations
+// in the live grinder.
+func TestMDFC_ReverseMDFC_FFLandsStripBackFaceSpellTypes(t *testing.T) {
+	cases := []struct {
+		front, back   string
+		frontTypes    []string
+		frontTypeLine string
+	}{
+		{"Midgar, City of Mako", "Reactor Raid",
+			[]string{"land"}, "land"},
+		{"Lindblum, Home of Theater Ship", "Falcon's Aerial Strike",
+			[]string{"land"}, "land"},
+		{"Ishgard, Holy See", "Heavensward Pilgrimage",
+			[]string{"land"}, "land"},
+		{"Jidoor, Opera Capital", "Dancing Diva's Aria",
+			[]string{"land"}, "land"},
+		{"Zanarkand, Forgotten Ruins", "Final Summoning",
+			[]string{"land"}, "land"},
+	}
+	for _, c := range cases {
+		t.Run(c.front, func(t *testing.T) {
+			card := reverseMDFCLand(c.front, c.back, c.frontTypes, c.frontTypeLine)
+			if !gameengine.IsReverseMDFC(card) {
+				t.Fatalf("test setup: %q should be reverse MDFC", c.front)
+			}
+			_, perm := playMDFCLandFromHand(t, card)
+
+			for _, ty := range perm.Card.Types {
+				if ty == "sorcery" || ty == "instant" {
+					t.Errorf("reverse MDFC %q must not carry %q on the battlefield; got %v",
+						c.front, ty, perm.Card.Types)
+				}
+				if ty == "//" {
+					t.Errorf("reverse MDFC %q must not carry the parser-leaked '//' token; got %v",
+						c.front, perm.Card.Types)
+				}
+			}
+			if !perm.IsLand() {
+				t.Errorf("reverse MDFC %q must remain IsLand()=true", c.front)
+			}
+		})
+	}
+}
+
 // TestMDFC_BackFaceSwap_DoesNotAffectVanillaLand — a sanity check that
 // the swap logic only fires for actual MDFCs. A plain basic land in
 // hand must enter the battlefield with its front-face identity intact;
