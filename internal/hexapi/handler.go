@@ -506,6 +506,10 @@ func (h *Handler) handleUpdateDeck(w http.ResponseWriter, r *http.Request) {
 	}
 	go h.registerDeckVersion(owner, id, cmdrCard, cardNames)
 
+	// Auto-trigger Freya analysis on every deck update.
+	h.publishDeck(owner+"/"+id, deckEvent{Event: "freya_started", Data: `{"status":"analyzing"}`})
+	go h.runFreya(deckPath)
+
 	writeJSON(w, map[string]any{
 		"id":             id,
 		"owner":          owner,
@@ -1015,6 +1019,9 @@ func (h *Handler) handleImportDeck(w http.ResponseWriter, r *http.Request) {
 		Source:    "paste",
 		CardCount: len(cards),
 	})
+
+	// Auto-trigger Freya analysis on import.
+	go h.runFreya(deckPath)
 
 	writeJSON(w, map[string]any{
 		"id":             finalID,

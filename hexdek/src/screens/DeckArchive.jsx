@@ -8,7 +8,7 @@ import MatchupsPanel from '../components/MatchupsPanel'
 import ManaCost from '../components/ManaCost'
 import { AchievementsPanel, BadgeShowcase } from '../components/AchievementsPanel'
 import { toast } from '../components/Toast'
-import { api, cardArtUrl, cardImageUrl } from '../services/api'
+import { api, cardArtUrl, cardImageUrl, API_BASE } from '../services/api'
 import { useArtContrast } from '../hooks/useArtContrast'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useAuth } from '../context/AuthContext'
@@ -382,7 +382,6 @@ export default function DeckArchive() {
     api.getDeckAnalysis(`${ownerId}/${deckId}`).then(data => {
       if (data.status === 'analyzing') {
         setAnalyzing(true)
-        setTimeout(() => fetchAnalysis(ownerId, deckId), 3000)
       } else {
         setAnalysis(data)
         setAnalyzing(false)
@@ -408,7 +407,6 @@ export default function DeckArchive() {
         const data = analysisRes.value
         if (data.status === 'analyzing') {
           setAnalyzing(true)
-          setTimeout(() => fetchAnalysis(owner, id), 3000)
         } else {
           setAnalysis(data)
         }
@@ -444,6 +442,21 @@ export default function DeckArchive() {
       .then(rows => { if (!cancelled) setSimilarDecks(Array.isArray(rows) ? rows : []) })
       .catch(() => { if (!cancelled) setSimilarDecks([]) })
     return () => { cancelled = true }
+  }, [owner, id])
+
+  // SSE listener — auto-refresh analysis when Freya completes.
+  useEffect(() => {
+    if (!owner || !id) return
+    const es = new EventSource(`${API_BASE}/api/decks/${owner}/${id}/events`)
+    es.addEventListener('freya_started', () => setAnalyzing(true))
+    es.addEventListener('freya_complete', () => {
+      api.getDeckAnalysis(`${owner}/${id}`).then(data => {
+        setAnalysis(data)
+        setAnalyzing(false)
+      }).catch(() => setAnalyzing(false))
+    })
+    es.onerror = () => {}
+    return () => es.close()
   }, [owner, id])
 
   const deckName = deck?.custom_name || deck?.commander || id?.replace(/_/g, ' ').toUpperCase() || 'DECK'
@@ -803,14 +816,7 @@ export default function DeckArchive() {
                 if (!cards.length) return
                 setExportOpen(true)
               }}>EXPORT</Btn>
-              <Btn ghost arrow="↗" onClick={() => {
-                if (!owner || !id) return
-                setAnalyzing(true)
-                trackEvent('run_freya', { deck: `${owner}/${id}` })
-                api.runAnalysis(`${owner}/${id}`).then(() => {
-                  setTimeout(() => fetchAnalysis(owner, id), 3000)
-                }).catch(() => setAnalyzing(false))
-              }}>{analyzing ? 'ANALYZING...' : 'RUN FREYA'}</Btn>
+              {analyzing && <Tag solid kind="info">ANALYZING...</Tag>}
               {owner && id && (
                 <Btn ghost arrow="↗" onClick={() => navigate(`/forge?deck=${owner}/${id}`)}>OPEN IN FORGE</Btn>
               )}
@@ -976,6 +982,7 @@ export default function DeckArchive() {
                   api.updateDeck(`${owner}/${id}`, editText).then(updated => {
                     setEditing(false)
                     setSaving(false)
+                    setAnalyzing(true)
                     api.getDeck(`${owner}/${id}`).then(setDeck)
                     api.getDeckVersions(`${owner}/${id}`).then(setVersions).catch(() => {})
                   }).catch(() => setSaving(false))

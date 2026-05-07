@@ -350,15 +350,7 @@ function ImportModalInner({ onClose, onImported, navigate, user }) {
         source: mode,
       })
 
-      // Trigger Freya analysis
       const newID = result?.id
-      if (newID) {
-        try {
-          await api.runAnalysis(newID)
-        } catch {
-          // Non-fatal — analysis can be triggered later
-        }
-      }
 
       setPhase('done')
       toast.success(`DECK IMPORTED: ${result?.name || name || 'NEW DECK'}`)
