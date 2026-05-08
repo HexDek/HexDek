@@ -1,18 +1,16 @@
 // hexdek-oracle-sync — Pull fresh Scryfall oracle bulk data, diff against
-// the local snapshot, re-parse changed cards, and run Thor on just that
-// subset.
+// the local snapshot, flag cards needing AST re-parse, and run Thor on the
+// changed subset.
 //
-// The local source of truth is data/rules/oracle-cards.json. The fresh
-// download lands at data/rules/oracle-cards-new.json and is only swapped
-// in when --promote is passed. The diff report is always written to
-// data/rules/oracle-sync-report.md.
+// The local source of truth is data/rules/oracle-cards.json.
 //
 // Usage:
 //
-//	go run ./cmd/hexdek-oracle-sync/                 # download + diff + parse + Thor
-//	go run ./cmd/hexdek-oracle-sync/ --dry-run       # download + diff only
-//	go run ./cmd/hexdek-oracle-sync/ --promote       # also replace the snapshot
-//	go run ./cmd/hexdek-oracle-sync/ --verbose       # print changed cards
+//	hexdek-oracle-sync --live          # download, diff, update, re-parse, Thor
+//	hexdek-oracle-sync --dry-run       # download + diff only, no writes
+//	hexdek-oracle-sync --diff-only     # compare existing local files only
+//	hexdek-oracle-sync --report        # show last sync report
+//	hexdek-oracle-sync --live --verbose # print changed cards to stdout
 package main
 
 import (
@@ -28,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -35,10 +34,14 @@ import (
 
 const (
 	scryfallBulkAPI   = "https://api.scryfall.com/bulk-data"
-	userAgent         = "HexDek-OracleSync/1.0"
+	userAgent         = "HexDek/1.0"
 	scryfallRateLimit = 100 * time.Millisecond
 	httpTimeout       = 10 * time.Minute
 )
+
+// ────────────────────────────────────────────────────────────────────────
+// Domain types
+// ────────────────────────────────────────────────────────────────────────
 
 type bulkInfo struct {
 	Type        string `json:"type"`
@@ -59,6 +62,9 @@ type card struct {
 	OracleText string     `json:"oracle_text"`
 	TypeLine   string     `json:"type_line"`
 	ManaCost   string     `json:"mana_cost"`
+	Power      string     `json:"power"`
+	Toughness  string     `json:"toughness"`
+	Keywords   []string   `json:"keywords"`
 	Layout     string     `json:"layout"`
 	CardFaces  []cardFace `json:"card_faces,omitempty"`
 }
@@ -68,6 +74,26 @@ type cardFace struct {
 	OracleText string `json:"oracle_text"`
 	TypeLine   string `json:"type_line"`
 	ManaCost   string `json:"mana_cost"`
+	Power      string `json:"power"`
+	Toughness  string `json:"toughness"`
+}
+
+// CardDiff represents a single card that changed between snapshots.
+type CardDiff struct {
+	Name          string
+	Kind          string // "added", "removed", "changed"
+	OldOracle     string
+	NewOracle     string
+	ChangedFields []string
+}
+
+type cardChange struct {
+	OracleID string
+	Name     string
+	Kind     string // "added", "removed", "changed"
+	Fields   []fieldChange
+	OldRaw   json.RawMessage
+	NewRaw   json.RawMessage
 }
 
 type fieldChange struct {
@@ -76,46 +102,102 @@ type fieldChange struct {
 	New   string
 }
 
-type cardChange struct {
-	OracleID string
-	Name     string
-	Fields   []fieldChange
-	OldRaw   json.RawMessage
-	NewRaw   json.RawMessage
+// ToCardDiff converts internal cardChange to the public CardDiff type.
+func (cc cardChange) ToCardDiff() CardDiff {
+	fields := make([]string, 0, len(cc.Fields))
+	for _, f := range cc.Fields {
+		fields = append(fields, f.Field)
+	}
+	var oldOracle, newOracle string
+	for _, f := range cc.Fields {
+		if f.Field == "oracle_text" {
+			oldOracle = f.Old
+			newOracle = f.New
+			break
+		}
+	}
+	return CardDiff{
+		Name:          cc.Name,
+		Kind:          cc.Kind,
+		OldOracle:     oldOracle,
+		NewOracle:     newOracle,
+		ChangedFields: fields,
+	}
 }
 
+// ────────────────────────────────────────────────────────────────────────
+// Entry point
+// ────────────────────────────────────────────────────────────────────────
+
 func main() {
-	dryRun := flag.Bool("dry-run", false, "download and diff only — skip re-parse and Thor")
-	promote := flag.Bool("promote", false, "after validation, replace the local oracle-cards.json with the fresh download")
+	live := flag.Bool("live", false, "download from Scryfall, diff, update local files")
+	dryRun := flag.Bool("dry-run", false, "download + diff only, no writes")
+	diffOnly := flag.Bool("diff-only", false, "compare existing local files only (no download)")
+	report := flag.Bool("report", false, "show last sync report")
 	verbose := flag.Bool("verbose", false, "print changed cards to stdout")
 	outputDir := flag.String("output", "data/rules", "directory holding oracle-cards.json")
-	skipDownload := flag.Bool("skip-download", false, "reuse oracle-cards-new.json from a previous run instead of re-downloading")
+	reportDir := flag.String("report-dir", "data", "directory for oracle-sync-report.md")
 	skipThor := flag.Bool("skip-thor", false, "diff and re-parse only — skip the Thor subset run")
 	flag.Parse()
+
+	// Mutual exclusion
+	modeCount := 0
+	if *live {
+		modeCount++
+	}
+	if *dryRun {
+		modeCount++
+	}
+	if *diffOnly {
+		modeCount++
+	}
+	if *report {
+		modeCount++
+	}
+	if modeCount == 0 {
+		fmt.Fprintln(os.Stderr, "error: specify one of --live, --dry-run, --diff-only, or --report")
+		flag.Usage()
+		os.Exit(1)
+	}
+	if modeCount > 1 {
+		fmt.Fprintln(os.Stderr, "error: --live, --dry-run, --diff-only, and --report are mutually exclusive")
+		flag.Usage()
+		os.Exit(1)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := run(ctx, *outputDir, *dryRun, *promote, *verbose, *skipDownload, *skipThor); err != nil {
+	if *report {
+		reportPath := filepath.Join(*reportDir, "oracle-sync-report.md")
+		data, err := os.ReadFile(reportPath)
+		if err != nil {
+			log.Fatalf("oracle-sync: cannot read report: %v", err)
+		}
+		fmt.Print(string(data))
+		return
+	}
+
+	if err := run(ctx, *outputDir, *reportDir, *live, *dryRun, *diffOnly, *verbose, *skipThor); err != nil {
 		log.Fatalf("oracle-sync: %v", err)
 	}
 }
 
-func run(ctx context.Context, outputDir string, dryRun, promote, verbose, skipDownload, skipThor bool) error {
+func run(ctx context.Context, outputDir, reportDir string, live, dryRun, diffOnly, verbose, skipThor bool) error {
 	currentPath := filepath.Join(outputDir, "oracle-cards.json")
 	newPath := filepath.Join(outputDir, "oracle-cards-new.json")
-	reportPath := filepath.Join(outputDir, "oracle-sync-report.md")
+	reportPath := filepath.Join(reportDir, "oracle-sync-report.md")
 
 	if _, err := os.Stat(currentPath); err != nil {
 		return fmt.Errorf("read current snapshot %s: %w", currentPath, err)
 	}
 
-	// ─── Step 1: pull bulk data ────────────────────────────────────────
-	if skipDownload {
+	// ─── Step 1: download (unless --diff-only) ────────────────────────
+	if diffOnly {
 		if _, err := os.Stat(newPath); err != nil {
-			return fmt.Errorf("--skip-download set but %s is missing: %w", newPath, err)
+			return fmt.Errorf("--diff-only set but %s is missing: %w", newPath, err)
 		}
-		log.Printf("skipping download — reusing %s", newPath)
+		log.Printf("diff-only mode — reusing %s", newPath)
 	} else {
 		info, err := fetchBulkInfo(ctx)
 		if err != nil {
@@ -147,21 +229,36 @@ func run(ctx context.Context, outputDir string, dryRun, promote, verbose, skipDo
 
 	changes := diffCards(oldCards, newCards)
 	log.Printf("changes detected: %d cards", len(changes))
+
+	// Compute summary counts
+	var addedCount, removedCount, changedCount int
+	for _, ch := range changes {
+		switch ch.Kind {
+		case "added":
+			addedCount++
+		case "removed":
+			removedCount++
+		case "changed":
+			changedCount++
+		}
+	}
+	log.Printf("  added: %d, removed: %d, changed: %d", addedCount, removedCount, changedCount)
+
 	if verbose {
 		for _, ch := range changes {
-			fmt.Printf("  %s\n", ch.Name)
+			fmt.Printf("  [%s] %s\n", ch.Kind, ch.Name)
 			for _, f := range ch.Fields {
-				fmt.Printf("    %s: %q → %q\n", f.Field, ch.truncate(f.Old), ch.truncate(f.New))
+				fmt.Printf("    %s: %q → %q\n", f.Field, truncateField(f.Old), truncateField(f.New))
 			}
 		}
 	}
 
-	// ─── Step 3 & 4: parse + Thor (skipped on --dry-run) ───────────────
+	// ─── Step 3: re-parse + Thor (--live mode only) ────────────────────
 	var (
 		parseImpacts []parseImpact
 		thorReport   string
 	)
-	if !dryRun && len(changes) > 0 {
+	if live && len(changes) > 0 {
 		log.Printf("re-parsing %d changed cards via scripts/parser.py", len(changes))
 		parseImpacts, err = reparseChanged(ctx, changes)
 		if err != nil {
@@ -189,25 +286,36 @@ func run(ctx context.Context, outputDir string, dryRun, promote, verbose, skipDo
 		}
 	}
 
-	// ─── Step 7: write report ──────────────────────────────────────────
-	if err := writeReport(reportPath, len(newCards), changes, parseImpacts, thorReport, dryRun); err != nil {
+	// ─── Step 4: write report ──────────────────────────────────────────
+	if err := writeReport(reportPath, len(oldCards), len(newCards), changes, parseImpacts, thorReport, dryRun || diffOnly); err != nil {
 		return fmt.Errorf("write report: %w", err)
 	}
 	log.Printf("report: %s", reportPath)
 
-	// ─── Step 5: promote ───────────────────────────────────────────────
-	if promote {
+	// ─── Step 5: update local file (--live only) ───────────────────────
+	if live {
 		if err := os.Rename(newPath, currentPath); err != nil {
 			return fmt.Errorf("promote: rename %s → %s: %w", newPath, currentPath, err)
 		}
-		log.Printf("promoted: %s now reflects the fresh download", currentPath)
+		log.Printf("updated: %s now reflects the fresh download", currentPath)
+
+		// Flag cards needing AST re-parse
+		needReparse := 0
+		for _, ch := range changes {
+			if ch.Kind == "added" || ch.Kind == "changed" {
+				needReparse++
+			}
+		}
+		if needReparse > 0 {
+			log.Printf("REPARSE NEEDED: %d cards need AST re-parse (run hexdek-thor to rebuild)", needReparse)
+		}
 	}
 
 	return nil
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// Scryfall bulk download
+// Scryfall bulk download (streaming — no 170MB in memory)
 // ────────────────────────────────────────────────────────────────────────
 
 func fetchBulkInfo(ctx context.Context) (*bulkInfo, error) {
@@ -329,6 +437,13 @@ func loadOracle(path string) (map[string]loadedCard, error) {
 	return out, nil
 }
 
+// wsNorm collapses whitespace runs to single spaces and trims.
+var wsRe = regexp.MustCompile(`\s+`)
+
+func normalizeWS(s string) string {
+	return strings.TrimSpace(wsRe.ReplaceAllString(s, " "))
+}
+
 func diffCards(oldCards, newCards map[string]loadedCard) []cardChange {
 	var changes []cardChange
 	for oid, nc := range newCards {
@@ -337,6 +452,7 @@ func diffCards(oldCards, newCards map[string]loadedCard) []cardChange {
 			changes = append(changes, cardChange{
 				OracleID: oid,
 				Name:     nc.c.Name,
+				Kind:     "added",
 				Fields:   []fieldChange{{Field: "added", Old: "", New: nc.c.Name}},
 				NewRaw:   nc.raw,
 			})
@@ -349,6 +465,7 @@ func diffCards(oldCards, newCards map[string]loadedCard) []cardChange {
 		changes = append(changes, cardChange{
 			OracleID: oid,
 			Name:     nc.c.Name,
+			Kind:     "changed",
 			Fields:   fields,
 			OldRaw:   oc.raw,
 			NewRaw:   nc.raw,
@@ -359,6 +476,7 @@ func diffCards(oldCards, newCards map[string]loadedCard) []cardChange {
 			changes = append(changes, cardChange{
 				OracleID: oid,
 				Name:     oc.c.Name,
+				Kind:     "removed",
 				Fields:   []fieldChange{{Field: "removed", Old: oc.c.Name, New: ""}},
 				OldRaw:   oc.raw,
 			})
@@ -372,17 +490,29 @@ func diffCards(oldCards, newCards map[string]loadedCard) []cardChange {
 
 func compareFields(oldC, newC card) []fieldChange {
 	var fc []fieldChange
-	if oldC.Name != newC.Name {
-		fc = append(fc, fieldChange{"name", oldC.Name, newC.Name})
-	}
-	if oldC.OracleText != newC.OracleText {
+	if normalizeWS(oldC.OracleText) != normalizeWS(newC.OracleText) {
 		fc = append(fc, fieldChange{"oracle_text", oldC.OracleText, newC.OracleText})
 	}
-	if oldC.TypeLine != newC.TypeLine {
+	if normalizeWS(oldC.TypeLine) != normalizeWS(newC.TypeLine) {
 		fc = append(fc, fieldChange{"type_line", oldC.TypeLine, newC.TypeLine})
 	}
-	if oldC.ManaCost != newC.ManaCost {
+	if normalizeWS(oldC.ManaCost) != normalizeWS(newC.ManaCost) {
 		fc = append(fc, fieldChange{"mana_cost", oldC.ManaCost, newC.ManaCost})
+	}
+	if normalizeWS(oldC.Power) != normalizeWS(newC.Power) {
+		fc = append(fc, fieldChange{"power", oldC.Power, newC.Power})
+	}
+	if normalizeWS(oldC.Toughness) != normalizeWS(newC.Toughness) {
+		fc = append(fc, fieldChange{"toughness", oldC.Toughness, newC.Toughness})
+	}
+	if normalizeWS(oldC.Layout) != normalizeWS(newC.Layout) {
+		fc = append(fc, fieldChange{"layout", oldC.Layout, newC.Layout})
+	}
+	// Compare keywords (sorted for stability)
+	oldKW := sortedKeywords(oldC.Keywords)
+	newKW := sortedKeywords(newC.Keywords)
+	if oldKW != newKW {
+		fc = append(fc, fieldChange{"keywords", oldKW, newKW})
 	}
 	// Dual-faced cards stash the real text under card_faces. Compare each
 	// face by index — adding/removing a face counts as a structural change.
@@ -394,25 +524,39 @@ func compareFields(oldC, newC card) []fieldChange {
 		})
 	} else {
 		for i := range oldC.CardFaces {
-			if oldC.CardFaces[i].OracleText != newC.CardFaces[i].OracleText {
+			if normalizeWS(oldC.CardFaces[i].OracleText) != normalizeWS(newC.CardFaces[i].OracleText) {
 				fc = append(fc, fieldChange{
 					fmt.Sprintf("card_faces[%d].oracle_text", i),
 					oldC.CardFaces[i].OracleText,
 					newC.CardFaces[i].OracleText,
 				})
 			}
-			if oldC.CardFaces[i].TypeLine != newC.CardFaces[i].TypeLine {
+			if normalizeWS(oldC.CardFaces[i].TypeLine) != normalizeWS(newC.CardFaces[i].TypeLine) {
 				fc = append(fc, fieldChange{
 					fmt.Sprintf("card_faces[%d].type_line", i),
 					oldC.CardFaces[i].TypeLine,
 					newC.CardFaces[i].TypeLine,
 				})
 			}
-			if oldC.CardFaces[i].ManaCost != newC.CardFaces[i].ManaCost {
+			if normalizeWS(oldC.CardFaces[i].ManaCost) != normalizeWS(newC.CardFaces[i].ManaCost) {
 				fc = append(fc, fieldChange{
 					fmt.Sprintf("card_faces[%d].mana_cost", i),
 					oldC.CardFaces[i].ManaCost,
 					newC.CardFaces[i].ManaCost,
+				})
+			}
+			if normalizeWS(oldC.CardFaces[i].Power) != normalizeWS(newC.CardFaces[i].Power) {
+				fc = append(fc, fieldChange{
+					fmt.Sprintf("card_faces[%d].power", i),
+					oldC.CardFaces[i].Power,
+					newC.CardFaces[i].Power,
+				})
+			}
+			if normalizeWS(oldC.CardFaces[i].Toughness) != normalizeWS(newC.CardFaces[i].Toughness) {
+				fc = append(fc, fieldChange{
+					fmt.Sprintf("card_faces[%d].toughness", i),
+					oldC.CardFaces[i].Toughness,
+					newC.CardFaces[i].Toughness,
 				})
 			}
 		}
@@ -420,7 +564,17 @@ func compareFields(oldC, newC card) []fieldChange {
 	return fc
 }
 
-func (cc cardChange) truncate(s string) string {
+func sortedKeywords(kws []string) string {
+	if len(kws) == 0 {
+		return ""
+	}
+	cp := make([]string, len(kws))
+	copy(cp, kws)
+	sort.Strings(cp)
+	return strings.Join(cp, ", ")
+}
+
+func truncateField(s string) string {
 	s = strings.ReplaceAll(s, "\n", " ↵ ")
 	if len(s) > 80 {
 		return s[:77] + "..."
@@ -442,12 +596,6 @@ type parseImpact struct {
 	ParseErr  string
 }
 
-// pyParseHelper is fed the changed cards as JSONL on stdin and emits one
-// JSON line per card per version with the structural signature.
-// We use repr(ast.abilities) — not signature() — because signature is a
-// structural fingerprint that elides numeric parameters. A "deals 3
-// damage" → "deals 4 damage" errata would have the same signature, so we
-// need the full repr to detect parameter-level changes.
 const pyParseHelper = `
 import json, sys
 from pathlib import Path
@@ -483,9 +631,6 @@ for line in sys.stdin:
 `
 
 func reparseChanged(ctx context.Context, changes []cardChange) ([]parseImpact, error) {
-	// Build one JSONL stream of (version, oracle_id, raw card dict). Python
-	// loads the parser once and consumes every entry — far cheaper than
-	// shelling out per card and reloading the 165MB oracle file each time.
 	cmd := exec.CommandContext(ctx, "python3", "-c", pyParseHelper)
 	cmd.Stderr = os.Stderr
 
@@ -501,7 +646,6 @@ func reparseChanged(ctx context.Context, changes []cardChange) ([]parseImpact, e
 		return nil, err
 	}
 
-	// Feed both versions of every changed card.
 	go func() {
 		defer stdin.Close()
 		bw := bufio.NewWriter(stdin)
@@ -516,7 +660,7 @@ func reparseChanged(ctx context.Context, changes []cardChange) ([]parseImpact, e
 		}
 	}()
 
-	results := make(map[string]map[string]parseEntry) // oracle_id → version → entry
+	results := make(map[string]map[string]parseEntry)
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 1<<20), 1<<22)
 	for scanner.Scan() {
@@ -567,15 +711,13 @@ type parseEntry struct {
 }
 
 func writeParseRequest(w io.Writer, oid, version string, raw json.RawMessage) {
-	// Inject the bookkeeping fields into the raw card dict by patching the
-	// trailing `}`. Cheaper than re-marshalling the whole card.
 	trimmed := []byte(strings.TrimSpace(string(raw)))
 	if len(trimmed) < 2 || trimmed[0] != '{' || trimmed[len(trimmed)-1] != '}' {
 		return
 	}
 	body := trimmed[1 : len(trimmed)-1]
-	prefix := []byte(`{"__version__":` + jsonString(version) +
-		`,"__oracle_id__":` + jsonString(oid))
+	prefix := []byte(`{"__version__":` + marshalString(version) +
+		`,"__oracle_id__":` + marshalString(oid))
 	if len(body) > 0 {
 		prefix = append(prefix, ',')
 	}
@@ -584,7 +726,7 @@ func writeParseRequest(w io.Writer, oid, version string, raw json.RawMessage) {
 	_, _ = w.Write(out)
 }
 
-func jsonString(s string) string {
+func marshalString(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
 }
@@ -606,8 +748,6 @@ func runThor(ctx context.Context, changes []cardChange, outputDir string) (strin
 	}
 	bw := bufio.NewWriter(f)
 	for _, ch := range changes {
-		// Cards added/removed don't have an existing AST in the corpus, so
-		// Thor can't test them against the engine. Skip those.
 		if len(ch.OldRaw) == 0 || len(ch.NewRaw) == 0 {
 			continue
 		}
@@ -646,7 +786,7 @@ func tailLines(s string, n int) string {
 // Report
 // ────────────────────────────────────────────────────────────────────────
 
-func writeReport(path string, totalCards int, changes []cardChange, impacts []parseImpact, thorReport string, dryRun bool) error {
+func writeReport(path string, oldTotal, newTotal int, changes []cardChange, impacts []parseImpact, thorReport string, readOnly bool) error {
 	parseChangedCount := 0
 	parseErrorCount := 0
 	for _, p := range impacts {
@@ -658,33 +798,56 @@ func writeReport(path string, totalCards int, changes []cardChange, impacts []pa
 		}
 	}
 
+	var addedCount, removedCount, changedCount int
+	for _, ch := range changes {
+		switch ch.Kind {
+		case "added":
+			addedCount++
+		case "removed":
+			removedCount++
+		case "changed":
+			changedCount++
+		}
+	}
+
 	var sb strings.Builder
 	fmt.Fprintln(&sb, "# Oracle Sync Report")
 	fmt.Fprintf(&sb, "**Generated:** %s\n", time.Now().UTC().Format(time.RFC3339))
 	fmt.Fprintln(&sb, "**Source:** Scryfall bulk data (oracle_cards)")
-	fmt.Fprintf(&sb, "**Cards checked:** %d\n", totalCards)
-	fmt.Fprintf(&sb, "**Changes detected:** %d\n", len(changes))
-	if dryRun {
-		fmt.Fprintln(&sb, "**Mode:** dry-run (parser + Thor skipped)")
-	} else {
-		fmt.Fprintf(&sb, "**Parse changes:** %d\n", parseChangedCount)
-		fmt.Fprintf(&sb, "**Parse errors:** %d\n", parseErrorCount)
-		fmt.Fprintln(&sb, "**Thor failures on changed set:** see Thor section below")
+	fmt.Fprintf(&sb, "**Cards (old snapshot):** %d\n", oldTotal)
+	fmt.Fprintf(&sb, "**Cards (new snapshot):** %d\n", newTotal)
+	fmt.Fprintln(&sb)
+	fmt.Fprintln(&sb, "## Summary")
+	fmt.Fprintln(&sb)
+	fmt.Fprintln(&sb, "| Metric | Count |")
+	fmt.Fprintln(&sb, "|--------|------:|")
+	fmt.Fprintf(&sb, "| Total changes | %d |\n", len(changes))
+	fmt.Fprintf(&sb, "| Added | %d |\n", addedCount)
+	fmt.Fprintf(&sb, "| Removed | %d |\n", removedCount)
+	fmt.Fprintf(&sb, "| Changed | %d |\n", changedCount)
+	if !readOnly {
+		fmt.Fprintf(&sb, "| Parse-result changes | %d |\n", parseChangedCount)
+		fmt.Fprintf(&sb, "| Parse errors | %d |\n", parseErrorCount)
 	}
 	fmt.Fprintln(&sb)
 
-	// Changed Cards table
+	if readOnly {
+		fmt.Fprintf(&sb, "**Mode:** read-only (parser + Thor skipped)\n\n")
+	}
+
+	// Changed Cards table with before/after oracle text
 	fmt.Fprintln(&sb, "## Changed Cards")
 	fmt.Fprintln(&sb)
 	if len(changes) == 0 {
 		fmt.Fprintln(&sb, "_No changes._")
 	} else {
-		fmt.Fprintln(&sb, "| Card | Field | Before | After |")
-		fmt.Fprintln(&sb, "|---|---|---|---|")
+		fmt.Fprintln(&sb, "| Card | Kind | Field | Before | After |")
+		fmt.Fprintln(&sb, "|------|------|-------|--------|-------|")
 		for _, ch := range changes {
 			for _, fc := range ch.Fields {
-				fmt.Fprintf(&sb, "| %s | %s | %s | %s |\n",
+				fmt.Fprintf(&sb, "| %s | %s | %s | %s | %s |\n",
 					mdEscape(ch.Name),
+					ch.Kind,
 					mdEscape(fc.Field),
 					mdEscape(truncate(fc.Old, 120)),
 					mdEscape(truncate(fc.New, 120)),
@@ -697,8 +860,8 @@ func writeReport(path string, totalCards int, changes []cardChange, impacts []pa
 	// Parse Impact
 	fmt.Fprintln(&sb, "## Parse Impact")
 	fmt.Fprintln(&sb)
-	if dryRun {
-		fmt.Fprintln(&sb, "_Skipped (--dry-run)._")
+	if readOnly {
+		fmt.Fprintln(&sb, "_Skipped (read-only mode)._")
 	} else if len(impacts) == 0 {
 		fmt.Fprintln(&sb, "_No cards re-parsed._")
 	} else {
@@ -727,12 +890,33 @@ func writeReport(path string, totalCards int, changes []cardChange, impacts []pa
 	// Thor Results
 	fmt.Fprintln(&sb, "## Thor Results on Changed Set")
 	fmt.Fprintln(&sb)
-	if dryRun {
-		fmt.Fprintln(&sb, "_Skipped (--dry-run)._")
+	if readOnly {
+		fmt.Fprintln(&sb, "_Skipped (read-only mode)._")
 	} else if thorReport == "" {
 		fmt.Fprintln(&sb, "_Thor was not run._")
 	} else {
 		fmt.Fprintln(&sb, thorReport)
+	}
+	fmt.Fprintln(&sb)
+
+	// Cards needing re-parse
+	fmt.Fprintln(&sb, "## Cards Needing AST Re-Parse")
+	fmt.Fprintln(&sb)
+	needReparse := 0
+	for _, ch := range changes {
+		if ch.Kind == "added" || ch.Kind == "changed" {
+			needReparse++
+		}
+	}
+	if needReparse == 0 {
+		fmt.Fprintln(&sb, "_None._")
+	} else {
+		fmt.Fprintf(&sb, "%d cards need re-parsing:\n\n", needReparse)
+		for _, ch := range changes {
+			if ch.Kind == "added" || ch.Kind == "changed" {
+				fmt.Fprintf(&sb, "- %s (%s)\n", ch.Name, ch.Kind)
+			}
+		}
 	}
 	fmt.Fprintln(&sb)
 
