@@ -154,18 +154,7 @@ func kenrithGainFiveLife(gs *gameengine.GameState, src *gameengine.Permanent, ct
 		})
 		return
 	}
-	s.Life += 5
-	gs.LogEvent(gameengine.Event{
-		Kind:   "gain_life",
-		Seat:   targetSeat,
-		Target: targetSeat,
-		Source: src.Card.DisplayName(),
-		Amount: 5,
-		Details: map[string]interface{}{
-			"slug":   slug,
-			"reason": "kenrith_2w",
-		},
-	})
+	gameengine.GainLife(gs, targetSeat, 5, src.Card.DisplayName())
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 		"seat":        src.Controller,
 		"target_seat": targetSeat,
@@ -228,8 +217,8 @@ func kenrithReanimate(gs *gameengine.GameState, src *gameengine.Permanent, ctx m
 	if ownerSeat < 0 || ownerSeat >= len(gs.Seats) {
 		ownerSeat = bestSeat
 	}
+	// MoveCard already creates the permanent and fires ETB triggers.
 	gameengine.MoveCard(gs, bestCard, bestSeat, "graveyard", "battlefield", "kenrith_reanimate")
-	enterBattlefieldWithETB(gs, ownerSeat, bestCard, false)
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 		"seat":       src.Controller,
 		"reanimated": bestCard.DisplayName(),

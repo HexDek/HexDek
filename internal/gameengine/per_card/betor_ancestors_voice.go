@@ -127,7 +127,14 @@ func betorEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[
 		}
 		if bestCard != nil {
 			gameengine.MoveCard(gs, bestCard, perm.Controller, "graveyard", "battlefield", "betor_reanimate")
-			ent := enterBattlefieldWithETB(gs, perm.Controller, bestCard, false)
+			// Check the card landed on the battlefield.
+			var ent *gameengine.Permanent
+			for _, p := range gs.Seats[perm.Controller].Battlefield {
+				if p != nil && p.Card == bestCard {
+					ent = p
+					break
+				}
+			}
 			if ent != nil {
 				reanimated = bestCard.DisplayName()
 				reanimatedCMC = bestCMC

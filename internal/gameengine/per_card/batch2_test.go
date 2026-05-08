@@ -371,6 +371,10 @@ func TestEmry_ActivateCastFromGrave_OncePerTurn(t *testing.T) {
 		t.Errorf("expected ZoneCastGrant for Mox Opal after Emry activation")
 	}
 
+	// Untap Emry so the once-per-turn restriction (not tap cost) blocks the
+	// second activation.
+	emry.Tapped = false
+
 	// Add a second artifact and try to activate again — should fail.
 	mox2 := &gameengine.Card{Name: "Mox Jet", Owner: 0, Types: []string{"artifact"}}
 	gs.Seats[0].Graveyard = append(gs.Seats[0].Graveyard, mox2)

@@ -59,7 +59,14 @@ func excavaAttacks(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 	}
 	card := seat.Graveyard[bestIdx]
 	gameengine.MoveCard(gs, card, perm.Controller, "graveyard", "battlefield", "excava_attack")
-	ent := enterBattlefieldWithETB(gs, perm.Controller, card, false)
+	// Find the permanent on the battlefield.
+	var ent *gameengine.Permanent
+	for _, p := range gs.Seats[perm.Controller].Battlefield {
+		if p != nil && p.Card == card {
+			ent = p
+			break
+		}
+	}
 	if ent != nil {
 		ent.AddCounter("finality", 1)
 		if ent.Flags == nil {

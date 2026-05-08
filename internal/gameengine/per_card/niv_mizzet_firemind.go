@@ -54,6 +54,10 @@ func nivMizzetFiremindActivate(gs *gameengine.GameState, src *gameengine.Permane
 	if gs == nil || src == nil {
 		return
 	}
+	if src.Tapped {
+		return
+	}
+	src.Tapped = true
 	drawn := drawOne(gs, src.Controller, src.Card.DisplayName())
 	drawnName := ""
 	if drawn != nil {

@@ -63,7 +63,6 @@ func zurAttackTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 
 	card := s.Library[bestIdx]
 	gameengine.MoveCard(gs, card, seat, "library", "battlefield", "zur_the_enchanter")
-	enterBattlefieldWithETB(gs, seat, card, false)
 	shuffleLibraryPerCard(gs, seat)
 
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{

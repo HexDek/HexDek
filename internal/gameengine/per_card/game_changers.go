@@ -942,7 +942,6 @@ func cropRotationResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 
 	card := s.Library[foundIdx]
 	gameengine.MoveCard(gs, card, seat, "library", "battlefield", "crop_rotation")
-	enterBattlefieldWithETB(gs, seat, card, false)
 	shuffleLibraryPerCard(gs, seat)
 
 	gs.LogEvent(gameengine.Event{
@@ -1025,7 +1024,6 @@ func naturalOrderResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 
 	card := s.Library[foundIdx]
 	gameengine.MoveCard(gs, card, seat, "library", "battlefield", "natural_order")
-	enterBattlefieldWithETB(gs, seat, card, false)
 	shuffleLibraryPerCard(gs, seat)
 
 	gs.LogEvent(gameengine.Event{

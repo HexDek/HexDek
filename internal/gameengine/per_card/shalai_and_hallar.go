@@ -77,19 +77,7 @@ func shalaiAndHallarCounterPlaced(gs *gameengine.GameState, perm *gameengine.Per
 		if s == nil || s.Lost {
 			continue
 		}
-		s.Life -= amount
-		gs.LogEvent(gameengine.Event{
-			Kind:   "damage",
-			Seat:   opp,
-			Target: opp,
-			Source: perm.Card.DisplayName(),
-			Amount: amount,
-			Details: map[string]interface{}{
-				"reason":       "shalai_and_hallar_counter_trigger",
-				"counter_kind": kind,
-				"on_creature":  targetPerm.Card.DisplayName(),
-			},
-		})
+		gameengine.DealDamage(gs, opp, amount, perm.Card.DisplayName())
 	}
 
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{

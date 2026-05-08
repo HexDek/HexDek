@@ -517,17 +517,8 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 			if paid < 0 {
 				paid = 0
 			}
-			gs.Seats[seat].Life -= paid
+			LoseLife(gs, seat, paid, sourceName(src))
 		}
-		gs.LogEvent(Event{
-			Kind:   "pay_life",
-			Seat:   controllerSeat(src),
-			Source: sourceName(src),
-			Amount: paid,
-			Details: map[string]interface{}{
-				"mode": "any_amount",
-			},
-		})
 
 	// -----------------------------------------------------------------
 	// May play exiled card free / may cast copy free — permission
@@ -1118,7 +1109,7 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 				gs.drawOne(vdSeat)
 			case level == 3:
 				// Room 3: gain 3 life.
-				s.Life += 3
+				GainLife(gs, vdSeat, 3, sourceName(src))
 			default:
 				// Deeper rooms: draw a card (completed dungeon bonus).
 				gs.drawOne(vdSeat)
@@ -1426,15 +1417,9 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 			}
 		}
 		if seat >= 0 && seat < len(gs.Seats) {
-			gs.Seats[seat].Life -= n
+			LoseLife(gs, seat, n, sourceName(src))
 			gs.Seats[seat].Turn.LifePaid += n
 		}
-		gs.LogEvent(Event{
-			Kind:   "pay_life",
-			Seat:   seat,
-			Source: sourceName(src),
-			Amount: n,
-		})
 
 	case "flip_coin":
 		result := 0 // 0 = heads (win), 1 = tails (lose)
@@ -1891,7 +1876,7 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 						n = v
 					}
 				}
-				s.Life -= n
+				LoseLife(gs, i, n, sourceName(src))
 			} else if containsIgnoreCase(raw, "gain") && containsIgnoreCase(raw, "life") {
 				n := 1
 				if len(e.Args) > 1 {
@@ -1899,7 +1884,7 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 						n = v
 					}
 				}
-				s.Life += n
+				GainLife(gs, i, n, sourceName(src))
 			}
 			affected++
 		}
@@ -2954,17 +2939,12 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 			}
 		}
 		if seat >= 0 && seat < len(gs.Seats) && n != 0 {
-			gs.Seats[seat].Life += n
+			if n > 0 {
+				GainLife(gs, seat, n, sourceName(src))
+			} else {
+				LoseLife(gs, seat, -n, sourceName(src))
+			}
 		}
-		gs.LogEvent(Event{
-			Kind:   "life_effect",
-			Seat:   seat,
-			Source: sourceName(src),
-			Amount: n,
-			Details: map[string]interface{}{
-				"args": e.Args,
-			},
-		})
 
 	// -----------------------------------------------------------------
 	// roll_die (21) — roll a die (generic, not d20-specific). Args
@@ -3034,7 +3014,7 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 				opps := gs.Opponents(seat)
 				if len(opps) > 0 {
 					opp := opps[0]
-					gs.Seats[opp].Life -= scaledAmount
+					DealDamage(gs, opp, scaledAmount, sourceName(src))
 				}
 			}
 		}
@@ -3651,13 +3631,13 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 		lifePaid := 0
 		if e.ModKind == "may_pay_life" {
 			if seat >= 0 && seat < len(gs.Seats) && gs.Seats[seat].Life > 1 {
-				gs.Seats[seat].Life -= 1
+				LoseLife(gs, seat, 1, sourceName(src))
 				gs.Seats[seat].Turn.LifePaid++
 				lifePaid = 1
 			}
 		} else if e.ModKind == "pay_any_amount" {
 			if seat >= 0 && seat < len(gs.Seats) && gs.Seats[seat].Life > 1 {
-				gs.Seats[seat].Life -= 1
+				LoseLife(gs, seat, 1, sourceName(src))
 				gs.Seats[seat].Turn.LifePaid++
 				lifePaid = 1
 			}
@@ -4699,9 +4679,8 @@ func resolveResidualByText(gs *GameState, src *Permanent, raw string) bool {
 			life = v
 		}
 		if seat >= 0 && seat < len(gs.Seats) {
-			gs.Seats[seat].Life -= life
+			LoseLife(gs, seat, life, sourceName(src))
 		}
-		gs.LogEvent(Event{Kind: "draw_lose_life", Seat: seat, Source: sourceName(src), Amount: n})
 		return true
 	}
 
@@ -4862,10 +4841,12 @@ func resolveResidualByText(gs *GameState, src *Permanent, raw string) bool {
 	if reResOppLoseHalf.MatchString(raw) {
 		for _, opp := range gs.Opponents(seat) {
 			if opp >= 0 && opp < len(gs.Seats) && gs.Seats[opp] != nil {
-				gs.Seats[opp].Life = gs.Seats[opp].Life / 2
+				lost := gs.Seats[opp].Life - gs.Seats[opp].Life/2
+				if lost > 0 {
+					LoseLife(gs, opp, lost, sourceName(src))
+				}
 			}
 		}
-		gs.LogEvent(Event{Kind: "lose_half_life", Seat: seat, Source: sourceName(src)})
 		return true
 	}
 

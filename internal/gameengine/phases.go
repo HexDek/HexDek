@@ -623,6 +623,12 @@ func UntapAll(gs *GameState, seatIdx int) {
 	// effects. DescendedThisTurn is written by MoveCard in zone_move.go.
 	seat.Turn.Reset()
 	seat.DescendedThisTurn = false
+	// Snapshot life total at turn start for Vecna-trilogy end-step checks
+	// and similar "life lost this turn" computations.
+	if seat.Flags == nil {
+		seat.Flags = map[string]int{}
+	}
+	seat.Flags["life_at_turn_start"] = seat.Life
 
 	// §502.1: phase in phased-out permanents before untapping.
 	PhaseInAll(gs, seatIdx)

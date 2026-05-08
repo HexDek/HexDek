@@ -707,17 +707,7 @@ func ApplyAfflict(gs *GameState, attacker *Permanent, defenderSeat int) {
 	if n <= 0 || defenderSeat < 0 || defenderSeat >= len(gs.Seats) {
 		return
 	}
-	gs.Seats[defenderSeat].Life -= n
-	gs.LogEvent(Event{
-		Kind:   "afflict",
-		Seat:   attacker.Controller,
-		Target: defenderSeat,
-		Source: attacker.Card.DisplayName(),
-		Amount: n,
-		Details: map[string]interface{}{
-			"rule": "702.130a",
-		},
-	})
+	LoseLife(gs, defenderSeat, n, attacker.Card.DisplayName())
 }
 
 // FireAfflictTriggers checks all blocked attackers for afflict.

@@ -106,7 +106,7 @@ func riaIvorPreventAndMint(gs *gameengine.GameState, perm *gameengine.Permanent,
 	// "Refund" the damage: target seat regains the life lost.
 	tgtSeat, _ := ctx["target_seat"].(int)
 	if tgtSeat >= 0 && tgtSeat < len(gs.Seats) && gs.Seats[tgtSeat] != nil {
-		gs.Seats[tgtSeat].Life += amount
+		gameengine.GainLife(gs, tgtSeat, amount, perm.Card.DisplayName())
 	}
 	// Mint amount Phyrexian Mite tokens for Ria's controller.
 	for i := 0; i < amount; i++ {

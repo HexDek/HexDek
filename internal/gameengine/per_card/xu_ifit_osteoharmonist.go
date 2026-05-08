@@ -31,6 +31,10 @@ func xuIfitOsteoharmonistActivate(gs *gameengine.GameState, src *gameengine.Perm
 	if gs == nil || src == nil {
 		return
 	}
+	if src.Tapped {
+		return
+	}
+	src.Tapped = true
 	seat := gs.Seats[src.Controller]
 	if seat == nil {
 		return

@@ -337,17 +337,8 @@ func FireExtortTriggers(gs *GameState, casterSeat int) {
 			if opp == nil {
 				continue
 			}
-			opp.Life -= 1
+			LoseLife(gs, oppIdx, 1, perm.Card.DisplayName())
 			totalDrained++
-			gs.LogEvent(Event{
-				Kind:   "life_change",
-				Seat:   oppIdx,
-				Amount: -1,
-				Source: perm.Card.DisplayName(),
-				Details: map[string]interface{}{
-					"reason": "extort",
-				},
-			})
 		}
 		if totalDrained > 0 {
 			GainLife(gs, casterSeat, totalDrained, perm.Card.DisplayName())

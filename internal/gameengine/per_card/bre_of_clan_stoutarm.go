@@ -92,7 +92,6 @@ func breEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[st
 				cardHasType(nonland, "enchantment") || cardHasType(nonland, "planeswalker") ||
 				cardHasType(nonland, "battle") || cardHasType(nonland, "land") {
 				gameengine.MoveCard(gs, nonland, perm.Controller, "exile", "battlefield", "bre_free_cast")
-				enterBattlefieldWithETB(gs, perm.Controller, nonland, false)
 				went = "battlefield"
 			} else {
 				went = "free_cast_partial"

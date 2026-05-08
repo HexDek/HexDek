@@ -58,7 +58,6 @@ func drEggmanEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx m
 		}
 		if target != nil && targetIdx >= 0 {
 			gameengine.MoveCard(gs, target, perm.Controller, "hand", "battlefield", "dr_eggman")
-			enterBattlefieldWithETB(gs, perm.Controller, target, false)
 			deployed++
 		} else if len(opp.Hand) > 0 {
 			c := opp.Hand[len(opp.Hand)-1]

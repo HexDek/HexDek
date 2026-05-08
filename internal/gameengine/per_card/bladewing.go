@@ -73,7 +73,6 @@ func bladewingETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 
 	card := s.Graveyard[bestIdx]
 	gameengine.MoveCard(gs, card, seat, "graveyard", "battlefield", "bladewing_etb")
-	enterBattlefieldWithETB(gs, seat, card, false)
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":     seat,
 		"returned": card.DisplayName(),

@@ -37,6 +37,10 @@ func rowanScionActivate(gs *gameengine.GameState, src *gameengine.Permanent, abi
 	if gs == nil || src == nil {
 		return
 	}
+	if src.Tapped {
+		return
+	}
+	src.Tapped = true
 	if abilityIdx != 0 {
 		return
 	}

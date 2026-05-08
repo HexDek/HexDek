@@ -85,6 +85,10 @@ func atemsisActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilit
 	if gs == nil || src == nil {
 		return
 	}
+	if src.Tapped {
+		return
+	}
+	src.Tapped = true
 	emitPartial(gs, "atemsis_loot_ability", src.Card.DisplayName(),
 		"draw_two_discard_one_activation_not_routed_through_per_card")
 }

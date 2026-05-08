@@ -47,7 +47,6 @@ func ayeshaAttacks(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 		}
 		if cardHasType(c, "artifact") && gameengine.ManaCostOf(c) <= power {
 			gameengine.MoveCard(gs, c, perm.Controller, "library", "battlefield", "ayesha_tanaka")
-			enterBattlefieldWithETB(gs, perm.Controller, c, true)
 			playedCount++
 		} else {
 			rest = append(rest, c)

@@ -40,7 +40,7 @@ func purphorosCreatureETB(gs *gameengine.GameState, perm *gameengine.Permanent, 
 		}
 		amt, cancelled := gameengine.FireDamageEvent(gs, perm, opp, nil, 2)
 		if !cancelled && amt > 0 {
-			s.Life -= amt
+			gameengine.DealDamage(gs, opp, amt, perm.Card.DisplayName())
 		}
 	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{

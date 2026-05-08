@@ -47,19 +47,8 @@ func zoyowaLavaTongueEnd(gs *gameengine.GameState, perm *gameengine.Permanent, c
 		if opp == nil || opp.Lost || i == perm.Controller {
 			continue
 		}
-		opp.Life -= 3
+		gameengine.DealDamage(gs, i, 3, perm.Card.DisplayName())
 		hits++
-		gs.LogEvent(gameengine.Event{
-			Kind:   "damage",
-			Seat:   perm.Controller,
-			Target: i,
-			Source: perm.Card.DisplayName(),
-			Amount: 3,
-			Details: map[string]interface{}{
-				"slug":   slug,
-				"reason": "zoyowa_descended",
-			},
-		})
 	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":         perm.Controller,

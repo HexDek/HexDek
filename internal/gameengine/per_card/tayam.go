@@ -158,7 +158,6 @@ func tayamActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilityI
 	}
 
 	gameengine.MoveCard(gs, best, seat, "graveyard", "battlefield", "tayam_recursion")
-	enterBattlefieldWithETB(gs, seat, best, false)
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 		"seat":              seat,
 		"counters_removed":  removed,

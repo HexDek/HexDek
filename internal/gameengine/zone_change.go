@@ -119,11 +119,25 @@ func DestroyPermanent(gs *GameState, perm *Permanent, source *Permanent) bool {
 			gs.Seats[perm.Controller].Turn.ExiledCards++
 		}
 	}
-	if destZone == "graveyard" && perm.IsCreature() {
+	if destZone == "graveyard" {
 		if gs.Flags == nil {
 			gs.Flags = map[string]int{}
 		}
-		gs.Flags["creature_died_this_turn"]++
+		if perm.IsCreature() {
+			gs.Flags["creature_died_this_turn"]++
+		}
+		gs.Flags["permanents_to_graveyard_this_turn"]++
+		// Ixalan descend: a permanent card entering a graveyard counts as
+		// descended for its owner. Tokens cease to exist (§704.5d) and
+		// don't count.
+		if !perm.IsToken() && perm.Card != nil {
+			ownerSeat := perm.Card.Owner
+			if ownerSeat >= 0 && ownerSeat < len(gs.Seats) && gs.Seats[ownerSeat] != nil {
+				gs.Seats[ownerSeat].DescendedThisTurn = true
+				gs.Seats[ownerSeat].Turn.Descended = true
+				gs.Flags[descendedKey(ownerSeat)] = 1
+			}
+		}
 	}
 
 	detachAll(gs, perm)
@@ -267,6 +281,21 @@ func sacrificePermanentImpl(gs *GameState, perm *Permanent, source *Permanent, r
 				gs.Flags = map[string]int{}
 			}
 			gs.Flags["creature_died_this_turn"]++
+		}
+		if destZone == "graveyard" {
+			if gs.Flags == nil {
+				gs.Flags = map[string]int{}
+			}
+			gs.Flags["permanents_to_graveyard_this_turn"]++
+			// Ixalan descend: sacrificed permanent entering graveyard.
+			if !perm.IsToken() && perm.Card != nil {
+				ownerSeat := perm.Card.Owner
+				if ownerSeat >= 0 && ownerSeat < len(gs.Seats) && gs.Seats[ownerSeat] != nil {
+					gs.Seats[ownerSeat].DescendedThisTurn = true
+					gs.Seats[ownerSeat].Turn.Descended = true
+					gs.Flags[descendedKey(ownerSeat)] = 1
+				}
+			}
 		}
 		if destZone == "exile" {
 			gs.Seats[perm.Controller].Turn.ExiledCards++

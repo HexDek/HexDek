@@ -31,6 +31,10 @@ func yunaActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilityId
 	if gs == nil || src == nil {
 		return
 	}
+	if src.Tapped {
+		return
+	}
+	src.Tapped = true
 	emitPartial(gs, slug, src.Card.DisplayName(), "deferred_creature_spell_counter_bonus_not_implemented")
 }
 

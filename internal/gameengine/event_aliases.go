@@ -93,17 +93,20 @@ var eventAliasTable = map[string][]string{
 	// -----------------------------------------------------------------------
 	// Attack aliases — normalize to "attack"
 	// -----------------------------------------------------------------------
-	"creature_attacks":     {"attack"}, // engine dispatch event (combat.go)
-	"declare_attackers":    {"attack"}, // step-level alias
-	"you_attack":           {"attack"}, // "whenever you attack"
-	"attacks":              {"attack"}, // plural form
-	"you_attack_with":      {"attack"}, // "whenever you attack with"
-	"attack_while_saddled": {"attack"}, // attack + saddled condition
+	"creature_attacks":          {"attack"}, // engine dispatch event (combat.go)
+	"declare_attackers":         {"attack"}, // step-level alias
+	"you_attack":                {"attack"}, // "whenever you attack"
+	"attacks":                   {"attack"}, // plural form
+	"you_attack_with":           {"attack"}, // "whenever you attack with"
+	"attack_while_saddled":      {"attack"}, // attack + saddled condition
+	"attack_declared":           {"attack"}, // single attacker declared
+	"combat_attackers_declared": {"attack"}, // step-level attackers declared
 
 	// -----------------------------------------------------------------------
 	// Dies / LTB aliases — normalize to zone-change canonical events
 	// -----------------------------------------------------------------------
 	// Observer dies (any creature / typed creature / tribe)
+	"dies":                             {"die"},
 	"creature_dies":                    {"die"},
 	"another_creature_dies":            {"die"},
 	"another_creature_dies_any":        {"die"},
@@ -136,7 +139,10 @@ var eventAliasTable = map[string][]string{
 	// -----------------------------------------------------------------------
 	// ETB observer — normalize to "etb" so fireObserverETBTriggers can match
 	// -----------------------------------------------------------------------
-	"another_typed_enters":   {"etb"},
+	"creature_enters_battlefield":   {"etb"},
+	"land_entered_battlefield":      {"etb"},
+	"permanent_entered_battlefield": {"etb"},
+	"another_typed_enters":          {"etb"},
 	"tribe_you_control_etb":  {"etb"},
 	"ally_etb":               {"etb"},
 	"another_creature_enters": {"etb"},
@@ -157,8 +163,10 @@ var eventAliasTable = map[string][]string{
 	// -----------------------------------------------------------------------
 	// Combat damage aliases
 	// -----------------------------------------------------------------------
-	"combat_damage_player":     {"deals_combat_damage"},
-	"self_deals_damage_player": {"deals_combat_damage"},
+	"combat_damage_player":                 {"deals_combat_damage"},
+	"combat_damage_dealt":                  {"deals_combat_damage"},
+	"creature_combat_damage_to_player":     {"deals_combat_damage"},
+	"self_deals_damage_player":             {"deals_combat_damage"},
 	"group_combat_damage_player": {"deals_combat_damage"},
 	"combat_damage":            {"deals_combat_damage"},
 	"combat_damage_creature":   {"deals_combat_damage"},
@@ -237,13 +245,16 @@ var eventAliasTable = map[string][]string{
 	"lose_life_threshold":  {"life_lost"},
 	"you_lose_life":        {"life_lost"},
 	"opponent_loses_life":  {"life_lost"},
-	"you_dealt_damage":     {"deals_damage"},
-	"ally_source_damage":   {"deals_damage"},
+	"you_dealt_damage":      {"deals_damage"},
+	"ally_source_damage":    {"deals_damage"},
+	"damaged":               {"damage_taken"},
+	"creature_dealt_damage": {"damage_taken"},
 
 	// -----------------------------------------------------------------------
 	// Misc event aliases
 	// -----------------------------------------------------------------------
-	"becomes_tapped":  {"tap_event"},
+	"becomes_tapped":   {"tap_event"},
+	"permanent_tapped": {"tap_event"},
 	"tapped_for_mana": {"tap_for_mana"},
 	"tap_for_mana":    {"tap_for_mana"},
 	"land_tapped_for_mana": {"tap_for_mana"},
@@ -254,7 +265,9 @@ var eventAliasTable = map[string][]string{
 	"mutates":          {"mutate"},
 	"exploits_creature": {"exploit"},
 	"ally_exploits":    {"exploit"},
-	"becomes_target":   {"targeted"},
+	"becomes_target":          {"targeted"},
+	"became_target":           {"targeted"},
+	"creature_targeted":       {"targeted"},
 	"becomes_target_whenever": {"targeted"},
 	"ally_targeted_by_opp":    {"targeted"},
 	"becomes_state":    {"state_change"},
@@ -337,8 +350,10 @@ var eventAliasTable = map[string][]string{
 	// Phase aliases (supplement triggerMatchesPhaseStep)
 	// -----------------------------------------------------------------------
 	"end_step":                   {"end_step"},
+	"end_step_controller":        {"end_step"},
 	"beginning_of_ordinal_step":  {"phase"},
-	"upkeep":                     {"upkeep"},
+	"upkeep":                     {"upkeep_controller"},
+	"upkeep_start":               {"upkeep_controller"},
 
 	// -----------------------------------------------------------------------
 	// Catch-all parser fallbacks

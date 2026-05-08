@@ -42,6 +42,13 @@ func senseisDiviningTopActivate(gs *gameengine.GameState, src *gameengine.Perman
 	if gs == nil || src == nil {
 		return
 	}
+	// Abilities 0 and 1 cost {T}; ability 2 ({1}: return to hand) does not.
+	if abilityIdx == 0 || abilityIdx == 1 {
+		if src.Tapped {
+			return
+		}
+		src.Tapped = true
+	}
 	seat := src.Controller
 	s := gs.Seats[seat]
 	switch abilityIdx {

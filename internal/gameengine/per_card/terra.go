@@ -103,6 +103,10 @@ func terraTrance(gs *gameengine.GameState, src *gameengine.Permanent, abilityIdx
 	if gs == nil || src == nil {
 		return
 	}
+	if src.Tapped {
+		return
+	}
+	src.Tapped = true
 	cardName := src.Card.DisplayName()
 	if !gameengine.TransformPermanent(gs, src, "terra_trance_activate") {
 		emitPartial(gs, slug, cardName,

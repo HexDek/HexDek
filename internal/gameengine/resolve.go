@@ -668,12 +668,17 @@ func applyDamage(gs *GameState, src *Permanent, t Target, amount int) {
 			return
 		}
 		gs.Seats[t.Seat].Life -= modified
+		// Track turn counters for noncombat damage / life loss.
+		gs.Seats[t.Seat].Turn.LifeLost += modified
+		gs.Seats[t.Seat].Turn.DamageReceived += modified
 		// Set damage_taken_this_turn flag so Bloodthirst (§702.54) and
 		// similar mechanics can detect non-combat damage to this player.
 		if gs.Seats[t.Seat].Flags == nil {
 			gs.Seats[t.Seat].Flags = map[string]int{}
 		}
 		gs.Seats[t.Seat].Flags["damage_taken_this_turn"] = 1
+		gs.Seats[t.Seat].Flags["lost_life_this_turn"] += modified
+		gs.Seats[t.Seat].Flags["life_lost_this_turn"] += modified
 		gs.LogEvent(Event{
 			Kind:   "damage",
 			Seat:   controllerSeat(src),
@@ -690,6 +695,12 @@ func applyDamage(gs *GameState, src *Permanent, t Target, amount int) {
 				"from": gs.Seats[t.Seat].Life + modified,
 				"to":   gs.Seats[t.Seat].Life,
 			},
+		})
+		// Fire life_lost trigger so Valgavoth, Lich's Mastery, etc. react.
+		FireCardTrigger(gs, "life_lost", map[string]interface{}{
+			"seat":   t.Seat,
+			"amount": modified,
+			"source": sourceName(src),
 		})
 	case TargetKindPermanent:
 		if t.Permanent == nil {
@@ -808,6 +819,12 @@ func DiscardCard(gs *GameState, card *Card, seat int) {
 		return
 	}
 	gs.Seats[seat].Turn.Discarded++
+	// Write gs.Flags["discarded_N"] so the "opponent_discarded_this_turn"
+	// condition check in evalCondition can detect discard events.
+	if gs.Flags == nil {
+		gs.Flags = map[string]int{}
+	}
+	gs.Flags["discarded_"+strconv.Itoa(seat)]++
 	dest := "graveyard"
 	if NecropotenceSkipsDraw(gs, seat) {
 		dest = "exile"

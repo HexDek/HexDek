@@ -1,5 +1,7 @@
 package gameengine
 
+import "strconv"
+
 // zone_move.go — universal zone-change entry point.
 //
 // Background: before this file existed, 200+ raw zone-move call sites
@@ -100,6 +102,15 @@ func MoveCard(gs *GameState, card *Card, ownerSeat int, fromZone, toZone, reason
 		if seat := gs.Seats[ownerSeat]; seat != nil && cardIsPermanentType(card) {
 			seat.DescendedThisTurn = true
 			seat.Turn.Descended = true
+			// Write gs.Flags["descended_N"] so resolve.go condition checks
+			// can detect descend without reaching into seat fields.
+			if gs.Flags == nil {
+				gs.Flags = map[string]int{}
+			}
+			gs.Flags[descendedKey(ownerSeat)] = 1
+			// Track total permanent cards entering any graveyard this turn
+			// for Henzie "Toolbox" Torre and similar batch-count mechanics.
+			gs.Flags["permanents_to_graveyard_this_turn"]++
 		}
 	}
 	return dest
@@ -219,4 +230,10 @@ func cardIsCreatureType(card *Card) bool {
 // can call it without re-implementing the type check.
 func CardCanEnterBattlefield(card *Card) bool {
 	return cardIsPermanentType(card)
+}
+
+// descendedKey returns the gs.Flags key for a seat's descended-this-turn
+// tracking. Matches the "descended_N" pattern read in resolve.go.
+func descendedKey(seat int) string {
+	return "descended_" + strconv.Itoa(seat)
 }

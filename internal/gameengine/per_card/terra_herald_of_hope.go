@@ -153,7 +153,6 @@ func terraHeraldOfHopeCombatDamage(gs *gameengine.GameState, perm *gameengine.Pe
 	seat.ManaPool -= terraHeraldOfHopePaymentCost
 
 	gameengine.MoveCard(gs, best, perm.Controller, "graveyard", "battlefield", "terra_herald_reanimate")
-	enterBattlefieldWithETB(gs, perm.Controller, best, true)
 
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":       perm.Controller,

@@ -35,6 +35,10 @@ func hermitDruidActivate(gs *gameengine.GameState, src *gameengine.Permanent, ab
 	if gs == nil || src == nil {
 		return
 	}
+	if src.Tapped {
+		return
+	}
+	src.Tapped = true
 	seat := src.Controller
 	s := gs.Seats[seat]
 	milled := 0

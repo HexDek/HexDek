@@ -39,6 +39,10 @@ func garthOneEyeActivate(gs *gameengine.GameState, src *gameengine.Permanent, ab
 	if gs == nil || src == nil {
 		return
 	}
+	if src.Tapped {
+		return
+	}
+	src.Tapped = true
 	if src.Flags == nil {
 		src.Flags = map[string]int{}
 	}

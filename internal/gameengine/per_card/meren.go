@@ -95,7 +95,6 @@ func merenEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[
 
 	if bfCard != nil {
 		gameengine.MoveCard(gs, bfCard, perm.Controller, "graveyard", "battlefield", "meren")
-		enterBattlefieldWithETB(gs, perm.Controller, bfCard, false)
 		emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 			"seat":        perm.Controller,
 			"experience":  xp,

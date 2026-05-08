@@ -351,17 +351,7 @@ func ActivateAbility(gs *GameState, seatIdx int, perm *Permanent, abilityIdx int
 				}
 				return &CastError{Reason: "insufficient_life"}
 			}
-			seat.Life -= lc
-			gs.LogEvent(Event{
-				Kind:   "pay_life",
-				Seat:   seatIdx,
-				Amount: lc,
-				Source: perm.Card.DisplayName(),
-				Details: map[string]interface{}{
-					"reason": "activation_cost",
-					"rule":   "602.1",
-				},
-			})
+			LoseLife(gs, seatIdx, lc, perm.Card.DisplayName())
 		}
 		// Sacrifice cost (CR §602.1b) — "sacrifice [filter]" or sacrifice self.
 		if ab.Cost.Sacrifice != nil {

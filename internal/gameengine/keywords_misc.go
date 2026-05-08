@@ -1610,7 +1610,7 @@ func VentureIntoDungeon(gs *GameState, seatIdx int) int {
 		CreateTreasureToken(gs, seatIdx)
 	case 3:
 		// Room 3: Gain 1 life.
-		seat.Life++
+		GainLife(gs, seatIdx, 1, "dungeon_room_3")
 	case 4:
 		// Room 4: Draw a card (dungeon complete).
 		gs.drawOne(seatIdx)

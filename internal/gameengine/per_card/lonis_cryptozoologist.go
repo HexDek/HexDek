@@ -56,6 +56,10 @@ func lonisActivated(gs *gameengine.GameState, src *gameengine.Permanent, ability
 	if gs == nil || src == nil {
 		return
 	}
+	if src.Tapped {
+		return
+	}
+	src.Tapped = true
 	emitPartial(gs, slug, src.Card.DisplayName(),
 		"sac_x_clues_reveal_top_x_steal_permanent_unimplemented")
 }

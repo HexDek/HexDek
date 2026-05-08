@@ -89,7 +89,6 @@ func moseoEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[
 		return
 	}
 	gameengine.MoveCard(gs, pick, perm.Controller, "graveyard", "battlefield", "moseo_infusion")
-	createPermanent(gs, perm.Controller, pick, false)
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":       perm.Controller,
 		"x":          x,

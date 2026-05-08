@@ -24,6 +24,13 @@ func ironSpiderActivated(gs *gameengine.GameState, src *gameengine.Permanent, ab
 	if gs == nil || src == nil {
 		return
 	}
+	// Ability 0 ({T}) needs tap; ability 1 ({2}, remove counters) does not.
+	if abilityIdx == 0 {
+		if src.Tapped {
+			return
+		}
+		src.Tapped = true
+	}
 	emitPartial(gs, slug, src.Card.DisplayName(),
 		"tap_buff_artifact_creatures_and_remove_counters_to_draw_unimplemented")
 }

@@ -1338,15 +1338,29 @@ func applyCombatDamageToPlayer(gs *GameState, src *Permanent, amount, seatIdx in
 			Source: src.Card.DisplayName(), Amount: amount,
 			Details: map[string]interface{}{"target_kind": "player", "combat": true},
 		})
+		// Life-loss tracking: only in the non-infect path because infect
+		// replaces damage with poison counters (§702.90 — no life is lost).
+		gs.Seats[seatIdx].Turn.LifeLost += amount
+		if gs.Seats[seatIdx].Flags == nil {
+			gs.Seats[seatIdx].Flags = map[string]int{}
+		}
+		gs.Seats[seatIdx].Flags["lost_life_this_turn"] += amount
+		gs.Seats[seatIdx].Flags["life_lost_this_turn"] += amount
+		// Fire life_lost trigger so Valgavoth, Lich's Mastery, etc. react
+		// to combat damage as life loss.
+		FireCardTrigger(gs, "life_lost", map[string]interface{}{
+			"seat":   seatIdx,
+			"amount": amount,
+			"source": src.Card.DisplayName(),
+		})
 	}
 	// Set damage_taken_this_turn flag so Bloodthirst (§702.54) and similar
-	// mechanics can detect that this player was dealt damage.
+	// mechanics can detect that this player was dealt damage (even via infect).
 	if gs.Seats[seatIdx].Flags == nil {
 		gs.Seats[seatIdx].Flags = map[string]int{}
 	}
 	gs.Seats[seatIdx].Flags["damage_taken_this_turn"] = 1
 	gs.Seats[seatIdx].Turn.DamageReceived += amount
-	gs.Seats[seatIdx].Turn.LifeLost += amount
 	if src.HasKeyword("lifelink") {
 		GainLife(gs, src.Controller, amount, src.Card.DisplayName())
 	}
@@ -1365,6 +1379,14 @@ func applyCombatDamageToPlayer(gs *GameState, src *Permanent, amount, seatIdx in
 				"reason":      "toxic",
 			},
 		})
+	}
+	// Track that this controller had a creature deal combat damage to a
+	// player this turn — enables Freerunning (§702.169) and similar.
+	if src.Controller >= 0 && src.Controller < len(gs.Seats) && gs.Seats[src.Controller] != nil {
+		if gs.Seats[src.Controller].Flags == nil {
+			gs.Seats[src.Controller].Flags = map[string]int{}
+		}
+		gs.Seats[src.Controller].Flags["creature_dealt_combat_damage_to_player"]++
 	}
 	// §721.4 — If a creature deals combat damage to the monarch, its
 	// controller becomes the monarch.

@@ -149,7 +149,6 @@ func sidarJabariCombatDamage(gs *gameengine.GameState, perm *gameengine.Permanen
 	}
 
 	gameengine.MoveCard(gs, best, perm.Controller, "graveyard", "battlefield", "sidar_jabari_reanimate")
-	enterBattlefieldWithETB(gs, perm.Controller, best, false)
 
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":       perm.Controller,

@@ -112,7 +112,6 @@ func jodahLegendaryCast(gs *gameengine.GameState, perm *gameengine.Permanent, ct
 			cardHasType(found, "planeswalker"),
 			cardHasType(found, "battle"):
 			gameengine.MoveCard(gs, found, perm.Controller, "exile", "battlefield", "jodah_free_cast")
-			enterBattlefieldWithETB(gs, perm.Controller, found, false)
 		case cardHasType(found, "instant"), cardHasType(found, "sorcery"):
 			// Free-cast resolution shortcut — leave in exile and flag.
 			castedPartial = true

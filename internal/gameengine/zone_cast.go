@@ -245,19 +245,9 @@ func CastFromZone(
 			addToZone(seat, card, zone)
 			return nil, &CastError{Reason: "insufficient_life"}
 		}
-		seat.Life -= perm.LifeCostInsteadOfMana
+		LoseLife(gs, seatIdx, perm.LifeCostInsteadOfMana, card.DisplayName())
 		seat.Turn.LifePaid += perm.LifeCostInsteadOfMana
 		result.LifePaid += perm.LifeCostInsteadOfMana
-		gs.LogEvent(Event{
-			Kind:   "pay_life",
-			Seat:   seatIdx,
-			Amount: perm.LifeCostInsteadOfMana,
-			Source: card.DisplayName(),
-			Details: map[string]interface{}{
-				"reason":  "zone_cast_life_cost",
-				"keyword": perm.Keyword,
-			},
-		})
 	} else {
 		if seat.ManaPool < manaCost {
 			addToZone(seat, card, zone)

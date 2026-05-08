@@ -40,7 +40,6 @@ func gerrardDies(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[s
 		}
 		if cardHasType(c, "creature") || cardHasType(c, "artifact") {
 			gameengine.MoveCard(gs, c, perm.Controller, "graveyard", "battlefield", "gerrard_recur")
-			enterBattlefieldWithETB(gs, perm.Controller, c, false)
 			returned++
 		} else {
 			keep = append(keep, c)

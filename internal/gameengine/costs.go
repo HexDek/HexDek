@@ -260,18 +260,8 @@ func PayAlternativeCost(gs *GameState, seatIdx int, card *Card, alt *Alternative
 		}
 		result.ExiledCards = append(result.ExiledCards, exiled)
 		if alt.LifeCost > 0 {
-			seat.Life -= alt.LifeCost
+			LoseLife(gs, seatIdx, alt.LifeCost, card.DisplayName())
 			result.LifePaid += alt.LifeCost
-			gs.LogEvent(Event{
-				Kind:   "pay_life",
-				Seat:   seatIdx,
-				Amount: alt.LifeCost,
-				Source: card.DisplayName(),
-				Details: map[string]interface{}{
-					"reason": "alternative_cost_pitch",
-					"rule":   "118.6",
-				},
-			})
 		}
 	case AltCostKindCommanderFree:
 		// No actual payment — being free is the point.
@@ -405,18 +395,8 @@ func PayAdditionalCost(gs *GameState, seatIdx int, card *Card, add *AdditionalCo
 		if seat.Life <= add.LifeAmount {
 			return nil
 		}
-		seat.Life -= add.LifeAmount
+		LoseLife(gs, seatIdx, add.LifeAmount, card.DisplayName())
 		result.LifePaid += add.LifeAmount
-		gs.LogEvent(Event{
-			Kind:   "pay_life",
-			Seat:   seatIdx,
-			Amount: add.LifeAmount,
-			Source: card.DisplayName(),
-			Details: map[string]interface{}{
-				"reason": "additional_cost",
-				"rule":   "118.8",
-			},
-		})
 	default:
 		return nil
 	}

@@ -52,9 +52,9 @@ func edeaCreatureDies(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		return
 	}
 	// Return to owner's battlefield + draw.
+	// MoveCard already creates the permanent and fires ETB triggers.
 	card := dead.Card
 	gameengine.MoveCard(gs, card, perm.Controller, "graveyard", "battlefield", "edea_recur")
-	enterBattlefieldWithETB(gs, dead.Owner, card, false)
 	drawOne(gs, perm.Controller, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":  perm.Controller,

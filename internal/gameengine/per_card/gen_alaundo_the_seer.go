@@ -109,7 +109,6 @@ func alaundoTheSeerActivate(gs *gameengine.GameState, src *gameengine.Permanent,
 			seat.Exile = append(seat.Exile[:i], seat.Exile[i+1:]...)
 			ex.Owner = seatIdx
 			gameengine.MoveCard(gs, ex, seatIdx, "exile", "battlefield", "alaundo_release")
-			enterBattlefieldWithETB(gs, seatIdx, ex, false)
 			released = ex.DisplayName()
 			seat.Flags[alaundoSuspendedKey]--
 			break

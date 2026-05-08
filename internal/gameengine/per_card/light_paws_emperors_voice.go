@@ -110,9 +110,15 @@ func lightPawsAuraETBTrigger(gs *gameengine.GameState, perm *gameengine.Permanen
 
 	card := s.Library[bestIdx]
 	gameengine.MoveCard(gs, card, seat, "library", "battlefield", "light_paws_emperors_voice")
-	fetched := enterBattlefieldWithETB(gs, seat, card, false)
 
-	// Attach the fetched Aura to Light-Paws.
+	// Find the permanent on the battlefield and attach to Light-Paws.
+	var fetched *gameengine.Permanent
+	for _, p := range gs.Seats[seat].Battlefield {
+		if p != nil && p.Card == card {
+			fetched = p
+			break
+		}
+	}
 	if fetched != nil {
 		fetched.AttachedTo = perm
 	}

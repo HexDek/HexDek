@@ -23,6 +23,11 @@ func janJansenActivated(gs *gameengine.GameState, src *gameengine.Permanent, abi
 	if gs == nil || src == nil {
 		return
 	}
+	// Both abilities cost {T}.
+	if src.Tapped {
+		return
+	}
+	src.Tapped = true
 	emitPartial(gs, slug, src.Card.DisplayName(),
 		"sac_artifact_creature_to_treasure_or_construct_unimplemented")
 }

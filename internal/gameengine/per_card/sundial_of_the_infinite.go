@@ -41,6 +41,10 @@ func sundialActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilit
 	if gs == nil || src == nil {
 		return
 	}
+	if src.Tapped {
+		return
+	}
+	src.Tapped = true
 	seat := src.Controller
 
 	// "Activate only during your turn" — CR restriction on Sundial.

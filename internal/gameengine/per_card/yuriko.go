@@ -91,7 +91,7 @@ func yurikoTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 
 	// Each opponent loses life equal to the revealed card's CMC
 	for i := range gs.Seats {
-		if i == controller || gs.Seats[i].Lost {
+		if i == controller || gs.Seats[i] == nil || gs.Seats[i].Lost {
 			continue
 		}
 		gameengine.LoseLife(gs, i, cmc, "Yuriko, the Tiger's Shadow")

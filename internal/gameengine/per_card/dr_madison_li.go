@@ -52,6 +52,11 @@ func drMadisonLiActivated(gs *gameengine.GameState, src *gameengine.Permanent, a
 	if gs == nil || src == nil {
 		return
 	}
+	// All three abilities cost {T}.
+	if src.Tapped {
+		return
+	}
+	src.Tapped = true
 	seat := gs.Seats[src.Controller]
 	if seat == nil {
 		return
@@ -166,7 +171,6 @@ func drMadisonLiActivated(gs *gameengine.GameState, src *gameengine.Permanent, a
 		}
 		seat.Flags["energy"] -= 5
 		gameengine.MoveCard(gs, target, src.Controller, "graveyard", "battlefield", "dr_madison_li_recur")
-		enterBattlefieldWithETB(gs, src.Controller, target, true)
 		emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 			"seat":         src.Controller,
 			"ability":      "recur_artifact",

@@ -187,17 +187,8 @@ func FireCastTriggerObservers(gs *GameState, cast *Card, controller int, fromCop
 					if opp == nil {
 						continue
 					}
-					opp.Life -= 1
+					LoseLife(gs, oppIdx, 1, name)
 					totalDrained++
-					gs.LogEvent(Event{
-						Kind:   "life_change",
-						Seat:   oppIdx,
-						Amount: -1,
-						Source: name,
-						Details: map[string]interface{}{
-							"reason": "extort",
-						},
-					})
 				}
 				if totalDrained > 0 {
 					GainLife(gs, controller, totalDrained, name)
@@ -677,20 +668,7 @@ func FireDrawTriggerObservers(gs *GameState, drawerSeat int, count int, fromRepl
 						"Zombie Archer Token", 1, 1, []string{"B"})
 					tgt := gs.Seats[drawerSeat]
 					if tgt != nil {
-						tgt.Life -= 1
-						gs.LogEvent(Event{
-							Kind:   "damage",
-							Seat:   perm.Controller,
-							Target: drawerSeat,
-							Source: name,
-							Amount: 1,
-						})
-						gs.LogEvent(Event{
-							Kind:   "life_change",
-							Seat:   drawerSeat,
-							Amount: -1,
-							Source: name,
-						})
+						DealDamage(gs, drawerSeat, 1, name)
 					}
 					gs.LogEvent(Event{
 						Kind:   "draw_trigger_observer",

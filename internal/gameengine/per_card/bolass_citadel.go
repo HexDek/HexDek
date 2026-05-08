@@ -90,7 +90,7 @@ func bolassCitadelActivate(gs *gameengine.GameState, src *gameengine.Permanent, 
 	s := gs.Seats[seat]
 	switch abilityIdx {
 	case 0:
-		// "Play top of library for life" mode. Move top card of
+		// "Play top of library for life" mode. (No tap cost.) Move top card of
 		// library into hand and pay life = its CMC. This is the
 		// fallback path when the zone-cast primitive isn't exercised
 		// directly by the Hat. Downstream zone-cast integration
@@ -123,8 +123,12 @@ func bolassCitadelActivate(gs *gameengine.GameState, src *gameengine.Permanent, 
 		}
 		_ = gs.CheckEnd()
 	case 1:
-		// Sacrifice-10 → each opponent loses 10 life.
+		// {T}, Sacrifice-10 → each opponent loses 10 life.
 		const slug = "bolass_citadel_sac_ten"
+		if src.Tapped {
+			return
+		}
+		src.Tapped = true
 		// We don't enforce the sac cost here (caller pays). Effect only.
 		for _, opp := range gs.Opponents(seat) {
 			gameengine.LoseLife(gs, opp, 10, src.Card.DisplayName())

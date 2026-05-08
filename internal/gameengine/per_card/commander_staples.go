@@ -460,8 +460,8 @@ func reanimateResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 		return
 	}
 	// Move from graveyard to battlefield under controller's control.
+	// MoveCard already creates the permanent and fires ETB triggers.
 	gameengine.MoveCard(gs, bestCard, bestSeat, "graveyard", "battlefield", "reanimate")
-	perm := enterBattlefieldWithETB(gs, seat, bestCard, false)
 	// Lose life equal to CMC.
 	lifeLost := cardCMC(bestCard)
 	gameengine.LoseLife(gs, seat, lifeLost, "Reanimate")
@@ -471,7 +471,6 @@ func reanimateResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 		"life_lost":  lifeLost,
 		"from_seat":  bestSeat,
 	})
-	_ = perm // suppress unused warning if enterBattlefieldWithETB returns nil
 	_ = gs.CheckEnd()
 }
 
@@ -531,8 +530,16 @@ func animateDeadETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		return
 	}
 	// Move from graveyard to battlefield under controller's control.
+	// MoveCard already creates the permanent and fires ETB triggers.
 	gameengine.MoveCard(gs, bestCard, bestSeat, "graveyard", "battlefield", "animate-dead")
-	creature := enterBattlefieldWithETB(gs, seat, bestCard, false)
+	// Find the permanent MoveCard created so we can apply -1/-0.
+	var creature *gameengine.Permanent
+	for _, p := range gs.Seats[seat].Battlefield {
+		if p != nil && p.Card == bestCard {
+			creature = p
+			break
+		}
+	}
 	if creature != nil {
 		// Apply -1/-0 modifier.
 		creature.Card.BasePower -= 1

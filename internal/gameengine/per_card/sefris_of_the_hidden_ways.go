@@ -185,7 +185,6 @@ func sefrisCreateUndead(gs *gameengine.GameState, perm *gameengine.Permanent, sl
 
 	// Move from graveyard to battlefield, then fire ETB triggers.
 	gameengine.MoveCard(gs, best, perm.Controller, "graveyard", "battlefield", "sefris_create_undead")
-	enterBattlefieldWithETB(gs, perm.Controller, best, false)
 
 	emit(gs, reanimSlug, perm.Card.DisplayName(), map[string]interface{}{
 		"controller": perm.Controller,

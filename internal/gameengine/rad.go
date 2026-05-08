@@ -54,16 +54,7 @@ func FireRadCounterTriggers(gs *GameState) {
 
 		// Lose life for each nonland card milled.
 		if nonlandMilled > 0 {
-			s.Life -= nonlandMilled
-			gs.LogEvent(Event{
-				Kind:   "rad_damage",
-				Seat:   i,
-				Amount: nonlandMilled,
-				Details: map[string]interface{}{
-					"cards_milled": cardsMilled,
-					"nonland":      nonlandMilled,
-				},
-			})
+			LoseLife(gs, i, nonlandMilled, "rad_counters")
 		}
 
 		// Remove rad counters equal to the number of NONLAND cards milled.

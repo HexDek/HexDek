@@ -102,7 +102,6 @@ func lordWindgracePlusTwo(gs *gameengine.GameState, src *gameengine.Permanent) {
 		// to exile, not graveyard, so it isn't returnable from there).
 		if cardInZone(s.Graveyard, pick) {
 			gameengine.MoveCard(gs, pick, seat, "graveyard", "battlefield", "lord_windgrace_plus_two")
-			enterBattlefieldWithETB(gs, seat, pick, false)
 			returned = true
 		}
 	} else {
@@ -149,7 +148,6 @@ func lordWindgraceMinusThree(gs *gameengine.GameState, src *gameengine.Permanent
 	returnedNames := make([]string, 0, len(picks))
 	for _, c := range picks {
 		gameengine.MoveCard(gs, c, seat, "graveyard", "battlefield", "lord_windgrace_minus_three")
-		enterBattlefieldWithETB(gs, seat, c, false)
 		returnedNames = append(returnedNames, c.DisplayName())
 	}
 

@@ -26,6 +26,10 @@ func krenkoActivate(gs *gameengine.GameState, src *gameengine.Permanent, ability
 	if gs == nil || src == nil || src.Card == nil {
 		return
 	}
+	if src.Tapped {
+		return
+	}
+	src.Tapped = true
 	seat := src.Controller
 	if seat < 0 || seat >= len(gs.Seats) {
 		return

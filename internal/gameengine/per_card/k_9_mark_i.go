@@ -36,6 +36,10 @@ func k9MarkIActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilit
 	if gs == nil || src == nil {
 		return
 	}
+	if src.Tapped {
+		return
+	}
+	src.Tapped = true
 	emitPartial(gs, "k9_mark_i_affirmative", src.Card.DisplayName(),
 		"cant_be_blocked_ueot_grant_not_modeled")
 }
