@@ -285,3 +285,52 @@ func TestAtomicWriteJSON_Integrity(t *testing.T) {
 		t.Errorf("roundtrip mismatch: %+v", roundtrip)
 	}
 }
+
+func TestCapEntries(t *testing.T) {
+	s := []int{1, 2, 3, 4, 5}
+	got := capEntries(s, 3)
+	if len(got) != 3 || got[0] != 3 || got[2] != 5 {
+		t.Fatalf("capEntries(5, 3) = %v, want [3 4 5]", got)
+	}
+	got = capEntries(s, 10)
+	if len(got) != 5 {
+		t.Fatalf("capEntries(5, 10) should return all, got %d", len(got))
+	}
+}
+
+func TestPersistInvariantViolations_CapsAtMax(t *testing.T) {
+	dir := t.TempDir()
+	batch := make([]InvariantViolation, maxInvariantViolations+500)
+	for i := range batch {
+		batch[i] = InvariantViolation{GameSeed: int64(i), Message: "test"}
+	}
+	if err := PersistInvariantViolations(dir, batch); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadInvariantViolations(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != maxInvariantViolations {
+		t.Fatalf("expected %d violations, got %d", maxInvariantViolations, len(got))
+	}
+	if got[0].GameSeed != 500 {
+		t.Fatalf("expected oldest kept seed=500, got %d", got[0].GameSeed)
+	}
+}
+
+func TestPersistCrashLogs_CapsAtMax(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < maxCrashLogs+100; i++ {
+		if err := PersistCrashLogs(dir, []string{"stack"}, []string{"cmd"}, i, 4); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := ReadCrashLogs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != maxCrashLogs {
+		t.Fatalf("expected %d crashes, got %d", maxCrashLogs, len(got))
+	}
+}

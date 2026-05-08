@@ -50,6 +50,11 @@ type Batcher struct {
 	pending      int
 	games        int
 
+	totalGaps       int
+	totalCrashes    int
+	totalDeadTrigs  int
+	totalInvariants int
+
 	stop   chan struct{}
 	doneWG sync.WaitGroup
 	closed bool
@@ -125,6 +130,7 @@ func (b *Batcher) AddParserGaps(gaps map[string]int) {
 		}
 		b.parserGaps[snippet] += count
 		b.pending++
+		b.totalGaps += count
 	}
 	flush := b.pending >= b.batchSize
 	b.mu.Unlock()
@@ -143,6 +149,7 @@ func (b *Batcher) AddCrash(stackTrace string, commanderNames []string, nGames, n
 		NSeats:         nSeats,
 	})
 	b.pending++
+	b.totalCrashes++
 	flush := b.pending >= b.batchSize
 	b.mu.Unlock()
 	if flush {
@@ -166,6 +173,7 @@ func (b *Batcher) AddDeadTrigger(triggerName, cardName string, count, gamesSeen 
 	a.count += count
 	a.gamesSeen += gamesSeen
 	b.pending++
+	b.totalDeadTrigs += count
 	flush := b.pending >= b.batchSize
 	b.mu.Unlock()
 	if flush {
@@ -196,6 +204,7 @@ func (b *Batcher) AddInvariantViolations(violations []InvariantViolation) {
 	b.mu.Lock()
 	b.invariants = append(b.invariants, violations...)
 	b.pending += len(violations)
+	b.totalInvariants += len(violations)
 	flush := b.pending >= b.batchSize
 	b.mu.Unlock()
 	if flush {
@@ -311,6 +320,26 @@ func (b *Batcher) Flush() error {
 		}
 	}
 	return firstErr
+}
+
+// BatcherStats holds lightweight counters for health telemetry.
+type BatcherStats struct {
+	ParserGaps    int
+	Crashes       int
+	DeadTriggers  int
+	Invariants    int
+}
+
+// Stats returns cumulative counters without reading any files from disk.
+func (b *Batcher) Stats() BatcherStats {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return BatcherStats{
+		ParserGaps:   b.totalGaps,
+		Crashes:      b.totalCrashes,
+		DeadTriggers: b.totalDeadTrigs,
+		Invariants:   b.totalInvariants,
+	}
 }
 
 // Close stops the background flusher and writes any remaining buffer to

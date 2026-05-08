@@ -95,12 +95,17 @@ type RegressionFailure struct {
 // --------------------------------------------------------------------
 
 const (
-	parserGapsFile            = "parser_gaps.json"
-	crashesFile               = "crashes.json"
-	deadTriggersFile          = "dead_triggers.json"
-	concessionsFile           = "concessions.json"
-	invariantViolationsFile   = "invariant_violations.json"
-	regressionFailuresFile    = "regression_failures.json"
+	parserGapsFile          = "parser_gaps.json"
+	crashesFile             = "crashes.json"
+	deadTriggersFile        = "dead_triggers.json"
+	concessionsFile         = "concessions.json"
+	invariantViolationsFile = "invariant_violations.json"
+	regressionFailuresFile  = "regression_failures.json"
+
+	maxInvariantViolations = 10000
+	maxCrashLogs           = 1000
+	maxConcessions         = 10000
+	maxRegressionFailures  = 5000
 )
 
 // --------------------------------------------------------------------
@@ -184,6 +189,7 @@ func PersistCrashLogs(dir string, crashes []string, commanderNames []string, nGa
 		existing = append(existing, entry)
 	}
 
+	existing = capEntries(existing, maxCrashLogs)
 	return atomicWriteJSON(filepath.Join(dir, crashesFile), existing)
 }
 
@@ -298,7 +304,7 @@ func PersistConcessions(dir string, records []ConcessionRecord) error {
 		return err
 	}
 
-	existing = append(existing, records...)
+	existing = capEntries(append(existing, records...), maxConcessions)
 	return atomicWriteJSON(filepath.Join(dir, concessionsFile), existing)
 }
 
@@ -339,7 +345,7 @@ func PersistInvariantViolations(dir string, violations []InvariantViolation) err
 		}
 	}
 
-	existing = append(existing, violations...)
+	existing = capEntries(append(existing, violations...), maxInvariantViolations)
 	return atomicWriteJSON(filepath.Join(dir, invariantViolationsFile), existing)
 }
 
@@ -383,6 +389,7 @@ func AutoArchiveViolation(dir string, rngSeed int64, deckKeys [4]string, violati
 		})
 	}
 
+	existing = capEntries(existing, maxInvariantViolations)
 	return atomicWriteJSON(filepath.Join(dir, invariantViolationsFile), existing)
 }
 
@@ -434,7 +441,7 @@ func PersistRegressionFailures(dir string, failures []RegressionFailure) error {
 		}
 	}
 
-	existing = append(existing, failures...)
+	existing = capEntries(append(existing, failures...), maxRegressionFailures)
 	return atomicWriteJSON(filepath.Join(dir, regressionFailuresFile), existing)
 }
 
@@ -518,6 +525,14 @@ func ReadRegressionFailures(dir string) ([]RegressionFailure, error) {
 // --------------------------------------------------------------------
 // Helpers
 // --------------------------------------------------------------------
+
+// capEntries keeps the last max elements when a slice exceeds the limit.
+func capEntries[T any](s []T, max int) []T {
+	if len(s) <= max {
+		return s
+	}
+	return s[len(s)-max:]
+}
 
 // readJSON reads a JSON file into dst. Returns nil if the file does not
 // exist (dst is left at its zero value).

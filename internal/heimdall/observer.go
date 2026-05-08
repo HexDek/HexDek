@@ -102,8 +102,10 @@ func (o *Observer) Flush() {
 }
 
 func (o *Observer) flushSeeds(seeds []GameSeed) {
-	// Append to seed file (JSON lines for now, binary later).
 	fname := filepath.Join(o.dataDir, "heimdall", "seeds.jsonl")
+	if info, err := os.Stat(fname); err == nil && info.Size() > maxSeedFileSize {
+		os.Rename(fname, fname+".prev")
+	}
 	f, err := os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return

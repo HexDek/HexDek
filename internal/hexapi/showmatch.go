@@ -31,7 +31,6 @@ import (
 	"github.com/hexdek/hexdek/internal/hat"
 	"github.com/hexdek/hexdek/internal/heimdall"
 	"github.com/hexdek/hexdek/internal/matchmaking"
-	"github.com/hexdek/hexdek/internal/muninn"
 	"github.com/hexdek/hexdek/internal/telemetry"
 	"github.com/hexdek/hexdek/internal/tournament"
 	"github.com/hexdek/hexdek/internal/trueskill"
@@ -621,24 +620,14 @@ func (sm *Showmatch) runHealthPulse() {
 		gamesPlayed := sm.stats.historicGames + sm.stats.gamesPlayed
 		sm.mu.RUnlock()
 
-		// Read Muninn data for gap/crash/dead-trigger counts.
-		parserGaps, _ := muninn.ReadParserGaps("data/muninn")
-		crashLogs, _ := muninn.ReadCrashLogs("data/muninn")
-		deadTriggers, _ := muninn.ReadDeadTriggers("data/muninn")
-
-		// Top 5 gap cards by count.
-		sorted := muninn.SortedParserGaps(parserGaps)
-		var topGaps []string
-		for i := 0; i < len(sorted) && i < 5; i++ {
-			topGaps = append(topGaps, sorted[i].Snippet)
-		}
+		ms := sm.muninnSink.batcher.Stats()
 
 		sm.heimdall.Pulse(heimdall.HealthPulse{
 			GamesPlayed:   gamesPlayed,
-			ParserGaps:    len(parserGaps),
-			Crashes:       len(crashLogs),
-			DeadTriggers:  len(deadTriggers),
-			TopGapCards:   topGaps,
+			ParserGaps:    ms.ParserGaps,
+			Crashes:       ms.Crashes,
+			DeadTriggers:  ms.DeadTriggers,
+			TopGapCards:   nil,
 			EngineVersion: "0.1.0",
 		})
 	}
