@@ -18,6 +18,16 @@ import "strconv"
 // FireZoneChange (commander.go) + FireZoneChangeTriggers (zone_change.go)
 // so that replacements and triggers fire correctly from every call site.
 
+// MoveResult holds the outcome of a MoveCard call. FinalZone is the
+// destination after §614 replacements and §903.9b commander redirect
+// (may differ from the requested toZone, or "" if the move was cancelled).
+// Permanent is non-nil when the card landed on the battlefield, pointing
+// to the newly created *Permanent wrapper.
+type MoveResult struct {
+	FinalZone string
+	Permanent *Permanent // non-nil when FinalZone == "battlefield"
+}
+
 // MoveCard is the universal zone-change entry point. It:
 //   1. Removes card from its source zone (by pointer identity) on the
 //      named seat. No-op for battlefield/stack sources — see notes.
@@ -31,10 +41,12 @@ import "strconv"
 //      that seat's graveyard. Used by "you've descended this turn"
 //      threshold checks on Ixalan descend cards.
 //
-// Returns the final destination zone string (may differ from the caller's
-// toZone when §614 or §903.9b redirected — e.g. commander on its way to
-// the hand gets bounced to command_zone). Returns "" when a replacement
-// effect cancelled the move.
+// Returns a MoveResult whose FinalZone is the final destination zone
+// string (may differ from the caller's toZone when §614 or §903.9b
+// redirected — e.g. commander on its way to the hand gets bounced to
+// command_zone). FinalZone is "" when a replacement effect cancelled the
+// move. When the card lands on the battlefield, MoveResult.Permanent
+// points to the newly created *Permanent wrapper.
 //
 // Callers moving FROM the battlefield should not use MoveCard directly:
 // battlefield exits have their own Permanent-lifecycle semantics (removal
@@ -44,15 +56,15 @@ import "strconv"
 //
 // reason is a free-form log string (e.g. "mill", "discard", "surveil",
 // "cascade-exile") — recorded in the fired events for debug traceability.
-func MoveCard(gs *GameState, card *Card, ownerSeat int, fromZone, toZone, reason string) string {
+func MoveCard(gs *GameState, card *Card, ownerSeat int, fromZone, toZone, reason string) MoveResult {
 	if gs == nil || card == nil {
-		return ""
+		return MoveResult{}
 	}
 	removeCardFromZone(gs, ownerSeat, card, fromZone)
 	dest := FireZoneChange(gs, nil, card, ownerSeat, fromZone, toZone)
 	if dest == "" {
 		// A §614 replacement cancelled the zone change entirely.
-		return ""
+		return MoveResult{}
 	}
 	// Ramp / recursion / "put onto the battlefield" effects bypass
 	// the cast path (tryPlayLand, resolvePermanentSpellETB), so an
@@ -137,7 +149,17 @@ func MoveCard(gs *GameState, card *Card, ownerSeat int, fromZone, toZone, reason
 			gs.Flags["permanents_to_graveyard_this_turn"]++
 		}
 	}
-	return dest
+	var perm *Permanent
+	if dest == "battlefield" && ownerSeat >= 0 && ownerSeat < len(gs.Seats) && gs.Seats[ownerSeat] != nil {
+		bf := gs.Seats[ownerSeat].Battlefield
+		for i := len(bf) - 1; i >= 0; i-- {
+			if bf[i] != nil && bf[i].Card == card {
+				perm = bf[i]
+				break
+			}
+		}
+	}
+	return MoveResult{FinalZone: dest, Permanent: perm}
 }
 
 // RemoveCardFromAllPrivateZones sweeps a card pointer out of every

@@ -241,7 +241,7 @@ func moveCardBetweenZones(gs *gameengine.GameState, seat int, card *gameengine.C
 	if gs == nil || card == nil || seat < 0 || seat >= len(gs.Seats) {
 		return ""
 	}
-	return gameengine.MoveCard(gs, card, seat, fromZone, toZone, reason)
+	return gameengine.MoveCard(gs, card, seat, fromZone, toZone, reason).FinalZone
 }
 
 // removePermanent detaches a permanent from its controller's battlefield.

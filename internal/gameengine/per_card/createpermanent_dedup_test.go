@@ -19,9 +19,9 @@ func TestCreatePermanent_DedupOnDoubleCall(t *testing.T) {
 
 	// Simulate the double-call pattern from reanimation handlers:
 	// Step 1: MoveCard places the card on the battlefield.
-	dest := gameengine.MoveCard(gs, card, 0, "graveyard", "battlefield", "reanimate")
-	if dest != "battlefield" {
-		t.Fatalf("MoveCard returned %q, want battlefield", dest)
+	result := gameengine.MoveCard(gs, card, 0, "graveyard", "battlefield", "reanimate")
+	if result.FinalZone != "battlefield" {
+		t.Fatalf("MoveCard returned %q, want battlefield", result.FinalZone)
 	}
 	if len(gs.Seats[0].Battlefield) != 1 {
 		t.Fatalf("after MoveCard: battlefield=%d, want 1", len(gs.Seats[0].Battlefield))

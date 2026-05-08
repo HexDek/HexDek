@@ -793,6 +793,14 @@ type Card struct {
 	// exist. SBA sba704_5e sweeps these from hand/graveyard/exile/library.
 	IsCopy bool
 
+	// ExiledByTimestamp is non-zero when this card was exiled "linked" to
+	// a specific permanent (CR §406.7 — O-Ring, Fiend Hunter, Knowledge
+	// Pool, Hostage Taker, etc.). The value is the exiling permanent's
+	// Timestamp field, which uniquely identifies it within the game. When
+	// the linked permanent leaves the battlefield, its LTB handler returns
+	// all cards whose ExiledByTimestamp matches.
+	ExiledByTimestamp int
+
 	// OracleTextCache — lowercased oracle text, computed once on first
 	// access via OracleTextLower. Avoids repeated string building +
 	// ToLower in hot evaluator loops.
@@ -930,6 +938,13 @@ type Permanent struct {
 	// the back-face name lives only on the oracle card.
 	FrontFaceName string
 	BackFaceName  string
+
+	// LinkedExile holds cards this permanent has exiled "until it leaves"
+	// (CR §406.7). Oblivion Ring, Fiend Hunter, Knowledge Pool, Hostage
+	// Taker, etc. append here at ETB; the LTB handler iterates this to
+	// return cards to the appropriate zone. The matching Card has
+	// ExiledByTimestamp set to this permanent's Timestamp.
+	LinkedExile []*Card
 }
 
 // Modification is a runtime +X/+Y style buff with a duration tag.
@@ -1092,6 +1107,37 @@ func (p *Permanent) AddCounter(kind string, n int) {
 	if p.Counters[kind] < 0 {
 		p.Counters[kind] = 0
 	}
+}
+
+// ExileLinked moves a card to the owner's exile zone and links it to
+// the exiling permanent (CR §406.7). When the permanent later leaves
+// the battlefield, callers should use ReturnLinkedExile to return all
+// linked cards. The card's ExiledByTimestamp is set to perm.Timestamp.
+func ExileLinked(gs *GameState, perm *Permanent, card *Card, ownerSeat int, fromZone string) {
+	if gs == nil || perm == nil || card == nil {
+		return
+	}
+	card.ExiledByTimestamp = perm.Timestamp
+	perm.LinkedExile = append(perm.LinkedExile, card)
+	MoveCard(gs, card, ownerSeat, fromZone, "exile", perm.Card.DisplayName()+"_exile_linked")
+}
+
+// ReturnLinkedExile returns all cards linked to a permanent back to
+// their owner's zone (typically "battlefield" for O-Ring effects or
+// "hand" for bounce-exile effects). Clears the permanent's LinkedExile
+// slice and resets each card's ExiledByTimestamp.
+func ReturnLinkedExile(gs *GameState, perm *Permanent, toZone string) {
+	if gs == nil || perm == nil || len(perm.LinkedExile) == 0 {
+		return
+	}
+	for _, card := range perm.LinkedExile {
+		if card == nil {
+			continue
+		}
+		card.ExiledByTimestamp = 0
+		MoveCard(gs, card, card.Owner, "exile", toZone, perm.Card.DisplayName()+"_ltb_return")
+	}
+	perm.LinkedExile = nil
 }
 
 // -----------------------------------------------------------------------------

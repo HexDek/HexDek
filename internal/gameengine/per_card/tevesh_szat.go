@@ -186,8 +186,8 @@ func teveshSzatMinusTen(gs *gameengine.GameState, src *gameengine.Permanent) {
 				continue
 			}
 			// MoveCard already creates the permanent and fires ETB triggers.
-			actualDest := gameengine.MoveCard(gs, c, seatIdx, "command_zone", "battlefield", "tevesh_szat_minus_ten")
-			if actualDest != "battlefield" {
+			result := gameengine.MoveCard(gs, c, seatIdx, "command_zone", "battlefield", "tevesh_szat_minus_ten")
+			if result.FinalZone != "battlefield" {
 				continue
 			}
 			zoneSteals = append(zoneSteals, stolen{from: seatIdx, name: c.DisplayName()})

@@ -211,9 +211,9 @@ func TestMoveCard_BattlefieldIntegration(t *testing.T) {
 	c.AST = &gameast.CardAST{Name: "Emrakul, the Aeons Torn"}
 	gs.Seats[0].Hand = append(gs.Seats[0].Hand, c)
 
-	dest := MoveCard(gs, c, 0, "hand", "battlefield", "cheat_creature")
-	if dest != "battlefield" {
-		t.Errorf("MoveCard returned dest=%q, want battlefield", dest)
+	result := MoveCard(gs, c, 0, "hand", "battlefield", "cheat_creature")
+	if result.FinalZone != "battlefield" {
+		t.Errorf("MoveCard returned dest=%q, want battlefield", result.FinalZone)
 	}
 	// Card should be on battlefield, not in hand or graveyard.
 	if len(gs.Seats[0].Battlefield) != 1 {
