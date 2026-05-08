@@ -222,6 +222,8 @@ type Showmatch struct {
 
 	gauntletMu sync.RWMutex
 	gauntlets  map[string]*GauntletResult
+
+	rooms *RoomManager
 }
 
 type spectatorConn struct {
@@ -262,6 +264,7 @@ func NewShowmatch(astPath, oraclePath, decksDir string, database *sql.DB) *Showm
 		persistCh:       make(chan persistJob, 512),
 		spectators:      make(map[*spectatorConn]struct{}),
 		gauntlets:       make(map[string]*GauntletResult),
+		rooms:           NewRoomManager(),
 		heimdall:        heimdall.New("data", &huginnAdapter{dataDir: "data"}, muninnSink, newTelemetrySink()),
 		muninnSink:      muninnSink,
 		cursePool:      make(map[string]*hat.CursePool),
@@ -2526,6 +2529,11 @@ func (sm *Showmatch) RegisterShowmatch(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/achievements/{owner}", sm.handleAchievements)
 	mux.HandleFunc("GET /api/owner/{owner}/stats", sm.handleOwnerStats)
 	mux.HandleFunc("GET /api/owner/{owner}/games", sm.handleOwnerGames)
+
+	mux.HandleFunc("POST /api/spectate/spawn", sm.handleSpawnSpectateRoom)
+	mux.HandleFunc("GET /api/spectate/rooms", sm.handleListSpectateRooms)
+	mux.HandleFunc("GET /api/spectate/rooms/{room_id}", sm.handleGetSpectateRoom)
+	mux.HandleFunc("GET /ws/spectate/{room_id}", sm.handleSpectateRoomWS)
 }
 
 var gauntletSem = make(chan struct{}, 2)
