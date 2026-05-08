@@ -98,6 +98,9 @@ func main() {
 	traceFlag := flag.Bool("trace", false, "write per-test execution traces to data/thor-traces/ for failing tests")
 	traceDirFlag := flag.String("trace-dir", "data/thor-traces", "directory for --trace output files")
 	failuresCsv := flag.String("failures-csv", "", "write all failures to CSV file (no truncation)")
+	crossrefFlag := flag.Bool("crossref", false, "run Muninn cross-reference after tests (diff Thor failures vs live-game gaps)")
+	crossrefDir := flag.String("crossref-dir", "data/muninn", "directory containing Muninn JSON files")
+	crossrefReport := flag.String("crossref-report", "data/crossref-report.md", "path for cross-reference report")
 
 	flag.Parse()
 
@@ -108,6 +111,13 @@ func main() {
 			log.Fatalf("trace: cannot create %s: %v", traceDir, err)
 		}
 		log.Printf("  trace mode: ON (writing to %s)", traceDir)
+	}
+
+	// Structured trace collector — layered on top of basic traces.
+	// Writes per-card .trace files with phase-annotated entries.
+	var traceCollector *TraceCollector
+	if *traceFlag {
+		traceCollector = NewTraceCollector(*traceDirFlag, true)
 	}
 
 	if *comboDemo {
@@ -278,7 +288,7 @@ func main() {
 			go func() {
 				defer wg.Done()
 				for wi := range work {
-					cardFailures := testCard(wi.card, wi.ast, interactions, *withPhases)
+					cardFailures := testCard(wi.card, wi.ast, interactions, *withPhases, traceCollector)
 					n := int64(len(interactions))
 					if *withPhases {
 						n += 7 // untap, upkeep, draw, main1, combat, main2, end
@@ -508,16 +518,52 @@ func main() {
 		}
 	}
 
+	// Structured trace summary.
+	if traceCollector != nil {
+		if err := traceCollector.WriteSummary(); err != nil {
+			log.Printf("WARNING: trace summary write failed: %v", err)
+		}
+		collected, written, skipped := traceCollector.Stats()
+		log.Printf("  traces:        %d collected, %d written, %d skipped", collected, written, skipped)
+	}
+
+	// Muninn cross-reference.
+	if *crossrefFlag {
+		log.Println("\n--- crossref: Thor vs Muninn ---")
+		xref, err := RunCrossRef(failures, *crossrefDir)
+		if err != nil {
+			log.Printf("  crossref error: %v", err)
+		} else {
+			if err := WriteCrossRefReport(*crossrefReport, xref); err != nil {
+				log.Printf("  crossref report write failed: %v", err)
+			} else {
+				log.Printf("  crossref report: %s", *crossrefReport)
+			}
+			tp := len(xref.TruePositives)
+			fn := len(xref.FalseNegatives)
+			fp := len(xref.FalsePositives)
+			log.Printf("  true positives:  %d", tp)
+			log.Printf("  false negatives: %d (Muninn sees, Thor misses)", fn)
+			log.Printf("  false positives: %d (Thor sees, Muninn clean)", fp)
+			if tp+fn > 0 {
+				log.Printf("  recall:          %.1f%%", float64(tp)/float64(tp+fn)*100)
+			}
+			if tp+fp > 0 {
+				log.Printf("  precision:       %.1f%%", float64(tp)/float64(tp+fp)*100)
+			}
+		}
+	}
+
 	// Print top failing cards.
 	printTopFailures(failures)
 }
 
-func testCard(oc *oracleCard, ast *gameast.CardAST, interactions []interaction, withPhases bool) []failure {
+func testCard(oc *oracleCard, ast *gameast.CardAST, interactions []interaction, withPhases bool, tc *TraceCollector) []failure {
 	var fails []failure
 
 	// 1. Interaction tests (destroy, exile, bounce, etc.)
 	for _, inter := range interactions {
-		f := testInteraction(oc, ast, inter)
+		f := testInteraction(oc, ast, inter, tc)
 		if f != nil {
 			fails = append(fails, *f)
 		}
@@ -584,12 +630,16 @@ func testCard(oc *oracleCard, ast *gameast.CardAST, interactions []interaction, 
 	return fails
 }
 
-func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction) (result *failure) {
+func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction, tc *TraceCollector) (result *failure) {
 	tr := NewTracer()
+	rec := tc.Begin(oc.Name, inter.Name)
 	defer func() {
 		if r := recover(); r != nil {
 			tr.Record("PANIC", "interaction=%s err=%v", inter.Name, r)
 			tr.Flush(oc.Name, "panic_"+inter.Name)
+			rec.Panic(fmt.Sprintf("interaction=%s err=%v", inter.Name, r))
+			rec.Complete(OutcomeFailPanic, "panic_recovery")
+			tc.Collect(rec.Trace())
 			result = &failure{
 				CardName:    oc.Name,
 				Interaction: inter.Name,
@@ -611,7 +661,10 @@ func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction) (r
 
 	tr.Record("SETUP", "place card=%q seat=0 types=%v power=%d toughness=%d",
 		oc.Name, oc.Types, perm.Power(), perm.Toughness())
+	rec.Setup(fmt.Sprintf("place card=%q seat=0 types=%v power=%d toughness=%d",
+		oc.Name, oc.Types, perm.Power(), perm.Toughness()))
 	tr.Record("SETUP", "place opponent=%q seat=1 power=2 toughness=2", "Opponent Bear")
+	rec.Setup("place opponent=\"Opponent Bear\" seat=1 power=2 toughness=2")
 
 	// Adversarial seat auto-detect: if the card references opponents,
 	// stage opponent actions so listening triggers can fire.
@@ -619,6 +672,17 @@ func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction) (r
 		needs := detectOpponentNeeds(oc.ast, oc.OracleText)
 		if needs.hasAny() {
 			applyAdversarialSetup(gs, oc, needs, tr)
+			rec.Setup("adversarial action setup applied")
+		}
+	}
+
+	// Board-state enrichment: ensure opponent has the right permanent types
+	// so targeting effects can resolve.
+	if oc.OracleText != "" {
+		req := DetectOpponentRequirements(oc.OracleText)
+		if req.HasAny() {
+			EnrichOpponentSeat(gs, 1, req)
+			rec.Setup("opponent board-state enrichment applied")
 		}
 	}
 
@@ -626,6 +690,7 @@ func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction) (r
 	eventsBefore := len(gs.EventLog)
 
 	tr.Record("EFFECT_ATTEMPT", "interaction=%s", inter.Name)
+	rec.EffectDispatch(fmt.Sprintf("interaction=%s", inter.Name))
 	inter.Fn(gs, perm)
 
 	gameengine.StateBasedActions(gs)
@@ -633,6 +698,7 @@ func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction) (r
 	bfAfter := totalBattlefield(gs)
 	newEvents := gs.EventLog[eventsBefore:]
 	tr.Record("STATE_CHANGE", "events=%d battlefield_delta=%d", len(newEvents), bfAfter-bfBefore)
+	rec.Resolution(fmt.Sprintf("events=%d battlefield_delta=%d", len(newEvents), bfAfter-bfBefore))
 	for i, ev := range newEvents {
 		if i >= 8 {
 			tr.Record("STATE_CHANGE", "... %d more events truncated", len(newEvents)-i)
@@ -646,6 +712,9 @@ func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction) (r
 	if len(violations) > 0 {
 		tr.Record("ASSERT_FAIL", "invariant=%s msg=%s", violations[0].Name, violations[0].Message)
 		tr.Flush(oc.Name, "interaction_"+inter.Name)
+		rec.Assert(fmt.Sprintf("FAIL invariant=%s msg=%s", violations[0].Name, violations[0].Message))
+		rec.Complete(OutcomeFailInvariant, violations[0].Name)
+		tc.Collect(rec.Trace())
 		return &failure{
 			CardName:    oc.Name,
 			Interaction: inter.Name,
@@ -655,6 +724,9 @@ func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction) (r
 	}
 
 	tr.Record("ASSERT_PASS", "no invariant violations")
+	rec.Assert("PASS no invariant violations")
+	rec.Complete(OutcomePass, "")
+	tc.Collect(rec.Trace())
 	return nil
 }
 

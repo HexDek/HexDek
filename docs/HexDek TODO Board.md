@@ -67,16 +67,16 @@ kanban-plugin: board
 - [ ] **Corpus audit: lifegain/lifeloss gaps (1,612 failures)** — gain_life (1,101) + lose_life (511). Cards like Bloodchief Ascension, Grave Venerations, Senu. Triggered effects needing condition setup or handler wiring. #engine #handlers #life
 - [ ] **Corpus audit: damage gaps (1,095 failures)** — damage effects parsed but not executing. Need to distinguish test harness setup issues from real handler gaps. #engine #handlers #damage
 - [ ] **Corpus audit: discard/mill/buff gaps (534 failures)** — discard (305), mill (148), buff (81). Lower volume, mixed causes. #engine #handlers #misc
-- [ ] **Thor test harness: conditional trigger setup** — many "failures" are Thor not meeting trigger conditions (e.g. "when a creature dies" but nothing dies). Improve test board scaffolding to exercise conditional triggers. #engine #qa #thor
-- [ ] **Muninn-Thor mismatch audit** — 121 Muninn live-game gaps vs 181 Thor failures. Cross-reference to find cards that fail in real games but pass Thor (false negatives) and vice versa. #engine #qa
+- [x] **Thor test harness: conditional trigger setup** — 14 new scaffold kinds in conditional_setup.go (gained-life, cast-spell, ETB, drawn-card, attacked, sacrificed, combat-damage, landfall, discarded, enchanted, opponent-lost-life, life-threshold, upkeep). (2026-05-07) #engine #qa #thor
+- [x] **Muninn-Thor mismatch audit** — crossref.go: loads Muninn data + Thor failures, builds TP/FN/FP confusion matrix, computes recall/precision, writes markdown report. (2026-05-07) #engine #qa
 
-## High Priority — Thor 2.0 (7174n1c, 2026-05-06)
+## High Priority — Thor 2.0 (7174n1c, 2026-05-06) — ALL DONE
 
-- [ ] **Action traces** — per-card `.trace` files dumping the full event chain step-by-step for every test. Shows WHERE the chain broke (condition check failed? handler entered but draw returned nil?). Layers on top of all existing modules. #thor #diagnostics
-- [ ] **Opponent auto-detect** — oracle text containing "opponent(s)" auto-spawns an active adversarial seat. Parse AST target references for `opponent` condition/target → add a second seat that casts, attacks, controls creatures, loses life, etc. No manual curation. #thor #scaffolding
-- [ ] **Conditional trigger scaffolding** — upgrade Goldilocks board setup: parse trigger conditions from AST and auto-generate the setup action. "when a creature dies" → add creature + kill it. "when you gain life" → gain life first. "whenever you cast" → cast a spell first. #thor #scaffolding
-- [ ] **Oracle Errata Pipeline** — on-demand Scryfall bulk pull → diff against local `oracle-cards.json` → re-parse changed cards through AST → re-run Thor on changed set → report. CLI: `hexdek-oracle-sync [--live|--dry-run]`. Triggered manually when set releases drop (pre-release = 1 week before street date). ~15 sec runtime, 80MB bandwidth, zero LLM tokens. #thor #pipeline #infra
-- [ ] **Muninn cross-reference** — post-Thor-run diff against Muninn live-game gaps. Flag false negatives (fail in games, pass Thor) and false positives (pass in games, fail Thor). #thor #qa
+- [x] **Action traces** — `CardTraceRecorder` fluent builder with 8 phases (setup → panic), `TraceCollector` writes `.trace` files per card, failures-only mode, snapshot diff summaries. 27 tests. (2026-05-07) #thor #diagnostics
+- [x] **Opponent auto-detect** — oracle text pattern analysis → 11 requirement categories → idempotent board-state enrichment for targeting effects. 30 tests. (2026-05-07) #thor #scaffolding
+- [x] **Conditional trigger scaffolding** — 14 new scaffold kinds (gained-life, cast-spell, creature-ETB, drawn-card, attacked, sacrificed, combat-damage, landfall, discarded, enchanted-creature, opponent-lost-life, life-above/below-threshold, upkeep-phase). All three layers (detect/apply/trace) updated. 49 new tests. (2026-05-07) #thor #scaffolding
+- [x] **Oracle Errata Pipeline** — `cmd/hexdek-oracle-sync/`: streaming Scryfall bulk download, field-level diff, markdown report, `--live`/`--dry-run`/`--diff-only`/`--report` modes. 27 tests. (2026-05-07) #thor #pipeline #infra
+- [x] **Muninn cross-reference** — loads Muninn data, builds confusion matrix against Thor failures (TP/FN/FP), computes recall/precision, writes markdown report. 10 tests. (2026-05-07) #thor #qa
 
 
 ## Medium Priority — Platform
