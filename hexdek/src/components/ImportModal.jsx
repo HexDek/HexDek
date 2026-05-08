@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { toast } from './Toast'
 import { trackEvent } from '../hooks/useAnalytics'
 import AuthPrompt from './AuthPrompt'
+import ContextBox from './ContextBox'
 import './ImportModal.css'
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -600,6 +601,10 @@ function ImportModalInner({ onClose, onImported, navigate, user }) {
             )}
 
             {/* Actions */}
+            <ContextBox>
+              Imports the deck into your archive and runs Freya analysis automatically — you'll land on the new deck's page when it's ready.
+              {mode === 'moxfield' ? ' Moxfield URL must point to a public deck.' : ''}
+            </ContextBox>
             <div className="import-modal__actions">
               <button
                 type="button"

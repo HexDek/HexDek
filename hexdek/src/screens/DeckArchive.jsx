@@ -16,6 +16,7 @@ import { trackEvent } from '../hooks/useAnalytics'
 import { MOCK_DECK_ANALYSIS } from '../services/mock'
 import { DeckPicker } from './DeckCompare'
 import DeckExportModal from '../components/DeckExportModal'
+import ContextBox from '../components/ContextBox'
 
 // Brutalist stat-summary panel: mana curve, card-type breakdown, color
 // pips. Computed entirely from the in-memory deck card list — no extra
@@ -801,54 +802,70 @@ export default function DeckArchive() {
             <div className="hr" style={{ margin: '10px 0' }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {owner && id && (
-                <Btn arrow="↗" onClick={() => {
-                  if (editing) return
-                  const lines = cards.map(c => {
-                    const cmdr = deck?.commander_card
-                    if (cmdr && c.name === cmdr) return `COMMANDER: ${c.name}`
-                    return c.quantity > 1 ? `${c.quantity} ${c.name}` : `1 ${c.name}`
-                  })
-                  setEditText(lines.join('\n'))
-                  setEditing(true)
-                  api.getDeckVersions(`${owner}/${id}`).then(setVersions).catch(() => {})
-                }}>EDIT DECK</Btn>
+                <>
+                  <ContextBox compact>Opens an editor with the full deck list. Saving re-runs Freya analysis on the new list.</ContextBox>
+                  <Btn arrow="↗" onClick={() => {
+                    if (editing) return
+                    const lines = cards.map(c => {
+                      const cmdr = deck?.commander_card
+                      if (cmdr && c.name === cmdr) return `COMMANDER: ${c.name}`
+                      return c.quantity > 1 ? `${c.quantity} ${c.name}` : `1 ${c.name}`
+                    })
+                    setEditText(lines.join('\n'))
+                    setEditing(true)
+                    api.getDeckVersions(`${owner}/${id}`).then(setVersions).catch(() => {})
+                  }}>EDIT DECK</Btn>
+                </>
               )}
+              <ContextBox compact>Downloads the decklist in your chosen format (Moxfield, Arena, plain text).</ContextBox>
               <Btn ghost arrow="↗" onClick={() => {
                 if (!cards.length) return
                 setExportOpen(true)
               }}>EXPORT</Btn>
               {analyzing && <Tag solid kind="info">ANALYZING...</Tag>}
               {owner && id && (
-                <Btn ghost arrow="↗" onClick={() => navigate(`/forge?deck=${owner}/${id}`)}>OPEN IN FORGE</Btn>
+                <>
+                  <ContextBox compact>Opens this deck in the Forge — interactive playtester for testing draws, mulligans, and lines.</ContextBox>
+                  <Btn ghost arrow="↗" onClick={() => navigate(`/forge?deck=${owner}/${id}`)}>OPEN IN FORGE</Btn>
+                </>
               )}
               {owner && id && !isOwner && user && (
-                <Btn solid arrow="⎘" disabled={cloning} onClick={() => {
-                  if (cloning) return
-                  setCloning(true)
-                  trackEvent('clone_deck', { deck: `${owner}/${id}` })
-                  api.cloneDeck(`${owner}/${id}`).then(res => {
-                    toast.success('DECK CLONED')
-                    navigate(`/decks/${res.owner}/${res.id}`)
-                  }).catch(err => {
-                    const msg = String(err?.message || '')
-                    if (msg.includes('401')) toast.error('SIGN IN TO CLONE')
-                    else toast.error('CLONE FAILED')
-                    setCloning(false)
-                  })
-                }}>{cloning ? 'CLONING...' : 'CLONE DECK'}</Btn>
+                <>
+                  <ContextBox compact>Copies this deck into your account so you can edit and tune your own version.</ContextBox>
+                  <Btn solid arrow="⎘" disabled={cloning} onClick={() => {
+                    if (cloning) return
+                    setCloning(true)
+                    trackEvent('clone_deck', { deck: `${owner}/${id}` })
+                    api.cloneDeck(`${owner}/${id}`).then(res => {
+                      toast.success('DECK CLONED')
+                      navigate(`/decks/${res.owner}/${res.id}`)
+                    }).catch(err => {
+                      const msg = String(err?.message || '')
+                      if (msg.includes('401')) toast.error('SIGN IN TO CLONE')
+                      else toast.error('CLONE FAILED')
+                      setCloning(false)
+                    })
+                  }}>{cloning ? 'CLONING...' : 'CLONE DECK'}</Btn>
+                </>
               )}
               {owner && id && (
                 <>
                   <div className="hr" style={{ margin: '4px 0' }} />
                   {!confirmDelete ? (
-                    <Btn ghost onClick={() => setConfirmDelete(true)} style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}>DELETE DECK</Btn>
+                    <>
+                      <ContextBox compact tone="danger">Permanently removes this deck and its analysis. This cannot be undone.</ContextBox>
+                      <Btn ghost onClick={() => setConfirmDelete(true)} style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}>DELETE DECK</Btn>
+                    </>
                   ) : (
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <Btn solid onClick={() => {
-                        api.deleteDeck(`${owner}/${id}`).then(() => navigate('/decks')).catch(() => setConfirmDelete(false))
-                      }} style={{ flex: 1, background: 'var(--danger)', borderColor: 'var(--danger)' }}>CONFIRM</Btn>
-                      <Btn ghost onClick={() => setConfirmDelete(false)} style={{ flex: 1 }}>CANCEL</Btn>
-                    </div>
+                    <>
+                      <ContextBox compact tone="danger">Final confirmation — CONFIRM deletes the deck for good. CANCEL backs out.</ContextBox>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <Btn solid onClick={() => {
+                          api.deleteDeck(`${owner}/${id}`).then(() => navigate('/decks')).catch(() => setConfirmDelete(false))
+                        }} style={{ flex: 1, background: 'var(--danger)', borderColor: 'var(--danger)' }}>CONFIRM</Btn>
+                        <Btn ghost onClick={() => setConfirmDelete(false)} style={{ flex: 1 }}>CANCEL</Btn>
+                      </div>
+                    </>
                   )}
                 </>
               )}
@@ -976,7 +993,11 @@ export default function DeckArchive() {
                 }}
                 spellCheck={false}
               />
-              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <ContextBox style={{ marginTop: 10 }}>
+                <strong>SAVE UPDATE</strong> writes a new version of the deck and re-runs Freya analysis.
+                {' '}<strong>CANCEL</strong> discards your edits.
+              </ContextBox>
+              <div style={{ display: 'flex', gap: 8 }}>
                 <Btn solid onClick={() => {
                   if (!editText.trim() || saving) return
                   setSaving(true)
@@ -1039,7 +1060,13 @@ export default function DeckArchive() {
 
           {/* Gauntlet button — prominent, right under Freya */}
           {owner && id && (
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div>
+              <ContextBox>
+                <strong>RUN GAUNTLET</strong> simulates 500 AI-vs-AI games against the meta to measure win rate (takes a few minutes; runs on the server).
+                {' '}<strong>SPECTATE LIVE</strong> spawns a live game room you can watch in real time.
+                {' '}<strong>TEST VARIANT</strong> lets you swap cards and rerun analysis without saving.
+              </ContextBox>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <Btn solid arrow="▶" onClick={() => {
                 if (gauntlet?.status === 'running') return
                 trackEvent('start_gauntlet', { deck: `${owner}/${id}`, games: 500 })
@@ -1064,6 +1091,7 @@ export default function DeckArchive() {
                 }).catch(() => setSpawningRoom(false))
               }}>{spawningRoom ? 'SPAWNING...' : 'SPECTATE LIVE'}</Btn>
               <Btn ghost arrow="▶">TEST VARIANT</Btn>
+              </div>
             </div>
           )}
 

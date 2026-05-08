@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Panel, Btn } from '../components/chrome'
 import { API_BASE } from '../services/api'
+import ContextBox from '../components/ContextBox'
 
 export default function BugReport() {
   const [type, setType] = useState('bug')
@@ -145,6 +146,7 @@ export default function BugReport() {
 
           {error && <div className="t-xs" style={{ color: 'var(--danger)' }}>{error}</div>}
 
+          <ContextBox>Sends this report to the HexDek inbox. We'll follow up at the contact info above when it's resolved.</ContextBox>
           <Btn onClick={handleSubmit} disabled={submitting}>
             {submitting ? 'SUBMITTING...' : 'SUBMIT REPORT'}
           </Btn>

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Btn, Panel, Tag, Tape } from '../components/chrome'
 import { api, cardArtUrl } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
+import ContextBox from '../components/ContextBox'
 
 function normalizeCardName(name) {
   if (!name) return ''
@@ -272,6 +273,9 @@ export default function DeckCompare() {
           </Panel>
         </div>
 
+        <ContextBox style={{ maxWidth: 720, margin: '0 auto' }}>
+          Returns to either deck's full archive page (analysis, gauntlet, decklist). Use <strong>SWAP DECK ↺</strong> on a hero card above to replace one side without leaving this page.
+        </ContextBox>
         <div className="cmp-footer">
           <Btn ghost arrow="←" onClick={() => navigate(`/decks/${owner1}/${deck1}`)}>BACK TO {owner1?.toUpperCase()}/{deck1}</Btn>
           <Btn ghost arrow="←" onClick={() => navigate(`/decks/${owner2}/${deck2}`)}>BACK TO {owner2?.toUpperCase()}/{deck2}</Btn>

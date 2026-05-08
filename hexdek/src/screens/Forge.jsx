@@ -4,6 +4,7 @@ import { Panel, KV, Bar, Tag, Btn, Tape } from '../components/chrome'
 import { api, cardArtUrl } from '../services/api'
 import { useDecks } from '../hooks/useData'
 import { trackEvent } from '../hooks/useAnalytics'
+import ContextBox from '../components/ContextBox'
 
 export default function Forge() {
   const { data: decks, loading: decksLoading } = useDecks()
@@ -283,6 +284,10 @@ export default function Forge() {
                 </>
               )}
 
+              <ContextBox>
+                <strong>RUN GAUNTLET</strong> simulates the selected number of AI-vs-AI games on the server and reports win rate, ELO delta, and matchup breakdown.
+                {' '}<strong>EXPORT .TXT</strong> downloads the decklist as a plain-text file you can paste anywhere.
+              </ContextBox>
               <div className="flex gap-2">
                 {(!gauntlet || gauntlet.status === 'none' || gauntlet.status === 'complete' || gauntlet.status === 'error') && (
                   <Btn solid arrow="▶" onClick={handleStartGauntlet}>RUN GAUNTLET</Btn>

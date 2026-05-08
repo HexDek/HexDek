@@ -6,6 +6,7 @@ import { useLiveSocket } from '../hooks/useLiveSocket'
 import { findGameChangerInText } from '../data/gameChangers'
 import CardLink, { linkifyAction } from '../components/CardLink'
 import { narrate } from '../components/NarratorOverlay'
+import ContextBox from '../components/ContextBox'
 
 const SPEED_MARKS = [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2]
 
@@ -766,6 +767,7 @@ export default function Spectator() {
             </Panel>
 
             <Panel code="FT.SPD" title="SPEED CONTROL">
+              <ContextBox compact>Adjusts how fast the live game ticks. Drag the slider or click a preset — 0.1× is slow study mode, 2× is fast forward.</ContextBox>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 {(() => {
                   const idx = SPEED_MARKS.indexOf(speed) >= 0 ? SPEED_MARKS.indexOf(speed) : 2

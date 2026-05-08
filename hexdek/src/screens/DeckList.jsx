@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useUploadDeck } from '../hooks/useUploadDeck'
 import { MOCK_DECKS } from '../services/mock'
+import ContextBox from '../components/ContextBox'
 
 const VIEW_KEY = 'hexdek_deck_view'
 
@@ -86,6 +87,12 @@ export default function DeckList() {
       <Tape left={tapeLabel} mid={`${filtered.length} / ${decks.length} TOTAL`} right="DOC HX-400" />
 
       <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {user && (
+          <ContextBox>
+            Browse and search every deck on the platform. Click any deck to open its archive — analysis, gauntlet results, decklist, and matchups.
+            {' '}Use <strong>ADD YOUR DECK</strong> (in the list view, or the upload tile on the shelf) to import a Moxfield link or paste a decklist; Freya analyzes it automatically after upload.
+          </ContextBox>
+        )}
         {(ownerParam || containsParam) && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-2)' }}>
             <span>FILTER:</span>
@@ -192,6 +199,9 @@ function ListView({ decks, eloByDeckId, navigate, onUpload }) {
         <span>BRACKET</span>
         <span>ELO</span>
         <span>RECORD</span>
+      </div>
+      <div style={{ padding: '6px 10px 0', borderBottom: '1px solid var(--rule)' }}>
+        <ContextBox compact>Click below to import a deck — paste a Moxfield URL or raw decklist. Freya analyzes it automatically.</ContextBox>
       </div>
       <div
         onClick={onUpload}
