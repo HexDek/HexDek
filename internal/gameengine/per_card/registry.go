@@ -1595,6 +1595,13 @@ func registerDefaults() {
 	registerAdelizTheCinderWind(Global())
 	registerAlibouAncientWitness(Global())
 
+	// Paradigm cards — Secrets of Strixhaven instant/sorcery cycle.
+	registerDecorumDissertation(Global())
+	registerEchocastingSymposium(Global())
+	registerGerminationPracticum(Global())
+	registerImprovisationCapstone(Global())
+	registerRestorationSeminar(Global())
+
 	// Auto-generated handlers (cmd/gen-handlers).
 	registerGeneratedHandlers(Global())
 }

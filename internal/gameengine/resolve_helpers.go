@@ -223,6 +223,7 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 	// -----------------------------------------------------------------
 	case "becomes_prepared":
 		if src != nil {
+			src.Prepared = true
 			if src.Flags == nil {
 				src.Flags = map[string]int{}
 			}

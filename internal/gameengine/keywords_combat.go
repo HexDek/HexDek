@@ -1291,6 +1291,10 @@ func CastAdventure(gs *GameState, seatIdx int, card *Card, adventureCost int) er
 	// Exile (adventure sends to exile, not graveyard).
 	MoveCard(gs, card, seatIdx, "hand", "exile", "replace-to-exile")
 
+	// Grant permission to cast the creature half from exile (CR §715.4).
+	creaturePerm := NewAdventureCreatureCastPermission(manaCostOf(card))
+	RegisterZoneCastGrant(gs, card, creaturePerm)
+
 	gs.LogEvent(Event{
 		Kind:   "adventure",
 		Seat:   seatIdx,

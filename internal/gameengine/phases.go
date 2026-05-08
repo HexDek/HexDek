@@ -803,3 +803,91 @@ func CleanupHandSize(gs *GameState, seatIdx, maxSize int) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Paradigm — Secrets of Strixhaven keyword action
+// ---------------------------------------------------------------------------
+
+// ResolveParadigmCopies fires at the beginning of the active player's first
+// main phase. For each card in gs.ParadigmExile[active], it creates a copy
+// and resolves it without paying its mana cost. The original stays in exile.
+//
+// Per reminder text: "Then exile this spell. After you first resolve a spell
+// with this name, you may cast a copy of it from exile without paying its
+// mana cost at the beginning of each of your first main phases."
+func ResolveParadigmCopies(gs *GameState, active int) {
+	if gs == nil || gs.ParadigmExile == nil {
+		return
+	}
+	cards := gs.ParadigmExile[active]
+	if len(cards) == 0 {
+		return
+	}
+	for _, card := range cards {
+		if card == nil {
+			continue
+		}
+		inExile := false
+		if active >= 0 && active < len(gs.Seats) && gs.Seats[active] != nil {
+			for _, c := range gs.Seats[active].Exile {
+				if c == card {
+					inExile = true
+					break
+				}
+			}
+		}
+		if !inExile {
+			continue
+		}
+
+		copyCard := card.DeepCopy()
+		copyCard.IsCopy = true
+		eff := collectSpellEffect(copyCard)
+		item := &StackItem{
+			Controller: active,
+			Card:       copyCard,
+			Effect:     eff,
+			CostMeta: map[string]interface{}{
+				"paradigm_copy": true,
+			},
+		}
+		PushStackItem(gs, item)
+		gs.LogEvent(Event{
+			Kind:   "paradigm_copy_cast",
+			Seat:   active,
+			Source: card.DisplayName(),
+			Details: map[string]interface{}{
+				"rule": "paradigm_keyword",
+			},
+		})
+		IncrementCastCount(gs, active)
+		RecordCast(gs, active, copyCard, 0)
+		FireCastTriggerObservers(gs, copyCard, active, false)
+		PriorityRound(gs)
+		DrainStack(gs)
+	}
+}
+
+// RegisterParadigmExile adds a card to the paradigm exile tracking for the
+// given seat. Called when a paradigm spell resolves.
+func RegisterParadigmExile(gs *GameState, seatIdx int, card *Card) {
+	if gs == nil || card == nil {
+		return
+	}
+	if gs.ParadigmExile == nil {
+		gs.ParadigmExile = map[int][]*Card{}
+	}
+	gs.ParadigmExile[seatIdx] = append(gs.ParadigmExile[seatIdx], card)
+}
+
+// Unprepare sets a permanent's Prepared state to false and clears the
+// legacy flag. Called after the prepared creature's spell copy resolves.
+func Unprepare(perm *Permanent) {
+	if perm == nil {
+		return
+	}
+	perm.Prepared = false
+	if perm.Flags != nil {
+		perm.Flags["prepared"] = 0
+	}
+}

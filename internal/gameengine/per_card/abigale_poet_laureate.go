@@ -63,10 +63,12 @@ func abigalePreparedTrigger(gs *gameengine.GameState, perm *gameengine.Permanent
 		return
 	}
 
+	// Mark Abigale as prepared (uses the Permanent.Prepared field).
+	perm.Prepared = true
 	if perm.Flags == nil {
 		perm.Flags = map[string]int{}
 	}
-	perm.Flags["abigale_prepared"] = 1
+	perm.Flags["prepared"] = 1
 
 	seat := gs.Seats[perm.Controller]
 	if seat == nil || seat.Lost {
@@ -84,7 +86,7 @@ func abigalePreparedTrigger(gs *gameengine.GameState, perm *gameengine.Permanent
 	}
 
 	target.AddCounter("+1/+1", 1)
-	perm.Flags["abigale_prepared"] = 0
+	gameengine.Unprepare(perm)
 	gs.LogEvent(gameengine.Event{
 		Kind:   "counter_added",
 		Seat:   perm.Controller,

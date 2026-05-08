@@ -268,6 +268,11 @@ func takeTurnImpl(gs *gameengine.GameState, hook func(*gameengine.GameState)) {
 	if gs.CheckEnd() || seat.Lost {
 		return
 	}
+	// Paradigm — cast free copies of paradigm-exiled cards.
+	gameengine.ResolveParadigmCopies(gs, active)
+	if gs.CheckEnd() || seat.Lost {
+		return
+	}
 	runMainPhase(gs, active, true)
 	gameengine.StateBasedActions(gs)
 	if gs.CheckEnd() || seat.Lost {

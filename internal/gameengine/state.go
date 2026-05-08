@@ -177,6 +177,13 @@ type GameState struct {
 	// cast. Consumed by the AI/Hat's cast-from-zone decision logic.
 	ZoneCastGrants map[*Card]*ZoneCastPermission
 
+	// ParadigmExile tracks cards exiled with the Paradigm keyword ability
+	// (Secrets of Strixhaven). At the beginning of the controller's first
+	// main phase, the engine creates a copy of each paradigm card and casts
+	// it without paying its mana cost. The original stays in exile
+	// permanently. Keyed by seat index.
+	ParadigmExile map[int][]*Card
+
 	// CardFirstPlayed maps a card display name to the turn number on
 	// which it first resolved as a spell during this game. Populated by
 	// ResolveStackTop only for spell stack items (item.Card != nil and
@@ -945,6 +952,11 @@ type Permanent struct {
 	// return cards to the appropriate zone. The matching Card has
 	// ExiledByTimestamp set to this permanent's Timestamp.
 	LinkedExile []*Card
+
+	// Prepared is the §702.168 prepared state for Strixhaven DFCs.
+	// While true, the controller may cast a copy of the card's spell face
+	// (the back face). Casting the copy sets Prepared back to false.
+	Prepared bool
 }
 
 // Modification is a runtime +X/+Y style buff with a duration tag.
