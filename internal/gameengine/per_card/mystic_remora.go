@@ -105,10 +105,7 @@ func mysticRemoraUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ct
 		return
 	}
 	// Step 1: put an age counter.
-	if perm.Counters == nil {
-		perm.Counters = map[string]int{}
-	}
-	perm.Counters["age"]++
+	perm.AddCounter("age", 1)
 	age := perm.Counters["age"]
 	// Step 2: decide — pay or sac?
 	// Cumulative upkeep cost is generic 1 per counter for Mystic Remora.

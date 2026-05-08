@@ -59,10 +59,7 @@ func marcusCombatDamage(gs *gameengine.GameState, perm *gameengine.Permanent, ct
 		})
 		return
 	}
-	if src.Counters == nil {
-		src.Counters = map[string]int{}
-	}
-	src.Counters["+1/+1"]++
+	src.AddCounter("+1/+1", 1)
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":   perm.Controller,
 		"source": sourceName,

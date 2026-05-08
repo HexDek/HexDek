@@ -57,10 +57,7 @@ func krosUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[st
 		emitFail(gs, slug, perm.Card.DisplayName(), "no_opponent_creature", nil)
 		return
 	}
-	if target.Counters == nil {
-		target.Counters = map[string]int{}
-	}
-	target.Counters["shield"]++
+	target.AddCounter("shield", 1)
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":   perm.Controller,
 		"target": target.Card.DisplayName(),

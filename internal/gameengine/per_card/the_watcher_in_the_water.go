@@ -37,10 +37,7 @@ func theWatcherETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		return
 	}
 	perm.Tapped = true
-	if perm.Counters == nil {
-		perm.Counters = map[string]int{}
-	}
-	perm.Counters["stun"] += 9
+	perm.AddCounter("stun", 9)
 	emit(gs, "the_watcher_etb", perm.Card.DisplayName(), map[string]interface{}{
 		"seat": perm.Controller,
 		"stun": 9,
@@ -114,10 +111,7 @@ func theWatcherTentacleDies(gs *gameengine.GameState, perm *gameengine.Permanent
 			if p.IsLand() {
 				continue
 			}
-			if p.Counters == nil {
-				p.Counters = map[string]int{}
-			}
-			p.Counters["stun"]++
+			p.AddCounter("stun", 1)
 			emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 				"seat":         perm.Controller,
 				"stunned":      p.Card.DisplayName(),

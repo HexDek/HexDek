@@ -91,14 +91,11 @@ func theMimeoplasmETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	}
 
 	// Add power-of +1/+1 counters.
-	if perm.Counters == nil {
-		perm.Counters = map[string]int{}
-	}
 	addedCounters := powerOf.card.BasePower
 	if addedCounters < 0 {
 		addedCounters = 0
 	}
-	perm.Counters["+1/+1"] += addedCounters
+	perm.AddCounter("+1/+1", addedCounters)
 
 	emit(gs, slug, originalName, map[string]interface{}{
 		"seat":     perm.Controller,

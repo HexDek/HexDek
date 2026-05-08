@@ -117,7 +117,7 @@ func rasputinActivate(gs *gameengine.GameState, src *gameengine.Permanent, abili
 			emitFail(gs, slug, src.Card.DisplayName(), "no_dream_counters", nil)
 			return
 		}
-		src.Counters["dream"]--
+		src.AddCounter("dream", -1)
 		if src.Counters["dream"] <= 0 {
 			delete(src.Counters, "dream")
 		}
@@ -134,7 +134,7 @@ func rasputinActivate(gs *gameengine.GameState, src *gameengine.Permanent, abili
 			emitFail(gs, slug, src.Card.DisplayName(), "no_dream_counters", nil)
 			return
 		}
-		src.Counters["dream"]--
+		src.AddCounter("dream", -1)
 		if src.Counters["dream"] <= 0 {
 			delete(src.Counters, "dream")
 		}

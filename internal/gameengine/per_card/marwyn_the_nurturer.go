@@ -39,10 +39,7 @@ func marwynElfETB(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[
 	if enteringCard == perm.Card {
 		return
 	}
-	if perm.Counters == nil {
-		perm.Counters = map[string]int{}
-	}
-	perm.Counters["+1/+1"]++
+	perm.AddCounter("+1/+1", 1)
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":     perm.Controller,
 		"elf":      enteringCard.DisplayName(),

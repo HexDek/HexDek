@@ -34,10 +34,7 @@ func braidOfFireUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx
 	if activeSeat != perm.Controller {
 		return
 	}
-	if perm.Counters == nil {
-		perm.Counters = map[string]int{}
-	}
-	perm.Counters["age"]++
+	perm.AddCounter("age", 1)
 	amount := perm.Counters["age"]
 	seat := gs.Seats[perm.Controller]
 	gameengine.AddMana(gs, seat, "R", amount, "Braid of Fire")
@@ -313,10 +310,7 @@ func asForetoldUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 	if activeSeat != perm.Controller {
 		return
 	}
-	if perm.Counters == nil {
-		perm.Counters = map[string]int{}
-	}
-	perm.Counters["time"]++
+	perm.AddCounter("time", 1)
 	emit(gs, "as_foretold_upkeep", "As Foretold", map[string]interface{}{
 		"seat":          perm.Controller,
 		"time_counters": perm.Counters["time"],

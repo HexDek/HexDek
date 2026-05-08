@@ -54,10 +54,7 @@ func theWarDoctorOnPhaseOut(gs *gameengine.GameState, perm *gameengine.Permanent
 }
 
 func theWarDoctorAddTimeCounter(gs *gameengine.GameState, perm *gameengine.Permanent, slug string) {
-	if perm.Counters == nil {
-		perm.Counters = map[string]int{}
-	}
-	perm.Counters["time"]++
+	perm.AddCounter("time", 1)
 	gs.LogEvent(gameengine.Event{
 		Kind:   "counter_mod",
 		Seat:   perm.Controller,

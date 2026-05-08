@@ -35,10 +35,7 @@ func kraumViolentCacophonyTrigger(gs *gameengine.GameState, perm *gameengine.Per
 	if gs.Seats[casterSeat].SpellsCastThisTurn != 2 {
 		return
 	}
-	if perm.Counters == nil {
-		perm.Counters = map[string]int{}
-	}
-	perm.Counters["+1/+1"]++
+	perm.AddCounter("+1/+1", 1)
 	drawOne(gs, perm.Controller, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":     perm.Controller,

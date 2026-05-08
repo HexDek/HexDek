@@ -288,10 +288,7 @@ func kaustTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[
 	if _, ok := entryPerm.Flags["turned_face_up"]; !ok {
 		return
 	}
-	if entryPerm.Counters == nil {
-		entryPerm.Counters = map[string]int{}
-	}
-	entryPerm.Counters["+1/+1"] += 2
+	entryPerm.AddCounter("+1/+1", 2)
 	emit(gs, "kaust_counters", perm.Card.DisplayName(), map[string]interface{}{
 		"seat":   perm.Controller,
 		"target": entryPerm.Card.DisplayName(),
@@ -336,10 +333,7 @@ func nazgulTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 		}
 	}
 	if army != nil {
-		if army.Counters == nil {
-			army.Counters = map[string]int{}
-		}
-		army.Counters["+1/+1"]++
+		army.AddCounter("+1/+1", 1)
 	} else {
 		token := &gameengine.Card{
 			Name:          "0/0 Wraith Army Token",
@@ -350,6 +344,9 @@ func nazgulTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 		}
 		army = enterBattlefieldWithETB(gs, seat, token, false)
 		if army != nil {
+			if army.Counters == nil {
+				army.Counters = map[string]int{}
+			}
 			army.Counters["+1/+1"] = 1
 		}
 	}
@@ -1105,14 +1102,8 @@ func ulrichBackFight(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	// deals damage equal to its power back.
 	ulrichPower := perm.Power()
 	targetPower := target.Power()
-	if target.Counters == nil {
-		target.Counters = map[string]int{}
-	}
-	target.Counters["damage_marked"] += ulrichPower
-	if perm.Counters == nil {
-		perm.Counters = map[string]int{}
-	}
-	perm.Counters["damage_marked"] += targetPower
+	target.AddCounter("damage_marked", ulrichPower)
+	perm.AddCounter("damage_marked", targetPower)
 	emit(gs, "ulrich_fight", perm.Card.DisplayName(), map[string]interface{}{
 		"seat":         seat,
 		"target":       target.Card.DisplayName(),
@@ -1238,10 +1229,7 @@ func vojaTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[s
 			}
 			for _, t := range p.Card.Types {
 				if strings.EqualFold(t, "elf") {
-					if p.Counters == nil {
-						p.Counters = map[string]int{}
-					}
-					p.Counters["+1/+1"]++
+					p.AddCounter("+1/+1", 1)
 					break
 				}
 			}
@@ -1362,10 +1350,7 @@ func ashlingActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilit
 	if gs == nil || src == nil {
 		return
 	}
-	if src.Counters == nil {
-		src.Counters = map[string]int{}
-	}
-	src.Counters["+1/+1"]++
+	src.AddCounter("+1/+1", 1)
 	// Track activations this turn via flags.
 	if src.Flags == nil {
 		src.Flags = map[string]int{}

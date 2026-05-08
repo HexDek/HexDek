@@ -111,10 +111,7 @@ func tophEarthbend(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 	}
 	target.Flags["earthbent"] = 1
 	target.Flags["temp_haste"] = 1
-	if target.Counters == nil {
-		target.Counters = map[string]int{}
-	}
-	target.Counters["+1/+1"] += x
+	target.AddCounter("+1/+1", x)
 	target.SummoningSick = false
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":     perm.Controller,

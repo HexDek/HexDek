@@ -80,7 +80,7 @@ func tidusYunasMoveCounter(gs *gameengine.GameState, perm *gameengine.Permanent,
 	if donor == nil || recipient == nil || donor == recipient {
 		return
 	}
-	donor.Counters[counterKind]--
+	donor.AddCounter(counterKind, -1)
 	recipient.AddCounter(counterKind, 1)
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":         perm.Controller,

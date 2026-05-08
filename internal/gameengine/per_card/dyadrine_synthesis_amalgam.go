@@ -74,7 +74,7 @@ func dyadrineAttack(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		return
 	}
 	for _, p := range picks {
-		p.Counters["+1/+1"]--
+		p.AddCounter("+1/+1", -1)
 		if p.Counters["+1/+1"] <= 0 {
 			delete(p.Counters, "+1/+1")
 		}

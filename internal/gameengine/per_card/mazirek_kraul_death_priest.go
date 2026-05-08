@@ -44,10 +44,7 @@ func mazirekSacrifice(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		if p == nil || !p.IsCreature() {
 			continue
 		}
-		if p.Counters == nil {
-			p.Counters = map[string]int{}
-		}
-		p.Counters["+1/+1"]++
+		p.AddCounter("+1/+1", 1)
 		count++
 	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{

@@ -66,10 +66,7 @@ func thantisAttackedTrigger(gs *gameengine.GameState, perm *gameengine.Permanent
 	if !matched {
 		return
 	}
-	if perm.Counters == nil {
-		perm.Counters = map[string]int{}
-	}
-	perm.Counters["+1/+1"]++
+	perm.AddCounter("+1/+1", 1)
 	gs.LogEvent(gameengine.Event{
 		Kind:   "counter_mod",
 		Seat:   perm.Controller,

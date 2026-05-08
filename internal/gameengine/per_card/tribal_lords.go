@@ -174,10 +174,7 @@ func diregrafColossusETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		}
 	}
 	if zombiesInGY > 0 {
-		if perm.Counters == nil {
-			perm.Counters = map[string]int{}
-		}
-		perm.Counters["+1/+1"] += zombiesInGY
+		perm.AddCounter("+1/+1", zombiesInGY)
 	}
 	emit(gs, "diregraf_colossus_etb", "Diregraf Colossus", map[string]interface{}{
 		"seat":     perm.Controller,
@@ -413,10 +410,7 @@ func doorOfDestiniesSpellCast(gs *gameengine.GameState, perm *gameengine.Permane
 	if casterSeat != perm.Controller {
 		return
 	}
-	if perm.Counters == nil {
-		perm.Counters = map[string]int{}
-	}
-	perm.Counters["charge"]++
+	perm.AddCounter("charge", 1)
 	emit(gs, "door_of_destinies_charge", "Door of Destinies", map[string]interface{}{
 		"seat":   perm.Controller,
 		"charge": perm.Counters["charge"],

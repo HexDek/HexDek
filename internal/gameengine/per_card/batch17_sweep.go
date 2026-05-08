@@ -156,7 +156,7 @@ func chronozoaUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx m
 	if perm.Counters == nil {
 		return
 	}
-	perm.Counters["time"]--
+	perm.AddCounter("time", -1)
 	if perm.Counters["time"] <= 0 {
 		// Sacrifice — create two copies.
 		for i := 0; i < 2; i++ {
@@ -192,10 +192,7 @@ func replicatingRingUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent,
 	if activeSeat != perm.Controller {
 		return
 	}
-	if perm.Counters == nil {
-		perm.Counters = map[string]int{}
-	}
-	perm.Counters["night"]++
+	perm.AddCounter("night", 1)
 	if perm.Counters["night"] >= 8 {
 		perm.Counters["night"] = 0
 		for i := 0; i < 8; i++ {

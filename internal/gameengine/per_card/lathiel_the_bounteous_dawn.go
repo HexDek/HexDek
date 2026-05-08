@@ -43,10 +43,7 @@ func lathielEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		if p == nil || p == perm || !p.IsCreature() || p.Card == nil {
 			continue
 		}
-		if p.Counters == nil {
-			p.Counters = map[string]int{}
-		}
-		p.Counters["+1/+1"]++
+		p.AddCounter("+1/+1", 1)
 		placed++
 	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{

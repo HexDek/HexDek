@@ -98,10 +98,7 @@ func kumenaActivated(gs *gameengine.GameState, src *gameengine.Permanent, abilit
 			if !cardHasType(p.Card, "merfolk") {
 				continue
 			}
-			if p.Counters == nil {
-				p.Counters = map[string]int{}
-			}
-			p.Counters["+1/+1"]++
+			p.AddCounter("+1/+1", 1)
 			count++
 		}
 		emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
