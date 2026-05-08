@@ -60,10 +60,22 @@ func MoveCard(gs *GameState, card *Card, ownerSeat int, fromZone, toZone, reason
 	if dest == "battlefield" {
 		EnsureBattlefieldFrontFace(card)
 		if ownerSeat >= 0 && ownerSeat < len(gs.Seats) && gs.Seats[ownerSeat] != nil {
-			if card != nil && cardIsCreatureType(card) {
-				gs.Seats[ownerSeat].Turn.CreaturesEntered++
+			seat := gs.Seats[ownerSeat]
+			if card != nil {
+				if cardIsCreatureType(card) {
+					seat.Turn.CreaturesEntered++
+				}
+				if cardHasType(card, "artifact") {
+					seat.Turn.ArtifactsEntered++
+				}
+				if cardHasType(card, "enchantment") {
+					seat.Turn.EnchantmentsEntered++
+				}
 			}
 		}
+	}
+	if dest == "exile" && ownerSeat >= 0 && ownerSeat < len(gs.Seats) && gs.Seats[ownerSeat] != nil {
+		gs.Seats[ownerSeat].Turn.ExiledCards++
 	}
 	FireZoneChangeTriggers(gs, nil, card, fromZone, dest)
 

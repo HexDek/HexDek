@@ -110,17 +110,22 @@ func DestroyPermanent(gs *GameState, perm *Permanent, source *Permanent) bool {
 		},
 	})
 
-	if destZone == "graveyard" && perm.IsCreature() {
-		if perm.Controller >= 0 && perm.Controller < len(gs.Seats) && gs.Seats[perm.Controller] != nil {
+	if perm.Controller >= 0 && perm.Controller < len(gs.Seats) && gs.Seats[perm.Controller] != nil {
+		gs.Seats[perm.Controller].Turn.PermanentsLeft++
+		if destZone == "graveyard" && perm.IsCreature() {
 			gs.Seats[perm.Controller].Turn.CreaturesDied++
 		}
+		if destZone == "exile" {
+			gs.Seats[perm.Controller].Turn.ExiledCards++
+		}
+	}
+	if destZone == "graveyard" && perm.IsCreature() {
 		if gs.Flags == nil {
 			gs.Flags = map[string]int{}
 		}
 		gs.Flags["creature_died_this_turn"]++
 	}
 
-	// Detach anything attached to p.
 	detachAll(gs, perm)
 
 	// Tokens cease to exist — skip zone write (§704.5d cleanup).
@@ -174,6 +179,11 @@ func ExilePermanent(gs *GameState, perm *Permanent, source *Permanent) bool {
 			"rule":        "406.3",
 		},
 	})
+
+	if perm.Controller >= 0 && perm.Controller < len(gs.Seats) && gs.Seats[perm.Controller] != nil {
+		gs.Seats[perm.Controller].Turn.PermanentsLeft++
+		gs.Seats[perm.Controller].Turn.ExiledCards++
+	}
 
 	detachAll(gs, perm)
 
@@ -250,12 +260,16 @@ func sacrificePermanentImpl(gs *GameState, perm *Permanent, source *Permanent, r
 
 	if perm.Controller >= 0 && perm.Controller < len(gs.Seats) && gs.Seats[perm.Controller] != nil {
 		gs.Seats[perm.Controller].Turn.Sacrificed++
+		gs.Seats[perm.Controller].Turn.PermanentsLeft++
 		if destZone == "graveyard" && perm.IsCreature() {
 			gs.Seats[perm.Controller].Turn.CreaturesDied++
 			if gs.Flags == nil {
 				gs.Flags = map[string]int{}
 			}
 			gs.Flags["creature_died_this_turn"]++
+		}
+		if destZone == "exile" {
+			gs.Seats[perm.Controller].Turn.ExiledCards++
 		}
 	}
 
@@ -329,6 +343,10 @@ func BouncePermanent(gs *GameState, perm *Permanent, source *Permanent, dest str
 			"rule":        "701.8",
 		},
 	})
+
+	if perm.Controller >= 0 && perm.Controller < len(gs.Seats) && gs.Seats[perm.Controller] != nil {
+		gs.Seats[perm.Controller].Turn.PermanentsLeft++
+	}
 
 	detachAll(gs, perm)
 

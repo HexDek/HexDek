@@ -560,6 +560,9 @@ func createTreasureToken(gs *GameState, seatIdx int) {
 	seat.Battlefield = append(seat.Battlefield, perm)
 	RegisterReplacementsForPermanent(gs, perm)
 	FirePermanentETBTriggers(gs, perm)
+	seat.Turn.TokensCreated++
+	seat.Turn.ArtifactsEntered++
+	seat.Turn.TreasuresCreated++
 	gs.LogEvent(Event{
 		Kind:   "create_token",
 		Seat:   seatIdx,

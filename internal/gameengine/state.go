@@ -457,15 +457,22 @@ type TurnCounters struct {
 	LifeGained       int  // total life gained this turn (from GainLife)
 	LifeLost         int  // total life lost this turn (from LoseLife + combat damage)
 	DamageReceived   int  // total damage received this turn (combat + noncombat)
+	LifePaid         int  // life paid as costs this turn (distinct from LifeLost per CR §118)
 	CardsDrawn       int  // cards drawn this turn
 	SpellsCast       int  // spells cast this turn
 	CreaturesEntered int  // creatures that entered the battlefield this turn
+	ArtifactsEntered    int // artifacts that entered the battlefield this turn
+	EnchantmentsEntered int // enchantments that entered the battlefield this turn
 	TokensCreated    int  // tokens created this turn
+	TreasuresCreated int  // treasure tokens created this turn
 	Sacrificed       int  // permanents sacrificed this turn
+	PermanentsLeft   int  // permanents that left the battlefield this turn (dies + exile + bounce + sac)
 	Discarded        int  // cards discarded this turn
 	Milled           int  // cards milled this turn
 	LandsPlayed      int  // lands played this turn
 	CreaturesDied    int  // creatures that died (went to GY from battlefield) this turn
+	ExiledCards      int  // cards exiled this turn (from any zone)
+	CastFromExile    int  // spells cast from exile this turn (cascade, impulse draw, etc.)
 	Descended        bool // a permanent card entered graveyard this turn (Ixalan)
 	Attacked         bool // this seat declared attackers this turn
 	Casts            []CastRecord // ordered log of every spell cast this turn

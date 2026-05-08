@@ -246,6 +246,7 @@ func CastFromZone(
 			return nil, &CastError{Reason: "insufficient_life"}
 		}
 		seat.Life -= perm.LifeCostInsteadOfMana
+		seat.Turn.LifePaid += perm.LifeCostInsteadOfMana
 		result.LifePaid += perm.LifeCostInsteadOfMana
 		gs.LogEvent(Event{
 			Kind:   "pay_life",
@@ -313,6 +314,9 @@ func CastFromZone(
 	// Cast-count bookkeeping.
 	IncrementCastCount(gs, seatIdx)
 	RecordCast(gs, seatIdx, card, 0)
+	if zone == "exile" && seatIdx >= 0 && seatIdx < len(gs.Seats) && gs.Seats[seatIdx] != nil {
+		gs.Seats[seatIdx].Turn.CastFromExile++
+	}
 	fireCastTriggersFromZone(gs, seatIdx, card, zone)
 	FireCastTriggerObservers(gs, card, seatIdx, false)
 

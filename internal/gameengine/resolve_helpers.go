@@ -1427,6 +1427,7 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 		}
 		if seat >= 0 && seat < len(gs.Seats) {
 			gs.Seats[seat].Life -= n
+			gs.Seats[seat].Turn.LifePaid += n
 		}
 		gs.LogEvent(Event{
 			Kind:   "pay_life",
@@ -3649,15 +3650,15 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 		seat := controllerSeat(src)
 		lifePaid := 0
 		if e.ModKind == "may_pay_life" {
-			// Simulation heuristic: auto-pay 1 life for optional life payments.
 			if seat >= 0 && seat < len(gs.Seats) && gs.Seats[seat].Life > 1 {
 				gs.Seats[seat].Life -= 1
+				gs.Seats[seat].Turn.LifePaid++
 				lifePaid = 1
 			}
 		} else if e.ModKind == "pay_any_amount" {
-			// Simulation heuristic: pay 1 life for "pay any amount" effects.
 			if seat >= 0 && seat < len(gs.Seats) && gs.Seats[seat].Life > 1 {
 				gs.Seats[seat].Life -= 1
+				gs.Seats[seat].Turn.LifePaid++
 				lifePaid = 1
 			}
 		}

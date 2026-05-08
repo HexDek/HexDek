@@ -103,6 +103,8 @@ func createSimpleArtifactToken(gs *GameState, seatIdx int,
 	seat.Battlefield = append(seat.Battlefield, perm)
 	RegisterReplacementsForPermanent(gs, perm)
 	FirePermanentETBTriggers(gs, perm)
+	seat.Turn.TokensCreated++
+	seat.Turn.ArtifactsEntered++
 	// Fire token_created trigger with re-entrancy guard.
 	if gs.Flags == nil || gs.Flags["in_token_trigger"] == 0 {
 		if gs.Flags == nil {
@@ -158,6 +160,20 @@ func CreateCreatureToken(gs *GameState, seatIdx int, name string, types []string
 	seat.Battlefield = append(seat.Battlefield, perm)
 	RegisterReplacementsForPermanent(gs, perm)
 	FirePermanentETBTriggers(gs, perm)
+	seat.Turn.TokensCreated++
+	seat.Turn.CreaturesEntered++
+	for _, tp := range types {
+		if tp == "artifact" {
+			seat.Turn.ArtifactsEntered++
+			break
+		}
+	}
+	for _, tp := range types {
+		if tp == "enchantment" {
+			seat.Turn.EnchantmentsEntered++
+			break
+		}
+	}
 	// Fire token_created trigger with re-entrancy guard.
 	if gs.Flags == nil || gs.Flags["in_token_trigger"] == 0 {
 		if gs.Flags == nil {
