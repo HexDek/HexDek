@@ -252,6 +252,7 @@ export default function DeckArchive() {
   const [savingName, setSavingName] = useState(false)
   const [winLinesExpanded, setWinLinesExpanded] = useState(false)
   const [cloning, setCloning] = useState(false)
+  const [spawningRoom, setSpawningRoom] = useState(false)
   const [isFriend, setIsFriend] = useState(false)
   const [friendBusy, setFriendBusy] = useState(false)
   const [ownerFriendCount, setOwnerFriendCount] = useState(null)
@@ -1053,6 +1054,15 @@ export default function DeckArchive() {
                 })
                 setGauntlet({ status: 'running', games: 0, target: 500, win_rate: 0 })
               }}>{gauntlet?.status === 'running' ? 'GAUNTLET RUNNING...' : 'RUN GAUNTLET (500)'}</Btn>
+              <Btn solid arrow="👁" onClick={() => {
+                if (spawningRoom) return
+                setSpawningRoom(true)
+                trackEvent('spawn_spectate_room', { deck: `${owner}/${id}` })
+                api.spawnSpectateRoom(`${owner}/${id}`).then(r => {
+                  setSpawningRoom(false)
+                  if (r.room_id) navigate(`/spectate/${r.room_id}`)
+                }).catch(() => setSpawningRoom(false))
+              }}>{spawningRoom ? 'SPAWNING...' : 'SPECTATE LIVE'}</Btn>
               <Btn ghost arrow="▶">TEST VARIANT</Btn>
             </div>
           )}

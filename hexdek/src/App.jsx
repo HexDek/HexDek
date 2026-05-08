@@ -13,6 +13,7 @@ import DeckArchive from './screens/DeckArchive'
 import DeckList from './screens/DeckList'
 import GameBoard from './screens/GameBoard'
 import Spectator from './screens/Spectator'
+import SpectateRoom from './screens/SpectateRoom'
 import Report from './screens/Report'
 import Forge from './screens/Forge'
 import Leaderboard from './screens/Leaderboard'
@@ -68,6 +69,7 @@ export default function App() {
         <Route path="leaderboard" element={<Leaderboard />} />
         <Route path="meta" element={<Navigate to="/leaderboard?view=meta" replace />} />
         <Route path="spectate" element={<Spectator />} />
+        <Route path="spectate/:roomId" element={<SpectateRoom />} />
         <Route path="report" element={<Report />} />
         <Route path="report/:gameId" element={<Report />} />
         <Route path="about" element={<About />} />

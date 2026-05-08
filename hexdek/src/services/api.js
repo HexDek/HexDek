@@ -108,4 +108,7 @@ export const api = {
   removeFriend: (target, asSlug) => request(`/api/friends/${encodeURIComponent(target)}?as=${encodeURIComponent(asSlug)}`, { method: 'DELETE' }),
   getOwnerStats: (owner) => request(`/api/owner/${encodeURIComponent(owner)}/stats`),
   getOwnerGames: (owner, limit = 20) => request(`/api/owner/${encodeURIComponent(owner)}/games?limit=${limit}`),
+  spawnSpectateRoom: (deckId) => request('/api/spectate/spawn', { method: 'POST', body: JSON.stringify({ deck_id: deckId }) }),
+  getSpectateRoom: (roomId) => request(`/api/spectate/rooms/${encodeURIComponent(roomId)}`),
+  listSpectateRooms: () => request('/api/spectate/rooms'),
 }
