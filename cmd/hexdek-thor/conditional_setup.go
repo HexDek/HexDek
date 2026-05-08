@@ -757,6 +757,26 @@ const (
 	condScaffoldCreatureCardsInGraveyard
 	condScaffoldCardInGraveyard
 	condScaffoldEnergyThreshold
+
+	// Trigger-condition scaffold kinds — handle raw condition text that
+	// describes a trigger event precondition. These bridge the gap when
+	// the AST parser emits a raw/intervening_if condition instead of a
+	// structured Trigger node, or when a static ability's condition text
+	// references a trigger-like predicate.
+	condScaffoldGainedLifeThisTurn
+	condScaffoldCastSpellThisTurn
+	condScaffoldCreatureETBThisTurn
+	condScaffoldDrawnCardThisTurn
+	condScaffoldAttackedThisTurn
+	condScaffoldSacrificedThisTurn
+	condScaffoldCombatDamageDealt
+	condScaffoldLandfallThisTurn
+	condScaffoldDiscardedThisTurn
+	condScaffoldEnchantedCreature
+	condScaffoldOpponentLostLife
+	condScaffoldLifeAboveThreshold
+	condScaffoldLifeBelowThreshold
+	condScaffoldUpkeepPhase
 )
 
 type conditionScaffold struct {
@@ -765,14 +785,18 @@ type conditionScaffold struct {
 	rawText     string
 
 	// Shape-specific payload.
-	subtype string // for condScaffoldYouControlSubtype: e.g. "wizard"
-	count   int    // for graveyard count / energy threshold
+	subtype   string // for condScaffoldYouControlSubtype: e.g. "wizard"
+	count     int    // for graveyard count / energy threshold
+	threshold int    // for life threshold conditions
 }
 
 var (
-	rawTribalRe = regexp.MustCompile(`(?:another|a|an)\s+([a-z]+)`)
-	energyAmtRe = regexp.MustCompile(`(\d+)\s+or\s+more\s+energy`)
-	graveCntRe  = regexp.MustCompile(`(?:(\d+)|one|two|three|four|five|six|seven)\s*(?:or\s+more\s+)?creature\s+cards?`)
+	rawTribalRe   = regexp.MustCompile(`(?:another|a|an)\s+([a-z]+)`)
+	energyAmtRe   = regexp.MustCompile(`(\d+)\s+or\s+more\s+energy`)
+	graveCntRe    = regexp.MustCompile(`(?:(\d+)|one|two|three|four|five|six|seven)\s*(?:or\s+more\s+)?creature\s+cards?`)
+	lifeAboveRe   = regexp.MustCompile(`(?:you have|your life total is)\s+(\d+)\s+or\s+more\s+life`)
+	lifeBelowRe   = regexp.MustCompile(`(?:you have|your life total is)\s+(\d+)\s+or\s+(?:less|fewer)\s+life`)
+	lifeBelowAltRe = regexp.MustCompile(`life total is\s+(\d+)\s+or\s+less`)
 )
 
 func conditionRawText(cond *gameast.Condition) string {
@@ -843,6 +867,114 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 		}
 		cs.kind = condScaffoldEnergyThreshold
 		cs.count = n
+		return cs
+	}
+
+	// Life gained this turn. Sorin, Lathiel, Heliod.
+	if (strings.Contains(txt, "gained life") || strings.Contains(txt, "gain life")) &&
+		strings.Contains(txt, "this turn") {
+		cs.kind = condScaffoldGainedLifeThisTurn
+		return cs
+	}
+
+	// Cast a spell this turn. Monastery Mentor, Prowess-adjacent.
+	if (strings.Contains(txt, "cast a spell") || strings.Contains(txt, "cast a noncreature") ||
+		strings.Contains(txt, "cast an instant") || strings.Contains(txt, "you cast")) &&
+		strings.Contains(txt, "this turn") {
+		cs.kind = condScaffoldCastSpellThisTurn
+		return cs
+	}
+
+	// Creature ETB this turn. "if a creature entered the battlefield"
+	if (strings.Contains(txt, "creature entered") || strings.Contains(txt, "creature enters")) &&
+		(strings.Contains(txt, "this turn") || strings.Contains(txt, "battlefield")) {
+		cs.kind = condScaffoldCreatureETBThisTurn
+		return cs
+	}
+
+	// Drew a card this turn. "if you've drawn a card this turn"
+	if (strings.Contains(txt, "drew a card") || strings.Contains(txt, "drawn a card") ||
+		strings.Contains(txt, "draw a card")) &&
+		strings.Contains(txt, "this turn") {
+		cs.kind = condScaffoldDrawnCardThisTurn
+		return cs
+	}
+
+	// Attacked this turn. "if you attacked this turn" / "if you attacked with a creature"
+	if (strings.Contains(txt, "attacked this turn") || strings.Contains(txt, "you attacked") ||
+		strings.Contains(txt, "creature attacked")) {
+		cs.kind = condScaffoldAttackedThisTurn
+		return cs
+	}
+
+	// Sacrificed this turn. "if you sacrificed a creature this turn"
+	if strings.Contains(txt, "sacrific") && strings.Contains(txt, "this turn") {
+		cs.kind = condScaffoldSacrificedThisTurn
+		return cs
+	}
+
+	// Combat damage dealt this turn. "if a creature dealt combat damage"
+	if strings.Contains(txt, "combat damage") &&
+		(strings.Contains(txt, "this turn") || strings.Contains(txt, "to a player") ||
+			strings.Contains(txt, "dealt")) {
+		cs.kind = condScaffoldCombatDamageDealt
+		return cs
+	}
+
+	// Landfall. "if a land entered the battlefield" / "landfall" / "if you played a land"
+	if strings.Contains(txt, "landfall") ||
+		(strings.Contains(txt, "land") && strings.Contains(txt, "entered")) ||
+		(strings.Contains(txt, "played a land") && strings.Contains(txt, "this turn")) {
+		cs.kind = condScaffoldLandfallThisTurn
+		return cs
+	}
+
+	// Discarded this turn. "if you discarded a card this turn"
+	if strings.Contains(txt, "discard") && strings.Contains(txt, "this turn") {
+		cs.kind = condScaffoldDiscardedThisTurn
+		return cs
+	}
+
+	// Enchanted creature. "enchanted creature" condition for auras.
+	if strings.Contains(txt, "enchanted creature") {
+		cs.kind = condScaffoldEnchantedCreature
+		return cs
+	}
+
+	// Opponent lost life this turn. "if an opponent lost life this turn"
+	if strings.Contains(txt, "opponent") &&
+		(strings.Contains(txt, "lost life") || strings.Contains(txt, "lose life") ||
+			strings.Contains(txt, "dealt damage")) &&
+		strings.Contains(txt, "this turn") {
+		cs.kind = condScaffoldOpponentLostLife
+		return cs
+	}
+
+	// Life above threshold. "if you have 25 or more life"
+	if m := lifeAboveRe.FindStringSubmatch(txt); m != nil {
+		n, _ := strconv.Atoi(m[1])
+		cs.kind = condScaffoldLifeAboveThreshold
+		cs.threshold = n
+		return cs
+	}
+
+	// Life below threshold. "if you have 5 or less life" / "your life total is 5 or less"
+	if m := lifeBelowRe.FindStringSubmatch(txt); m != nil {
+		n, _ := strconv.Atoi(m[1])
+		cs.kind = condScaffoldLifeBelowThreshold
+		cs.threshold = n
+		return cs
+	}
+	if m := lifeBelowAltRe.FindStringSubmatch(txt); m != nil {
+		n, _ := strconv.Atoi(m[1])
+		cs.kind = condScaffoldLifeBelowThreshold
+		cs.threshold = n
+		return cs
+	}
+
+	// Upkeep phase condition. "during your upkeep" / "it's your upkeep"
+	if strings.Contains(txt, "upkeep") {
+		cs.kind = condScaffoldUpkeepPhase
 		return cs
 	}
 
@@ -950,6 +1082,174 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 			gs.Seats[0].Flags["energy_counters"] = cs.count
 		}
 		cs.description = fmt.Sprintf("set seat 0 energy counters to %d", cs.count)
+
+	case condScaffoldGainedLifeThisTurn:
+		primeGainedLife(gs, 3)
+		cs.description = "gained 3 life for seat 0 (life_gained_this_turn flag set)"
+
+	case condScaffoldCastSpellThisTurn:
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].SpellsCastThisTurn++
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["cast_spell_this_turn"] = 1
+		}
+		gs.SpellsCastThisTurn++
+		cs.description = "incremented spell cast counters for seat 0"
+
+	case condScaffoldCreatureETBThisTurn:
+		placeNamedFriendlyCreature(gs, "ETB Witness")
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["creature_etb_this_turn"] = 1
+		cs.description = "placed ETB Witness creature and set creature_etb_this_turn flag"
+
+	case condScaffoldDrawnCardThisTurn:
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["drawn_card_this_turn"] = 1
+			// Ensure there's a library to draw from in case the effect also draws.
+			if len(gs.Seats[0].Library) < 5 {
+				fillLibrary(gs, 0, 5)
+			}
+		}
+		cs.description = "set drawn_card_this_turn flag + filled library"
+
+	case condScaffoldAttackedThisTurn:
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["attacked_this_turn"] = 1
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["attacked_this_turn"] = 1
+		}
+		cs.description = "set attacked_this_turn flag on seat 0 and game"
+
+	case condScaffoldSacrificedThisTurn:
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["sacrificed_this_turn"] = 1
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["sacrificed_this_turn"] = 1
+			// Place a creature card in graveyard to simulate the sacrifice.
+			gs.Seats[0].Graveyard = append(gs.Seats[0].Graveyard, &gameengine.Card{
+				Name:          "Sac Victim Setup",
+				Owner:         0,
+				Types:         []string{"creature"},
+				BasePower:     1,
+				BaseToughness: 1,
+			})
+		}
+		cs.description = "set sacrificed_this_turn flag + placed creature in graveyard"
+
+	case condScaffoldCombatDamageDealt:
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["combat_damage_dealt_this_turn"] = 1
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["combat_damage_dealt_this_turn"] = 1
+		}
+		cs.description = "set combat_damage_dealt_this_turn flag"
+
+	case condScaffoldLandfallThisTurn:
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["landfall_this_turn"] = 1
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["landfall_this_turn"] = 1
+			// Place a land on the battlefield to represent the landfall trigger source.
+			gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, &gameengine.Permanent{
+				Card: &gameengine.Card{
+					Name:  "Landfall Setup Land",
+					Owner: 0,
+					Types: []string{"land", "forest"},
+				},
+				Controller: 0,
+				Owner:      0,
+				Flags:      map[string]int{},
+				Counters:   map[string]int{},
+			})
+		}
+		cs.description = "set landfall_this_turn flag + placed land on seat 0"
+
+	case condScaffoldDiscardedThisTurn:
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["discarded_this_turn"] = 1
+			// Place a card in graveyard to represent the discard.
+			gs.Seats[0].Graveyard = append(gs.Seats[0].Graveyard, &gameengine.Card{
+				Name:  "Discarded Setup",
+				Owner: 0,
+				Types: []string{"instant"},
+			})
+			// Ensure hand has cards in case the effect also discards.
+			if len(gs.Seats[0].Hand) < 3 {
+				fillHand(gs, 0, 3-len(gs.Seats[0].Hand))
+			}
+		}
+		cs.description = "set discarded_this_turn flag + placed card in graveyard"
+
+	case condScaffoldEnchantedCreature:
+		// For aura conditions that reference "enchanted creature", we need
+		// a creature on the battlefield with the source attached to it.
+		target := placeNamedFriendlyCreature(gs, "Enchanted Target")
+		if srcPerm != nil {
+			srcPerm.AttachedTo = target
+		}
+		cs.description = "placed Enchanted Target creature for aura attachment"
+
+	case condScaffoldOpponentLostLife:
+		if len(gs.Seats) > 1 && gs.Seats[1] != nil {
+			gs.Seats[1].Life -= 3
+			if gs.Seats[1].Flags == nil {
+				gs.Seats[1].Flags = map[string]int{}
+			}
+			gs.Seats[1].Flags["life_lost_this_turn"] = 3
+			gs.Seats[1].Flags["lost_life_this_turn"] = 3
+		}
+		cs.description = "opponent (seat 1) lost 3 life this turn"
+
+	case condScaffoldLifeAboveThreshold:
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Life < cs.threshold {
+				gs.Seats[0].Life = cs.threshold
+			}
+		}
+		cs.description = fmt.Sprintf("set seat 0 life to %d (above threshold)", cs.threshold)
+
+	case condScaffoldLifeBelowThreshold:
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Life > cs.threshold {
+				gs.Seats[0].Life = cs.threshold
+			}
+		}
+		cs.description = fmt.Sprintf("set seat 0 life to %d (below threshold)", cs.threshold)
+
+	case condScaffoldUpkeepPhase:
+		gs.Phase = "beginning"
+		gs.Step = "upkeep"
+		cs.description = "set game phase to upkeep"
 	}
 	return cs
 }
@@ -980,6 +1280,34 @@ func traceConditionScaffolding(cond *gameast.Condition, tr *Tracer) {
 		desc = "placed creature card in seat 0 graveyard"
 	case condScaffoldEnergyThreshold:
 		desc = fmt.Sprintf("set seat 0 energy counters to %d", cs.count)
+	case condScaffoldGainedLifeThisTurn:
+		desc = "gained 3 life for seat 0 (life_gained_this_turn flag set)"
+	case condScaffoldCastSpellThisTurn:
+		desc = "incremented spell cast counters for seat 0"
+	case condScaffoldCreatureETBThisTurn:
+		desc = "placed ETB Witness creature and set creature_etb_this_turn flag"
+	case condScaffoldDrawnCardThisTurn:
+		desc = "set drawn_card_this_turn flag + filled library"
+	case condScaffoldAttackedThisTurn:
+		desc = "set attacked_this_turn flag on seat 0 and game"
+	case condScaffoldSacrificedThisTurn:
+		desc = "set sacrificed_this_turn flag + placed creature in graveyard"
+	case condScaffoldCombatDamageDealt:
+		desc = "set combat_damage_dealt_this_turn flag"
+	case condScaffoldLandfallThisTurn:
+		desc = "set landfall_this_turn flag + placed land on seat 0"
+	case condScaffoldDiscardedThisTurn:
+		desc = "set discarded_this_turn flag + placed card in graveyard"
+	case condScaffoldEnchantedCreature:
+		desc = "placed Enchanted Target creature for aura attachment"
+	case condScaffoldOpponentLostLife:
+		desc = "opponent (seat 1) lost 3 life this turn"
+	case condScaffoldLifeAboveThreshold:
+		desc = fmt.Sprintf("set seat 0 life to %d (above threshold)", cs.threshold)
+	case condScaffoldLifeBelowThreshold:
+		desc = fmt.Sprintf("set seat 0 life to %d (below threshold)", cs.threshold)
+	case condScaffoldUpkeepPhase:
+		desc = "set game phase to upkeep"
 	}
 	tr.Record("CONDITION_SETUP", "%q → %s", cs.rawText, desc)
 }
