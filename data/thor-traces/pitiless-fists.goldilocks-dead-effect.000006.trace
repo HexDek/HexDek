@@ -1,0 +1,10 @@
+[001] SETUP: card="Pitiless Fists" kind=fight abilityKind=triggered
+[002] SETUP: battlefield seat=0 size=2 srcPerm=true
+[003] OPPONENT_SETUP: needs cast=false attack=false loseLife=false gainLife=false draw=false sac=false
+[004] CONDITION_SETUP: "etb" → no-op (source's own ETB will fire trigger)
+[005] TRIGGER_FIRE: creature_etb primed on "Pitiless Fists"
+[006] EFFECT_ATTEMPT: kind=fight usingFullEffect=true
+[007] TRIGGER_CHECK: event="etb" resolving via fireTriggerEvent
+[008] HANDLER_ENTER: fireTriggerEvent srcPerm="Pitiless Fists"
+[009] STATE_CHANGE: events=0 changed=false
+[010] ASSERT_FAIL: goldilocks_dead_effect effect=fight abilityKind=triggered filterBase="A=enchanted_creature B=creature"

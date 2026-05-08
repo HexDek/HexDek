@@ -1,0 +1,11 @@
+[001] SETUP: card="Soul-Guide Lantern" kind=exile abilityKind=triggered
+[002] SETUP: battlefield seat=0 size=2 srcPerm=true
+[003] OPPONENT_SETUP: needs cast=false attack=false loseLife=false gainLife=false draw=false sac=true
+[004] OPPONENT_ACTION: seat 1 sacrifices "Smart Target"
+[005] CONDITION_SETUP: "etb" → no-op (source's own ETB will fire trigger)
+[006] TRIGGER_FIRE: creature_etb primed on "Soul-Guide Lantern"
+[007] EFFECT_ATTEMPT: kind=exile usingFullEffect=true
+[008] TRIGGER_CHECK: event="etb" resolving via fireTriggerEvent
+[009] HANDLER_ENTER: fireTriggerEvent srcPerm="Soul-Guide Lantern"
+[010] STATE_CHANGE: events=0 changed=false
+[011] ASSERT_FAIL: goldilocks_dead_effect effect=exile abilityKind=triggered filterBase="card"

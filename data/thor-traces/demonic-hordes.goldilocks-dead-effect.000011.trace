@@ -1,0 +1,9 @@
+[001] SETUP: card="Demonic Hordes" kind=destroy abilityKind=activated
+[002] SETUP: battlefield seat=0 size=2 srcPerm=true
+[003] OPPONENT_SETUP: needs cast=false attack=false loseLife=false gainLife=false draw=false sac=true
+[004] OPPONENT_ACTION: seat 1 sacrifices "Smart Target"
+[005] EFFECT_ATTEMPT: kind=destroy usingFullEffect=true
+[006] HANDLER_ENTER: InvokeActivatedHook srcPerm="Demonic Hordes" index=0
+[007] HANDLER_ENTER: fallback ResolveEffect (activated hook produced no events)
+[008] STATE_CHANGE: events=0 changed=false
+[009] ASSERT_FAIL: goldilocks_dead_effect effect=destroy abilityKind=activated filterBase="land"

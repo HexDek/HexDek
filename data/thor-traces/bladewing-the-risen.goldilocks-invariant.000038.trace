@@ -1,0 +1,14 @@
+[001] SETUP: card="Bladewing the Risen" kind=reanimate abilityKind=triggered
+[002] SETUP: battlefield seat=0 size=1 srcPerm=true
+[003] CONDITION_SETUP: "etb" → no-op (source's own ETB will fire trigger)
+[004] TRIGGER_FIRE: creature_etb primed on "Bladewing the Risen"
+[005] EFFECT_ATTEMPT: kind=reanimate usingFullEffect=true
+[006] TRIGGER_CHECK: event="etb" resolving via fireTriggerEvent
+[007] HANDLER_ENTER: fireTriggerEvent srcPerm="Bladewing the Risen"
+[008] STATE_CHANGE: events=5 changed=true
+[009] EVENT: kind=zone_change source="GraveDragon" seat=0 target=-1 amount=0
+[010] EVENT: kind=per_card_handler source="Bladewing the Risen" seat=0 target=0 amount=0
+[011] EVENT: kind=zone_change source="Bladewing the Risen" seat=0 target=-1 amount=0
+[012] EVENT: kind=per_card_failed source="Bladewing the Risen" seat=0 target=0 amount=0
+[013] EVENT: kind=per_card_handler source="Bladewing the Risen" seat=0 target=0 amount=0
+[014] ASSERT_FAIL: goldilocks_invariant invariant=CardIdentity msg=CardIdentity: card "GraveDragon" (ptr 0xc008a4cee0) appears in both seat 0 battlefield and seat 0 battlefield

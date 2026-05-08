@@ -1,0 +1,7 @@
+[001] SETUP: card="Axavar, Fate Thief" kind=ability_word abilityKind=static
+[002] SETUP: battlefield seat=0 size=2 srcPerm=true
+[003] OPPONENT_SETUP: needs cast=false attack=false loseLife=false gainLife=false draw=false sac=false
+[004] EFFECT_ATTEMPT: kind=ability_word usingFullEffect=false
+[005] HANDLER_ENTER: ResolveEffect (static/default path)
+[006] STATE_CHANGE: events=0 changed=false
+[007] ASSERT_FAIL: goldilocks_dead_effect effect=ability_word abilityKind=static filterBase=""
