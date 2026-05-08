@@ -104,6 +104,22 @@ kanban-plugin: board
 - [ ] **Tournament prize pools** — hat-vs-hat bracket tournaments with cash prizes (1st/2nd/3rd/4th splits). Starcraft model: deckbuilding is the skill, hat execution is the layer. Legally sound as skill competition (no entry-fee model safest, donations-funded). Needs: bracket system, payout logic, age verification (18+), tax reporting (>$600). #platform #economy #future
 
 
+## Done — Session 2026-05-08 (Engine Deep Audit + Structural Systems)
+
+- [x] **Deep sweep: 34 missing FireCardTrigger dispatch points** — dead triggers (targeted, card_exiled, zone_change, scry, proliferate, etc.) across 15 engine files. CI lint test `TestAllRegisteredTriggersAreDispatched` prevents future dead triggers. (2026-05-08) #engine #dispatch
+- [x] **CheckEnd after 54 lethal damage sites** — 42 per_card handlers silently ignoring lethal opponent damage. Games could continue past death. Critical correctness fix. (2026-05-08) #engine #bug #critical
+- [x] **AddCounter centralization** — 30 manual `perm.Counters[kind]++` sites migrated to `perm.AddCounter()` (nil-safe, floors at 0). (2026-05-08) #engine #refactor
+- [x] **MoveResult return type** — `MoveCard` now returns `MoveResult{FinalZone, Permanent}` instead of bare string. Callers can access created permanents. (2026-05-08) #engine
+- [x] **ExileLinked infrastructure (CR §406.7)** — `ExileLinked()` / `ReturnLinkedExile()` for O-Ring/Fiend Hunter/Knowledge Pool patterns. `Card.ExiledByTimestamp` + `Permanent.LinkedExile` fields. (2026-05-08) #engine
+- [x] **ZoneCastPermission duration/expiry** — Duration, GrantTurn, SourceTimestamp, SpendAnyColor fields. `ExpireZoneCastGrants` at end-of-turn cleanup. Fixed bug where impulse draw grants (Prosper, Narset, Urza, etc.) persisted forever. 11 handlers upgraded. (2026-05-08) #engine #bug #critical
+- [x] **Adventure ZoneCastGrant wiring (CR §715.4)** — `CastAdventure` now calls `RegisterZoneCastGrant` so creature half is castable from exile. Was previously half-broken. (2026-05-08) #engine #bug
+- [x] **Prepared mechanic (§702.168)** — `Permanent.Prepared` bool + `Unprepare()` helper. 3 handlers: Abigale (upgraded from flags), Tam Observant Sequencer (landfall→draw+life), Lluwen Exchange Student (ETB/activate→Pest token). (2026-05-08) #engine #strixhaven
+- [x] **Paradigm mechanic** — `GameState.ParadigmExile` tracking + `ResolveParadigmCopies` at first main phase. 5 handlers for all Strixhaven paradigm cards (Decorum Dissertation, Echocasting Symposium, Germination Practicum, Improvisation Capstone, Restoration Seminar). (2026-05-08) #engine #strixhaven
+- [x] **9 new tests** — adventure grant registration, Prepared field lifecycle, paradigm exile tracking, ResolveParadigmCopies copy-cast. (2026-05-08) #engine #tests
+
+*10 commits, ~2,500 lines across ~100 files. Key impact: ZoneCast duration fix + CheckEnd fix affect ~15% of commander pool each.*
+
+
 ## Done — Session 2026-05-05 Evening (UI/UX Sprint)
 
 - [x] **Narrator enrichment** — 15 new event kinds surfaced (untap, tap, discard, scry, surveil, bounce, flicker, equip, etc), coalescing (consecutive same-seat events merge), dedup (cast suppresses ETB), per-seat color-coded log borders, turn separators. LogEntry enriched with source/targets/amount/count for animation rigging. (2026-05-05) #ui #spectator

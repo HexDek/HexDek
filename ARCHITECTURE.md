@@ -82,9 +82,16 @@ Full Commander rules implementation:
 - **Turn structure**: untap → upkeep → draw → main1 → combat → main2 → end step → cleanup
 - **Stack & priority**: APNAP ordering (§603), split-second, modal/kicker/X spells
 - **Combat**: 5-step combat, first/double strike, trample, menace, provoke, goad
-- **Zone system**: universal `MoveCard` entry point with replacement effect interception
+- **Zone system**: universal `MoveCard` (returns `MoveResult{FinalZone, Permanent}`) with replacement effect interception
+- **Cast-from-zone systems**: 6 structural patterns for non-hand casting:
+  - `ZoneCastPermission` — flashback, escape, adventure, impulse draw, static exile-cast (with Duration/GrantTurn/SourceTimestamp/SpendAnyColor)
+  - `AdditionalCost` — sacrifice, bargain, exile-from-graveyard (escape's exile-N cost)
+  - `ExileLinked` — O-Ring/Fiend Hunter/Knowledge Pool "exile until source leaves" (CR §406.7)
+  - `Prepared` — Strixhaven DFC state flag + copy-cast from battlefield
+  - `ParadigmExile` — recurring free copy-cast from exile at first main phase
+  - Duration lifecycle: `ExpireZoneCastGrants` at end-of-turn, `ExpireSourceGrants` on LTB
 - **Layer system**: §613 continuous effects (layers 1–7e), dependency ordering, cache invalidation
-- **Trigger dispatch**: zone-change, ETB/LTB, cast, damage, state-based triggers
+- **Trigger dispatch**: zone-change, ETB/LTB, cast, damage, state-based triggers + CI lint guard
 - **State-based actions**: full §704 (lethal damage, 0 toughness, legend rule, poison, commander damage, etc.)
 - **Mana system**: 6-type pool, hybrid/phyrexian, convoke, treasure, restricted mana
 - **Replacement effects**: §614/§616 ordering, shield counters, self-replacement
