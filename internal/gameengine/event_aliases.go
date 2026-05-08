@@ -93,9 +93,11 @@ var eventAliasTable = map[string][]string{
 	// -----------------------------------------------------------------------
 	// Attack aliases — normalize to "attack"
 	// -----------------------------------------------------------------------
-	"you_attack":         {"attack"}, // "whenever you attack"
-	"attacks":            {"attack"}, // plural form
-	"you_attack_with":    {"attack"}, // "whenever you attack with"
+	"creature_attacks":     {"attack"}, // engine dispatch event (combat.go)
+	"declare_attackers":    {"attack"}, // step-level alias
+	"you_attack":           {"attack"}, // "whenever you attack"
+	"attacks":              {"attack"}, // plural form
+	"you_attack_with":      {"attack"}, // "whenever you attack with"
 	"attack_while_saddled": {"attack"}, // attack + saddled condition
 
 	// -----------------------------------------------------------------------
