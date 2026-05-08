@@ -843,7 +843,7 @@ func ApplyBloodthirst(gs *GameState, perm *Permanent, n int) {
 		if opp == nil {
 			continue
 		}
-		if opp.Flags != nil && opp.Flags["damage_taken_this_turn"] > 0 {
+		if opp.Turn.DamageReceived > 0 {
 			opponentDamaged = true
 			break
 		}

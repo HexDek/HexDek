@@ -27,10 +27,10 @@ func syggEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[s
 	triggered := false
 	for _, oppIdx := range gs.Opponents(perm.Controller) {
 		s := gs.Seats[oppIdx]
-		if s == nil || s.Flags == nil {
+		if s == nil {
 			continue
 		}
-		if s.Flags["life_lost_this_turn"] >= 3 {
+		if s.Turn.LifeLost >= 3 {
 			triggered = true
 			break
 		}

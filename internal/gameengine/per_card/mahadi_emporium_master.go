@@ -15,18 +15,7 @@ import (
 // (creature_dies observer increments). At end step, create that many
 // treasure tokens, then reset the counter.
 func registerMahadiEmporiumMaster(r *Registry) {
-	r.OnTrigger("Mahadi, Emporium Master", "creature_dies", mahadiTrackDeath)
 	r.OnTrigger("Mahadi, Emporium Master", "end_step", mahadiEndStep)
-}
-
-func mahadiTrackDeath(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
-	if gs == nil || perm == nil {
-		return
-	}
-	if perm.Flags == nil {
-		perm.Flags = map[string]int{}
-	}
-	perm.Flags["mahadi_creatures_died_this_turn"]++
 }
 
 func mahadiEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
@@ -38,11 +27,12 @@ func mahadiEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 	if activeSeat != perm.Controller {
 		return
 	}
-	if perm.Flags == nil {
-		perm.Flags = map[string]int{}
+	count := 0
+	for _, s := range gs.Seats {
+		if s != nil {
+			count += s.Turn.CreaturesDied
+		}
 	}
-	count := perm.Flags["mahadi_creatures_died_this_turn"]
-	delete(perm.Flags, "mahadi_creatures_died_this_turn")
 	if count <= 0 {
 		return
 	}

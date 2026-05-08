@@ -1269,7 +1269,14 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 			case "fateful hour":
 				conditionMet = gs.Seats[controller].Life <= 5
 			case "morbid":
-				conditionMet = gs.Flags != nil && gs.Flags["creature_died_this_turn"] > 0
+				conditionMet = func() bool {
+					for _, s := range gs.Seats {
+						if s != nil && s.Turn.CreaturesDied > 0 {
+							return true
+						}
+					}
+					return false
+				}()
 			case "threshold":
 				conditionMet = len(gs.Seats[controller].Graveyard) >= 7
 			default:

@@ -877,17 +877,10 @@ func CanPaySpectacle(gs *GameState, seatIdx int) bool {
 	if gs == nil {
 		return false
 	}
-	// Check if any opponent lost life this turn.
 	for _, oppSeat := range gs.LivingOpponents(seatIdx) {
-		if gs.Seats[oppSeat] != nil && gs.Seats[oppSeat].Flags != nil {
-			if gs.Seats[oppSeat].Flags["lost_life_this_turn"] > 0 {
-				return true
-			}
+		if gs.Seats[oppSeat] != nil && gs.Seats[oppSeat].Turn.LifeLost > 0 {
+			return true
 		}
-	}
-	// Also check game-wide flag.
-	if gs.Flags != nil && gs.Flags["opponent_lost_life_this_turn"] > 0 {
-		return true
 	}
 	return false
 }
@@ -915,7 +908,7 @@ func CanPaySurge(gs *GameState, seatIdx int) bool {
 		return false
 	}
 	seat := gs.Seats[seatIdx]
-	if seat != nil && seat.Flags != nil && seat.Flags["spells_cast_this_turn"] > 0 {
+	if seat != nil && seat.Turn.SpellsCast > 0 {
 		return true
 	}
 	return false
@@ -1093,10 +1086,7 @@ func CanCastMiracle(gs *GameState, seatIdx int, card *Card) bool {
 		return false
 	}
 	seat := gs.Seats[seatIdx]
-	if seat.Flags == nil {
-		return true // No draws recorded yet — this is the first.
-	}
-	return seat.Flags["cards_drawn_this_turn"] <= 1
+	return seat.Turn.CardsDrawn <= 1
 }
 
 // CastWithMiracle casts a spell for its miracle cost. The card must

@@ -19,26 +19,7 @@ import (
 // creatures (excluding Lathiel itself), one per creature in BasePower
 // descending order, capped at gained.
 func registerLathielTheBounteousDawn(r *Registry) {
-	r.OnTrigger("Lathiel, the Bounteous Dawn", "life_gained", lathielTrackLifeGained)
 	r.OnTrigger("Lathiel, the Bounteous Dawn", "end_step", lathielEndStep)
-}
-
-func lathielTrackLifeGained(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
-	if gs == nil || perm == nil || ctx == nil {
-		return
-	}
-	seat, _ := ctx["seat"].(int)
-	if seat != perm.Controller {
-		return
-	}
-	amount, _ := ctx["amount"].(int)
-	if amount <= 0 {
-		return
-	}
-	if perm.Flags == nil {
-		perm.Flags = map[string]int{}
-	}
-	perm.Flags["lathiel_life_gained_this_turn"] += amount
 }
 
 func lathielEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
@@ -46,16 +27,12 @@ func lathielEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 	if gs == nil || perm == nil || ctx == nil {
 		return
 	}
-	if perm.Flags == nil {
-		perm.Flags = map[string]int{}
-	}
-	gained := perm.Flags["lathiel_life_gained_this_turn"]
-	delete(perm.Flags, "lathiel_life_gained_this_turn")
-	if gained <= 0 {
-		return
-	}
 	seat := gs.Seats[perm.Controller]
 	if seat == nil {
+		return
+	}
+	gained := seat.Turn.LifeGained
+	if gained <= 0 {
 		return
 	}
 	placed := 0

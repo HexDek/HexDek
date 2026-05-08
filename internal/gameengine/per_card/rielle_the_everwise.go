@@ -26,7 +26,6 @@ import (
 func registerRielleTheEverwise(r *Registry) {
 	r.OnETB("Rielle, the Everwise", rielleETB)
 	r.OnTrigger("Rielle, the Everwise", "card_discarded", rielleDiscarded)
-	r.OnTrigger("Rielle, the Everwise", "untap_step", rielleUntapReset)
 }
 
 func rielleETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
@@ -50,17 +49,13 @@ func rielleDiscarded(gs *gameengine.GameState, perm *gameengine.Permanent, ctx m
 	if discarderSeat < 0 || discarderSeat >= len(gs.Seats) {
 		return
 	}
-	seat := gs.Seats[discarderSeat]
-	if seat == nil {
+	if perm.Flags != nil && perm.Flags["rielle_fired_turn"] == gs.Turn {
 		return
 	}
-	if seat.Flags == nil {
-		seat.Flags = map[string]int{}
+	if perm.Flags == nil {
+		perm.Flags = map[string]int{}
 	}
-	if seat.Flags["rielle_discarded_this_turn"] == 1 {
-		return
-	}
-	seat.Flags["rielle_discarded_this_turn"] = 1
+	perm.Flags["rielle_fired_turn"] = gs.Turn
 
 	count, _ := ctx["count"].(int)
 	if count <= 0 {
@@ -77,19 +72,4 @@ func rielleDiscarded(gs *gameengine.GameState, perm *gameengine.Permanent, ctx m
 		"discarded": count,
 		"drawn":     drawn,
 	})
-}
-
-func rielleUntapReset(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
-	if gs == nil || perm == nil || ctx == nil {
-		return
-	}
-	activeSeat, _ := ctx["active_seat"].(int)
-	if activeSeat != perm.Controller {
-		return
-	}
-	seat := gs.Seats[perm.Controller]
-	if seat == nil || seat.Flags == nil {
-		return
-	}
-	delete(seat.Flags, "rielle_discarded_this_turn")
 }

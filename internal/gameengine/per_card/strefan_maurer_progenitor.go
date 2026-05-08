@@ -68,10 +68,7 @@ func strefanEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		if s == nil || s.Lost {
 			continue
 		}
-		if s.Flags != nil && s.Flags["damage_taken_this_turn"] > 0 {
-			lostLife[i] = true
-		}
-		if s.Flags != nil && s.Flags["lost_life_this_turn"] > 0 {
+		if s.Turn.DamageReceived > 0 || s.Turn.LifeLost > 0 {
 			lostLife[i] = true
 		}
 	}

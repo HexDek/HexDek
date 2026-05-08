@@ -1435,10 +1435,10 @@ func TestFormidable_Inactive(t *testing.T) {
 
 func TestRaid_ActiveWithFlag(t *testing.T) {
 	gs := newMiscGame(t)
-	gs.Seats[0].Flags = map[string]int{"attacked_this_turn": 1}
+	gs.Seats[0].Turn.Attacked = true
 
 	if !CheckRaid(gs, 0) {
-		t.Error("raid should be active when attacked_this_turn flag is set")
+		t.Error("raid should be active when Turn.Attacked is set")
 	}
 }
 
@@ -1728,9 +1728,8 @@ func TestRaid_CombatSetsFlag(t *testing.T) {
 		t.Error("raid should be active after declaring attackers")
 	}
 
-	// Verify the flag is set.
-	if gs.Seats[0].Flags == nil || gs.Seats[0].Flags["attacked_this_turn"] != 1 {
-		t.Error("attacked_this_turn flag should be set on seat")
+	if !gs.Seats[0].Turn.Attacked {
+		t.Error("Turn.Attacked should be set on seat")
 	}
 }
 
@@ -1779,8 +1778,7 @@ func TestRaid_OpponentNotAffected(t *testing.T) {
 
 func TestRaid_ConditionalResolvesWhenAttacked(t *testing.T) {
 	gs := newMiscGame(t)
-	// Set up the seat flag directly (simulating post-combat).
-	gs.Seats[0].Flags = map[string]int{"attacked_this_turn": 1}
+	gs.Seats[0].Turn.Attacked = true
 
 	// Create a creature with a raid-conditional ETB: draw if attacked.
 	perm := addMiscBattlefield(gs, 0, "Raid Creature", 2, 2, "creature")

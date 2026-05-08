@@ -58,10 +58,7 @@ func sorinPostcombatTransform(gs *gameengine.GameState, perm *gameengine.Permane
 	if seat == nil {
 		return
 	}
-	gained := 0
-	if seat.Flags != nil {
-		gained = seat.Flags["life_gained_this_turn"]
-	}
+	gained := seat.Turn.LifeGained
 	if gained < 3 {
 		return
 	}
@@ -105,10 +102,7 @@ func sorinNeonateMinusOne(gs *gameengine.GameState, src *gameengine.Permanent) {
 	if seat == nil {
 		return
 	}
-	gained := 0
-	if seat.Flags != nil {
-		gained = seat.Flags["life_gained_this_turn"]
-	}
+	gained := seat.Turn.LifeGained
 	if gained <= 0 {
 		emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 			"seat":   src.Controller,

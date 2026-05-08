@@ -28,7 +28,6 @@ import (
 //   - Flying handled by AST keyword pipeline.
 func registerMoseoVeinsNewDean(r *Registry) {
 	r.OnETB("Moseo, Vein's New Dean", moseoETB)
-	r.OnTrigger("Moseo, Vein's New Dean", "life_gained", moseoLifeGained)
 	r.OnTrigger("Moseo, Vein's New Dean", "end_step", moseoEndStep)
 }
 
@@ -54,47 +53,17 @@ func moseoETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		"pest_token_attack_to_gain_1_life_trigger_not_modeled")
 }
 
-func moseoLifeGained(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
-	if gs == nil || perm == nil || ctx == nil {
-		return
-	}
-	gainSeat, _ := ctx["seat"].(int)
-	if gainSeat != perm.Controller {
-		return
-	}
-	amount, _ := ctx["amount"].(int)
-	if amount <= 0 {
-		return
-	}
-	if perm.Flags == nil {
-		perm.Flags = map[string]int{}
-	}
-	turnKey := "moseo_lg_turn"
-	totalKey := "moseo_lg_total"
-	if perm.Flags[turnKey] != gs.Turn {
-		perm.Flags[turnKey] = gs.Turn
-		perm.Flags[totalKey] = 0
-	}
-	perm.Flags[totalKey] += amount
-}
-
 func moseoEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
 	const slug = "moseo_infusion_reanimate"
 	if gs == nil || perm == nil {
 		return
 	}
-	if perm.Flags == nil {
-		return
-	}
-	if perm.Flags["moseo_lg_turn"] != gs.Turn {
-		return
-	}
-	x := perm.Flags["moseo_lg_total"]
-	if x <= 0 {
-		return
-	}
 	seat := gs.Seats[perm.Controller]
 	if seat == nil {
+		return
+	}
+	x := seat.Turn.LifeGained
+	if x <= 0 {
 		return
 	}
 	var pick *gameengine.Card

@@ -86,7 +86,7 @@ func evalNumber(gs *GameState, src *Permanent, n *gameast.NumberOrRef) (int, boo
 //   - permanents_you_control   → count all permanents on src controller's battlefield
 //   - cards_in_zone            → count cards in (zone, whose)
 //   - counters_on_self         → read src.Counters[kind]
-//   - life_gained_this_turn    → MVP 0 (needs turn-scoped tracking)
+//   - life_gained_this_turn    → seat.Turn.LifeGained
 //   - life_lost_this_way       → MVP 0
 //   - raw                      → 0 (parser couldn't structure)
 func evalScaling(gs *GameState, src *Permanent, sa *gameast.ScalingAmount) (int, bool) {
@@ -299,9 +299,16 @@ func evalScaling(gs *GameState, src *Permanent, sa *gameast.ScalingAmount) (int,
 		}
 		return 0, true
 
-	case "life_gained_this_turn", "life_lost_this_way":
-		// MVP stubs — return 0. A Phase 8 pass will implement
-		// turn-scoped life trackers.
+	case "life_gained_this_turn":
+		if src == nil {
+			return 0, true
+		}
+		seat := src.Controller
+		if seat >= 0 && seat < len(gs.Seats) && gs.Seats[seat] != nil {
+			return gs.Seats[seat].Turn.LifeGained, true
+		}
+		return 0, true
+	case "life_lost_this_way":
 		return 0, true
 	case "half_rounded_up":
 		// Half of a value, rounded up. For "loses life equal to half

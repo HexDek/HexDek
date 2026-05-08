@@ -579,7 +579,7 @@ func TestSpectacle_Detection(t *testing.T) {
 
 func TestSpectacle_CanPay_OpponentLostLife(t *testing.T) {
 	gs := newKWCombatGame(t)
-	gs.Flags["opponent_lost_life_this_turn"] = 1
+	gs.Seats[1].Turn.LifeLost = 3
 
 	if !CanPaySpectacle(gs, 0) {
 		t.Error("spectacle should be payable when opponent lost life this turn")
@@ -615,10 +615,7 @@ func TestSurge_Detection(t *testing.T) {
 
 func TestSurge_CanPay_SpellCastThisTurn(t *testing.T) {
 	gs := newKWCombatGame(t)
-	if gs.Seats[0].Flags == nil {
-		gs.Seats[0].Flags = map[string]int{}
-	}
-	gs.Seats[0].Flags["spells_cast_this_turn"] = 1
+	gs.Seats[0].Turn.SpellsCast = 1
 
 	if !CanPaySurge(gs, 0) {
 		t.Error("surge should be payable when a spell was cast this turn")

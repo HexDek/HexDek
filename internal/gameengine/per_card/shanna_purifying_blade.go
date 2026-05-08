@@ -40,10 +40,7 @@ func shannaPurifyingEndStep(gs *gameengine.GameState, perm *gameengine.Permanent
 	if seat == nil {
 		return
 	}
-	gained := 0
-	if seat.Flags != nil {
-		gained = seat.Flags["life_gained_this_turn"]
-	}
+	gained := seat.Turn.LifeGained
 	if gained <= 0 {
 		emitFail(gs, slug, perm.Card.DisplayName(), "no_life_gained_this_turn", map[string]interface{}{
 			"seat": perm.Controller,

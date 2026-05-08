@@ -49,12 +49,7 @@ func rowanScionActivate(gs *gameengine.GameState, src *gameengine.Permanent, abi
 		return
 	}
 
-	lifeLost := 0
-	if s.Flags != nil {
-		if startLife, ok := s.Flags["life_at_turn_start"]; ok && startLife > s.Life {
-			lifeLost = startLife - s.Life
-		}
-	}
+	lifeLost := s.Turn.LifeLost
 
 	if src.Flags == nil {
 		src.Flags = map[string]int{}

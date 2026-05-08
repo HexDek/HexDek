@@ -1980,10 +1980,8 @@ func CheckRaid(gs *GameState, seatIdx int) bool {
 			return true
 		}
 	}
-	// Also check the seat-level flags (combat.go may set this).
 	if seatIdx >= 0 && seatIdx < len(gs.Seats) {
-		seat := gs.Seats[seatIdx]
-		if seat.Flags != nil && seat.Flags["attacked_this_turn"] > 0 {
+		if gs.Seats[seatIdx].Turn.Attacked {
 			return true
 		}
 	}

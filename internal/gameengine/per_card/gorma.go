@@ -27,12 +27,9 @@ import (
 //     rather than a §614 replacement so subsequent ETB observers see the
 //     buffed creature, matching Tayam's pattern.
 //   - "end_step" trigger resets the per-seat death counter once per turn.
-const gormaDeathCountKey = "gorma_creatures_died_this_turn"
-
 func registerGorma(r *Registry) {
 	r.OnTrigger("Gorma, the Gullet", "creature_dies", gormaDeathTrigger)
 	r.OnTrigger("Gorma, the Gullet", "permanent_etb", gormaETBStatic)
-	r.OnTrigger("Gorma, the Gullet", "end_step", gormaEndStepReset)
 }
 
 func gormaDeathTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
@@ -53,21 +50,15 @@ func gormaDeathTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx
 
 	perm.AddCounter("+1/+1", 1)
 	seat := gs.Seats[perm.Controller]
-	if seat != nil {
-		if seat.Flags == nil {
-			seat.Flags = map[string]int{}
-		}
-		seat.Flags[gormaDeathCountKey]++
-	}
 
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":           perm.Controller,
 		"plus_one_total": perm.Counters["+1/+1"],
 		"deaths_this_turn": func() int {
-			if seat == nil || seat.Flags == nil {
+			if seat == nil {
 				return 0
 			}
-			return seat.Flags[gormaDeathCountKey]
+			return seat.Turn.CreaturesDied
 		}(),
 	})
 }
@@ -93,10 +84,10 @@ func gormaETBStatic(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		return
 	}
 	seat := gs.Seats[perm.Controller]
-	if seat == nil || seat.Flags == nil {
+	if seat == nil {
 		return
 	}
-	n := seat.Flags[gormaDeathCountKey]
+	n := seat.Turn.CreaturesDied
 	if n <= 0 {
 		return
 	}
@@ -107,18 +98,4 @@ func gormaETBStatic(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		"counters_added":   n,
 		"deaths_this_turn": n,
 	})
-}
-
-func gormaEndStepReset(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
-	if gs == nil || perm == nil {
-		return
-	}
-	seat := gs.Seats[perm.Controller]
-	if seat == nil || seat.Flags == nil {
-		return
-	}
-	if seat.Flags[gormaDeathCountKey] == 0 {
-		return
-	}
-	seat.Flags[gormaDeathCountKey] = 0
 }
