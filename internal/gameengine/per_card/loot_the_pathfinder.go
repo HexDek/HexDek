@@ -84,15 +84,7 @@ func lootActivated(gs *gameengine.GameState, src *gameengine.Permanent, abilityI
 			}
 		}
 		if target >= 0 {
-			gs.Seats[target].Life -= 3
-			gs.LogEvent(gameengine.Event{
-				Kind:   "damage_dealt",
-				Seat:   target,
-				Target: target,
-				Source: src.Card.DisplayName(),
-				Amount: 3,
-				Details: map[string]interface{}{"reason": "loot_exhaust"},
-			})
+			gameengine.DealDamage(gs, target, 3, src.Card.DisplayName())
 			_ = gs.CheckEnd()
 		}
 		emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{

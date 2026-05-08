@@ -53,18 +53,7 @@ func gwenStacyAttack(gs *gameengine.GameState, perm *gameengine.Permanent, ctx m
 	if x <= 0 {
 		return
 	}
-	gs.Seats[defenderSeat].Life -= x
-	gs.LogEvent(gameengine.Event{
-		Kind:   "damage",
-		Seat:   perm.Controller,
-		Target: defenderSeat,
-		Source: perm.Card.DisplayName(),
-		Amount: x,
-		Details: map[string]interface{}{
-			"slug":   slug,
-			"reason": "gwen_stacy_attack_count",
-		},
-	})
+	gameengine.DealDamage(gs, defenderSeat, x, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":           perm.Controller,
 		"target_seat":    defenderSeat,

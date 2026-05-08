@@ -69,17 +69,7 @@ func tellahNoncreatureCast(gs *gameengine.GameState, perm *gameengine.Permanent,
 			if s == nil || s.Lost {
 				continue
 			}
-			s.Life -= mv
-			gs.LogEvent(gameengine.Event{
-				Kind:   "damage",
-				Seat:   perm.Controller,
-				Target: opp,
-				Source: perm.Card.DisplayName(),
-				Amount: mv,
-				Details: map[string]interface{}{
-					"reason": "tellah_great_sage_octuple",
-				},
-			})
+			gameengine.DealDamage(gs, opp, mv, perm.Card.DisplayName())
 		}
 	}
 

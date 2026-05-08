@@ -104,17 +104,7 @@ func braidsArisenNightmareEndStep(gs *gameengine.GameState, perm *gameengine.Per
 		} else {
 			// No matching permanent (or opponent can't/doesn't sacrifice):
 			// opponent loses 2 life, Braids' controller draws a card.
-			os.Life -= 2
-			gs.LogEvent(gameengine.Event{
-				Kind:   "life_change",
-				Seat:   oppSeat,
-				Target: -1,
-				Source: perm.Card.DisplayName(),
-				Details: map[string]interface{}{
-					"amount": -2,
-					"cause":  "braids_arisen_nightmare_no_sac",
-				},
-			})
+			gameengine.LoseLife(gs, oppSeat, 2, perm.Card.DisplayName())
 			drawn := drawOne(gs, controller, perm.Card.DisplayName())
 			drawnName := ""
 			if drawn != nil {

@@ -85,17 +85,7 @@ func fetchLandActivated(gs *gameengine.GameState, src *gameengine.Permanent, car
 
 	// Pay life cost.
 	if cfg.LifeCost > 0 {
-		s.Life -= cfg.LifeCost
-		gs.LogEvent(gameengine.Event{
-			Kind:   "lose_life",
-			Seat:   seat,
-			Target: seat,
-			Source: cardName,
-			Amount: cfg.LifeCost,
-			Details: map[string]interface{}{
-				"reason": "fetchland_activation_cost",
-			},
-		})
+		gameengine.LoseLife(gs, seat, cfg.LifeCost, cardName)
 	}
 
 	// Sacrifice self.

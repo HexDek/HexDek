@@ -63,18 +63,7 @@ func sylvanLibraryDraw(gs *gameengine.GameState, perm *gameengine.Permanent, ctx
 	keepCards := s.Life > 12
 
 	if keepCards {
-		s.Life -= lifeCost
-		gs.LogEvent(gameengine.Event{
-			Kind:   "lose_life",
-			Seat:   seat,
-			Target: seat,
-			Source: "Sylvan Library",
-			Amount: lifeCost,
-			Details: map[string]interface{}{
-				"reason": "sylvan_library_keep_cards",
-				"cards":  len(drawnCards),
-			},
-		})
+		gameengine.LoseLife(gs, seat, lifeCost, "Sylvan Library")
 		emit(gs, slug, "Sylvan Library", map[string]interface{}{
 			"seat":      seat,
 			"drawn":     len(drawnCards),

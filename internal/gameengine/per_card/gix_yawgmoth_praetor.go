@@ -56,7 +56,7 @@ func gixYawgmothCombatDamage(gs *gameengine.GameState, perm *gameengine.Permanen
 		})
 		return
 	}
-	src.Life--
+	gameengine.LoseLife(gs, sourceSeat, 1, perm.Card.DisplayName())
 	if len(src.Library) > 0 {
 		card := src.Library[0]
 		src.Library = src.Library[1:]

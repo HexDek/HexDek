@@ -60,17 +60,7 @@ func urabraskInstantSorceryCast(gs *gameengine.GameState, perm *gameengine.Perma
 		}
 	}
 	if target >= 0 {
-		gs.Seats[target].Life -= 1
-		gs.LogEvent(gameengine.Event{
-			Kind:   "damage",
-			Seat:   perm.Controller,
-			Target: target,
-			Source: perm.Card.DisplayName(),
-			Amount: 1,
-			Details: map[string]interface{}{
-				"reason": "urabrask_is_ping",
-			},
-		})
+		gameengine.DealDamage(gs, target, 1, perm.Card.DisplayName())
 	}
 	gs.LogEvent(gameengine.Event{
 		Kind:   "mana_added",

@@ -84,7 +84,7 @@ func jawsArtifactGone(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		if s == nil || s.Lost {
 			continue
 		}
-		s.Life--
+		gameengine.DealDamage(gs, i, 1, perm.Card.DisplayName())
 		pinged++
 	}
 	if pinged > 0 {

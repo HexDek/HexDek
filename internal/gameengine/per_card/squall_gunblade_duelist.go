@@ -93,14 +93,7 @@ func squallGunbladeAttackers(gs *gameengine.GameState, perm *gameengine.Permanen
 		return
 	}
 	dmg := perm.Power()
-	defender.Life -= dmg
-	gs.LogEvent(gameengine.Event{
-		Kind:   "damage",
-		Seat:   perm.Controller,
-		Target: defenderSeat,
-		Source: perm.Card.DisplayName(),
-		Amount: dmg,
-	})
+	gameengine.DealDamage(gs, defenderSeat, dmg, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":     perm.Controller,
 		"defender": defenderSeat,

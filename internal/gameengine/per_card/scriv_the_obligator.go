@@ -171,17 +171,7 @@ func contractAttackTrigger(gs *gameengine.GameState, perm *gameengine.Permanent,
 	// Otherwise — attacker's controller loses 2 life.
 	atkSeat := atk.Controller
 	if atkSeat >= 0 && atkSeat < len(gs.Seats) && gs.Seats[atkSeat] != nil {
-		gs.Seats[atkSeat].Life -= 2
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_loss",
-			Seat:   atkSeat,
-			Target: atkSeat,
-			Source: "Contract",
-			Amount: 2,
-			Details: map[string]interface{}{
-				"reason": "contract_attacker_not_targeting_opponent",
-			},
-		})
+		gameengine.LoseLife(gs, atkSeat, 2, "Contract")
 	}
 	emit(gs, slug, "Contract", map[string]interface{}{
 		"contract_seat": contractCtrl,

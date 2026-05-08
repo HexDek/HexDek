@@ -143,17 +143,7 @@ func eleshNornArgentDamagePunish(gs *gameengine.GameState, perm *gameengine.Perm
 		return
 	}
 
-	src.Life -= 2
-	gs.LogEvent(gameengine.Event{
-		Kind:   "life_change",
-		Seat:   sourceSeat,
-		Target: -1,
-		Source: perm.Card.DisplayName(),
-		Details: map[string]interface{}{
-			"amount": -2,
-			"cause":  "elesh_norn_argent_etchings_punish",
-		},
-	})
+	gameengine.LoseLife(gs, sourceSeat, 2, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":        perm.Controller,
 		"source_seat": sourceSeat,

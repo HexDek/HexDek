@@ -99,7 +99,7 @@ func zoralineDoReanimate(gs *gameengine.GameState, perm *gameengine.Permanent, k
 	if pick == nil {
 		return
 	}
-	seat.Life -= 2
+	gameengine.LoseLife(gs, perm.Controller, 2, perm.Card.DisplayName())
 	moveCardBetweenZones(gs, perm.Controller, pick, "graveyard", "exile", "zoraline_reanimate_route")
 	newPerm := enterBattlefieldWithETB(gs, perm.Controller, pick, false)
 	if newPerm != nil {

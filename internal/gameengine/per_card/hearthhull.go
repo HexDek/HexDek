@@ -106,19 +106,8 @@ func hearthhullLandSacDrain(gs *gameengine.GameState, perm *gameengine.Permanent
 		if s == nil || i == perm.Controller || s.Lost {
 			continue
 		}
-		s.Life -= 2
+		gameengine.LoseLife(gs, i, 2, perm.Card.DisplayName())
 		drained++
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   perm.Controller,
-			Target: i,
-			Source: perm.Card.DisplayName(),
-			Amount: -2,
-			Details: map[string]interface{}{
-				"slug":   slug,
-				"reason": "hearthhull_land_sacrificed",
-			},
-		})
 	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":              perm.Controller,

@@ -21,14 +21,7 @@ func bloodArtistTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ct
 		if s == nil || s.Lost || i == seat {
 			continue
 		}
-		s.Life--
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   i,
-			Target: -1,
-			Source: "Blood Artist",
-			Details: map[string]interface{}{"amount": -1, "cause": "blood_artist"},
-		})
+		gameengine.LoseLife(gs, i, 1, "Blood Artist")
 		break // "target opponent" — pick first alive opponent
 	}
 	gameengine.GainLife(gs, seat, 1, "Blood Artist")
@@ -55,14 +48,7 @@ func zulaportTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx m
 		if s == nil || s.Lost || i == seat {
 			continue
 		}
-		s.Life--
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   i,
-			Target: -1,
-			Source: "Zulaport Cutthroat",
-			Details: map[string]interface{}{"amount": -1, "cause": "zulaport_cutthroat"},
-		})
+		gameengine.LoseLife(gs, i, 1, "Zulaport Cutthroat")
 	}
 	gameengine.GainLife(gs, seat, 1, "Zulaport Cutthroat")
 }
@@ -88,14 +74,7 @@ func bastionTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		if s == nil || s.Lost || i == seat {
 			continue
 		}
-		s.Life--
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   i,
-			Target: -1,
-			Source: "Bastion of Remembrance",
-			Details: map[string]interface{}{"amount": -1, "cause": "bastion_of_remembrance"},
-		})
+		gameengine.LoseLife(gs, i, 1, "Bastion of Remembrance")
 	}
 	gameengine.GainLife(gs, seat, 1, "Bastion of Remembrance")
 }
@@ -121,14 +100,7 @@ func cruelCelebrantTrigger(gs *gameengine.GameState, perm *gameengine.Permanent,
 		if s == nil || s.Lost || i == seat {
 			continue
 		}
-		s.Life--
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   i,
-			Target: -1,
-			Source: "Cruel Celebrant",
-			Details: map[string]interface{}{"amount": -1, "cause": "cruel_celebrant"},
-		})
+		gameengine.LoseLife(gs, i, 1, "Cruel Celebrant")
 	}
 	gameengine.GainLife(gs, seat, 1, "Cruel Celebrant")
 }
@@ -154,14 +126,7 @@ func vindictiveTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx
 		if s == nil || s.Lost || i == seat {
 			continue
 		}
-		s.Life--
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   i,
-			Target: -1,
-			Source: "Vindictive Vampire",
-			Details: map[string]interface{}{"amount": -1, "cause": "vindictive_vampire"},
-		})
+		gameengine.LoseLife(gs, i, 1, "Vindictive Vampire")
 	}
 	gameengine.GainLife(gs, seat, 1, "Vindictive Vampire")
 }
@@ -183,13 +148,6 @@ func syrKonradTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		if s == nil || s.Lost || i == seat {
 			continue
 		}
-		s.Life--
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   i,
-			Target: -1,
-			Source: "Syr Konrad, the Grim",
-			Details: map[string]interface{}{"amount": -1, "cause": "syr_konrad"},
-		})
+		gameengine.LoseLife(gs, i, 1, "Syr Konrad, the Grim")
 	}
 }

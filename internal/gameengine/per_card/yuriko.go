@@ -94,17 +94,6 @@ func yurikoTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 		if i == controller || gs.Seats[i].Lost {
 			continue
 		}
-		gs.Seats[i].Life -= cmc
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   i,
-			Amount: -cmc,
-			Source: "Yuriko, the Tiger's Shadow",
-			Details: map[string]interface{}{
-				"from":   gs.Seats[i].Life + cmc,
-				"to":     gs.Seats[i].Life,
-				"reason": "yuriko_trigger",
-			},
-		})
+		gameengine.LoseLife(gs, i, cmc, "Yuriko, the Tiger's Shadow")
 	}
 }

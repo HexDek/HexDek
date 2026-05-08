@@ -57,17 +57,7 @@ func kedissCombatDamage(gs *gameengine.GameState, perm *gameengine.Permanent, ct
 		if os == nil || os.Lost {
 			continue
 		}
-		os.Life -= amount
-		gs.LogEvent(gameengine.Event{
-			Kind:   "damage_dealt",
-			Seat:   opp,
-			Target: opp,
-			Source: src.Card.DisplayName(),
-			Amount: amount,
-			Details: map[string]interface{}{
-				"reason": "kediss_redirect",
-			},
-		})
+		gameengine.DealDamage(gs, opp, amount, src.Card.DisplayName())
 		dealt++
 	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{

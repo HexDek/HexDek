@@ -181,7 +181,7 @@ func smallpoxResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 		if gs.Seats[i] == nil || gs.Seats[i].Lost {
 			continue
 		}
-		gs.Seats[i].Life--
+		gameengine.LoseLife(gs, i, 1, "Smallpox")
 		gameengine.DiscardN(gs, i, 1, "")
 	}
 	eachPlayerSacrificeCreature(gs)
@@ -220,7 +220,7 @@ func poxResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 			continue
 		}
 		lifeLoss := (s.Life + 2) / 3
-		s.Life -= lifeLoss
+		gameengine.LoseLife(gs, i, lifeLoss, "Pox")
 
 		handLoss := (len(s.Hand) + 2) / 3
 		gameengine.DiscardN(gs, i, handLoss, "")
@@ -485,7 +485,7 @@ func deathCloudResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 		if s == nil || s.Lost {
 			continue
 		}
-		s.Life -= x
+		gameengine.LoseLife(gs, i, x, "Death Cloud")
 		gameengine.DiscardN(gs, i, x, "")
 		for j := 0; j < x; j++ {
 			victim := pickWeakestCreature(gs, i)

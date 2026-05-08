@@ -240,7 +240,7 @@ func rankleTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 		if seat == nil || seat.Lost {
 			continue
 		}
-		seat.Life--
+		gameengine.LoseLife(gs, i, 1, "Rankle, Master of Pranks")
 		drawOne(gs, i, "Rankle, Master of Pranks")
 	}
 	emit(gs, "rankle", "Rankle, Master of Pranks", map[string]interface{}{
@@ -319,12 +319,12 @@ func lilianasCaressTrigger(gs *gameengine.GameState, perm *gameengine.Permanent,
 		return
 	}
 	if discarderSeat >= 0 && discarderSeat < len(gs.Seats) {
-		gs.Seats[discarderSeat].Life -= 2
+		gameengine.LoseLife(gs, discarderSeat, 2, "Liliana's Caress")
 	}
 	emit(gs, "lilianas_caress", "Liliana's Caress", map[string]interface{}{
 		"seat":        perm.Controller,
 		"target":      discarderSeat,
-		"damage":      2,
+		"life_lost":   2,
 	})
 }
 
@@ -346,7 +346,7 @@ func megrimTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 		return
 	}
 	if discarderSeat >= 0 && discarderSeat < len(gs.Seats) {
-		gs.Seats[discarderSeat].Life -= 2
+		gameengine.DealDamage(gs, discarderSeat, 2, "Megrim")
 	}
 	emit(gs, "megrim", "Megrim", map[string]interface{}{
 		"seat":   perm.Controller,

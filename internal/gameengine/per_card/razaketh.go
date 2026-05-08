@@ -75,17 +75,7 @@ func razakethActivate(gs *gameengine.GameState, src *gameengine.Permanent, abili
 		return
 	}
 	// Pay 2 life.
-	s.Life -= 2
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   seat,
-		Target: seat,
-		Source: src.Card.DisplayName(),
-		Amount: 2,
-		Details: map[string]interface{}{
-			"reason": "razaketh_activation_cost",
-		},
-	})
+	gameengine.LoseLife(gs, seat, 2, src.Card.DisplayName())
 	// Sacrifice the target.
 	gameengine.SacrificePermanent(gs, sacTarget, "razaketh_activation")
 

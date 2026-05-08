@@ -109,18 +109,7 @@ func grevenAttacks(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 		card := seat.Library[0]
 		gameengine.MoveCard(gs, card, perm.Controller, "library", "hand", "greven-draw")
 	}
-	seat.Life -= tough
-	seat.Turn.LifeLost += tough
-	if seat.Flags == nil {
-		seat.Flags = map[string]int{}
-	}
-	seat.Flags["lost_life_this_turn"] += tough
-	seat.Flags["life_lost_this_turn"] += tough
-	gameengine.FireCardTrigger(gs, "life_lost", map[string]interface{}{
-		"seat":   perm.Controller,
-		"amount": tough,
-		"source": perm.Card.DisplayName(),
-	})
+	gameengine.LoseLife(gs, perm.Controller, tough, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":       perm.Controller,
 		"sacrificed": true,

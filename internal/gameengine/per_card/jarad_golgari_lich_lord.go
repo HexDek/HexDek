@@ -102,17 +102,7 @@ func jaradGolgariLichLordActivate(gs *gameengine.GameState, src *gameengine.Perm
 		if opp == nil || opp.Lost || i == src.Controller {
 			continue
 		}
-		opp.Life -= power
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   i,
-			Source: src.Card.DisplayName(),
-			Amount: -power,
-			Details: map[string]interface{}{
-				"slug":   slug,
-				"reason": "jarad_drain",
-			},
-		})
+		gameengine.LoseLife(gs, i, power, src.Card.DisplayName())
 	}
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 		"seat":       src.Controller,

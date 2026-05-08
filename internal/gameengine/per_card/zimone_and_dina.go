@@ -60,14 +60,7 @@ func zimoneDinaCardDrawn(gs *gameengine.GameState, perm *gameengine.Permanent, c
 	if target < 0 {
 		return
 	}
-	gs.Seats[target].Life -= 2
-	gs.LogEvent(gameengine.Event{
-		Kind:    "life_change",
-		Seat:    target,
-		Source:  perm.Card.DisplayName(),
-		Target:  -2,
-		Details: map[string]interface{}{"amount": -2, "cause": "zimone_and_dina"},
-	})
+	gameengine.LoseLife(gs, target, 2, perm.Card.DisplayName())
 	gameengine.GainLife(gs, perm.Controller, 2, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":     perm.Controller,

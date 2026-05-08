@@ -87,18 +87,7 @@ func ayaraFirstOfLocthwainETBTrigger(gs *gameengine.GameState, perm *gameengine.
 		if os == nil || os.Lost {
 			continue
 		}
-		os.Life--
-		gs.LogEvent(gameengine.Event{
-			Kind:   "lose_life",
-			Seat:   opp,
-			Target: opp,
-			Source: perm.Card.DisplayName(),
-			Amount: 1,
-			Details: map[string]interface{}{
-				"reason":   "ayara_drain",
-				"creature": enteringCard.DisplayName(),
-			},
-		})
+		gameengine.LoseLife(gs, opp, 1, perm.Card.DisplayName())
 	}
 
 	// Controller gains 1 life.

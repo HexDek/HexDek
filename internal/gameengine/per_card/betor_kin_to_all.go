@@ -63,15 +63,7 @@ func betorKinEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx m
 			}
 			loss := (opp.Life + 1) / 2
 			if loss > 0 {
-				opp.Life -= loss
-				gs.LogEvent(gameengine.Event{
-					Kind:    "life_lost",
-					Seat:    i,
-					Target:  i,
-					Source:  perm.Card.DisplayName(),
-					Amount:  loss,
-					Details: map[string]interface{}{"slug": "betor_kin_to_all"},
-				})
+				gameengine.LoseLife(gs, i, loss, perm.Card.DisplayName())
 				lifeLost += loss
 			}
 		}

@@ -103,17 +103,7 @@ func athreosGodOfPassageDies(gs *gameengine.GameState, perm *gameengine.Permanen
 	pay := impactful && paySafe
 
 	if pay {
-		targetSeat.Life -= 3
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   target,
-			Target: -1,
-			Source: perm.Card.DisplayName(),
-			Details: map[string]interface{}{
-				"amount": -3,
-				"cause":  "athreos_passage_pay",
-			},
-		})
+		gameengine.LoseLife(gs, target, 3, perm.Card.DisplayName())
 		emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 			"seat":         perm.Controller,
 			"creature":     dyingCard.DisplayName(),

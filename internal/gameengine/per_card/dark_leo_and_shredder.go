@@ -55,13 +55,7 @@ func darkLeoCombat(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 		if def != nil {
 			loss := (def.Life + 1) / 2
 			if loss > 0 {
-				def.Life -= loss
-				gs.LogEvent(gameengine.Event{
-					Kind:   "life_lost",
-					Seat:   defenderSeat,
-					Source: perm.Card.DisplayName(),
-					Amount: loss,
-				})
+				gameengine.LoseLife(gs, defenderSeat, loss, perm.Card.DisplayName())
 				halfLife = true
 			}
 		}

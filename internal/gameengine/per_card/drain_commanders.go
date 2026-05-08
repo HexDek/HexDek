@@ -34,13 +34,7 @@ func dinaDrainTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		if gs.Seats[opp] == nil || gs.Seats[opp].Lost {
 			continue
 		}
-		gs.Seats[opp].Life -= 1
-		gs.LogEvent(gameengine.Event{
-			Kind:   "lose_life",
-			Seat:   opp,
-			Source: perm.Card.DisplayName(),
-			Amount: 1,
-		})
+		gameengine.LoseLife(gs, opp, 1, perm.Card.DisplayName())
 	}
 	emit(gs, "dina_drain", perm.Card.DisplayName(), map[string]interface{}{
 		"seat":       perm.Controller,
@@ -85,13 +79,7 @@ func vitoDrainTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 			bestOpp = opp
 		}
 	}
-	gs.Seats[bestOpp].Life -= amount
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   bestOpp,
-		Source: perm.Card.DisplayName(),
-		Amount: amount,
-	})
+	gameengine.LoseLife(gs, bestOpp, amount, perm.Card.DisplayName())
 	emit(gs, "vito_drain", perm.Card.DisplayName(), map[string]interface{}{
 		"seat":      perm.Controller,
 		"target":    bestOpp,
@@ -137,13 +125,7 @@ func corpseKnightTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, c
 		if gs.Seats[opp] == nil || gs.Seats[opp].Lost {
 			continue
 		}
-		gs.Seats[opp].Life -= 1
-		gs.LogEvent(gameengine.Event{
-			Kind:   "lose_life",
-			Seat:   opp,
-			Source: "Corpse Knight",
-			Amount: 1,
-		})
+		gameengine.LoseLife(gs, opp, 1, "Corpse Knight")
 	}
 	emit(gs, "corpse_knight_drain", "Corpse Knight", map[string]interface{}{
 		"seat":       perm.Controller,

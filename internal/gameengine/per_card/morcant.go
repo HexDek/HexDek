@@ -55,17 +55,7 @@ func morcantDiscardTrigger(gs *gameengine.GameState, perm *gameengine.Permanent,
 		if opp == nil {
 			continue
 		}
-		opp.Life -= 1
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   oppIdx,
-			Target: oppIdx,
-			Source: perm.Card.DisplayName(),
-			Amount: -1,
-			Details: map[string]interface{}{
-				"reason": "morcant_discard",
-			},
-		})
+		gameengine.LoseLife(gs, oppIdx, 1, perm.Card.DisplayName())
 		drained++
 	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{

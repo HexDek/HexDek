@@ -190,17 +190,7 @@ func sephirothCreatureDies(gs *gameengine.GameState, perm *gameengine.Permanent,
 		if s == nil || s.Lost || i == seat {
 			continue
 		}
-		s.Life--
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   i,
-			Target: -1,
-			Source: perm.Card.DisplayName(),
-			Details: map[string]interface{}{
-				"amount": -1,
-				"cause":  "sephiroth_drain",
-			},
-		})
+		gameengine.LoseLife(gs, i, 1, perm.Card.DisplayName())
 		break
 	}
 	gameengine.GainLife(gs, seat, 1, perm.Card.DisplayName())

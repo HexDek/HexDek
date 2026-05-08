@@ -42,6 +42,11 @@ func arcumDagssonActivate(gs *gameengine.GameState, src *gameengine.Permanent, a
 	if gs == nil || src == nil {
 		return
 	}
+	if src.Tapped {
+		emitFail(gs, slug, src.Card.DisplayName(), "already_tapped", nil)
+		return
+	}
+	src.Tapped = true
 	seat := src.Controller
 	if seat < 0 || seat >= len(gs.Seats) {
 		return

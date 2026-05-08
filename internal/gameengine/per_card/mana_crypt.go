@@ -99,17 +99,7 @@ func manaCryptUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx m
 	}
 	// Tails: 3 damage to controller.
 	seat := perm.Controller
-	gs.Seats[seat].Life -= 3
-	gs.LogEvent(gameengine.Event{
-		Kind:   "damage",
-		Seat:   seat,
-		Target: seat,
-		Source: perm.Card.DisplayName(),
-		Amount: 3,
-		Details: map[string]interface{}{
-			"reason": "mana_crypt_flip_loss",
-		},
-	})
+	gameengine.DealDamage(gs, seat, 3, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":   seat,
 		"result": "tails",

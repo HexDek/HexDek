@@ -78,17 +78,7 @@ func aetherfluxActivate(gs *gameengine.GameState, src *gameengine.Permanent, abi
 		return
 	}
 	// Pay 50 life.
-	s.Life -= 50
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   seat,
-		Target: seat,
-		Source: src.Card.DisplayName(),
-		Amount: 50,
-		Details: map[string]interface{}{
-			"reason": "aetherflux_activation_cost",
-		},
-	})
+	gameengine.LoseLife(gs, seat, 50, src.Card.DisplayName())
 	// Deal 50 damage to target.
 	targetSeat := -1
 	if v, ok := ctx["target_seat"].(int); ok {
@@ -102,14 +92,7 @@ func aetherfluxActivate(gs *gameengine.GameState, src *gameengine.Permanent, abi
 		}
 	}
 	if targetSeat >= 0 && targetSeat < len(gs.Seats) {
-		gs.Seats[targetSeat].Life -= 50
-		gs.LogEvent(gameengine.Event{
-			Kind:   "damage",
-			Seat:   seat,
-			Target: targetSeat,
-			Source: src.Card.DisplayName(),
-			Amount: 50,
-		})
+		gameengine.DealDamage(gs, targetSeat, 50, src.Card.DisplayName())
 		emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 			"seat":        seat,
 			"target_seat": targetSeat,

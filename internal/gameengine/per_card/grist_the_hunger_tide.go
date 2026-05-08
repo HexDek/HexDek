@@ -250,21 +250,7 @@ func gristMinusFive(gs *gameengine.GameState, src *gameengine.Permanent) {
 	}
 	drained := 0
 	for _, opp := range gs.LivingOpponents(seat) {
-		os := gs.Seats[opp]
-		if os == nil {
-			continue
-		}
-		os.Life -= x
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_loss",
-			Seat:   seat,
-			Target: opp,
-			Source: src.Card.DisplayName(),
-			Amount: x,
-			Details: map[string]interface{}{
-				"reason": "grist_minus_five",
-			},
-		})
+		gameengine.LoseLife(gs, opp, x, src.Card.DisplayName())
 		drained++
 	}
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{

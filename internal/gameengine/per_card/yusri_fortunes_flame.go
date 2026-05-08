@@ -45,22 +45,8 @@ func yusriFortunesFlameAttacks(gs *gameengine.GameState, perm *gameengine.Perman
 	for i := 0; i < wins; i++ {
 		drawOne(gs, perm.Controller, perm.Card.DisplayName())
 	}
-	seat := gs.Seats[perm.Controller]
-	if seat != nil {
-		damage := losses * 2
-		seat.Life -= damage
-		gs.LogEvent(gameengine.Event{
-			Kind:   "damage",
-			Seat:   perm.Controller,
-			Target: perm.Controller,
-			Source: perm.Card.DisplayName(),
-			Amount: damage,
-			Details: map[string]interface{}{
-				"slug":   slug,
-				"reason": "yusri_lost_flips",
-			},
-		})
-	}
+	damage := losses * 2
+	gameengine.DealDamage(gs, perm.Controller, damage, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":   perm.Controller,
 		"chosen": wins + losses,

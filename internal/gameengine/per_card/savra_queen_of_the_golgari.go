@@ -52,7 +52,7 @@ func savraSacrifice(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		return
 	}
 	if isBlack && seat.Life > 2 {
-		seat.Life -= 2
+		gameengine.LoseLife(gs, perm.Controller, 2, perm.Card.DisplayName())
 		oppSacced := 0
 		for _, oppIdx := range gs.Opponents(perm.Controller) {
 			os := gs.Seats[oppIdx]
@@ -85,7 +85,7 @@ func savraSacrifice(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		})
 	}
 	if isGreen {
-		seat.Life += 2
+		gameengine.GainLife(gs, perm.Controller, 2, perm.Card.DisplayName())
 		emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 			"seat":      perm.Controller,
 			"color":     "G",

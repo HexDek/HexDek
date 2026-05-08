@@ -103,17 +103,10 @@ func rinAndSeriActivate(gs *gameengine.GameState, src *gameengine.Permanent, abi
 		}
 	}
 	if tgt >= 0 && dogs > 0 {
-		gs.Seats[tgt].Life -= dogs
-		gs.LogEvent(gameengine.Event{
-			Kind:   "damage",
-			Seat:   src.Controller,
-			Target: tgt,
-			Source: src.Card.DisplayName(),
-			Amount: dogs,
-		})
+		gameengine.DealDamage(gs, tgt, dogs, src.Card.DisplayName())
 	}
 	if cats > 0 {
-		seat.Life += cats
+		gameengine.GainLife(gs, src.Controller, cats, src.Card.DisplayName())
 	}
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 		"seat":   src.Controller,

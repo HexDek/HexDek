@@ -57,11 +57,18 @@ func aleshaAttacks(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 		return
 	}
 	card := seat.Graveyard[bestIdx]
-	seat.Graveyard = append(seat.Graveyard[:bestIdx], seat.Graveyard[bestIdx+1:]...)
-	tokenPerm := enterBattlefieldWithETB(gs, perm.Controller, card, true)
-	if tokenPerm != nil {
+	gameengine.MoveCard(gs, card, perm.Controller, "graveyard", "battlefield_tapped", "alesha_reanimate")
+	// Find the newly created permanent to mark it as attacking.
+	var reanimatedPerm *gameengine.Permanent
+	for _, p := range seat.Battlefield {
+		if p != nil && p.Card == card {
+			reanimatedPerm = p
+			break
+		}
+	}
+	if reanimatedPerm != nil {
 		if def, ok := gameengine.AttackerDefender(perm); ok {
-			gameengine.SetAttackerDefender(tokenPerm, def)
+			gameengine.SetAttackerDefender(reanimatedPerm, def)
 		}
 	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{

@@ -48,13 +48,7 @@ func quezaDrawTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 	if bestOpp < 0 {
 		return
 	}
-	gs.Seats[bestOpp].Life -= 1
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   bestOpp,
-		Source: perm.Card.DisplayName(),
-		Amount: 1,
-	})
+	gameengine.LoseLife(gs, bestOpp, 1, perm.Card.DisplayName())
 	gameengine.GainLife(gs, perm.Controller, 1, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":   perm.Controller,

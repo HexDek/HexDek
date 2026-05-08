@@ -41,18 +41,7 @@ func nivMizzetFiremindDraw(gs *gameengine.GameState, perm *gameengine.Permanent,
 			target = o
 		}
 	}
-	gs.Seats[target].Life -= 1
-	gs.LogEvent(gameengine.Event{
-		Kind:   "damage",
-		Seat:   perm.Controller,
-		Target: target,
-		Source: perm.Card.DisplayName(),
-		Amount: 1,
-		Details: map[string]interface{}{
-			"slug":   slug,
-			"reason": "niv_mizzet_firemind_draw",
-		},
-	})
+	gameengine.DealDamage(gs, target, 1, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":        perm.Controller,
 		"target_seat": target,

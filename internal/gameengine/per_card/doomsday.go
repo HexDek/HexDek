@@ -122,15 +122,5 @@ func doomsdayLoseHalfLife(gs *gameengine.GameState, seat int) {
 		life = 0
 	}
 	loss := (life + 1) / 2
-	s.Life -= loss
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   seat,
-		Target: seat,
-		Source: "Doomsday",
-		Amount: loss,
-		Details: map[string]interface{}{
-			"reason": "doomsday_half_life",
-		},
-	})
+	gameengine.LoseLife(gs, seat, loss, "Doomsday")
 }

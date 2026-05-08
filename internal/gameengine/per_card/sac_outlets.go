@@ -260,14 +260,7 @@ func goblinBombardmentActivated(gs *gameengine.GameState, src *gameengine.Perman
 	// Deal 1 damage to any target. MVP: target the highest-threat opponent.
 	targetSeat := pickTargetSeat(gs, seat, ctx)
 	if targetSeat >= 0 && targetSeat < len(gs.Seats) {
-		gs.Seats[targetSeat].Life--
-		gs.LogEvent(gameengine.Event{
-			Kind:   "damage",
-			Seat:   seat,
-			Target: targetSeat,
-			Source: "Goblin Bombardment",
-			Amount: 1,
-		})
+		gameengine.DealDamage(gs, targetSeat, 1, "Goblin Bombardment")
 	}
 
 	emit(gs, slug, "Goblin Bombardment", map[string]interface{}{

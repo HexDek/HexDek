@@ -145,17 +145,7 @@ func prosperEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 			if o < 0 || o >= len(gs.Seats) {
 				continue
 			}
-			gs.Seats[o].Life--
-			gs.LogEvent(gameengine.Event{
-				Kind:   "life_loss",
-				Seat:   perm.Controller,
-				Target: o,
-				Source: perm.Card.DisplayName(),
-				Amount: 1,
-				Details: map[string]interface{}{
-					"reason": "prosper_end_step",
-				},
-			})
+			gameengine.LoseLife(gs, o, 1, perm.Card.DisplayName())
 		}
 		gameengine.CreateTreasureToken(gs, perm.Controller)
 	}

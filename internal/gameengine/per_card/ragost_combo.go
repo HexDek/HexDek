@@ -194,14 +194,7 @@ func strongbullActivated(gs *gameengine.GameState, src *gameengine.Permanent, ab
 
 	// 1 damage to each opponent.
 	for _, opp := range gs.LivingOpponents(seat) {
-		gs.Seats[opp].Life--
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   opp,
-			Source: "Penregon Strongbull",
-			Amount: -1,
-			Details: map[string]interface{}{"cause": "strongbull"},
-		})
+		gameengine.DealDamage(gs, opp, 1, "Penregon Strongbull")
 	}
 
 	emit(gs, "strongbull_activated", src.Card.DisplayName(), map[string]interface{}{

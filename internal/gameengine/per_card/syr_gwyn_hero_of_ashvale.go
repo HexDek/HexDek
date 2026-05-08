@@ -116,17 +116,7 @@ func syrGwynAttackTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, 
 		if s == nil || s.Lost {
 			continue
 		}
-		s.Life -= 1
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_loss",
-			Seat:   seat,
-			Target: opp,
-			Source: perm.Card.DisplayName(),
-			Amount: 1,
-			Details: map[string]interface{}{
-				"reason": "syr_gwyn_attack_drain",
-			},
-		})
+		gameengine.LoseLife(gs, opp, 1, perm.Card.DisplayName())
 		drained++
 	}
 

@@ -56,18 +56,7 @@ func eshkiTemurCreatureSpellCast(gs *gameengine.GameState, perm *gameengine.Perm
 				if s == nil || s.Lost {
 					continue
 				}
-				s.Life -= dmg
-				gs.LogEvent(gameengine.Event{
-					Kind:   "damage",
-					Seat:   perm.Controller,
-					Target: opp,
-					Source: perm.Card.DisplayName(),
-					Amount: dmg,
-					Details: map[string]interface{}{
-						"slug":   slug,
-						"reason": "eshki_temurs_roar_six_power",
-					},
-				})
+				gameengine.DealDamage(gs, opp, dmg, perm.Card.DisplayName())
 			}
 		}
 	}

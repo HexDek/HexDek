@@ -91,14 +91,7 @@ func walkingBallistaActivate(gs *gameengine.GameState, src *gameengine.Permanent
 		src.AddCounter("+1/+1", -1)
 		// Damage target.
 		if targetSeat, ok := ctx["target_seat"].(int); ok && targetSeat >= 0 && targetSeat < len(gs.Seats) {
-			gs.Seats[targetSeat].Life -= 1
-			gs.LogEvent(gameengine.Event{
-				Kind:   "damage",
-				Seat:   src.Controller,
-				Target: targetSeat,
-				Source: src.Card.DisplayName(),
-				Amount: 1,
-			})
+			gameengine.DealDamage(gs, targetSeat, 1, src.Card.DisplayName())
 			emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 				"target_seat": targetSeat,
 				"damage":      1,

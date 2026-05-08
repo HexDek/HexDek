@@ -78,17 +78,7 @@ func auntieOolCounterPlaced(gs *gameengine.GameState, perm *gameengine.Permanent
 	if s == nil || s.Lost {
 		return
 	}
-	s.Life--
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   targetSeat,
-		Target: targetSeat,
-		Source: perm.Card.DisplayName(),
-		Amount: 1,
-		Details: map[string]interface{}{
-			"reason": "auntie_ool_counter_drain",
-		},
-	})
+	gameengine.LoseLife(gs, targetSeat, 1, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":         perm.Controller,
 		"target_card":  target.Card.DisplayName(),

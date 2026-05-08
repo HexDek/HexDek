@@ -1359,6 +1359,56 @@ func GainLife(gs *GameState, seat, amount int, source string) {
 	})
 }
 
+// LoseLife subtracts life, increments Turn.LifeLost, fires life_lost
+// trigger, and dual-writes legacy flags. Mirrors GainLife.
+func LoseLife(gs *GameState, seat, amount int, source string) {
+	if gs == nil || amount <= 0 || seat < 0 || seat >= len(gs.Seats) {
+		return
+	}
+	s := gs.Seats[seat]
+	if s == nil || s.Lost {
+		return
+	}
+	s.Life -= amount
+	s.Turn.LifeLost += amount
+	if s.Flags == nil {
+		s.Flags = map[string]int{}
+	}
+	s.Flags["lost_life_this_turn"] += amount
+	s.Flags["life_lost_this_turn"] += amount
+	FireCardTrigger(gs, "life_lost", map[string]interface{}{
+		"seat":   seat,
+		"amount": amount,
+		"source": source,
+	})
+}
+
+// DealDamage deals noncombat damage, incrementing DamageReceived and
+// LifeLost. Use for "deals N damage to target player" effects.
+func DealDamage(gs *GameState, seat, amount int, source string) {
+	if gs == nil || amount <= 0 || seat < 0 || seat >= len(gs.Seats) {
+		return
+	}
+	s := gs.Seats[seat]
+	if s == nil || s.Lost {
+		return
+	}
+	s.Life -= amount
+	s.Turn.LifeLost += amount
+	s.Turn.DamageReceived += amount
+	if s.Flags == nil {
+		s.Flags = map[string]int{}
+	}
+	s.Flags["lost_life_this_turn"] += amount
+	s.Flags["life_lost_this_turn"] += amount
+	s.Flags["damage_taken_this_turn"] += amount
+	FireCardTrigger(gs, "life_lost", map[string]interface{}{
+		"seat":   seat,
+		"amount": amount,
+		"source": source,
+	})
+}
+
 // drawOne pulls the top card of seat's library into its hand. Sets
 // AttemptedEmptyDraw if the library is empty (SBA consumer for §704.5b).
 // Returns (card, drew) where drew is false on empty library.

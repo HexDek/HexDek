@@ -103,19 +103,7 @@ func bolassCitadelActivate(gs *gameengine.GameState, src *gameengine.Permanent, 
 		c := s.Library[0]
 		cmc := cardCMC(c)
 		gameengine.MoveCard(gs, c, seat, "library", "hand", "effect")
-		s.Life -= cmc
-		gs.LogEvent(gameengine.Event{
-			Kind:   "lose_life",
-			Seat:   seat,
-			Target: seat,
-			Source: src.Card.DisplayName(),
-			Amount: cmc,
-			Details: map[string]interface{}{
-				"reason":      "bolass_citadel_cast_top_paying_life",
-				"card_played": c.DisplayName(),
-				"cmc":         cmc,
-			},
-		})
+		gameengine.LoseLife(gs, seat, cmc, src.Card.DisplayName())
 		emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 			"seat":        seat,
 			"card_played": c.DisplayName(),
@@ -139,18 +127,7 @@ func bolassCitadelActivate(gs *gameengine.GameState, src *gameengine.Permanent, 
 		const slug = "bolass_citadel_sac_ten"
 		// We don't enforce the sac cost here (caller pays). Effect only.
 		for _, opp := range gs.Opponents(seat) {
-			os := gs.Seats[opp]
-			os.Life -= 10
-			gs.LogEvent(gameengine.Event{
-				Kind:   "lose_life",
-				Seat:   seat,
-				Target: opp,
-				Source: src.Card.DisplayName(),
-				Amount: 10,
-				Details: map[string]interface{}{
-					"reason": "bolass_citadel_activated",
-				},
-			})
+			gameengine.LoseLife(gs, opp, 10, src.Card.DisplayName())
 		}
 		emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 			"seat":           seat,

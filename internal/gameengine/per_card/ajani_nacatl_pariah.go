@@ -210,17 +210,7 @@ func ajaniAvengerZero(gs *gameengine.GameState, src *gameengine.Permanent) {
 	if target < 0 {
 		return
 	}
-	gs.Seats[target].Life -= creatureCount
-	gs.LogEvent(gameengine.Event{
-		Kind:   "damage",
-		Seat:   src.Controller,
-		Target: target,
-		Source: src.Card.DisplayName(),
-		Amount: creatureCount,
-		Details: map[string]interface{}{
-			"cause": "ajani_nacatl_avenger_zero",
-		},
-	})
+	gameengine.DealDamage(gs, target, creatureCount, src.Card.DisplayName())
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 		"seat":           src.Controller,
 		"red_permanent":  true,

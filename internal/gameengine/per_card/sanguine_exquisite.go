@@ -83,17 +83,7 @@ func sanguineBondTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, c
 		}
 	}
 
-	gs.Seats[bestOpp].Life -= amount
-	gs.LogEvent(gameengine.Event{
-		Kind:   "life_change",
-		Seat:   bestOpp,
-		Source: "Sanguine Bond",
-		Amount: -amount,
-		Details: map[string]interface{}{
-			"from": gs.Seats[bestOpp].Life + amount,
-			"to":   gs.Seats[bestOpp].Life,
-		},
-	})
+	gameengine.LoseLife(gs, bestOpp, amount, "Sanguine Bond")
 
 	emit(gs, slug, "Sanguine Bond", map[string]interface{}{
 		"seat":     perm.Controller,

@@ -50,17 +50,7 @@ func belakorETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		}
 	}
 	if x > 0 {
-		seat.Life -= x
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   perm.Controller,
-			Source: perm.Card.DisplayName(),
-			Amount: -x,
-			Details: map[string]interface{}{
-				"slug":   slug,
-				"reason": "belakor_prince_of_chaos",
-			},
-		})
+		gameengine.LoseLife(gs, perm.Controller, x, perm.Card.DisplayName())
 	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":      perm.Controller,
@@ -107,18 +97,7 @@ func belakorOtherDemonETB(gs *gameengine.GameState, perm *gameengine.Permanent, 
 		emitFail(gs, slug, perm.Card.DisplayName(), "no_opponent", nil)
 		return
 	}
-	gs.Seats[target].Life -= dmg
-	gs.LogEvent(gameengine.Event{
-		Kind:   "damage",
-		Seat:   perm.Controller,
-		Target: target,
-		Source: enteringPerm.Card.DisplayName(),
-		Amount: dmg,
-		Details: map[string]interface{}{
-			"slug":   slug,
-			"reason": "belakor_demon_etb_ping",
-		},
-	})
+	gameengine.DealDamage(gs, target, dmg, enteringPerm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":        perm.Controller,
 		"demon":       enteringPerm.Card.DisplayName(),

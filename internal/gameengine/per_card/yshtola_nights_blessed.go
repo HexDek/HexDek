@@ -136,19 +136,8 @@ func yshtolaSpellCast(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		if s == nil || s.Lost {
 			continue
 		}
-		s.Life -= 2
+		gameengine.DealDamage(gs, opp, 2, perm.Card.DisplayName())
 		hits++
-		gs.LogEvent(gameengine.Event{
-			Kind:   "damage",
-			Seat:   perm.Controller,
-			Target: opp,
-			Source: perm.Card.DisplayName(),
-			Amount: 2,
-			Details: map[string]interface{}{
-				"slug":   slug,
-				"reason": "yshtola_noncreature_mv3",
-			},
-		})
 	}
 	gameengine.GainLife(gs, perm.Controller, 2, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{

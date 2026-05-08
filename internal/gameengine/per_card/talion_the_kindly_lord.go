@@ -81,17 +81,7 @@ func talionOnSpellCast(gs *gameengine.GameState, perm *gameengine.Permanent, ctx
 	if target == nil || target.Lost {
 		return
 	}
-	target.Life -= 2
-	gs.LogEvent(gameengine.Event{
-		Kind:   "life_loss",
-		Seat:   perm.Controller,
-		Target: caster,
-		Source: perm.Card.DisplayName(),
-		Amount: 2,
-		Details: map[string]interface{}{
-			"reason": "talion_match",
-		},
-	})
+	gameengine.LoseLife(gs, caster, 2, perm.Card.DisplayName())
 	drawOne(gs, perm.Controller, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":        perm.Controller,

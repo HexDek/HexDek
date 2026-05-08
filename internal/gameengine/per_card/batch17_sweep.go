@@ -68,16 +68,16 @@ func blackMarketUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx
 	if len(seat.Library) > 0 {
 		card := seat.Library[0]
 		gameengine.MoveCard(gs, card, perm.Controller, "library", "hand", "draw")
-		seat.Life -= 2
+		gameengine.LoseLife(gs, perm.Controller, 2, "Black Market Connections")
 	}
 	// Create a Treasure, lose 2 life.
 	gameengine.CreateTreasureToken(gs, perm.Controller)
-	seat.Life -= 2
+	gameengine.LoseLife(gs, perm.Controller, 2, "Black Market Connections")
 	// Create a 3/2 changeling if life > 10.
 	if seat.Life > 10 {
 		gameengine.CreateCreatureToken(gs, perm.Controller, "Shapeshifter",
 			[]string{"creature", "shapeshifter", "changeling"}, 3, 2)
-		seat.Life -= 3
+		gameengine.LoseLife(gs, perm.Controller, 3, "Black Market Connections")
 	}
 	emit(gs, "black_market_connections_trigger", "Black Market Connections", map[string]interface{}{
 		"seat":      perm.Controller,
@@ -1081,16 +1081,7 @@ func maralenUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 	if seat == nil || seat.Lost {
 		return
 	}
-	seat.Life -= 3
-	gs.LogEvent(gameengine.Event{
-		Kind:   "life_change",
-		Seat:   activeSeat,
-		Amount: -3,
-		Source: perm.Card.DisplayName(),
-		Details: map[string]interface{}{
-			"reason": "maralen_draw_replacement",
-		},
-	})
+	gameengine.LoseLife(gs, activeSeat, 3, perm.Card.DisplayName())
 	// Tutor: pick highest-CMC card from library.
 	if len(seat.Library) > 0 {
 		bestIdx := 0

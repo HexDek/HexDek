@@ -93,18 +93,8 @@ func tormentOfHailfireResolve(gs *gameengine.GameState, item *gameengine.StackIt
 			}
 
 			// Priority 3: lose 3 life.
-			opp.Life -= 3
+			gameengine.LoseLife(gs, oppIdx, 3, "Torment of Hailfire")
 			totalLifeLost[oppIdx] += 3
-			gs.LogEvent(gameengine.Event{
-				Kind:   "life_change",
-				Seat:   oppIdx,
-				Source: "Torment of Hailfire",
-				Amount: -3,
-				Details: map[string]interface{}{
-					"from": opp.Life + 3,
-					"to":   opp.Life,
-				},
-			})
 		}
 	}
 

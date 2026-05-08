@@ -60,17 +60,7 @@ func shocklandETB(gs *gameengine.GameState, perm *gameengine.Permanent, cardName
 	// totals the risk isn't worth it.
 	payLife := s.Life > 5
 	if payLife {
-		s.Life -= 2
-		gs.LogEvent(gameengine.Event{
-			Kind:   "lose_life",
-			Seat:   seat,
-			Target: seat,
-			Source: cardName,
-			Amount: 2,
-			Details: map[string]interface{}{
-				"reason": "shockland_etb_payment",
-			},
-		})
+		gameengine.LoseLife(gs, seat, 2, cardName)
 		emit(gs, slug, cardName, map[string]interface{}{
 			"seat":    seat,
 			"paid":    true,

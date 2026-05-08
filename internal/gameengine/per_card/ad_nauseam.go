@@ -58,7 +58,7 @@ func adNauseamResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 		c := s.Library[0]
 		gameengine.MoveCard(gs, c, seat, "library", "hand", "effect")
 		cmc := cardCMC(c)
-		s.Life -= cmc
+		gameengine.LoseLife(gs, seat, cmc, item.Card.DisplayName())
 		totalLifeLoss += cmc
 		revealed++
 		gs.LogEvent(gameengine.Event{
@@ -85,19 +85,7 @@ func adNauseamResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 			break
 		}
 	}
-	// SBA-visible lose-life event for §704.5a bookkeeping.
-	if totalLifeLoss > 0 {
-		gs.LogEvent(gameengine.Event{
-			Kind:   "lose_life",
-			Seat:   seat,
-			Target: seat,
-			Source: item.Card.DisplayName(),
-			Amount: totalLifeLoss,
-			Details: map[string]interface{}{
-				"reason": "ad_nauseam_reveals",
-			},
-		})
-	}
+	// LoseLife already handles §704.5a bookkeeping per iteration.
 	emit(gs, slug, item.Card.DisplayName(), map[string]interface{}{
 		"seat":             seat,
 		"cards_revealed":   revealed,

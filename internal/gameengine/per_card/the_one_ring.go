@@ -118,18 +118,7 @@ func theOneRingUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		return
 	}
 	// Lose 1 life per burden counter.
-	gs.Seats[seat].Life -= burdens
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   seat,
-		Target: seat,
-		Source: "The One Ring",
-		Amount: burdens,
-		Details: map[string]interface{}{
-			"reason":  "burden_counters",
-			"burdens": burdens,
-		},
-	})
+	gameengine.LoseLife(gs, seat, burdens, "The One Ring")
 	emit(gs, slug, "The One Ring", map[string]interface{}{
 		"seat":      seat,
 		"burdens":   burdens,

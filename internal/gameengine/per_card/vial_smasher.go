@@ -61,19 +61,7 @@ func vialSmasherTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ct
 	if opp == nil || opp.Lost {
 		return
 	}
-	opp.Life -= mv
-	gs.LogEvent(gameengine.Event{
-		Kind:   "damage",
-		Seat:   perm.Controller,
-		Target: target,
-		Source: "Vial Smasher the Fierce",
-		Amount: mv,
-		Details: map[string]interface{}{
-			"slug":       slug,
-			"mana_value": mv,
-			"random":     true,
-		},
-	})
+	gameengine.DealDamage(gs, target, mv, "Vial Smasher the Fierce")
 
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":        perm.Controller,

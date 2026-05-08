@@ -81,17 +81,7 @@ func tymnaPostcombatDraw(gs *gameengine.GameState, perm *gameengine.Permanent, c
 		return
 	}
 
-	seat.Life -= x
-	gs.LogEvent(gameengine.Event{
-		Kind:   "life_paid",
-		Seat:   perm.Controller,
-		Source: "Tymna the Weaver",
-		Amount: x,
-		Details: map[string]interface{}{
-			"reason": "tymna_postcombat",
-			"x":      x,
-		},
-	})
+	gameengine.LoseLife(gs, perm.Controller, x, "Tymna the Weaver")
 	for i := 0; i < x && len(seat.Library) > 0; i++ {
 		card := seat.Library[0]
 		gameengine.MoveCard(gs, card, perm.Controller, "library", "hand", "draw")

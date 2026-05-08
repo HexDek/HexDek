@@ -37,17 +37,7 @@ func griselbrandActivate(gs *gameengine.GameState, src *gameengine.Permanent, ab
 	seat := src.Controller
 	s := gs.Seats[seat]
 	// Pay 7 life (caller didn't — we enforce the cost for correctness).
-	s.Life -= 7
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   seat,
-		Target: seat,
-		Source: src.Card.DisplayName(),
-		Amount: 7,
-		Details: map[string]interface{}{
-			"reason": "griselbrand_activation_cost",
-		},
-	})
+	gameengine.LoseLife(gs, seat, 7, src.Card.DisplayName())
 	// Draw 7.
 	drew := 0
 	for i := 0; i < 7; i++ {

@@ -125,14 +125,7 @@ func sorinNeonateMinusOne(gs *gameengine.GameState, src *gameengine.Permanent) {
 	if tgt < 0 {
 		return
 	}
-	gs.Seats[tgt].Life -= gained
-	gs.LogEvent(gameengine.Event{
-		Kind:   "damage",
-		Seat:   src.Controller,
-		Target: tgt,
-		Source: src.Card.DisplayName(),
-		Amount: gained,
-	})
+	gameengine.DealDamage(gs, tgt, gained, src.Card.DisplayName())
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 		"seat":   src.Controller,
 		"target": tgt,

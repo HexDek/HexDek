@@ -68,21 +68,7 @@ func elasIlKorOtherDies(gs *gameengine.GameState, perm *gameengine.Permanent, ct
 		return
 	}
 	for _, opp := range gs.Opponents(perm.Controller) {
-		s := gs.Seats[opp]
-		if s == nil || s.Lost {
-			continue
-		}
-		s.Life -= 1
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   opp,
-			Source: perm.Card.DisplayName(),
-			Amount: -1,
-			Details: map[string]interface{}{
-				"slug":   slug,
-				"reason": "elas_il_kor_drain",
-			},
-		})
+		gameengine.LoseLife(gs, opp, 1, perm.Card.DisplayName())
 	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":     perm.Controller,

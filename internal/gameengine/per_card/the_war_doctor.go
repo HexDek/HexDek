@@ -98,17 +98,7 @@ func theWarDoctorOnAttack(gs *gameengine.GameState, perm *gameengine.Permanent, 
 	if target < 0 {
 		return
 	}
-	gs.Seats[target].Life -= dmg
-	gs.LogEvent(gameengine.Event{
-		Kind:   "damage",
-		Seat:   perm.Controller,
-		Target: target,
-		Source: perm.Card.DisplayName(),
-		Amount: dmg,
-		Details: map[string]interface{}{
-			"reason": "the_war_doctor_attack",
-		},
-	})
+	gameengine.DealDamage(gs, target, dmg, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":   perm.Controller,
 		"target": target,

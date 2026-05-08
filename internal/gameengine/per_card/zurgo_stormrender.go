@@ -215,18 +215,8 @@ func zurgoTokenLeaves(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		if s == nil || s.Lost || i == perm.Controller {
 			continue
 		}
-		s.Life--
+		gameengine.LoseLife(gs, i, 1, perm.Card.DisplayName())
 		hits++
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   i,
-			Target: -1,
-			Source: perm.Card.DisplayName(),
-			Details: map[string]interface{}{
-				"amount": -1,
-				"cause":  "zurgo_stormrender_drain",
-			},
-		})
 	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":           perm.Controller,

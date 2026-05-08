@@ -54,17 +54,7 @@ func daxosGainLife(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	if perm.Controller < 0 || perm.Controller >= len(gs.Seats) {
 		return
 	}
-	seat := gs.Seats[perm.Controller]
-	if seat == nil {
-		return
-	}
-	seat.Life++
-	gs.LogEvent(gameengine.Event{
-		Kind:   "life_gained",
-		Seat:   perm.Controller,
-		Source: perm.Card.DisplayName(),
-		Amount: 1,
-	})
+	gameengine.GainLife(gs, perm.Controller, 1, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat": perm.Controller,
 	})

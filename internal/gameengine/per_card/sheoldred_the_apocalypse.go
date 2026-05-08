@@ -34,21 +34,14 @@ func sheoldredApocCardDrawn(gs *gameengine.GameState, perm *gameengine.Permanent
 		return
 	}
 	if drawerSeat == perm.Controller {
-		drawer.Life += 2
+		gameengine.GainLife(gs, perm.Controller, 2, perm.Card.DisplayName())
 		emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 			"seat":   perm.Controller,
 			"effect": "gain_2",
 		})
 		return
 	}
-	drawer.Life -= 2
-	gs.LogEvent(gameengine.Event{
-		Kind:   "life_loss",
-		Seat:   drawerSeat,
-		Target: drawerSeat,
-		Source: perm.Card.DisplayName(),
-		Amount: 2,
-	})
+	gameengine.LoseLife(gs, drawerSeat, 2, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":   perm.Controller,
 		"target": drawerSeat,

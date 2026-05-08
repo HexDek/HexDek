@@ -73,13 +73,7 @@ func vitoThornLifeGained(gs *gameengine.GameState, perm *gameengine.Permanent, c
 	}
 
 	// Apply life loss.
-	gs.Seats[bestOpp].Life -= amount
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   bestOpp,
-		Source: perm.Card.DisplayName(),
-		Amount: amount,
-	})
+	gameengine.LoseLife(gs, bestOpp, amount, perm.Card.DisplayName())
 
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":      perm.Controller,

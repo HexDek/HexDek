@@ -71,18 +71,7 @@ func alibouAttacks(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 		}
 	}
 	if target >= 0 {
-		opp := gs.Seats[target]
-		opp.Life -= tappedArtifacts
-		gs.LogEvent(gameengine.Event{
-			Kind:   "damage",
-			Seat:   perm.Controller,
-			Target: target,
-			Source: perm.Card.DisplayName(),
-			Amount: tappedArtifacts,
-			Details: map[string]interface{}{
-				"slug": slug,
-			},
-		})
+		gameengine.DealDamage(gs, target, tappedArtifacts, perm.Card.DisplayName())
 	}
 	gameengine.Scry(gs, perm.Controller, tappedArtifacts)
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{

@@ -79,17 +79,7 @@ func nivMizzetParunDraw(gs *gameengine.GameState, perm *gameengine.Permanent, ct
 	}
 
 	// Deal 1 damage.
-	gs.Seats[target].Life -= 1
-	gs.LogEvent(gameengine.Event{
-		Kind:   "damage",
-		Seat:   perm.Controller,
-		Target: target,
-		Source: perm.Card.DisplayName(),
-		Amount: 1,
-		Details: map[string]interface{}{
-			"reason": "niv_mizzet_parun_draw_trigger",
-		},
-	})
+	gameengine.DealDamage(gs, target, 1, perm.Card.DisplayName())
 
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":        perm.Controller,

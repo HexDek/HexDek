@@ -26,15 +26,7 @@ func carmenSacTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 	}
 	perm.AddCounter("+1/+1", 1)
 	gs.InvalidateCharacteristicsCache()
-	if perm.Controller >= 0 && perm.Controller < len(gs.Seats) && gs.Seats[perm.Controller] != nil {
-		gs.Seats[perm.Controller].Life++
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_gained",
-			Seat:   perm.Controller,
-			Source: perm.Card.DisplayName(),
-			Amount: 1,
-		})
-	}
+	gameengine.GainLife(gs, perm.Controller, 1, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat": perm.Controller,
 	})
@@ -80,7 +72,6 @@ func carmenAttacks(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 	}
 	card := seat.Graveyard[bestIdx]
 	gameengine.MoveCard(gs, card, perm.Controller, "graveyard", "battlefield", "carmen_attack")
-	enterBattlefieldWithETB(gs, perm.Controller, card, false)
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":     perm.Controller,
 		"reanimated": card.DisplayName(),

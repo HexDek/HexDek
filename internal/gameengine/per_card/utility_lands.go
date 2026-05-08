@@ -359,17 +359,7 @@ func ancientTombActivated(gs *gameengine.GameState, src *gameengine.Permanent, a
 	gameengine.AddMana(gs, gs.Seats[seat], "C", 2, "Ancient Tomb")
 
 	// Deal 2 damage to controller.
-	gs.Seats[seat].Life -= 2
-	gs.LogEvent(gameengine.Event{
-		Kind:   "damage",
-		Seat:   seat,
-		Target: seat,
-		Source: "Ancient Tomb",
-		Amount: 2,
-		Details: map[string]interface{}{
-			"reason": "ancient_tomb_self_damage",
-		},
-	})
+	gameengine.DealDamage(gs, seat, 2, "Ancient Tomb")
 
 	emit(gs, slug, "Ancient Tomb", map[string]interface{}{
 		"seat":    seat,

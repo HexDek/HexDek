@@ -69,16 +69,7 @@ func burakosAttacks(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		})
 		return
 	}
-	def := gs.Seats[defenderSeat]
-	if def != nil {
-		def.Life -= x
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_lost",
-			Seat:   defenderSeat,
-			Source: perm.Card.DisplayName(),
-			Amount: x,
-		})
-	}
+	gameengine.LoseLife(gs, defenderSeat, x, perm.Card.DisplayName())
 	for i := 0; i < x; i++ {
 		gameengine.CreateTreasureToken(gs, perm.Controller)
 	}

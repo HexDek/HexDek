@@ -44,17 +44,7 @@ func ketramoseZoneChange(gs *gameengine.GameState, perm *gameengine.Permanent, c
 		return
 	}
 	drawOne(gs, perm.Controller, perm.Card.DisplayName())
-	seat.Life--
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   perm.Controller,
-		Target: perm.Controller,
-		Source: perm.Card.DisplayName(),
-		Amount: 1,
-		Details: map[string]interface{}{
-			"reason": "ketramose_self_pay",
-		},
-	})
+	gameengine.LoseLife(gs, perm.Controller, 1, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat": perm.Controller,
 		"from": from,

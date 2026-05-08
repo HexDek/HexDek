@@ -147,17 +147,7 @@ func manaVaultUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx m
 	}
 	// Deals 1 damage to controller while tapped.
 	seat := perm.Controller
-	gs.Seats[seat].Life -= 1
-	gs.LogEvent(gameengine.Event{
-		Kind:   "damage",
-		Seat:   seat,
-		Target: seat,
-		Source: "Mana Vault",
-		Amount: 1,
-		Details: map[string]interface{}{
-			"reason": "mana_vault_upkeep_tapped",
-		},
-	})
+	gameengine.DealDamage(gs, seat, 1, "Mana Vault")
 	emit(gs, slug, "Mana Vault", map[string]interface{}{
 		"seat":   seat,
 		"damage": 1,
@@ -474,19 +464,7 @@ func reanimateResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 	perm := enterBattlefieldWithETB(gs, seat, bestCard, false)
 	// Lose life equal to CMC.
 	lifeLost := cardCMC(bestCard)
-	gs.Seats[seat].Life -= lifeLost
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   seat,
-		Target: seat,
-		Source: "Reanimate",
-		Amount: lifeLost,
-		Details: map[string]interface{}{
-			"reason":     "reanimate_life_cost",
-			"reanimated": bestCard.DisplayName(),
-			"cmc":        lifeLost,
-		},
-	})
+	gameengine.LoseLife(gs, seat, lifeLost, "Reanimate")
 	emit(gs, slug, "Reanimate", map[string]interface{}{
 		"seat":       seat,
 		"reanimated": bestCard.DisplayName(),

@@ -66,18 +66,7 @@ func aragornUniterSpellCast(gs *gameengine.GameState, perm *gameengine.Permanent
 		if target := aragornPickDamageTarget(gs, perm.Controller); target >= 0 {
 			opp := gs.Seats[target]
 			if opp != nil && !opp.Lost {
-				opp.Life -= 3
-				gs.LogEvent(gameengine.Event{
-					Kind:   "damage",
-					Seat:   perm.Controller,
-					Target: target,
-					Source: perm.Card.DisplayName(),
-					Amount: 3,
-					Details: map[string]interface{}{
-						"slug": slug,
-						"mode": "red_3_damage",
-					},
-				})
+				gameengine.DealDamage(gs, target, 3, perm.Card.DisplayName())
 				modes = append(modes, "red_3_damage")
 			}
 		}

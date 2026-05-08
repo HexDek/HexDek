@@ -555,17 +555,7 @@ func imperialSealResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 		return
 	}
 	// Pay 2 life.
-	gs.Seats[seat].Life -= 2
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   seat,
-		Target: seat,
-		Source: "Imperial Seal",
-		Amount: 2,
-		Details: map[string]interface{}{
-			"reason": "imperial_seal_cost",
-		},
-	})
+	gameengine.LoseLife(gs, seat, 2, "Imperial Seal")
 	found := tutorToTop(gs, seat, nil, "Imperial Seal")
 	emit(gs, slug, "Imperial Seal", map[string]interface{}{
 		"seat":  seat,
@@ -610,17 +600,7 @@ func orcishBowmastersETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		}
 	}
 	if bestOpp >= 0 {
-		gs.Seats[bestOpp].Life -= 1
-		gs.LogEvent(gameengine.Event{
-			Kind:   "damage",
-			Seat:   seat,
-			Target: bestOpp,
-			Source: "Orcish Bowmasters",
-			Amount: 1,
-			Details: map[string]interface{}{
-				"reason": "orcish_bowmasters_etb",
-			},
-		})
+		gameengine.DealDamage(gs, bestOpp, 1, "Orcish Bowmasters")
 	}
 
 	// Amass Orcs 1: create a 1/1 Orc Army or add +1/+1 counter to existing.
@@ -649,18 +629,7 @@ func orcishBowmastersTrigger(gs *gameengine.GameState, perm *gameengine.Permanen
 	seat := perm.Controller
 
 	// Deal 1 damage to the drawing opponent.
-	gs.Seats[drawerSeat].Life -= 1
-	gs.LogEvent(gameengine.Event{
-		Kind:   "damage",
-		Seat:   seat,
-		Target: drawerSeat,
-		Source: "Orcish Bowmasters",
-		Amount: 1,
-		Details: map[string]interface{}{
-			"reason":      "orcish_bowmasters_draw_trigger",
-			"drawer_seat": drawerSeat,
-		},
-	})
+	gameengine.DealDamage(gs, drawerSeat, 1, "Orcish Bowmasters")
 
 	// Amass Orcs 1.
 	amassOrcs(gs, seat)
@@ -1507,18 +1476,7 @@ func glacialChasmUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ct
 		ageCost = perm.Counters["age"] * 2
 	}
 
-	gs.Seats[seat].Life -= ageCost
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   seat,
-		Target: seat,
-		Source: "Glacial Chasm",
-		Amount: ageCost,
-		Details: map[string]interface{}{
-			"reason":      "cumulative_upkeep",
-			"age_counters": perm.Counters["age"],
-		},
-	})
+	gameengine.LoseLife(gs, seat, ageCost, "Glacial Chasm")
 
 	emit(gs, slug, "Glacial Chasm", map[string]interface{}{
 		"seat":     seat,

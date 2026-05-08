@@ -375,20 +375,7 @@ func courtOfEmberethUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent,
 			}
 		}
 		for _, opp := range gs.Opponents(perm.Controller) {
-			oppSeat := gs.Seats[opp]
-			if oppSeat != nil && !oppSeat.Lost {
-				oppSeat.Life -= creatures
-				gs.LogEvent(gameengine.Event{
-					Kind:   "damage",
-					Seat:   opp,
-					Source: "Court of Embereth",
-					Amount: creatures,
-					Details: map[string]interface{}{
-						"source_seat": perm.Controller,
-						"rule":        "court_of_embereth_monarch_damage",
-					},
-				})
-			}
+			gameengine.DealDamage(gs, opp, creatures, "Court of Embereth")
 		}
 	}
 	emit(gs, "court_of_embereth_trigger", "Court of Embereth", map[string]interface{}{

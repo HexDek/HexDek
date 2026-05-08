@@ -67,17 +67,7 @@ func necropotenceActivate(gs *gameengine.GameState, src *gameengine.Permanent, a
 		return
 	}
 	// Pay 1 life.
-	s.Life -= 1
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   seat,
-		Target: seat,
-		Source: src.Card.DisplayName(),
-		Amount: 1,
-		Details: map[string]interface{}{
-			"reason": "necropotence_activation_cost",
-		},
-	})
+	gameengine.LoseLife(gs, seat, 1, src.Card.DisplayName())
 	// Exile top card face down.
 	c := s.Library[0]
 	gameengine.MoveCard(gs, c, seat, "library", "exile", "face-down-exile")

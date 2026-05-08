@@ -78,17 +78,7 @@ func yawgmothSacDraw(gs *gameengine.GameState, src *gameengine.Permanent, ctx ma
 	// --- Pay costs ---
 
 	// Pay 1 life.
-	s.Life -= 1
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   seat,
-		Target: seat,
-		Source: "Yawgmoth, Thran Physician",
-		Amount: 1,
-		Details: map[string]interface{}{
-			"reason": "yawgmoth_ability_cost",
-		},
-	})
+	gameengine.LoseLife(gs, seat, 1, "Yawgmoth, Thran Physician")
 
 	// Sacrifice the creature.
 	victimName := victim.Card.DisplayName()

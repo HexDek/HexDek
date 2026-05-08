@@ -192,17 +192,7 @@ func vampiricTutorResolve(gs *gameengine.GameState, item *gameengine.StackItem) 
 		return
 	}
 	// Pay 2 life.
-	gs.Seats[seat].Life -= 2
-	gs.LogEvent(gameengine.Event{
-		Kind:   "lose_life",
-		Seat:   seat,
-		Target: seat,
-		Source: "Vampiric Tutor",
-		Amount: 2,
-		Details: map[string]interface{}{
-			"reason": "vampiric_tutor_cost",
-		},
-	})
+	gameengine.LoseLife(gs, seat, 2, "Vampiric Tutor")
 
 	found := tutorToTop(gs, seat, nil, "Vampiric Tutor")
 	emit(gs, slug, "Vampiric Tutor", map[string]interface{}{

@@ -33,12 +33,7 @@ func eyeOfVecnaETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		drawn := s.Library[0]
 		gameengine.MoveCard(gs, drawn, seat, "library", "hand", "draw")
 	}
-	s.Life -= 2
-	gs.LogEvent(gameengine.Event{
-		Kind: "eye_of_vecna_etb", Seat: seat,
-		Source: "Eye of Vecna",
-		Details: map[string]interface{}{"draw": 1, "life_lost": 2},
-	})
+	gameengine.LoseLife(gs, seat, 2, "Eye of Vecna")
 }
 
 func eyeOfVecnaUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
@@ -64,12 +59,7 @@ func eyeOfVecnaUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		drawn := s.Library[0]
 		gameengine.MoveCard(gs, drawn, seat, "library", "hand", "draw")
 	}
-	s.Life -= 2
-	gs.LogEvent(gameengine.Event{
-		Kind: "eye_of_vecna_upkeep", Seat: seat,
-		Source: "Eye of Vecna",
-		Details: map[string]interface{}{"draw": 1, "life_lost": 2, "mana_paid": 2},
-	})
+	gameengine.LoseLife(gs, seat, 2, "Eye of Vecna")
 }
 
 // ---------------------------------------------------------------------------

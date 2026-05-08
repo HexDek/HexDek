@@ -138,19 +138,8 @@ func lathrilDrain(gs *gameengine.GameState, src *gameengine.Permanent, abilityId
 		if opp == nil || i == seat || opp.Lost {
 			continue
 		}
-		opp.Life -= 10
+		gameengine.LoseLife(gs, i, 10, src.Card.DisplayName())
 		drained++
-		gs.LogEvent(gameengine.Event{
-			Kind:   "life_change",
-			Seat:   seat,
-			Target: i,
-			Source: src.Card.DisplayName(),
-			Amount: -10,
-			Details: map[string]interface{}{
-				"slug":   slug,
-				"reason": "lathril_drain",
-			},
-		})
 	}
 	gameengine.GainLife(gs, seat, 10, src.Card.DisplayName())
 

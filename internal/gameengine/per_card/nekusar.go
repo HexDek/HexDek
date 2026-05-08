@@ -99,18 +99,6 @@ func nekusarPing(gs *gameengine.GameState, perm *gameengine.Permanent, drawerSea
 	if tgt == nil || tgt.Lost {
 		return false
 	}
-	tgt.Life -= 1
-	gs.LogEvent(gameengine.Event{
-		Kind:   "damage",
-		Seat:   perm.Controller,
-		Target: drawerSeat,
-		Source: perm.Card.DisplayName(),
-		Amount: 1,
-		Details: map[string]interface{}{
-			"reason":      "nekusar_opponent_draw",
-			"drawer_seat": drawerSeat,
-			"target_kind": "player",
-		},
-	})
+	gameengine.DealDamage(gs, drawerSeat, 1, perm.Card.DisplayName())
 	return true
 }
