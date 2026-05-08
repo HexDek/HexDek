@@ -435,6 +435,36 @@ func (gs *GameState) Opponents(seat int) []int {
 }
 
 // -----------------------------------------------------------------------------
+// TurnCounters — centralized per-seat, per-turn tracking
+// -----------------------------------------------------------------------------
+
+// TurnCounters holds all per-turn counters for a single seat. Core engine
+// functions (GainLife, drawOne, SacrificePermanent, etc.) increment these
+// directly. Per_card handlers read them instead of rolling their own flags.
+// Reset once per turn via Reset() in UntapAll.
+type TurnCounters struct {
+	LifeGained       int  // total life gained this turn (from GainLife)
+	LifeLost         int  // total life lost this turn (from LoseLife + combat damage)
+	DamageReceived   int  // total damage received this turn (combat + noncombat)
+	CardsDrawn       int  // cards drawn this turn
+	SpellsCast       int  // spells cast this turn
+	CreaturesEntered int  // creatures that entered the battlefield this turn
+	TokensCreated    int  // tokens created this turn
+	Sacrificed       int  // permanents sacrificed this turn
+	Discarded        int  // cards discarded this turn
+	Milled           int  // cards milled this turn
+	LandsPlayed      int  // lands played this turn
+	CreaturesDied    int  // creatures that died (went to GY from battlefield) this turn
+	Descended        bool // a permanent card entered graveyard this turn (Ixalan)
+	Attacked         bool // this seat declared attackers this turn
+}
+
+// Reset zeroes all turn counters. Called once per turn at the untap step.
+func (tc *TurnCounters) Reset() {
+	*tc = TurnCounters{}
+}
+
+// -----------------------------------------------------------------------------
 // Seat (player)
 // -----------------------------------------------------------------------------
 
@@ -543,6 +573,12 @@ type Seat struct {
 	// empty. §704.5b will consume this in the SBA phase.
 	AttemptedEmptyDraw bool
 
+	// Turn is the centralized per-turn counter block. All core engine
+	// functions (GainLife, drawOne, SacrificePermanent, etc.) increment
+	// these counters directly. Per_card handlers read them instead of
+	// rolling their own flag tracking. Reset once per turn in UntapAll.
+	Turn TurnCounters
+
 	// SpellsCastThisTurn is the per-seat count of spells THIS seat has
 	// cast since its last untap. Resets at this seat's turn start, NOT
 	// at every untap — an instant this seat casts on opponents' turns
@@ -550,6 +586,8 @@ type Seat struct {
 	// Used by Storm-Kiln Artist / Young Pyromancer / Birgi / Monastery
 	// Mentor / Niv-Mizzet Parun / Runaway Steam-Kin cast-trigger
 	// observers (the "whenever YOU cast…" cards).
+	// DEPRECATED: prefer seat.Turn.SpellsCast. Kept for compatibility
+	// with existing per_card handlers during migration.
 	SpellsCastThisTurn int
 
 	// SpellsCastLastTurn is the previous-turn snapshot of
@@ -563,6 +601,7 @@ type Seat struct {
 	// Used by "if you've descended this turn" threshold checks. Reset at
 	// this seat's own untap step. Writes are routed through MoveCard in
 	// zone_move.go — direct zone-slice pokes do not set this flag.
+	// DEPRECATED: prefer seat.Turn.Descended. Kept for compatibility.
 	DescendedThisTurn bool
 
 	// SkipUntapStep is true when the seat's untap step should be skipped
@@ -1249,6 +1288,11 @@ func GainLife(gs *GameState, seat, amount int, source string) {
 		return
 	}
 	s.Life += amount
+	s.Turn.LifeGained += amount
+	if s.Flags == nil {
+		s.Flags = map[string]int{}
+	}
+	s.Flags["life_gained_this_turn"] += amount
 	FireCardTrigger(gs, "life_gained", map[string]interface{}{
 		"seat":   seat,
 		"amount": amount,
@@ -1270,6 +1314,11 @@ func (gs *GameState) drawOne(seat int) (*Card, bool) {
 	}
 	c := s.Library[0]
 	MoveCard(gs, c, seat, "library", "hand", "draw")
+	s.Turn.CardsDrawn++
+	if s.Flags == nil {
+		s.Flags = map[string]int{}
+	}
+	s.Flags["cards_drawn_this_turn"]++
 	return c, true
 }
 
@@ -1285,6 +1334,7 @@ func (gs *GameState) millOne(seat int) (*Card, bool) {
 	}
 	c := s.Library[0]
 	MoveCard(gs, c, seat, "library", "graveyard", "mill")
+	s.Turn.Milled++
 	return c, true
 }
 

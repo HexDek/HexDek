@@ -807,6 +807,7 @@ func DiscardCard(gs *GameState, card *Card, seat int) {
 	if gs == nil || card == nil || seat < 0 || seat >= len(gs.Seats) {
 		return
 	}
+	gs.Seats[seat].Turn.Discarded++
 	dest := "graveyard"
 	if NecropotenceSkipsDraw(gs, seat) {
 		dest = "exile"
@@ -955,6 +956,14 @@ func resolveLoseLife(gs *GameState, src *Permanent, e *gameast.LoseLife) {
 				"to":   gs.Seats[seat].Life,
 			},
 		})
+		if seat >= 0 && seat < len(gs.Seats) && gs.Seats[seat] != nil {
+			gs.Seats[seat].Turn.LifeLost += modified
+			if gs.Seats[seat].Flags == nil {
+				gs.Seats[seat].Flags = map[string]int{}
+			}
+			gs.Seats[seat].Flags["lost_life_this_turn"] += modified
+			gs.Seats[seat].Flags["life_lost_this_turn"] += modified
+		}
 		// Fire life_lost trigger so Lich's Mastery and similar observers
 		// can react. Mirrors the life_gained pattern in GainLife (state.go).
 		FireCardTrigger(gs, "life_lost", map[string]interface{}{
@@ -1572,6 +1581,9 @@ func resolveCreateToken(gs *GameState, src *Permanent, e *gameast.CreateToken) {
 			"source":          sourceName(src),
 		})
 		gs.Flags["in_token_trigger"] = 0
+	}
+	if controller >= 0 && controller < len(gs.Seats) && gs.Seats[controller] != nil {
+		gs.Seats[controller].Turn.TokensCreated += count
 	}
 	gs.LogEvent(Event{
 		Kind:   "create_token",

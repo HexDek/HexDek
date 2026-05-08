@@ -110,6 +110,16 @@ func DestroyPermanent(gs *GameState, perm *Permanent, source *Permanent) bool {
 		},
 	})
 
+	if destZone == "graveyard" && perm.IsCreature() {
+		if perm.Controller >= 0 && perm.Controller < len(gs.Seats) && gs.Seats[perm.Controller] != nil {
+			gs.Seats[perm.Controller].Turn.CreaturesDied++
+		}
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["creature_died_this_turn"]++
+	}
+
 	// Detach anything attached to p.
 	detachAll(gs, perm)
 
@@ -237,6 +247,17 @@ func sacrificePermanentImpl(gs *GameState, perm *Permanent, source *Permanent, r
 			"rule":        "701.17",
 		},
 	})
+
+	if perm.Controller >= 0 && perm.Controller < len(gs.Seats) && gs.Seats[perm.Controller] != nil {
+		gs.Seats[perm.Controller].Turn.Sacrificed++
+		if destZone == "graveyard" && perm.IsCreature() {
+			gs.Seats[perm.Controller].Turn.CreaturesDied++
+			if gs.Flags == nil {
+				gs.Flags = map[string]int{}
+			}
+			gs.Flags["creature_died_this_turn"]++
+		}
+	}
 
 	detachAll(gs, perm)
 

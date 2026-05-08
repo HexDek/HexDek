@@ -59,6 +59,11 @@ func MoveCard(gs *GameState, card *Card, ownerSeat int, fromZone, toZone, reason
 	// fire so ETB observers see the land identity.
 	if dest == "battlefield" {
 		EnsureBattlefieldFrontFace(card)
+		if ownerSeat >= 0 && ownerSeat < len(gs.Seats) && gs.Seats[ownerSeat] != nil {
+			if card != nil && cardIsCreatureType(card) {
+				gs.Seats[ownerSeat].Turn.CreaturesEntered++
+			}
+		}
 	}
 	FireZoneChangeTriggers(gs, nil, card, fromZone, dest)
 
@@ -82,6 +87,7 @@ func MoveCard(gs *GameState, card *Card, ownerSeat int, fromZone, toZone, reason
 	if dest == "graveyard" && ownerSeat >= 0 && ownerSeat < len(gs.Seats) {
 		if seat := gs.Seats[ownerSeat]; seat != nil && cardIsPermanentType(card) {
 			seat.DescendedThisTurn = true
+			seat.Turn.Descended = true
 		}
 	}
 	return dest
@@ -183,6 +189,10 @@ func cardIsPermanentType(card *Card) bool {
 		cardHasType(card, "planeswalker") ||
 		cardHasType(card, "land") ||
 		cardHasType(card, "battle")
+}
+
+func cardIsCreatureType(card *Card) bool {
+	return card != nil && cardHasType(card, "creature")
 }
 
 // CardCanEnterBattlefield reports whether card has at least one

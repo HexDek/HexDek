@@ -484,6 +484,7 @@ func DeclareAttackers(gs *GameState, attackerSeat int) []*Permanent {
 			seat.Flags = map[string]int{}
 		}
 		seat.Flags["attacked_this_turn"] = 1
+		seat.Turn.Attacked = true
 
 		pairs := make([]map[string]interface{}, 0, len(declared))
 		for _, a := range declared {
@@ -1344,6 +1345,8 @@ func applyCombatDamageToPlayer(gs *GameState, src *Permanent, amount, seatIdx in
 		gs.Seats[seatIdx].Flags = map[string]int{}
 	}
 	gs.Seats[seatIdx].Flags["damage_taken_this_turn"] = 1
+	gs.Seats[seatIdx].Turn.DamageReceived += amount
+	gs.Seats[seatIdx].Turn.LifeLost += amount
 	if src.HasKeyword("lifelink") {
 		GainLife(gs, src.Controller, amount, src.Card.DisplayName())
 	}

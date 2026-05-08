@@ -46,6 +46,11 @@ func IncrementCastCount(gs *GameState, seatIdx int) {
 		return
 	}
 	seat.SpellsCastThisTurn++
+	seat.Turn.SpellsCast++
+	if seat.Flags == nil {
+		seat.Flags = map[string]int{}
+	}
+	seat.Flags["spells_cast_this_turn"] = seat.Turn.SpellsCast
 }
 
 // FireCastTriggerObservers fires every "whenever a spell is cast" style

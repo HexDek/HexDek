@@ -621,6 +621,7 @@ func UntapAll(gs *GameState, seatIdx int) {
 	// (§502.1) — even when SkipUntapStep is set, this code path still
 	// runs, so the reset lands correctly regardless of Stasis-like
 	// effects. DescendedThisTurn is written by MoveCard in zone_move.go.
+	seat.Turn.Reset()
 	seat.DescendedThisTurn = false
 
 	// §502.1: phase in phased-out permanents before untapping.
