@@ -312,6 +312,7 @@ func CastFromZone(
 
 	// Cast-count bookkeeping.
 	IncrementCastCount(gs, seatIdx)
+	RecordCast(gs, seatIdx, card, 0)
 	fireCastTriggersFromZone(gs, seatIdx, card, zone)
 	FireCastTriggerObservers(gs, card, seatIdx, false)
 

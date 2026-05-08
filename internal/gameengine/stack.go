@@ -385,6 +385,7 @@ func CastSpell(gs *GameState, seatIdx int, card *Card, targets []Target) error {
 	// its own storm tally (copies = spells_cast_this_turn - 1). Copies
 	// do NOT call IncrementCastCount (§706.10).
 	IncrementCastCount(gs, seatIdx)
+	RecordCast(gs, seatIdx, card, 0)
 
 	// Fire per-card triggers keyed on "spell cast" events. Rhystic Study,
 	// Mystic Remora, Aetherflux Reservoir, Displacer Kitten, Hullbreaker
@@ -703,6 +704,7 @@ func PriorityRound(gs *GameState) {
 			// Remora / Esper Sentinel miss every counterspell cast —
 			// the "bless you" gap Wave 1b closes.
 			IncrementCastCount(gs, seat)
+			RecordCast(gs, seat, resp.Card, 0)
 			fireCastTriggers(gs, seat, resp.Card)
 			FireCastTriggerObservers(gs, resp.Card, seat, false)
 			PushStackItem(gs, resp)

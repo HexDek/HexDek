@@ -831,6 +831,7 @@ func CastSpellWithCosts(
 
 	// Cast-count bookkeeping.
 	IncrementCastCount(gs, seatIdx)
+	RecordCast(gs, seatIdx, card, 0)
 	fireCastTriggers(gs, seatIdx, card)
 	FireCastTriggerObservers(gs, card, seatIdx, false)
 

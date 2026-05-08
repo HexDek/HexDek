@@ -53,6 +53,26 @@ func IncrementCastCount(gs *GameState, seatIdx int) {
 	seat.Flags["spells_cast_this_turn"] = seat.Turn.SpellsCast
 }
 
+// RecordCast appends a CastRecord to the seat's TurnCounters. Called
+// alongside IncrementCastCount when card metadata is available.
+// Safe to call with nil card (no-ops).
+func RecordCast(gs *GameState, seatIdx int, card *Card, xPaid int) {
+	if gs == nil || card == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
+		return
+	}
+	seat := gs.Seats[seatIdx]
+	if seat == nil {
+		return
+	}
+	seat.Turn.Casts = append(seat.Turn.Casts, CastRecord{
+		CardName:  card.DisplayName(),
+		Types:     card.Types,
+		ManaValue: card.EffectiveCMC(),
+		XCost:     ManaCostContainsX(card),
+		XValue:    xPaid,
+	})
+}
+
 // FireCastTriggerObservers fires every "whenever a spell is cast" style
 // observer permanent for the cast of `cast`. `fromCopy` MUST be true when
 // called from Storm copy propagation — copies are not cast (§706.10) and

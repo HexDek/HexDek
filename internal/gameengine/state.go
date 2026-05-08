@@ -438,6 +438,17 @@ func (gs *GameState) Opponents(seat int) []int {
 // TurnCounters — centralized per-seat, per-turn tracking
 // -----------------------------------------------------------------------------
 
+// CastRecord captures metadata about a single spell cast this turn.
+// Used by cards that care about "second instant or sorcery", "spell with
+// mana value 5 or greater", "X spell", etc.
+type CastRecord struct {
+	CardName  string
+	Types     []string // card types at time of cast
+	ManaValue int      // total mana value (CMC) of the spell
+	XCost     bool     // true if the spell had X in its mana cost
+	XValue    int      // the actual X value paid (0 if !XCost)
+}
+
 // TurnCounters holds all per-turn counters for a single seat. Core engine
 // functions (GainLife, drawOne, SacrificePermanent, etc.) increment these
 // directly. Per_card handlers read them instead of rolling their own flags.
@@ -457,11 +468,52 @@ type TurnCounters struct {
 	CreaturesDied    int  // creatures that died (went to GY from battlefield) this turn
 	Descended        bool // a permanent card entered graveyard this turn (Ixalan)
 	Attacked         bool // this seat declared attackers this turn
+	Casts            []CastRecord // ordered log of every spell cast this turn
 }
 
 // Reset zeroes all turn counters. Called once per turn at the untap step.
 func (tc *TurnCounters) Reset() {
-	*tc = TurnCounters{}
+	*tc = TurnCounters{Casts: tc.Casts[:0]}
+}
+
+// NthCastOfType returns the count of spells cast this turn that match
+// any of the given types. E.g. NthCastOfType("instant","sorcery") returns
+// how many instants or sorceries have been cast.
+func (tc *TurnCounters) NthCastOfType(types ...string) int {
+	n := 0
+	for _, c := range tc.Casts {
+		for _, wantType := range types {
+			for _, hasType := range c.Types {
+				if hasType == wantType {
+					n++
+					goto next
+				}
+			}
+		}
+	next:
+	}
+	return n
+}
+
+// HasXCast returns true if any spell cast this turn had an X cost.
+func (tc *TurnCounters) HasXCast() bool {
+	for _, c := range tc.Casts {
+		if c.XCost {
+			return true
+		}
+	}
+	return false
+}
+
+// MaxManaValue returns the highest mana value among spells cast this turn.
+func (tc *TurnCounters) MaxManaValue() int {
+	max := 0
+	for _, c := range tc.Casts {
+		if c.ManaValue > max {
+			max = c.ManaValue
+		}
+	}
+	return max
 }
 
 // -----------------------------------------------------------------------------
