@@ -90,6 +90,9 @@ func gontiCombatDamage(gs *gameengine.GameState, perm *gameengine.Permanent, ctx
 		ManaCost:          -1,
 		RequireController: perm.Controller,
 		SourceName:        perm.Card.DisplayName(),
+		Duration:          "while_source_on_bf",
+		SourceTimestamp:    perm.Timestamp,
+		SpendAnyColor:     true,
 	}
 	gs.LogEvent(gameengine.Event{
 		Kind:   "exile_from_library",

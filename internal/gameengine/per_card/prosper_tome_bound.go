@@ -87,6 +87,8 @@ func prosperImpulseExile(gs *gameengine.GameState, perm *gameengine.Permanent, s
 			ManaCost:          -1, // pay the card's normal cost
 			RequireController: seat,
 			SourceName:        perm.Card.DisplayName(),
+			Duration:          "until_end_of_turn",
+			GrantTurn:         gs.Turn,
 		}
 	} else {
 		emitPartial(gs, slug, perm.Card.DisplayName(),

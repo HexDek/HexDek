@@ -105,6 +105,27 @@ type ZoneCastPermission struct {
 	// SourceName is the card/permanent granting this permission (e.g.
 	// "Underworld Breach" grants escape to graveyard instants/sorceries).
 	SourceName string
+
+	// Duration controls when this permission expires. Values:
+	//   "until_end_of_turn"      — Light Up the Stage, Prosper, most impulse draw
+	//   "until_end_of_next_turn" — Laelia, Faldorn
+	//   "while_source_on_bf"     — Knowledge Pool, Gonti Lord of Luxury
+	//   ""                       — permanent (Misthollow Griffin, flashback, escape)
+	Duration string
+
+	// GrantTurn is the turn number when this permission was created.
+	// Used by cleanup to expire "until_end_of_turn" and "until_end_of_next_turn".
+	GrantTurn int
+
+	// SourceTimestamp is the Permanent.Timestamp of the source that granted
+	// this permission. Used to expire "while_source_on_bf" grants when the
+	// source leaves the battlefield.
+	SourceTimestamp int
+
+	// SpendAnyColor: if true, the caster may spend mana as though it were
+	// any color to pay for this spell (CR §106.11 — Gonti, Fallen Shinobi,
+	// Sen Triplets, Hostage Taker).
+	SpendAnyColor bool
 }
 
 // ---------------------------------------------------------------------------
@@ -572,4 +593,67 @@ func NewBreachEscapePermission(cardManaCost int) *ZoneCastPermission {
 		RequireController: -1,
 		SourceName:        "Underworld Breach",
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Zone-cast grant lifecycle — expiry and cleanup
+// ---------------------------------------------------------------------------
+
+// ExpireZoneCastGrants removes expired grants from gs.ZoneCastGrants.
+// Called at end-of-turn cleanup (phases.go EndOfTurnCleanup).
+func ExpireZoneCastGrants(gs *GameState) {
+	if gs == nil || len(gs.ZoneCastGrants) == 0 {
+		return
+	}
+	for card, p := range gs.ZoneCastGrants {
+		if shouldExpireGrant(gs, p) {
+			delete(gs.ZoneCastGrants, card)
+		}
+	}
+}
+
+// ExpireSourceGrants removes all grants whose SourceTimestamp matches
+// the given permanent's Timestamp. Called when a permanent with
+// "while_source_on_bf" grants leaves the battlefield.
+func ExpireSourceGrants(gs *GameState, sourceTimestamp int) {
+	if gs == nil || len(gs.ZoneCastGrants) == 0 || sourceTimestamp == 0 {
+		return
+	}
+	for card, p := range gs.ZoneCastGrants {
+		if p.SourceTimestamp == sourceTimestamp {
+			delete(gs.ZoneCastGrants, card)
+		}
+	}
+}
+
+func shouldExpireGrant(gs *GameState, p *ZoneCastPermission) bool {
+	if p == nil {
+		return true
+	}
+	switch p.Duration {
+	case "until_end_of_turn":
+		return gs.Turn >= p.GrantTurn
+	case "until_end_of_next_turn":
+		return gs.Turn > p.GrantTurn
+	case "while_source_on_bf":
+		return !permanentWithTimestampExists(gs, p.SourceTimestamp)
+	}
+	return false
+}
+
+func permanentWithTimestampExists(gs *GameState, ts int) bool {
+	if ts == 0 {
+		return false
+	}
+	for _, seat := range gs.Seats {
+		if seat == nil {
+			continue
+		}
+		for _, perm := range seat.Battlefield {
+			if perm != nil && perm.Timestamp == ts {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -134,12 +134,24 @@ func rivazRegisterGrant(gs *gameengine.GameState, seat int, card *gameengine.Car
 	if gs.ZoneCastGrants == nil {
 		gs.ZoneCastGrants = map[*gameengine.Card]*gameengine.ZoneCastPermission{}
 	}
+	// Look up Rivaz's Timestamp for while_source_on_bf expiry.
+	var rivazTimestamp int
+	if seat >= 0 && seat < len(gs.Seats) && gs.Seats[seat] != nil {
+		for _, p := range gs.Seats[seat].Battlefield {
+			if p != nil && p.Card != nil && p.Card.DisplayName() == sourceName {
+				rivazTimestamp = p.Timestamp
+				break
+			}
+		}
+	}
 	gs.ZoneCastGrants[card] = &gameengine.ZoneCastPermission{
 		Zone:              gameengine.ZoneGraveyard,
 		Keyword:           "rivaz_dragon_graveyard_cast",
 		ManaCost:          -1, // pay normal mana cost
 		RequireController: seat,
 		SourceName:        sourceName,
+		Duration:          "while_source_on_bf",
+		SourceTimestamp:    rivazTimestamp,
 		AdditionalCosts: []*gameengine.AdditionalCost{
 			{
 				Kind:  "rivaz_once_per_turn",

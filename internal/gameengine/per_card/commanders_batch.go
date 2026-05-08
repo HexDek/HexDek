@@ -560,6 +560,8 @@ func narsetExileTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ct
 		ManaCost:          -1, // use card's normal cost
 		RequireController: seat,
 		SourceName:        perm.Card.DisplayName(),
+		Duration:          "until_end_of_turn",
+		GrantTurn:         gs.Turn,
 	}
 	gs.LogEvent(gameengine.Event{
 		Kind:   "exile_from_library",

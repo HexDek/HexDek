@@ -90,6 +90,8 @@ func narsetEnlightenedMasterAttack(gs *gameengine.GameState, perm *gameengine.Pe
 				ExileOnResolve:    false,
 				RequireController: perm.Controller,
 				SourceName:        perm.Card.DisplayName(),
+				Duration:          "until_end_of_turn",
+				GrantTurn:         gs.Turn,
 			}
 			grantedNames = append(grantedNames, top.DisplayName())
 			if cardHasType(top, "land") {

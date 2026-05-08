@@ -283,6 +283,8 @@ func ScanExpiredDurations(gs *GameState, phase, step string) {
 				delete(p.Flags, "basilisk_marked_destroy")
 			}
 		}
+
+		ExpireZoneCastGrants(gs)
 	}
 
 	// 3) Delayed triggers — we don't expire them here; they consume

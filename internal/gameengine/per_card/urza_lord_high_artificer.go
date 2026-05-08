@@ -215,6 +215,8 @@ func urzaExileTopMayPlay(gs *gameengine.GameState, src *gameengine.Permanent, s 
 		ExileOnResolve:    false,
 		RequireController: seat,
 		SourceName:        "Urza, Lord High Artificer",
+		Duration:          "until_end_of_turn",
+		GrantTurn:         gs.Turn,
 	}
 
 	// Clean up the cast grant at end of turn via delayed trigger.

@@ -70,6 +70,8 @@ func obNixilisCaptiveTrigger(gs *gameengine.GameState, perm *gameengine.Permanen
 		ManaCost:          -1,
 		RequireController: seat,
 		SourceName:        perm.Card.DisplayName(),
+		Duration:          "until_end_of_next_turn",
+		GrantTurn:         gs.Turn,
 	}
 	gs.LogEvent(gameengine.Event{
 		Kind:   "exile_from_library",

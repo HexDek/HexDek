@@ -139,6 +139,8 @@ func edwardVehicleDamage(gs *gameengine.GameState, perm *gameengine.Permanent, c
 		ManaCost:          -1,
 		RequireController: perm.Controller,
 		SourceName:        perm.Card.DisplayName(),
+		Duration:          "while_source_on_bf",
+		SourceTimestamp:    perm.Timestamp,
 	}
 	gs.LogEvent(gameengine.Event{
 		Kind:   "exile_from_library",

@@ -103,6 +103,8 @@ func cruelclawCombatDamage(gs *gameengine.GameState, perm *gameengine.Permanent,
 		ManaCost:          0,
 		RequireController: seat,
 		SourceName:        perm.Card.DisplayName(),
+		Duration:          "until_end_of_turn",
+		GrantTurn:         gs.Turn,
 		AdditionalCosts: []*gameengine.AdditionalCost{
 			{
 				Kind:  "discard",

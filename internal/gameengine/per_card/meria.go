@@ -103,6 +103,8 @@ func meriaActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilityI
 			ManaCost:          -1,
 			RequireController: seat,
 			SourceName:        src.Card.DisplayName(),
+			Duration:          "until_end_of_turn",
+			GrantTurn:         gs.Turn,
 		}
 		gs.LogEvent(gameengine.Event{
 			Kind:   "exile_from_library",

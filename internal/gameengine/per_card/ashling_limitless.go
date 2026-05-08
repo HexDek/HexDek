@@ -65,6 +65,8 @@ func ashlingTheLimitlessTrigger(gs *gameengine.GameState, perm *gameengine.Perma
 			ManaCost:          -1,
 			RequireController: perm.Controller,
 			SourceName:        perm.Card.DisplayName(),
+			Duration:          "until_end_of_turn",
+			GrantTurn:         gs.Turn,
 		}
 		exiled = append(exiled, top.DisplayName())
 	}
