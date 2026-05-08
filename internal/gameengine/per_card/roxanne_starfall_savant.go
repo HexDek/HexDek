@@ -77,6 +77,7 @@ func roxanneMintMeteorite(gs *gameengine.GameState, perm *gameengine.Permanent, 
 	}
 	if tgt >= 0 {
 		gameengine.DealDamage(gs, tgt, 2, "Meteorite")
+		_ = gs.CheckEnd()
 	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":           perm.Controller,

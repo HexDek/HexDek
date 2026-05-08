@@ -104,6 +104,7 @@ func athreosGodOfPassageDies(gs *gameengine.GameState, perm *gameengine.Permanen
 
 	if pay {
 		gameengine.LoseLife(gs, target, 3, perm.Card.DisplayName())
+		_ = gs.CheckEnd()
 		emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 			"seat":         perm.Controller,
 			"creature":     dyingCard.DisplayName(),

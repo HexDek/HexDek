@@ -84,6 +84,7 @@ func sanguineBondTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, c
 	}
 
 	gameengine.LoseLife(gs, bestOpp, amount, "Sanguine Bond")
+	_ = gs.CheckEnd()
 
 	emit(gs, slug, "Sanguine Bond", map[string]interface{}{
 		"seat":     perm.Controller,

@@ -172,6 +172,7 @@ func contractAttackTrigger(gs *gameengine.GameState, perm *gameengine.Permanent,
 	atkSeat := atk.Controller
 	if atkSeat >= 0 && atkSeat < len(gs.Seats) && gs.Seats[atkSeat] != nil {
 		gameengine.LoseLife(gs, atkSeat, 2, "Contract")
+		_ = gs.CheckEnd()
 	}
 	emit(gs, slug, "Contract", map[string]interface{}{
 		"contract_seat": contractCtrl,

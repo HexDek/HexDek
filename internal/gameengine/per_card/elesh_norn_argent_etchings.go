@@ -144,6 +144,7 @@ func eleshNornArgentDamagePunish(gs *gameengine.GameState, perm *gameengine.Perm
 	}
 
 	gameengine.LoseLife(gs, sourceSeat, 2, perm.Card.DisplayName())
+	_ = gs.CheckEnd()
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":        perm.Controller,
 		"source_seat": sourceSeat,

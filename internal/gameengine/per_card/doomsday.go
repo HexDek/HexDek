@@ -123,4 +123,5 @@ func doomsdayLoseHalfLife(gs *gameengine.GameState, seat int) {
 	}
 	loss := (life + 1) / 2
 	gameengine.LoseLife(gs, seat, loss, "Doomsday")
+	_ = gs.CheckEnd()
 }

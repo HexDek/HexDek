@@ -67,6 +67,7 @@ func betorKinEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx m
 				lifeLost += loss
 			}
 		}
+		_ = gs.CheckEnd()
 	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":      perm.Controller,

@@ -184,6 +184,7 @@ func smallpoxResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 		gameengine.LoseLife(gs, i, 1, "Smallpox")
 		gameengine.DiscardN(gs, i, 1, "")
 	}
+	_ = gs.CheckEnd()
 	eachPlayerSacrificeCreature(gs)
 	for i := range gs.Seats {
 		if gs.Seats[i] == nil || gs.Seats[i].Lost {
@@ -253,6 +254,7 @@ func poxResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 			}
 		}
 	}
+	_ = gs.CheckEnd()
 	emit(gs, "pox", "Pox", map[string]interface{}{
 		"seat": item.Controller,
 	})
@@ -500,6 +502,7 @@ func deathCloudResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 			}
 		}
 	}
+	_ = gs.CheckEnd()
 	emit(gs, "death_cloud", "Death Cloud", map[string]interface{}{
 		"seat": item.Controller,
 		"x":    x,

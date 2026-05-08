@@ -56,6 +56,7 @@ func slimefootSaprolingDies(gs *gameengine.GameState, perm *gameengine.Permanent
 		gameengine.DealDamage(gs, oppIdx, 1, perm.Card.DisplayName())
 		hits++
 	}
+	_ = gs.CheckEnd()
 	gameengine.GainLife(gs, perm.Controller, 1, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":  perm.Controller,

@@ -49,6 +49,7 @@ func quezaDrawTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		return
 	}
 	gameengine.LoseLife(gs, bestOpp, 1, perm.Card.DisplayName())
+	_ = gs.CheckEnd()
 	gameengine.GainLife(gs, perm.Controller, 1, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":   perm.Controller,

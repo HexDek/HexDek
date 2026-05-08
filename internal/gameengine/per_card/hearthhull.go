@@ -113,6 +113,7 @@ func hearthhullLandSacDrain(gs *gameengine.GameState, perm *gameengine.Permanent
 		gameengine.LoseLife(gs, i, 2, perm.Card.DisplayName())
 		drained++
 	}
+	_ = gs.CheckEnd()
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":              perm.Controller,
 		"sacrificed_land":   card.DisplayName(),

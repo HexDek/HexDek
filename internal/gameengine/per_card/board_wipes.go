@@ -98,6 +98,7 @@ func toxicDelugeResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 
 	// Pay X life as additional cost.
 	gameengine.LoseLife(gs, seat, x, "Toxic Deluge")
+	_ = gs.CheckEnd()
 
 	// Apply -X/-X to ALL creatures until end of turn.
 	modified := 0

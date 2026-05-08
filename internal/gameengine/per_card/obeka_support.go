@@ -377,6 +377,7 @@ func courtOfEmberethUpkeep(gs *gameengine.GameState, perm *gameengine.Permanent,
 		for _, opp := range gs.Opponents(perm.Controller) {
 			gameengine.DealDamage(gs, opp, creatures, "Court of Embereth")
 		}
+		_ = gs.CheckEnd()
 	}
 	emit(gs, "court_of_embereth_trigger", "Court of Embereth", map[string]interface{}{
 		"seat":       perm.Controller,

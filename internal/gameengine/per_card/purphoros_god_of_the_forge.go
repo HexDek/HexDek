@@ -43,6 +43,7 @@ func purphorosCreatureETB(gs *gameengine.GameState, perm *gameengine.Permanent, 
 			gameengine.DealDamage(gs, opp, amt, perm.Card.DisplayName())
 		}
 	}
+	_ = gs.CheckEnd()
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":   perm.Controller,
 		"source": other.Card.DisplayName(),

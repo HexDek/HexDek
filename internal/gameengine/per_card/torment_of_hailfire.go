@@ -97,6 +97,7 @@ func tormentOfHailfireResolve(gs *gameengine.GameState, item *gameengine.StackIt
 			totalLifeLost[oppIdx] += 3
 		}
 	}
+	_ = gs.CheckEnd()
 
 	emit(gs, slug, "Torment of Hailfire", map[string]interface{}{
 		"seat":       casterSeat,

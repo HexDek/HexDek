@@ -126,6 +126,7 @@ func sorinNeonateMinusOne(gs *gameengine.GameState, src *gameengine.Permanent) {
 		return
 	}
 	gameengine.DealDamage(gs, tgt, gained, src.Card.DisplayName())
+	_ = gs.CheckEnd()
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 		"seat":   src.Controller,
 		"target": tgt,

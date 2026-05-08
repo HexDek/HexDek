@@ -58,6 +58,7 @@ func mishraGixAttacks(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		}
 		gameengine.FireLoseLifeEvent(gs, opp, x, perm)
 	}
+	_ = gs.CheckEnd()
 	gameengine.GainLife(gs, perm.Controller, x, "Mishra, Claimed by Gix")
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":      perm.Controller,

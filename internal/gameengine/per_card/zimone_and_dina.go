@@ -61,6 +61,7 @@ func zimoneDinaCardDrawn(gs *gameengine.GameState, perm *gameengine.Permanent, c
 		return
 	}
 	gameengine.LoseLife(gs, target, 2, perm.Card.DisplayName())
+	_ = gs.CheckEnd()
 	gameengine.GainLife(gs, perm.Controller, 2, perm.Card.DisplayName())
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":     perm.Controller,

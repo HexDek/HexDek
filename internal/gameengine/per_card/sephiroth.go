@@ -193,6 +193,7 @@ func sephirothCreatureDies(gs *gameengine.GameState, perm *gameengine.Permanent,
 		gameengine.LoseLife(gs, i, 1, perm.Card.DisplayName())
 		break
 	}
+	_ = gs.CheckEnd()
 	gameengine.GainLife(gs, seat, 1, perm.Card.DisplayName())
 
 	// Increment per-turn resolution counter and transform on the 4th.

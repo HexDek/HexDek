@@ -218,6 +218,7 @@ func zurgoTokenLeaves(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		gameengine.LoseLife(gs, i, 1, perm.Card.DisplayName())
 		hits++
 	}
+	_ = gs.CheckEnd()
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":           perm.Controller,
 		"token":          leavingCard.DisplayName(),

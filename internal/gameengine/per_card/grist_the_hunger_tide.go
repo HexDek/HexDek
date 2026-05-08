@@ -253,6 +253,7 @@ func gristMinusFive(gs *gameengine.GameState, src *gameengine.Permanent) {
 		gameengine.LoseLife(gs, opp, x, src.Card.DisplayName())
 		drained++
 	}
+	_ = gs.CheckEnd()
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 		"seat":            seat,
 		"loyalty":         src.Counters["loyalty"],

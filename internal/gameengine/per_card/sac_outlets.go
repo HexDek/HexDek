@@ -261,6 +261,7 @@ func goblinBombardmentActivated(gs *gameengine.GameState, src *gameengine.Perman
 	targetSeat := pickTargetSeat(gs, seat, ctx)
 	if targetSeat >= 0 && targetSeat < len(gs.Seats) {
 		gameengine.DealDamage(gs, targetSeat, 1, "Goblin Bombardment")
+		_ = gs.CheckEnd()
 	}
 
 	emit(gs, slug, "Goblin Bombardment", map[string]interface{}{

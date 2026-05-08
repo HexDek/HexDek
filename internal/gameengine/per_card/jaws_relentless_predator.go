@@ -87,6 +87,7 @@ func jawsArtifactGone(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		gameengine.DealDamage(gs, i, 1, perm.Card.DisplayName())
 		pinged++
 	}
+	_ = gs.CheckEnd()
 	if pinged > 0 {
 		emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 			"seat":     perm.Controller,

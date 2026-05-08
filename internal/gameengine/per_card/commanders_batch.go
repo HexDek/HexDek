@@ -690,6 +690,7 @@ func ragostTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 				target = opps[gs.Rng.Intn(len(opps))]
 			}
 			gameengine.DealDamage(gs, target, dmg, perm.Card.DisplayName())
+			_ = gs.CheckEnd()
 		}
 	}
 	emit(gs, "ragost_food_sac", perm.Card.DisplayName(), map[string]interface{}{
@@ -1259,6 +1260,7 @@ func vojaTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[s
 			}
 			dmg := perm.Power()
 			gameengine.DealDamage(gs, target, dmg, perm.Card.DisplayName())
+			_ = gs.CheckEnd()
 		}
 		emit(gs, "voja_damage", perm.Card.DisplayName(), map[string]interface{}{
 			"seat":   seat,
@@ -1383,6 +1385,7 @@ func ashlingActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilit
 			}
 			gameengine.DealDamage(gs, i, dmg, src.Card.DisplayName())
 		}
+		_ = gs.CheckEnd()
 		// Damage all creatures (mark damage for SBA).
 		for _, s := range gs.Seats {
 			if s == nil {

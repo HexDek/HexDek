@@ -442,6 +442,20 @@ func (r *Registry) HasCastAndTrigger(normName string) (hasCast, hasTrigger bool)
 	return
 }
 
+// RegisteredTriggerEvents returns the set of canonical event names that have
+// at least one OnTrigger handler registered (across all cards).
+func (r *Registry) RegisteredTriggerEvents() map[string]bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	events := map[string]bool{}
+	for _, byEvent := range r.onTrigger {
+		for ev := range byEvent {
+			events[ev] = true
+		}
+	}
+	return events
+}
+
 // HasTrigger reports whether a trigger handler is registered for cardName+event.
 func HasTrigger(cardName, event string) bool {
 	reg := Global()

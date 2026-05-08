@@ -149,6 +149,7 @@ func prosperEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		}
 		gameengine.CreateTreasureToken(gs, perm.Controller)
 	}
+	_ = gs.CheckEnd()
 
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":      perm.Controller,

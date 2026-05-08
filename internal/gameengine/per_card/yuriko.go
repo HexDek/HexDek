@@ -96,4 +96,5 @@ func yurikoTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 		}
 		gameengine.LoseLife(gs, i, cmc, "Yuriko, the Tiger's Shadow")
 	}
+	_ = gs.CheckEnd()
 }

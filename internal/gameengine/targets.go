@@ -254,7 +254,15 @@ func pickPermanentTarget(gs *GameState, f gameast.Filter, srcSeat int, src *Perm
 			best = c
 		}
 	}
-	return []Target{{Kind: TargetKindPermanent, Permanent: best.p, Seat: best.p.Controller}}
+	result := []Target{{Kind: TargetKindPermanent, Permanent: best.p, Seat: best.p.Controller}}
+	if f.Targeted && best.p != nil && best.p.Card != nil {
+		FireCardTrigger(gs, "targeted", map[string]interface{}{
+			"seat":   best.p.Controller,
+			"card":   best.p.Card.DisplayName(),
+			"source": srcSeat,
+		})
+	}
+	return result
 }
 
 // matchesControl returns true if seat i is valid given f's control flags.

@@ -196,6 +196,7 @@ func strongbullActivated(gs *gameengine.GameState, src *gameengine.Permanent, ab
 	for _, opp := range gs.LivingOpponents(seat) {
 		gameengine.DealDamage(gs, opp, 1, "Penregon Strongbull")
 	}
+	_ = gs.CheckEnd()
 
 	emit(gs, "strongbull_activated", src.Card.DisplayName(), map[string]interface{}{
 		"seat":       seat,

@@ -269,6 +269,7 @@ func waywardServantDrain(gs *gameengine.GameState, seat int) {
 	for _, opp := range gs.Opponents(seat) {
 		gameengine.LoseLife(gs, opp, 1, "Wayward Servant")
 	}
+	_ = gs.CheckEnd()
 	gameengine.GainLife(gs, seat, 1, "Wayward Servant")
 	emit(gs, "wayward_servant_drain", "Wayward Servant", map[string]interface{}{
 		"seat": seat,

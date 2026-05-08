@@ -36,6 +36,7 @@ func dinaDrainTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		}
 		gameengine.LoseLife(gs, opp, 1, perm.Card.DisplayName())
 	}
+	_ = gs.CheckEnd()
 	emit(gs, "dina_drain", perm.Card.DisplayName(), map[string]interface{}{
 		"seat":       perm.Controller,
 		"drain_each": 1,
@@ -80,6 +81,7 @@ func vitoDrainTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		}
 	}
 	gameengine.LoseLife(gs, bestOpp, amount, perm.Card.DisplayName())
+	_ = gs.CheckEnd()
 	emit(gs, "vito_drain", perm.Card.DisplayName(), map[string]interface{}{
 		"seat":      perm.Controller,
 		"target":    bestOpp,
@@ -127,6 +129,7 @@ func corpseKnightTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, c
 		}
 		gameengine.LoseLife(gs, opp, 1, "Corpse Knight")
 	}
+	_ = gs.CheckEnd()
 	emit(gs, "corpse_knight_drain", "Corpse Knight", map[string]interface{}{
 		"seat":       perm.Controller,
 		"drain_each": 1,

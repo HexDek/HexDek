@@ -21,9 +21,8 @@ import (
 //   - Flying — AST keyword pipeline.
 //   - "end_step" trigger: gates on active_seat == controller ("your end
 //     step"). Counts every player (including Strefan's controller) who
-//     lost life this turn via the per-seat "damage_taken_this_turn" flag
-//     AND by scanning the EventLog for "lose_life" events targeting each
-//     seat. Creates one Blood token per qualifying player.
+//     lost life this turn via Turn.DamageReceived and Turn.LifeLost
+//     counters. Creates one Blood token per qualifying player.
 //   - "creature_attacks" trigger: gates on attacker == Strefan. Looks
 //     for 2+ Blood tokens on the controller's battlefield. Sacrifices
 //     two Blood tokens, then finds a Vampire creature card in hand and
@@ -59,10 +58,6 @@ func strefanEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		return
 	}
 
-	// Build a set of seats that lost life this turn. Two sources:
-	// 1. Per-seat "damage_taken_this_turn" flag (set by combat damage).
-	// 2. EventLog "lose_life" / "damage" events targeting a player seat
-	//    (catches Shock, Thoughtseize, etc.).
 	lostLife := make(map[int]bool, len(gs.Seats))
 	for i, s := range gs.Seats {
 		if s == nil || s.Lost {
@@ -70,26 +65,6 @@ func strefanEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		}
 		if s.Turn.DamageReceived > 0 || s.Turn.LifeLost > 0 {
 			lostLife[i] = true
-		}
-	}
-	// Scan EventLog for lose_life and player-targeted damage events.
-	for _, ev := range gs.EventLog {
-		switch ev.Kind {
-		case "lose_life":
-			if ev.Target >= 0 && ev.Target < len(gs.Seats) {
-				lostLife[ev.Target] = true
-			}
-		case "damage":
-			if d, ok := ev.Details["target_kind"]; ok && d == "player" {
-				if ev.Target >= 0 && ev.Target < len(gs.Seats) {
-					lostLife[ev.Target] = true
-				}
-			}
-		case "life_change":
-			// Negative life_change means life was lost.
-			if ev.Amount < 0 && ev.Seat >= 0 && ev.Seat < len(gs.Seats) {
-				lostLife[ev.Seat] = true
-			}
 		}
 	}
 

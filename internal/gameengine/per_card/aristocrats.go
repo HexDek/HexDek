@@ -24,6 +24,7 @@ func bloodArtistTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ct
 		gameengine.LoseLife(gs, i, 1, "Blood Artist")
 		break // "target opponent" — pick first alive opponent
 	}
+	_ = gs.CheckEnd()
 	gameengine.GainLife(gs, seat, 1, "Blood Artist")
 }
 
@@ -50,6 +51,7 @@ func zulaportTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx m
 		}
 		gameengine.LoseLife(gs, i, 1, "Zulaport Cutthroat")
 	}
+	_ = gs.CheckEnd()
 	gameengine.GainLife(gs, seat, 1, "Zulaport Cutthroat")
 }
 
@@ -76,6 +78,7 @@ func bastionTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		}
 		gameengine.LoseLife(gs, i, 1, "Bastion of Remembrance")
 	}
+	_ = gs.CheckEnd()
 	gameengine.GainLife(gs, seat, 1, "Bastion of Remembrance")
 }
 
@@ -102,6 +105,7 @@ func cruelCelebrantTrigger(gs *gameengine.GameState, perm *gameengine.Permanent,
 		}
 		gameengine.LoseLife(gs, i, 1, "Cruel Celebrant")
 	}
+	_ = gs.CheckEnd()
 	gameengine.GainLife(gs, seat, 1, "Cruel Celebrant")
 }
 
@@ -128,6 +132,7 @@ func vindictiveTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx
 		}
 		gameengine.LoseLife(gs, i, 1, "Vindictive Vampire")
 	}
+	_ = gs.CheckEnd()
 	gameengine.GainLife(gs, seat, 1, "Vindictive Vampire")
 }
 
@@ -150,4 +155,5 @@ func syrKonradTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		}
 		gameengine.LoseLife(gs, i, 1, "Syr Konrad, the Grim")
 	}
+	_ = gs.CheckEnd()
 }

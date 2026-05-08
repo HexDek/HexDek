@@ -104,6 +104,7 @@ func rinAndSeriActivate(gs *gameengine.GameState, src *gameengine.Permanent, abi
 	}
 	if tgt >= 0 && dogs > 0 {
 		gameengine.DealDamage(gs, tgt, dogs, src.Card.DisplayName())
+		_ = gs.CheckEnd()
 	}
 	if cats > 0 {
 		gameengine.GainLife(gs, src.Controller, cats, src.Card.DisplayName())

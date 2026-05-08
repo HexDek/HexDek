@@ -42,6 +42,7 @@ func sheoldredApocCardDrawn(gs *gameengine.GameState, perm *gameengine.Permanent
 		return
 	}
 	gameengine.LoseLife(gs, drawerSeat, 2, perm.Card.DisplayName())
+	_ = gs.CheckEnd()
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":   perm.Controller,
 		"target": drawerSeat,

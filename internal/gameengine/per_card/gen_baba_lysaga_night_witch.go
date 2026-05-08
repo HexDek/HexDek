@@ -33,6 +33,7 @@ func babaLysagaNightWitchActivate(gs *gameengine.GameState, src *gameengine.Perm
 			gameengine.LoseLife(gs, opp, 3, src.Card.DisplayName())
 		}
 	}
+	_ = gs.CheckEnd()
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 		"seat": seat,
 	})

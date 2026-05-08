@@ -62,6 +62,7 @@ func vialSmasherTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ct
 		return
 	}
 	gameengine.DealDamage(gs, target, mv, "Vial Smasher the Fierce")
+	_ = gs.CheckEnd()
 
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":        perm.Controller,

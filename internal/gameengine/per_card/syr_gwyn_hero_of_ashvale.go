@@ -119,6 +119,7 @@ func syrGwynAttackTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, 
 		gameengine.LoseLife(gs, opp, 1, perm.Card.DisplayName())
 		drained++
 	}
+	_ = gs.CheckEnd()
 
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":     seat,
