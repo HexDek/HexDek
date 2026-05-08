@@ -230,17 +230,18 @@ type spectatorConn struct {
 }
 
 type eloState struct {
-	rating    float64 // TrueSkill conservative rating (μ - 3σ), bracket-seeded
-	hexRating float64 // HexELO (bracket-seeded, K-modulated, gravity)
-	tsMu      float64 // TrueSkill μ (skill estimate)
-	tsSigma   float64 // TrueSkill σ (uncertainty)
-	games     int
-	delta     float64
-	hexDelta  float64
-	wins      int
-	commander string
-	owner     string
-	bracket   int
+	rating     float64 // TrueSkill conservative rating (μ - 3σ), bracket-seeded
+	hexRating  float64 // HexELO (bracket-seeded, K-modulated, gravity)
+	tsMu       float64 // TrueSkill μ (skill estimate)
+	tsSigma    float64 // TrueSkill σ (uncertainty)
+	games      int
+	delta      float64
+	hexDelta   float64
+	wins       int
+	commander  string
+	owner      string
+	bracket    int
+	lossStreak int // consecutive losses for diminishing penalty + streak break bonus
 }
 
 type sessionState struct {
@@ -2091,21 +2092,96 @@ func hexELOKFactor(baseK float64, winnerBracket, loserBracket int) float64 {
 	return baseK * math.Max(0.5, 1.0-float64(dist)*0.15)
 }
 
-// hexELOGravity applies a mild pull toward the deck's bracket center.
-// Keeps expected decks in their band; genuine outliers overcome it.
+// hexELOBracketFloor returns the floor and basement for a bracket.
+// Between floor and basement gravity ramps hard; at basement it's a wall.
+func hexELOBracketFloor(bracket int) (floor, basement float64) {
+	switch bracket {
+	case 1:
+		return 100, 0
+	case 2:
+		return 600, 500
+	case 3:
+		return 1300, 1200
+	case 4:
+		return 2000, 1900
+	case 5:
+		return 2800, 2700
+	default:
+		return 600, 500
+	}
+}
+
+// hexELOGravity applies a pull toward the deck's bracket center.
+// Above the floor: mild pull (capped ±5). Below: ramps hard toward
+// the basement, making it nearly impossible to sink further.
 func hexELOGravity(rating float64, bracket int) float64 {
 	if bracket <= 0 {
 		return 0
 	}
 	center := hexELOStartRating(bracket)
-	pull := 0.02 * (center - rating)
-	if pull > 5.0 {
-		pull = 5.0
+	floor, basement := hexELOBracketFloor(bracket)
+
+	if rating >= floor {
+		pull := 0.02 * (center - rating)
+		if pull > 5.0 {
+			pull = 5.0
+		}
+		if pull < -5.0 {
+			pull = -5.0
+		}
+		return pull
 	}
-	if pull < -5.0 {
-		pull = -5.0
+
+	// Below floor: gravity ramps from 5 → 40 as rating approaches basement.
+	span := floor - basement
+	if span <= 0 {
+		span = 1
 	}
-	return pull
+	t := (floor - rating) / span // 0 at floor, 1 at basement, >1 below
+	if t > 1 {
+		t = 1
+	}
+	return 5.0 + t*35.0
+}
+
+// hexELOLossDamper returns a multiplier [0.1, 1.0] for loss deltas.
+// Below the bracket floor losses barely count — the deck is already dead.
+// Loss streaks also diminish: after 3 consecutive losses each additional
+// loss is worth less.
+func hexELOLossDamper(rating float64, bracket, lossStreak int) float64 {
+	damper := 1.0
+
+	// Below-floor damping: losses fade as rating approaches basement.
+	floor, basement := hexELOBracketFloor(bracket)
+	if rating < floor {
+		span := floor - basement
+		if span <= 0 {
+			span = 1
+		}
+		t := (floor - rating) / span // 0 at floor, 1 at basement
+		if t > 1 {
+			t = 1
+		}
+		damper *= math.Max(0.1, 1.0-0.9*t)
+	}
+
+	// Loss streak damping: after 3 consecutive losses, each additional
+	// loss is worth 15% less, down to 20% minimum.
+	if lossStreak > 3 {
+		streakDamp := math.Max(0.2, 1.0-0.15*float64(lossStreak-3))
+		damper *= streakDamp
+	}
+
+	return damper
+}
+
+// hexELOStreakBreakBonus returns bonus ELO for winning after a loss streak.
+// Rewards breaking out: +3 per streak game, up to +30.
+func hexELOStreakBreakBonus(lossStreak int) float64 {
+	if lossStreak < 3 {
+		return 0
+	}
+	return math.Min(float64(lossStreak)*3.0, 30.0)
 }
 
 func (sm *Showmatch) updateELO(deckKeys, commanders []string, decks []*deckparser.TournamentDeck, winner int) {
@@ -2181,7 +2257,7 @@ func (sm *Showmatch) updateELO(deckKeys, commanders []string, decks []*deckparse
 		}
 	}
 
-	// --- HexELO update (bracket-aware K + gravity) ---
+	// --- HexELO update (bracket-aware K + gravity + floor/streak) ---
 	winnerKey := ""
 	if winner >= 0 && winner < n {
 		winnerKey = deckKeys[winner]
@@ -2199,8 +2275,24 @@ func (sm *Showmatch) updateELO(deckKeys, commanders []string, decks []*deckparse
 				sm.elo[b].hexRating += sm.elo[b].hexDelta + hexELOGravity(sm.elo[b].hexRating, sm.elo[b].bracket)
 			}
 		}
+		for _, key := range deckKeys {
+			sm.elo[key].lossStreak++
+		}
 		return
 	}
+
+	// Winner: streak break bonus + reset streak.
+	wStreak := sm.elo[winnerKey].lossStreak
+	streakBonus := hexELOStreakBreakBonus(wStreak)
+	sm.elo[winnerKey].lossStreak = 0
+
+	// Losers: increment streak.
+	for _, key := range deckKeys {
+		if key != winnerKey {
+			sm.elo[key].lossStreak++
+		}
+	}
+
 	for _, loserKey := range deckKeys {
 		if loserKey == winnerKey {
 			continue
@@ -2212,10 +2304,25 @@ func (sm *Showmatch) updateELO(deckKeys, commanders []string, decks []*deckparse
 		hexEL := 1.0 - hexEW
 		hwDelta := hk * (1.0 - hexEW)
 		hlDelta := hk * (0.0 - hexEL)
+
+		// Dampen loser's loss based on floor proximity + streak length.
+		hlDelta *= hexELOLossDamper(sm.elo[loserKey].hexRating, lBracket, sm.elo[loserKey].lossStreak)
+
 		sm.elo[winnerKey].hexDelta = hwDelta
 		sm.elo[loserKey].hexDelta = hlDelta
 		sm.elo[winnerKey].hexRating += hwDelta + hexELOGravity(sm.elo[winnerKey].hexRating, wBracket)
 		sm.elo[loserKey].hexRating += hlDelta + hexELOGravity(sm.elo[loserKey].hexRating, lBracket)
+	}
+
+	// Streak break bonus applied once after all pairwise updates.
+	sm.elo[winnerKey].hexRating += streakBonus
+
+	// Hard basement clamp — absolute floor.
+	for _, key := range deckKeys {
+		_, basement := hexELOBracketFloor(sm.elo[key].bracket)
+		if sm.elo[key].hexRating < basement {
+			sm.elo[key].hexRating = basement
+		}
 	}
 
 	// Anti-cheat Phase 1 — feed each contributor's per-game result into
