@@ -449,7 +449,45 @@ func FireZoneChangeTriggers(gs *GameState, perm *Permanent, card *Card, fromZone
 		})
 	}
 
-	// 4. Fire "land_to_graveyard" for any land card entering a graveyard from
+	// 4. Fire "card_exiled" when a permanent is exiled from the battlefield.
+	//    Non-battlefield→exile is handled in MoveCard (zone_move.go).
+	//    Used by The War Doctor, Syr Vondam Sunstar Exemplar.
+	if toZone == "exile" && card != nil {
+		exileSeat := -1
+		if perm != nil {
+			exileSeat = perm.Controller
+		} else if card.Owner >= 0 {
+			exileSeat = card.Owner
+		}
+		FireCardTrigger(gs, "card_exiled", map[string]interface{}{
+			"seat":      exileSeat,
+			"card":      card.DisplayName(),
+			"from_zone": fromZone,
+			"source":    "effect",
+		})
+	}
+
+	// 5. Fire generic "zone_change" for any zone transition from the
+	//    battlefield. Non-battlefield transitions are handled in MoveCard
+	//    (zone_move.go). Used by Ketramose, Necrotic Ooze, Underworld
+	//    Breach, Sidisi Brood Tyrant.
+	if card != nil {
+		zcSeat := -1
+		if perm != nil {
+			zcSeat = perm.Controller
+		} else if card.Owner >= 0 {
+			zcSeat = card.Owner
+		}
+		FireCardTrigger(gs, "zone_change", map[string]interface{}{
+			"seat":      zcSeat,
+			"card":      card.DisplayName(),
+			"from_zone": fromZone,
+			"to_zone":   toZone,
+			"source":    "effect",
+		})
+	}
+
+	// 6. Fire "land_to_graveyard" for any land card entering a graveyard from
 	//    any zone (CR §702 Gitrog Monster pattern: "whenever one or more land
 	//    cards are put into your graveyard from anywhere").
 	//    owner_seat is available only when perm != nil (permanent leaving

@@ -118,4 +118,10 @@ func initSagaLoreCounters(gs *GameState, perm *Permanent) {
 			"lore":          perm.Counters["lore"],
 		},
 	})
+	// Fire lore_counter_added for Urza's Saga, Sheoldred // The True Scriptures, etc.
+	FireCardTrigger(gs, "lore_counter_added", map[string]interface{}{
+		"seat":    perm.Controller,
+		"card":    perm.Card.DisplayName(),
+		"chapter": perm.Counters["lore"],
+	})
 }

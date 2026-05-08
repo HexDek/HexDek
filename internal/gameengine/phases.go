@@ -483,6 +483,11 @@ func PhaseOut(gs *GameState, p *Permanent) {
 			"rule": "702.26",
 		},
 	})
+	// Fire permanent_phased_out for The War Doctor, etc.
+	FireCardTrigger(gs, "permanent_phased_out", map[string]interface{}{
+		"seat": p.Controller,
+		"card": cardName,
+	})
 	// §702.26d — indirectly phase out attached permanents.
 	for _, s := range gs.Seats {
 		if s == nil {

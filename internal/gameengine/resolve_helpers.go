@@ -919,6 +919,13 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 			},
 		})
 
+		// Dispatch per-card trigger so cards like Venser, Corpse Puppet
+		// can react to proliferate events.
+		FireCardTrigger(gs, "proliferate", map[string]interface{}{
+			"seat":   seat,
+			"amount": proliferatedCount,
+		})
+
 	case "populate":
 		// CR §701.30 — "Create a token that's a copy of a creature
 		// token you control."
@@ -1188,6 +1195,14 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 			Details: map[string]interface{}{
 				"tier": tier,
 			},
+		})
+
+		// Dispatch per-card trigger so cards like Mr. House, President
+		// and CEO and Vrondiss, Rage of Ancients can react to dice rolls.
+		FireCardTrigger(gs, "roll_dice", map[string]interface{}{
+			"seat":   seat,
+			"result": result,
+			"sides":  20,
 		})
 
 	case "seek":
@@ -2766,17 +2781,23 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 			// CR §701.27: add one counter of each kind to any number of
 			// permanents/players that already have counters. MVP: add a
 			// +1/+1 counter to each friendly creature that has any counters.
+			proliferatedKA := 0
 			if kaSeat >= 0 && kaSeat < len(gs.Seats) {
 				for _, p := range gs.Seats[kaSeat].Battlefield {
 					if p != nil && p.IsCreature() && len(p.Counters) > 0 {
 						for kind := range p.Counters {
 							p.Counters[kind]++
+							proliferatedKA++
 							break // one counter type per permanent for MVP
 						}
 					}
 				}
 				gs.InvalidateCharacteristicsCache()
 			}
+			FireCardTrigger(gs, "proliferate", map[string]interface{}{
+				"seat":   kaSeat,
+				"amount": proliferatedKA,
+			})
 			kaResolved = true
 		case strings.HasPrefix(kaRaw, "connive"):
 			// CR §701.47: draw a card, then discard a card. If you discarded
@@ -2969,6 +2990,13 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 			Details: map[string]interface{}{
 				"sides": sides,
 			},
+		})
+
+		// Dispatch per-card trigger so dice-matters cards can react.
+		FireCardTrigger(gs, "roll_dice", map[string]interface{}{
+			"seat":   controllerSeat(src),
+			"result": result,
+			"sides":  sides,
 		})
 
 	// -----------------------------------------------------------------

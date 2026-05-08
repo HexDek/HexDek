@@ -1814,6 +1814,12 @@ func AdvanceSagaChapter(gs *GameState, perm *Permanent) int {
 			"rule": "714.2",
 		},
 	})
+	// Fire lore_counter_added for Urza's Saga, Sheoldred // The True Scriptures, etc.
+	FireCardTrigger(gs, "lore_counter_added", map[string]interface{}{
+		"seat":    perm.Controller,
+		"card":    perm.Card.DisplayName(),
+		"chapter": chapter,
+	})
 
 	// If final chapter (typically 3), the saga will be sacrificed by SBA §704.5s.
 	return chapter

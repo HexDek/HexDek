@@ -91,6 +91,30 @@ func MoveCard(gs *GameState, card *Card, ownerSeat int, fromZone, toZone, reason
 		})
 	}
 
+	// card_exiled: fires when any card moves to exile (non-battlefield
+	// sources). Battlefield→exile is handled in FireZoneChangeTriggers.
+	// Used by The War Doctor, Syr Vondam Sunstar Exemplar.
+	if dest == "exile" {
+		FireCardTrigger(gs, "card_exiled", map[string]interface{}{
+			"seat":      ownerSeat,
+			"card":      card.DisplayName(),
+			"from_zone": fromZone,
+			"source":    reason,
+		})
+	}
+
+	// zone_change: generic event for ANY zone transition (non-battlefield
+	// sources). Battlefield exits are handled in FireZoneChangeTriggers.
+	// Used by Ketramose, Necrotic Ooze, Underworld Breach, Sidisi Brood
+	// Tyrant.
+	FireCardTrigger(gs, "zone_change", map[string]interface{}{
+		"seat":      ownerSeat,
+		"card":      card.DisplayName(),
+		"from_zone": fromZone,
+		"to_zone":   dest,
+		"source":    reason,
+	})
+
 	// CR Ixalan descend: a permanent card entering any graveyard — the
 	// owner's or not — counts as a "descend" event for that permanent's
 	// OWNER. We only track the owner seat's flag here; observer triggers

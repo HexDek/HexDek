@@ -316,6 +316,12 @@ func ActivateAbility(gs *GameState, seatIdx int, perm *Permanent, abilityIdx int
 					"rule":   "602.1",
 				},
 			})
+			// Dispatch tap_event for cards like Magda, Brazen Outlaw
+			// and Emmara, Soul of the Accord.
+			FireCardTrigger(gs, "tap_event", map[string]interface{}{
+				"seat": seatIdx,
+				"perm": perm,
+			})
 		}
 		// Mana cost.
 		if ab.Cost.Mana != nil {

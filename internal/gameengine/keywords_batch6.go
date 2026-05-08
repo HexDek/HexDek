@@ -425,6 +425,13 @@ func ApplyReadAhead(gs *GameState, perm *Permanent, chapter int) {
 			"rule":             "702.155",
 		},
 	})
+	// Fire lore_counter_added — Read Ahead jumps directly to the chosen
+	// chapter, so fire for the final chapter reached (not each intermediate).
+	FireCardTrigger(gs, "lore_counter_added", map[string]interface{}{
+		"seat":    perm.Controller,
+		"card":    perm.Card.DisplayName(),
+		"chapter": chapter,
+	})
 }
 
 // ===========================================================================

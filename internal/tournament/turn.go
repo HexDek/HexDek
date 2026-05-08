@@ -147,6 +147,11 @@ func takeTurnImpl(gs *gameengine.GameState, hook func(*gameengine.GameState)) {
 	gs.InvalidateCharacteristicsCache()
 	gameengine.FireDelayedTriggers(gs, gs.Phase, gs.Step)
 	gameengine.UntapAll(gs, active)
+	// §502 trigger: cards like Rasputin Dreamweaver and Seedborn Muse
+	// listen for the untap_step event to snapshot or react to untap state.
+	gameengine.FireCardTrigger(gs, "untap_step", map[string]interface{}{
+		"active_seat": active,
+	})
 	// Per-turn bookkeeping: drain mana pool (§500.4), reset lands-played.
 	seat.ManaPool = 0
 	if seat.Mana != nil {
@@ -182,6 +187,13 @@ func takeTurnImpl(gs *gameengine.GameState, hook func(*gameengine.GameState)) {
 	gameengine.FireCardTrigger(gs, "upkeep_controller", map[string]interface{}{
 		"active_seat": active,
 	})
+	// §503 opponent upkeep: cards like Slicer, Hired Muscle trigger on
+	// each opponent's upkeep (i.e. the upkeep of any non-active player).
+	for _, opp := range gs.Opponents(active) {
+		gameengine.FireCardTrigger(gs, "upkeep_opponent", map[string]interface{}{
+			"seat": opp,
+		})
+	}
 	gameengine.StateBasedActions(gs)
 	// Drain the stack: resolve any triggered abilities pushed during
 	// upkeep (e.g., Mystic Remora, Smothering Tithe, Rhystic Study).

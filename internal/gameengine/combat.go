@@ -473,6 +473,12 @@ func DeclareAttackers(gs *GameState, attackerSeat int) []*Permanent {
 
 		if !p.HasKeyword("vigilance") {
 			p.Tapped = true
+			// Dispatch tap_event for cards like Magda, Brazen Outlaw
+			// and Emmara, Soul of the Accord.
+			FireCardTrigger(gs, "tap_event", map[string]interface{}{
+				"seat": p.Controller,
+				"perm": p,
+			})
 		}
 		declared = append(declared, p)
 	}
@@ -1351,6 +1357,12 @@ func applyCombatDamageToPlayer(gs *GameState, src *Permanent, amount, seatIdx in
 		FireCardTrigger(gs, "life_lost", map[string]interface{}{
 			"seat":   seatIdx,
 			"amount": amount,
+			"source": src.Card.DisplayName(),
+		})
+		// Fire life_change trigger so Exquisite Blood can react to combat damage.
+		FireCardTrigger(gs, "life_change", map[string]interface{}{
+			"seat":   seatIdx,
+			"amount": -amount,
 			"source": src.Card.DisplayName(),
 		})
 	}

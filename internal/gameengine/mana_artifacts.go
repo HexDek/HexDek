@@ -119,6 +119,7 @@ func ArtifactManaPotential(p *Permanent) int {
 //   - Mana Vault / Grim Monolith / Basalt Monolith flag themselves as
 //     "stuck-tapped" so untap_step can choose to leave them tapped.
 func ApplyArtifactMana(gs *GameState, seat *Seat, p *Permanent) (int, bool) {
+	wasTapped := p != nil && p.Tapped
 	pips, ok := applyArtifactManaImpl(gs, seat, p)
 	if ok && gs != nil {
 		FireCardTrigger(gs, "artifact_tapped_for_mana", map[string]interface{}{
@@ -128,6 +129,14 @@ func ApplyArtifactMana(gs *GameState, seat *Seat, p *Permanent) (int, bool) {
 			"pips":            pips,
 			"artifact_name":   p.Card.DisplayName(),
 		})
+		// Dispatch tap_event for cards like Magda, Brazen Outlaw.
+		// Only fire when the artifact actually transitioned to tapped.
+		if !wasTapped && p.Tapped {
+			FireCardTrigger(gs, "tap_event", map[string]interface{}{
+				"seat": seat.Idx,
+				"perm": p,
+			})
+		}
 	}
 	return pips, ok
 }

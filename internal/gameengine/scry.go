@@ -69,6 +69,13 @@ func Scry(gs *GameState, seatIdx int, count int) {
 			"rule":        "701.18",
 		},
 	})
+
+	// Dispatch per-card trigger so cards like Elrond, Master of Healing
+	// can react to scry events.
+	FireCardTrigger(gs, "scry", map[string]interface{}{
+		"seat":   seatIdx,
+		"amount": count,
+	})
 }
 
 // Surveil implements CR §701.46 — look at top N, Hat decides which go

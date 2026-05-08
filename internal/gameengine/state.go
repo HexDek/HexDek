@@ -1357,6 +1357,12 @@ func GainLife(gs *GameState, seat, amount int, source string) {
 		"amount": amount,
 		"source": source,
 	})
+	// Fire life_change trigger (positive amount = gain) for symmetry.
+	FireCardTrigger(gs, "life_change", map[string]interface{}{
+		"seat":   seat,
+		"amount": amount,
+		"source": source,
+	})
 }
 
 // LoseLife subtracts life, increments Turn.LifeLost, fires life_lost
@@ -1379,6 +1385,12 @@ func LoseLife(gs *GameState, seat, amount int, source string) {
 	FireCardTrigger(gs, "life_lost", map[string]interface{}{
 		"seat":   seat,
 		"amount": amount,
+		"source": source,
+	})
+	// Fire life_change trigger so Exquisite Blood can react to any life loss.
+	FireCardTrigger(gs, "life_change", map[string]interface{}{
+		"seat":   seat,
+		"amount": -amount,
 		"source": source,
 	})
 }
@@ -1407,6 +1419,12 @@ func DealDamage(gs *GameState, seat, amount int, source string) {
 		"amount": amount,
 		"source": source,
 	})
+	// Fire life_change trigger so Exquisite Blood can react to noncombat damage.
+	FireCardTrigger(gs, "life_change", map[string]interface{}{
+		"seat":   seat,
+		"amount": -amount,
+		"source": source,
+	})
 }
 
 // drawOne pulls the top card of seat's library into its hand. Sets
@@ -1428,6 +1446,28 @@ func (gs *GameState) drawOne(seat int) (*Card, bool) {
 		s.Flags = map[string]int{}
 	}
 	s.Flags["cards_drawn_this_turn"]++
+
+	// Fire "card_drawn" trigger for per-card handlers (Sheoldred,
+	// Consecrated Sphinx, Smothering Tithe, Nekusar, Queza, Orcish
+	// Bowmasters, The Watcher in the Water, The Council of Four,
+	// Zimone and Dina, etc.). Recursion guard prevents infinite loops
+	// when a draw-trigger handler itself draws cards (e.g. Consecrated
+	// Sphinx drawing two in response to an opponent draw).
+	if gs.Flags == nil {
+		gs.Flags = map[string]int{}
+	}
+	gs.Flags["_card_drawn_depth"]++
+	if gs.Flags["_card_drawn_depth"] <= 8 {
+		FireCardTrigger(gs, "card_drawn", map[string]interface{}{
+			"seat":          seat,
+			"drawer_seat":   seat,
+			"card":          c.DisplayName(),
+			"nth_this_turn": s.Flags["cards_drawn_this_turn"],
+			"source":        "draw",
+		})
+	}
+	gs.Flags["_card_drawn_depth"]--
+
 	return c, true
 }
 

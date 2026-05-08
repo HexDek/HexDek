@@ -530,6 +530,46 @@ func CountControlledByTypeExported(gs *GameState, seat int, filter string) int {
 }
 
 // -----------------------------------------------------------------------------
+// Crime detection (OTJ §702.159)
+// -----------------------------------------------------------------------------
+
+// maybeFireCrime checks if any of the given targets belong to an opponent of
+// the source's controller. If so, it fires a "crime" trigger event. In MTG,
+// "committing a crime" means targeting an opponent, a permanent an opponent
+// controls, a spell an opponent controls, or a card in an opponent's graveyard.
+func maybeFireCrime(gs *GameState, src *Permanent, targets []Target) {
+	if gs == nil || src == nil || len(targets) == 0 {
+		return
+	}
+	caster := src.Controller
+	for _, t := range targets {
+		isOpponentTarget := false
+		switch t.Kind {
+		case TargetKindSeat:
+			isOpponentTarget = t.Seat != caster
+		case TargetKindPermanent:
+			if t.Permanent != nil {
+				isOpponentTarget = t.Permanent.Controller != caster
+			}
+		case TargetKindCard:
+			// Card in an opponent's graveyard/exile counts.
+			isOpponentTarget = t.Seat != caster && t.Seat >= 0
+		case TargetKindStackItem:
+			if t.Stack != nil {
+				isOpponentTarget = t.Stack.Controller != caster
+			}
+		}
+		if isOpponentTarget {
+			FireCardTrigger(gs, "crime", map[string]interface{}{
+				"seat":   caster,
+				"source": sourceName(src),
+			})
+			return // Only fire once per resolution.
+		}
+	}
+}
+
+// -----------------------------------------------------------------------------
 // Leaf handlers
 // -----------------------------------------------------------------------------
 
@@ -547,6 +587,7 @@ func resolveDamage(gs *GameState, src *Permanent, e *gameast.Damage) {
 			targets = []Target{{Kind: TargetKindSeat, Seat: opps[0]}}
 		}
 	}
+	maybeFireCrime(gs, src, targets)
 	if e.Divided && len(targets) > 1 {
 		// CR §601.2d: "distribute N damage among any number of targets".
 		// The caster divides the total damage among the targets at cast
@@ -696,8 +737,22 @@ func applyDamage(gs *GameState, src *Permanent, t Target, amount int) {
 				"to":   gs.Seats[t.Seat].Life,
 			},
 		})
+		// Fire life_change trigger so Exquisite Blood can react to any life loss.
+		FireCardTrigger(gs, "life_change", map[string]interface{}{
+			"seat":   t.Seat,
+			"amount": -modified,
+			"source": sourceName(src),
+		})
 		// Fire life_lost trigger so Valgavoth, Lich's Mastery, etc. react.
 		FireCardTrigger(gs, "life_lost", map[string]interface{}{
+			"seat":   t.Seat,
+			"amount": modified,
+			"source": sourceName(src),
+		})
+		// Fire noncombat_damage_to_player for Niv-Mizzet Visionary etc.
+		// applyDamage in resolve.go is the noncombat path; combat goes
+		// through applyCombatDamageToPlayer in combat.go.
+		FireCardTrigger(gs, "noncombat_damage_to_player", map[string]interface{}{
 			"seat":   t.Seat,
 			"amount": modified,
 			"source": sourceName(src),
@@ -725,6 +780,13 @@ func applyDamage(gs *GameState, src *Permanent, t Target, amount int) {
 			Details: map[string]interface{}{
 				"target_card": t.Permanent.Card.DisplayName(),
 			},
+		})
+		// Fire noncombat_damage_to_creature for Taii Wakeen, Perfect Shot etc.
+		FireCardTrigger(gs, "noncombat_damage_to_creature", map[string]interface{}{
+			"seat":   t.Permanent.Controller,
+			"amount": modified,
+			"source": sourceName(src),
+			"target": t.Permanent.Card.DisplayName(),
 		})
 	}
 }
@@ -795,6 +857,7 @@ func resolveDiscard(gs *GameState, src *Permanent, e *gameast.Discard) {
 			targets = []Target{{Kind: TargetKindSeat, Seat: opps[0]}}
 		}
 	}
+	maybeFireCrime(gs, src, targets)
 	for _, t := range targets {
 		seat, ok := seatFromTarget(t)
 		if !ok {
@@ -973,6 +1036,12 @@ func resolveLoseLife(gs *GameState, src *Permanent, e *gameast.LoseLife) {
 				"to":   gs.Seats[seat].Life,
 			},
 		})
+		// Fire life_change trigger so Exquisite Blood can react to any life loss.
+		FireCardTrigger(gs, "life_change", map[string]interface{}{
+			"seat":   seat,
+			"amount": -modified,
+			"source": sourceName(src),
+		})
 		if seat >= 0 && seat < len(gs.Seats) && gs.Seats[seat] != nil {
 			gs.Seats[seat].Turn.LifeLost += modified
 			if gs.Seats[seat].Flags == nil {
@@ -1021,6 +1090,12 @@ func resolveSetLife(gs *GameState, src *Permanent, e *gameast.SetLife) {
 				"to":   amount,
 			},
 		})
+		// Fire life_change trigger so Exquisite Blood can react to set-life effects.
+		FireCardTrigger(gs, "life_change", map[string]interface{}{
+			"seat":   seat,
+			"amount": amount - prevLife,
+			"source": sourceName(src),
+		})
 	}
 }
 
@@ -1030,6 +1105,7 @@ func resolveSetLife(gs *GameState, src *Permanent, e *gameast.SetLife) {
 
 func resolveDestroy(gs *GameState, src *Permanent, e *gameast.Destroy) {
 	targets := PickTarget(gs, src, e.Target)
+	maybeFireCrime(gs, src, targets)
 	for _, t := range targets {
 		if t.Kind != TargetKindPermanent || t.Permanent == nil {
 			continue
@@ -1058,6 +1134,7 @@ func resolveExile(gs *GameState, src *Permanent, e *gameast.Exile) {
 	}
 
 	targets := PickTarget(gs, src, e.Target)
+	maybeFireCrime(gs, src, targets)
 	for _, t := range targets {
 		switch t.Kind {
 		case TargetKindPermanent:
@@ -1118,6 +1195,7 @@ func resolveBounce(gs *GameState, src *Permanent, e *gameast.Bounce) {
 	}
 
 	targets := PickTarget(gs, src, e.Target)
+	maybeFireCrime(gs, src, targets)
 	for _, t := range targets {
 		if t.Kind != TargetKindPermanent || t.Permanent == nil {
 			continue
@@ -1294,10 +1372,21 @@ func resolveTap(gs *GameState, src *Permanent, e *gameast.TapEffect) {
 	if len(targets) == 0 && src != nil {
 		targets = []Target{{Kind: TargetKindPermanent, Permanent: src, Seat: src.Controller}}
 	}
+	maybeFireCrime(gs, src, targets)
 	for _, t := range targets {
 		if t.Kind == TargetKindPermanent && t.Permanent != nil {
+			wasTapped := t.Permanent.Tapped
 			t.Permanent.Tapped = true
 			gs.LogEvent(Event{Kind: "tap", Source: sourceName(src)})
+			// Dispatch tap_event for cards like Magda, Brazen Outlaw
+			// and Emmara, Soul of the Accord. Only fire when actually
+			// transitioning from untapped to tapped.
+			if !wasTapped {
+				FireCardTrigger(gs, "tap_event", map[string]interface{}{
+					"seat": t.Permanent.Controller,
+					"perm": t.Permanent,
+				})
+			}
 		}
 	}
 }
@@ -1318,6 +1407,7 @@ func resolveUntap(gs *GameState, src *Permanent, e *gameast.UntapEffect) {
 
 func resolveGainControl(gs *GameState, src *Permanent, e *gameast.GainControl) {
 	targets := PickTarget(gs, src, e.Target)
+	maybeFireCrime(gs, src, targets)
 	newController := 0
 	if src != nil {
 		newController = src.Controller
@@ -2252,6 +2342,13 @@ func resolveCounterSpell(gs *GameState, src *Permanent, e *gameast.CounterSpell)
 	// side effects that can't be expressed in the AST. This function only
 	// runs for counterspells that DON'T have a per-card handler.
 	casterSeat := controllerSeat(src)
+
+	// Countering a spell always targets an opponent's spell — commit a crime.
+	FireCardTrigger(gs, "crime", map[string]interface{}{
+		"seat":   casterSeat,
+		"source": sourceName(src),
+	})
+
 	ResolveCounterSpellGeneric(gs, casterSeat, e)
 }
 
@@ -2403,11 +2500,19 @@ func resolveExtraCombat(gs *GameState, src *Permanent, e *gameast.ExtraCombat) {
 
 func resolveScry(gs *GameState, src *Permanent, e *gameast.Scry) {
 	count, _ := evalNumber(gs, src, &e.Count)
+	seat := controllerSeat(src)
 	gs.LogEvent(Event{
 		Kind:   "scry",
-		Seat:   controllerSeat(src),
+		Seat:   seat,
 		Source: sourceName(src),
 		Amount: count,
+	})
+
+	// Dispatch per-card trigger so cards like Elrond, Master of Healing
+	// can react to scry events.
+	FireCardTrigger(gs, "scry", map[string]interface{}{
+		"seat":   seat,
+		"amount": count,
 	})
 }
 
