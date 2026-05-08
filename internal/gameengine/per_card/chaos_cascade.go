@@ -228,8 +228,8 @@ func thousandYearStormTrigger(gs *gameengine.GameState, perm *gameengine.Permane
 
 	// Count instant/sorcery spells cast this turn BEFORE this one.
 	priorCasts := 0
-	if gs.Seats[casterSeat] != nil && gs.Seats[casterSeat].Flags != nil {
-		priorCasts = gs.Seats[casterSeat].Flags["instant_sorcery_cast_this_turn"]
+	if gs.Seats[casterSeat] != nil {
+		priorCasts = gs.Seats[casterSeat].Turn.NthCastOfType("instant", "sorcery")
 		if priorCasts > 0 {
 			priorCasts-- // subtract the current cast
 		}

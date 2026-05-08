@@ -17,50 +17,11 @@ import (
 //
 // Implementation:
 //   - Activated ability (idx 0): tap Vazi, mint X Treasures for the
-//     lowest-life opponent (helps the most-pressured player to bait deals).
-//     X = perm.Flags["vazi_treasures_minted_turn"+turnKey] proxy: we read
-//     ctx["treasures_this_turn"] when present; otherwise default 0.
-//   - "token_created": when *we* create a Treasure, increment our
-//     per-turn counter (engine doesn't track this natively).
+//     lowest-life opponent. X = seat.Turn.TreasuresCreated.
 //   - The opponent-cast-with-treasure trigger requires per-spell mana
 //     provenance, which the engine doesn't track. emitPartial.
 func registerVaziKeenNegotiator(r *Registry) {
 	r.OnActivated("Vazi, Keen Negotiator", vaziActivate)
-	r.OnTrigger("Vazi, Keen Negotiator", "token_created", vaziTokenCreated)
-}
-
-func vaziTreasuresKey(turn int) string {
-	return "vazi_treasures_this_turn"
-}
-
-func vaziTokenCreated(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
-	if gs == nil || perm == nil || ctx == nil {
-		return
-	}
-	creatorSeat, _ := ctx["controller_seat"].(int)
-	if creatorSeat != perm.Controller {
-		return
-	}
-	types, _ := ctx["types"].([]string)
-	isTreasure := false
-	for _, t := range types {
-		if t == "treasure" || t == "Treasure" {
-			isTreasure = true
-			break
-		}
-	}
-	if !isTreasure {
-		return
-	}
-	if perm.Flags == nil {
-		perm.Flags = map[string]int{}
-	}
-	// Reset per-turn counter on turn change.
-	if perm.Flags["vazi_turn"] != gs.Turn {
-		perm.Flags["vazi_turn"] = gs.Turn
-		perm.Flags[vaziTreasuresKey(gs.Turn)] = 0
-	}
-	perm.Flags[vaziTreasuresKey(gs.Turn)]++
 }
 
 func vaziActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilityIdx int, ctx map[string]interface{}) {
@@ -77,10 +38,7 @@ func vaziActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilityId
 	}
 	src.Tapped = true
 
-	x := 0
-	if src.Flags != nil {
-		x = src.Flags[vaziTreasuresKey(gs.Turn)]
-	}
+	x := gs.Seats[src.Controller].Turn.TreasuresCreated
 	if x <= 0 {
 		emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 			"seat": src.Controller,

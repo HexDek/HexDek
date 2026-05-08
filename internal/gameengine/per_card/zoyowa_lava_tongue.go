@@ -39,17 +39,7 @@ func zoyowaLavaTongueEnd(gs *gameengine.GameState, perm *gameengine.Permanent, c
 	if seat == nil {
 		return
 	}
-	descended := false
-	for _, c := range seat.Graveyard {
-		if c == nil {
-			continue
-		}
-		if cardHasTypeAny(c, "creature", "artifact", "enchantment", "planeswalker", "land", "battle") {
-			descended = true
-			break
-		}
-	}
-	if !descended {
+	if !seat.Turn.Descended {
 		return
 	}
 	hits := 0
@@ -76,6 +66,6 @@ func zoyowaLavaTongueEnd(gs *gameengine.GameState, perm *gameengine.Permanent, c
 		"opponents_hit": hits,
 	})
 	emitPartial(gs, slug, perm.Card.DisplayName(),
-		"descended_check_uses_full_yard_scan_not_per_turn_counter_opponents_assumed_to_not_pay")
+		"opponents_assumed_to_not_pay")
 	_ = gs.CheckEnd()
 }

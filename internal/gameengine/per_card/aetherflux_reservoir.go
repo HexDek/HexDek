@@ -39,10 +39,10 @@ func aetherfluxOnSpellCast(gs *gameengine.GameState, perm *gameengine.Permanent,
 	if casterSeat != perm.Controller {
 		return
 	}
-	// Count "cast this turn" events by the controller.
-	casts := countCastsThisTurnBy(gs, perm.Controller)
+	// Read centralized cast counter — includes the triggering spell.
+	casts := gs.Seats[perm.Controller].Turn.SpellsCast
 	if casts < 1 {
-		casts = 1 // defensive: the triggering cast itself counts
+		casts = 1
 	}
 	// Gain `casts` life.
 	gameengine.GainLife(gs, perm.Controller, casts, perm.Card.DisplayName())
@@ -119,24 +119,3 @@ func aetherfluxActivate(gs *gameengine.GameState, src *gameengine.Permanent, abi
 	}
 }
 
-// countCastsThisTurnBy counts "cast" events on the event log for the
-// current turn by the specified seat. When storm counters (cast_counts.go)
-// are available, callers should prefer those; this is a fallback.
-func countCastsThisTurnBy(gs *gameengine.GameState, seat int) int {
-	if gs == nil {
-		return 0
-	}
-	// Walk backwards from the tail until we cross a turn boundary
-	// (turn_start / begin_turn event) — conservative but robust.
-	n := 0
-	for i := len(gs.EventLog) - 1; i >= 0; i-- {
-		ev := gs.EventLog[i]
-		if ev.Kind == "turn_start" || ev.Kind == "begin_turn" || ev.Kind == "untap_step" {
-			break
-		}
-		if ev.Kind == "cast" && ev.Seat == seat {
-			n++
-		}
-	}
-	return n
-}
