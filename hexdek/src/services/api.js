@@ -11,7 +11,18 @@ async function request(path, opts = {}) {
     headers: { 'Content-Type': 'application/json', ...opts.headers },
     ...opts,
   })
-  if (!res.ok) throw new Error(`API ${res.status}: ${path}`)
+  if (!res.ok) {
+    // Pull the body out so callers can show a meaningful message and
+    // attach the status as a property (callers shouldn't have to grep
+    // an error string for "401"). We swallow JSON parse errors — the
+    // body is plain text on http.Error responses anyway.
+    let body = ''
+    try { body = await res.text() } catch { /* noop */ }
+    const err = new Error(body?.trim() || `API ${res.status}: ${path}`)
+    err.status = res.status
+    err.body = body
+    throw err
+  }
   return res.json()
 }
 
