@@ -553,6 +553,11 @@ func resolveActivatedAbility(gs *GameState, item *StackItem) {
 // FindSacrificeTarget finds a permanent to sacrifice matching the filter.
 // Returns nil if no valid target exists. Used by both buildActivationOptions
 // (legality check) and ActivateAbility (cost payment).
+//
+// When the seat's Hat implements SacrificeChooser AND the filter has more
+// than one matching candidate, the Hat picks; otherwise the first match
+// (deterministic) is returned. "Self" sacrifices always resolve to the
+// source permanent — there is no choice to make.
 func FindSacrificeTarget(gs *GameState, seatIdx int, source *Permanent, filter *gameast.Filter) *Permanent {
 	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) || filter == nil {
 		return nil
@@ -563,21 +568,37 @@ func FindSacrificeTarget(gs *GameState, seatIdx int, source *Permanent, filter *
 	}
 	base := strings.ToLower(filter.Base)
 	isSelf := base == "self" || base == "this" || base == "~"
+	if isSelf {
+		for _, p := range seat.Battlefield {
+			if p == source {
+				return p
+			}
+		}
+		return nil
+	}
+	var candidates []*Permanent
 	for _, p := range seat.Battlefield {
 		if p == nil {
 			continue
 		}
-		if isSelf {
-			if p == source {
-				return p
-			}
-			continue
-		}
 		if matchesSacrificeFilter(p, filter) {
-			return p
+			candidates = append(candidates, p)
 		}
 	}
-	return nil
+	if len(candidates) == 0 {
+		return nil
+	}
+	if len(candidates) == 1 {
+		return candidates[0]
+	}
+	if seat.Hat != nil {
+		if chooser, ok := seat.Hat.(SacrificeChooser); ok {
+			if pick := chooser.ChooseSacrifice(gs, seatIdx, source, "activation_cost", candidates); pick != nil {
+				return pick
+			}
+		}
+	}
+	return candidates[0]
 }
 
 func matchesSacrificeFilter(p *Permanent, filter *gameast.Filter) bool {

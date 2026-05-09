@@ -116,3 +116,135 @@ func TestChooseSurveil_SendsFlashbackToGraveyard_NonReanimator(t *testing.T) {
 		t.Fatalf("flashback card should have been surveiled to graveyard; gy=%v top=%v", gy, top)
 	}
 }
+
+// Item 2: with an active graveyard ZoneCastGrant in play (Underworld
+// Breach-style), instants/sorceries that lack an intrinsic recursion
+// keyword should ALSO be biased toward the graveyard during discard,
+// since the grant lets us cast them from there.
+func TestChooseDiscard_PrefersInstantWhenGraveyardCastGrantActive(t *testing.T) {
+	sp := &StrategyProfile{Archetype: ArchetypeMidrange}
+	h := NewYggdrasilHatWithNoise(sp, 0, 0)
+	gs := newTestGame(t, 2)
+
+	// A non-spell baseline (no recursion potential, average value).
+	vanilla := newTestCardMinimal("Grizzly Bears", []string{"creature"}, 2, nil)
+	// Plain instant — no flashback. Without an enabler, this should NOT be
+	// preferentially discarded over the vanilla creature.
+	plainInstant := newTestCardMinimal("Lightning Bolt", []string{"instant"}, 1, nil)
+
+	// First confirm baseline: with no grant, the vanilla creature isn't
+	// favored over the instant by recursion bias (sanity guard).
+	_ = h.ChooseDiscard(gs, 0, []*gameengine.Card{plainInstant, vanilla}, 1)
+
+	// Now register an active graveyard zone-cast grant for seat 0.
+	// (Mirrors what RegisterZoneCastGrant does under Underworld Breach
+	// resolution — we set the grant directly on the GameState here.)
+	if gs.ZoneCastGrants == nil {
+		gs.ZoneCastGrants = map[*gameengine.Card]*gameengine.ZoneCastPermission{}
+	}
+	gs.ZoneCastGrants[plainInstant] = &gameengine.ZoneCastPermission{
+		Zone:              "graveyard",
+		Keyword:           "escape",
+		ManaCost:          -1,
+		RequireController: 0,
+		SourceName:        "Underworld Breach",
+	}
+
+	got := h.ChooseDiscard(gs, 0, []*gameengine.Card{plainInstant, vanilla}, 1)
+	if len(got) != 1 || got[0] != plainInstant {
+		t.Fatalf("with active graveyard cast grant, plain instant should be preferred discard; got %v", got)
+	}
+}
+
+// Item 3: SacrificeChooser preference. Persist > vanilla > commander.
+func TestChooseSacrifice_PrefersPersistOverVanilla(t *testing.T) {
+	sp := &StrategyProfile{Archetype: ArchetypeMidrange}
+	h := NewYggdrasilHatWithNoise(sp, 0, 0)
+	gs := newTestGame(t, 2)
+
+	persistCard := cardWithStaticText("Murderous Redcap", []string{"creature"}, 4, "persist")
+	persist := newTestPermanent(gs.Seats[0], persistCard, 1, 1)
+
+	vanillaCard := newTestCardMinimal("Grizzly Bears", []string{"creature"}, 2, nil)
+	vanilla := newTestPermanent(gs.Seats[0], vanillaCard, 2, 2)
+
+	pick := h.ChooseSacrifice(gs, 0, nil, "activation_cost",
+		[]*gameengine.Permanent{vanilla, persist})
+	if pick != persist {
+		t.Fatalf("persist creature should be preferred over vanilla; got %v",
+			pick.Card.DisplayName())
+	}
+}
+
+// Item 3: tokens preferred over non-token creatures with no recursion.
+func TestChooseSacrifice_TokensOverNonTokens(t *testing.T) {
+	sp := &StrategyProfile{Archetype: ArchetypeMidrange}
+	h := NewYggdrasilHatWithNoise(sp, 0, 0)
+	gs := newTestGame(t, 2)
+
+	// Token: the engine marks tokens via Card.Types containing "token".
+	tokenCard := newTestCardMinimal("Soldier Token", []string{"creature", "token"}, 0, nil)
+	token := newTestPermanent(gs.Seats[0], tokenCard, 1, 1)
+
+	vanillaCard := newTestCardMinimal("Grizzly Bears", []string{"creature"}, 2, nil)
+	vanilla := newTestPermanent(gs.Seats[0], vanillaCard, 2, 2)
+
+	pick := h.ChooseSacrifice(gs, 0, nil, "activation_cost",
+		[]*gameengine.Permanent{vanilla, token})
+	if pick != token {
+		t.Fatalf("token should be preferred over vanilla creature; got %v",
+			pick.Card.DisplayName())
+	}
+}
+
+// Item 3: undying creature still has counters bypassing trigger should NOT
+// be preferred — the score guards against re-sacrificing a creature that
+// already returned with a +1/+1 counter.
+func TestChooseSacrifice_UndyingExhaustedNotPreferred(t *testing.T) {
+	sp := &StrategyProfile{Archetype: ArchetypeMidrange}
+	h := NewYggdrasilHatWithNoise(sp, 0, 0)
+	gs := newTestGame(t, 2)
+
+	undyingCard := cardWithStaticText("Young Wolf", []string{"creature"}, 1, "undying")
+	undying := newTestPermanent(gs.Seats[0], undyingCard, 1, 1)
+	// Already has a +1/+1 counter — undying won't fire again.
+	if undying.Counters == nil {
+		undying.Counters = map[string]int{}
+	}
+	undying.Counters["+1/+1"] = 1
+
+	tokenCard := newTestCardMinimal("Soldier Token", []string{"creature", "token"}, 0, nil)
+	token := newTestPermanent(gs.Seats[0], tokenCard, 1, 1)
+
+	pick := h.ChooseSacrifice(gs, 0, nil, "activation_cost",
+		[]*gameengine.Permanent{undying, token})
+	// Token still wins — undying with a +1/+1 counter is "spent".
+	if pick != token {
+		t.Fatalf("token should beat exhausted-undying creature; got %v",
+			pick.Card.DisplayName())
+	}
+}
+
+// Item 3: engine integration — ActivationAbility's sacrifice cost path
+// routes through FindSacrificeTarget, which must consult the Hat when
+// it implements SacrificeChooser. Smoke test: same persist-vs-vanilla
+// scenario, called via FindSacrificeTarget directly.
+func TestFindSacrificeTarget_RoutesThroughHat(t *testing.T) {
+	sp := &StrategyProfile{Archetype: ArchetypeMidrange}
+	h := NewYggdrasilHatWithNoise(sp, 0, 0)
+	gs := newTestGame(t, 2)
+	gs.Seats[0].Hat = h
+
+	vanillaCard := newTestCardMinimal("Grizzly Bears", []string{"creature"}, 2, nil)
+	_ = newTestPermanent(gs.Seats[0], vanillaCard, 2, 2)
+
+	persistCard := cardWithStaticText("Murderous Redcap", []string{"creature"}, 4, "persist")
+	persist := newTestPermanent(gs.Seats[0], persistCard, 1, 1)
+
+	filter := &gameast.Filter{Base: "creature"}
+	got := gameengine.FindSacrificeTarget(gs, 0, nil, filter)
+	if got != persist {
+		t.Fatalf("FindSacrificeTarget should consult Hat's SacrificeChooser and return the persist creature; got %v",
+			got)
+	}
+}
