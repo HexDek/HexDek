@@ -4211,6 +4211,68 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 			}
 		}
 
+		// Gang-block — multiple blockers combining to kill a dangerous
+		// attacker. Only fires when:
+		//   - we MUST block (lethal incoming or must-block attacker)
+		//   - the attacker is dangerous (raw 4+ power, lifelink/infect/
+		//     annihilator/double strike, etc.)
+		//   - the current single-blocker choice doesn't already kill
+		//     the attacker
+		//   - 2 or 3 creatures from the legal pool can combine to kill
+		//     it (sum of powers ≥ attacker toughness, attacker not
+		//     indestructible)
+		// Trades 2-3 small creatures for a single big threat — the
+		// classic "wall of bodies" answer to a Voltron commander or a
+		// 6/6 trampler that nothing 1v1's profitably.
+		gangAlreadyKills := false
+		if len(chosen) >= 1 {
+			aDies, _ := simulateBlockerTrade(gs, atk, chosen[0])
+			gangAlreadyKills = aDies
+		}
+		if !gangAlreadyKills && (willDieIfUnblocked || mustBlock) {
+			dangerous := atkPow >= 4 ||
+				atk.HasKeyword("lifelink") ||
+				atk.HasKeyword("infect") || atk.HasKeyword("toxic") || atk.HasKeyword("poisonous") ||
+				atkDS ||
+				gameengine.GetAnnihilatorN(atk) > 0
+			if dangerous && !atk.HasKeyword("indestructible") {
+				// Greedy: take blockers in descending power so we kill
+				// the attacker with the fewest creatures lost. Cap at 3
+				// — beyond that the trade gets too expensive even
+				// against scary threats.
+				byPow := make([]*gameengine.Permanent, 0, len(legal))
+				for _, b := range legal {
+					if b == nil || gs.PowerOf(b) <= 0 {
+						continue
+					}
+					byPow = append(byPow, b)
+				}
+				sort.SliceStable(byPow, func(i, j int) bool {
+					if gs.PowerOf(byPow[i]) != gs.PowerOf(byPow[j]) {
+						return gs.PowerOf(byPow[i]) > gs.PowerOf(byPow[j])
+					}
+					// Tie-break on cheapest stat-sum so we lose less.
+					return gs.PowerOf(byPow[i])+gs.ToughnessOf(byPow[i]) <
+						gs.PowerOf(byPow[j])+gs.ToughnessOf(byPow[j])
+				})
+				gangSum := 0
+				var gang []*gameengine.Permanent
+				for _, b := range byPow {
+					if len(gang) >= 3 {
+						break
+					}
+					gang = append(gang, b)
+					gangSum += gs.PowerOf(b)
+					if gangSum >= atkTou {
+						break
+					}
+				}
+				if gangSum >= atkTou && len(gang) >= 2 {
+					chosen = gang
+				}
+			}
+		}
+
 		// Menace: need a second blocker.
 		if len(chosen) > 0 && atk.HasKeyword("menace") {
 			extras := make([]*gameengine.Permanent, 0, len(legal))
