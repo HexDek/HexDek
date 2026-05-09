@@ -11,23 +11,23 @@ kanban-plugin: board
 
 ## High Priority — Engine
 
-- [ ] **Remaining 276 commander handlers** — coverage at 447/652 files (750 registered names covering all 652 pool commanders). Template generator (`cmd/gen-handlers/main.go`) handles simple patterns. Pool now at 1292 decks (threshold lowered 100→80, 2026-05-05). #engine #per_card
+- [x] **Remaining 276 commander handlers** — generator improved (fuzzy slug resolution, hand-edit preservation, deterministic number extraction). NO_AST 73→0, 195/196 unhandled pool commanders templated. PR #1 merged 2026-05-09. #engine #per_card
 
 
 ## High Priority — Platform
 
-- [ ] **Mobile full pass** — leaderboard, spectate, operator, meta pages need individual mobile audit at 375px. Deck drilldown done, rest pending. #ui #mobile
-- [ ] **Mobile deck drilldown: curse data last** — on mobile, curse/genetic section should render below all other panels (currently positioned mid-page). #ui #mobile
-- [ ] **Global glossary disclosure system** — every stat/label/metric across all pages tap-to-expand inline explanation. One shared component + glossary data source. Replaces FAQ concept. #ui #ux #accessibility
-- [ ] **Curse Proficiency sigil** — cymatic SVG replacing curse section on deck page (circle → flower of life evolution, color-identity tinted). Part of "Hats" → "Curses" rebrand. #ui #design
-- [ ] **Action button context boxes** — brief TLDR above gauntlet/test variant/etc buttons for neurodivergent UX clarity. #ui #ux #accessibility
-- [ ] **"Consider Cutting" rationale** — each cut recommendation needs: what was detected (stats/pattern), why it's recommended (synergy gap, mana curve, etc), the resulting effect, and suggested swaps. #ui #deck #freya
-- [ ] **Value Engine rationale** — explain WHY each value engine was identified for this deck (what cards/interactions trigger it, how the engine functions). #ui #deck #freya
-- [ ] **Win Condition rationale** — show detection logic for each win-con (which cards form the line, what conditions are needed, how the combo resolves). #ui #deck #freya
-- [ ] **Deck clone** — non-owners can clone a deck to their own collection for editing. Clone creates a copy under the cloner's owner dir, then they can rename/edit freely. #ui #platform
-- [ ] **Ephemeral spectator rooms** — "Spectate Live" button on deck drilldown spawns a dedicated game instance for that deck. Keyed by deck_id (second viewer joins existing room, no duplicates). Room runs games continuously while viewers are connected; after last viewer leaves, finishes current game then tears down. Per-room speed dial. Max 8 concurrent rooms. Main fishtank `/spectate` untouched. Games feed into ELO/Heimdall/cardstats (rated). Spectated deck always seat 1 (camera focus). Bracket-matched opponents. Max 50 concurrent rooms, unlimited viewers per room. Backend: `POST /api/spectate/spawn {deck_id}` → `room_id`, WebSocket at `/ws/spectate/{room_id}`. Frontend: same Spectator component, room-aware. #platform #spectate #backend #ui
-- [ ] **Reconnection countdown** — when WebSocket disconnects, show attempt number and countdown timer per reconnection attempt (currently just shows "DISCONNECTED — RECONNECTING"). #ui #ux
-- [ ] **Magic link graceful flow** — user clicks email link → new tab catches the auth post and logs them in → tab auto-closes → original tab plays a console-style "logging in" feed animation → redirects to /operator. #ui #auth #ux
+- [x] **Mobile full pass** — fishtank telemetry hidden, curse section pushed to bottom, meta page padding trimmed for 375px. PR #3 merged 2026-05-09. #ui #mobile
+- [x] **Mobile deck drilldown: curse data last** — flexbox `order: 999` on `.archive-curse-section`. PR #3 merged 2026-05-09. #ui #mobile
+- [x] **Global glossary disclosure system** — ~50 entries, GlossaryTerm component (tap-to-expand, ARIA), wired into 6 pages. PR #4 merged 2026-05-09. #ui #ux #accessibility
+- [ ] ~~**Curse Proficiency sigil**~~ — NIXED (radar plot is fine). #ui #design
+- [x] **Action button context boxes** — ContextBox upgraded with persistent dismissal, 19 context boxes across all action surfaces. PR #8 merged 2026-05-09. #ui #ux #accessibility
+- [x] **"Consider Cutting" rationale** — structured Go backend + expandable React panel. PR #10 merged 2026-05-09. #ui #deck #freya
+- [x] **Value Engine rationale** — trigger/how-it-works/key-pieces per chain. PR #10 merged 2026-05-09. #ui #deck #freya
+- [x] **Win Condition rationale** — combo pieces, conditions, resolution path. PR #10 merged 2026-05-09. #ui #deck #freya
+- [x] **Deck clone** — rate limit 10/hr, cloned_from metadata, clone_log, two-step confirm, sign-in-to-clone UX. PR #7 merged 2026-05-09. #ui #platform
+- [x] **Ephemeral spectator rooms** — RoomManager (856 lines), SpectateRoom.jsx (591 lines), full API, lifecycle tests. PR #5 merged 2026-05-09. #platform #spectate #backend #ui
+- [x] **Reconnection countdown** — exponential backoff (1s-30s), 10 attempts, manual retry, ReconnectBanner component. PR #9 merged 2026-05-09. #ui #ux
+- [x] **Magic link graceful flow** — BroadcastChannel cross-tab auth, console-style login animation, auto-close. PR #9 merged 2026-05-09. #ui #auth #ux
 
 
 ## High Priority — Learning Loop (Observability) — ALL PHASES DONE
@@ -60,23 +60,23 @@ kanban-plugin: board
 
 ## Medium Priority — Hat Decision Making
 
-- [ ] **Equipment stacking intelligence** — hat currently scores equip at a flat 20 with no awareness of existing attachments. Needs: (1) prefer stacking multiple equipment on the same high-value creature over spreading thin, (2) prioritize commander as equip target (survives recast, Voltron payoff), (3) evaluate equipment synergies (Resurrection Orb on commander = recursive value engine). Currently in `greedy.go:scoreEffect` + `ChooseTarget`. #hat #equipment #voltron
-- [ ] **Equipment-specific target scoring** — `ChooseTarget` for equip abilities picks first legal creature. Should score targets by: power/toughness, commander status, evasion keywords (flying/trample/unblockable), existing equipment count (diminishing returns vs stacking value), and equipment-creature synergy (e.g. deathtouch creature + equipment that grants first strike). #hat #equipment #targeting
-- [ ] **Equipment recurrence awareness** — hat should recognize "equip → creature dies → re-equip" loops as value patterns (Skullclamp, Sword cycle). Equipment that generates advantage on connect (Sword of Feast and Famine) should be prioritized on evasive creatures. #hat #equipment #strategy
-- [ ] **Graveyard recursion awareness (non-reanimator)** — all graveyard intelligence (intentional yard dumping, "let it die we can bring it back" logic, reanimation spell scanning) is gated behind `ArchetypeReanimator`. Decks with recursion effects (Szarekh, Meren, Karador) that aren't classified as reanimator don't get strategic graveyard play. Needs: detect recursion density in decklist regardless of archetype classification, apply yard-valuation logic proportionally. #hat #graveyard #strategy
-- [ ] **Zone-cast grant strategic valuation** — Yggdrasil tracks zone-cast grants (flashback, escape, unearth, etc.) but doesn't factor them into discard/surveil decisions for non-reanimator decks. If a creature has Unearth, the hat should value it LESS in hand (can recover from yard) and MORE as a discard target. Same for flashback instants/sorceries. Currently only ArchetypeReanimator gets surveil-to-yard logic. #hat #graveyard #zonecast
-- [ ] **Recursion-aware sacrifice evaluation** — hat should recognize when sacrificing a permanent with a recursion path (Persist, Undying, Unearth, etc.) is net-positive. Currently treats all sacrifices as pure loss unless ArchetypeReanimator. Sacrifice + Persist = free death trigger + creature returns. #hat #sacrifice #recursion
+- [x] **Equipment stacking intelligence** — commander Voltron routing (2x per-stack bonus), concentration kicker, Skullclamp/Sword-cycle recurrence, connect-payoff targeting. +480 lines, 20 tests. PR #2 merged 2026-05-09. #hat #equipment #voltron
+- [x] **Equipment-specific target scoring** — fixed nil-equipment bug in ChooseTarget, stack-top recovery + single-equipment fallback. PR #2 merged 2026-05-09. #hat #equipment #targeting
+- [x] **Equipment recurrence awareness** — Skullclamp pattern (tokens/1-toughness), Sword-cycle pattern (evasion premium), pump-rider synergy. PR #2 merged 2026-05-09. #hat #equipment #strategy
+- [x] **Graveyard recursion awareness (non-reanimator)** — already shipped 2026-05-08 (`hasGraveyardRecursionValue` + `hasGraveyardRecursionEnabler`). Verified 2026-05-09. #hat #graveyard #strategy
+- [x] **Zone-cast grant strategic valuation** — `hasActiveGraveyardCastGrant` + `hasGraveyardRecursionPotential` for Underworld Breach-style effects. PR #6 merged 2026-05-09. #hat #graveyard #zonecast
+- [x] **Recursion-aware sacrifice evaluation** — new `SacrificeChooser` interface, persist/undying/unearth net-positive scoring, commander penalty. PR #6 merged 2026-05-09. #hat #sacrifice #recursion
 
 ## Medium Priority — Engine
 
-- [ ] **Temporal Pincer** — anon UUID cookie → session tracking → on login stitch all anon device UUIDs to authenticated profile. No PII, all UUIDs. Powers P&R via GraphQL. #infra #platform
-- [ ] **BUG: Esika/Prismatic Bridge 9.2% WR** — systemic B5 combo execution issue. Bridge should flip and cast free spells every upkeep but combo assembly/sequencing not firing correctly. #engine #bug #per_card
-- [ ] **BUG: Multiple B5 decks at 13-14% WR** — combo execution ceiling across several B5 commanders. Likely related to Esika issue — combo sequencer not recognizing all win-line piece states. #engine #bug #combo
-- [ ] **34K corpus audit — DONE (initial run)** — 31,963 cards tested, 181 unique failures (99.4% card coverage). Full report: `data/corpus-audit-full-report.md`. Remaining work is handler coverage for the 181 failing cards. #engine #qa
-- [ ] **Corpus audit: draw handler gaps (2,032 failures)** — conditional draw triggers not firing in test harness. Top cards: Solemn Simulacrum, Kindred Discovery, Veil of Summer, Keldon Raider, etc. Mix of test scaffolding issues (conditions not met) and missing handlers. #engine #handlers #draw
-- [ ] **Corpus audit: lifegain/lifeloss gaps (1,612 failures)** — gain_life (1,101) + lose_life (511). Cards like Bloodchief Ascension, Grave Venerations, Senu. Triggered effects needing condition setup or handler wiring. #engine #handlers #life
-- [ ] **Corpus audit: damage gaps (1,095 failures)** — damage effects parsed but not executing. Need to distinguish test harness setup issues from real handler gaps. #engine #handlers #damage
-- [ ] **Corpus audit: discard/mill/buff gaps (534 failures)** — discard (305), mill (148), buff (81). Lower volume, mixed causes. #engine #handlers #misc
+- [x] **Temporal Pincer** — implemented 2026-05-04. SQLite schema, REST handlers, frontend wiring. #infra #platform
+- [ ] **BUG: Esika/Prismatic Bridge 9.2% WR** — systemic B5 combo execution issue. **IN PROGRESS** (hex-dev, 2026-05-09). #engine #bug #per_card
+- [ ] **BUG: Multiple B5 decks at 13-14% WR** — combo execution ceiling. **IN PROGRESS** (hex-dev, 2026-05-09). #engine #bug #combo
+- [x] **34K corpus audit — DONE (initial run)** — 31,963 cards tested, 181 unique failures (99.4% card coverage). #engine #qa
+- [x] **Corpus audit: draw handler gaps** — verified 2,032/2,032 PASS (was tests-run count, not failures). All draw tests already passing after keyword_dead fix 2026-05-08. #engine #handlers #draw
+- [ ] **Corpus audit: lifegain/lifeloss gaps (1,612)** — may be stale (needs verification like draw gaps). #engine #handlers #life
+- [ ] **Corpus audit: damage gaps (1,095)** — may be stale (needs verification). #engine #handlers #damage
+- [ ] **Corpus audit: discard/mill/buff gaps (534)** — may be stale (needs verification). #engine #handlers #misc
 - [x] **Thor test harness: conditional trigger setup** — 14 new scaffold kinds in conditional_setup.go (gained-life, cast-spell, ETB, drawn-card, attacked, sacrificed, combat-damage, landfall, discarded, enchanted, opponent-lost-life, life-threshold, upkeep). (2026-05-07) #engine #qa #thor
 - [x] **Muninn-Thor mismatch audit** — crossref.go: loads Muninn data + Thor failures, builds TP/FN/FP confusion matrix, computes recall/precision, writes markdown report. (2026-05-07) #engine #qa
 
@@ -87,12 +87,13 @@ kanban-plugin: board
 - [x] **Conditional trigger scaffolding** — 14 new scaffold kinds (gained-life, cast-spell, creature-ETB, drawn-card, attacked, sacrificed, combat-damage, landfall, discarded, enchanted-creature, opponent-lost-life, life-above/below-threshold, upkeep-phase). All three layers (detect/apply/trace) updated. 49 new tests. (2026-05-07) #thor #scaffolding
 - [x] **Oracle Errata Pipeline** — `cmd/hexdek-oracle-sync/`: streaming Scryfall bulk download, field-level diff, markdown report, `--live`/`--dry-run`/`--diff-only`/`--report` modes. 27 tests. (2026-05-07) #thor #pipeline #infra
 - [x] **Muninn cross-reference** — loads Muninn data, builds confusion matrix against Thor failures (TP/FN/FP), computes recall/precision, writes markdown report. 10 tests. (2026-05-07) #thor #qa
+- [x] **Thor CLI wiring** — `thorFeatures` struct, 4 CLI flags (--trace, --trace-failures-only, --opponent-detect, --scaffold), conditional scaffolding wired into testInteraction. 6 integration tests. PR #12 merged 2026-05-09. #thor #cli
 
 
 ## Medium Priority — Platform
 
-- [ ] BOINC-style distributed compute (desktop client → contribute games → earn credits) #distributed
-- [ ] **Deterministic seed capture (anti-cheat Phase 1)** — surface the existing Heimdall seed ring buffer + JSONL flush as a cryptographic per-game seed contract; sign at game-start, verify on replay; required before spot-check + cauterize phases. Builds on the seed capture work already wired into all 3 game paths #anticheat
+- [ ] BOINC-style distributed compute (desktop client → contribute games → earn credits) — **IN PROGRESS** (hex-dev-3, 2026-05-09) #distributed
+- [ ] **Deterministic seed capture (anti-cheat Phase 1)** — **IN PROGRESS** (hex-dev-4, 2026-05-09) #anticheat
 - [ ] Deterministic replay anti-cheat (cryptographic seed, spot-check 2-5%, auto-cauterize bad actors) — *enhanced by seed capture from Phase 1* #anticheat
 - [ ] Statistical anomaly detection (per-contributor distribution tracking, 3σ flagging) #anticheat
 - [ ] Credit economy (contribute compute → earn credits → spend on own deck testing) #economy
@@ -109,7 +110,7 @@ kanban-plugin: board
 
 ## Low Priority
 
-- [ ] **i18n — IN PROGRESS** — scaffolding shipped (i18n.js + locales/ + useT() hook + URL/navigator detection across 8 locales, commit 059a9d1, 2026-05-04). Content translation remaining: ~500 UI keys × 8+ languages still need professional translation; Scryfall localized card names integration also pending. #platform
+- [x] **i18n — catalog translated** — 52 UI keys translated into 7 locales (es, de, fr, pt, ja, ko, zh). MTG terminology localized per community convention. Remaining: migrate ~450 hardcoded JSX strings to useT() + Scryfall localized card names. PR #11 merged 2026-05-09. #platform
 - [ ] Multi-format support beyond Commander (Modern, Legacy deck ratings) #engine
 - [ ] **Tournament prize pools** — hat-vs-hat bracket tournaments with cash prizes (1st/2nd/3rd/4th splits). Starcraft model: deckbuilding is the skill, hat execution is the layer. Legally sound as skill competition (no entry-fee model safest, donations-funded). Needs: bracket system, payout logic, age verification (18+), tax reporting (>$600). #platform #economy #future
 
