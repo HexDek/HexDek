@@ -376,3 +376,50 @@ CREATE INDEX IF NOT EXISTS idx_contrib_chunk_owner
     ON contrib_chunk(owner, returned_at DESC);
 CREATE INDEX IF NOT EXISTS idx_contrib_chunk_issued
     ON contrib_chunk(issued_at);
+
+-- ===== ANTI-CHEAT PHASE 2: SPOT-CHECK + CAUTERIZE =====
+-- verification_queue: pending replays for game outcomes selected by
+-- the spot-check scheduler. Each row pins the inputs needed to
+-- deterministically re-execute the game (rng seed, deck keys per
+-- seat) and the claim being verified (winner, turns). The worker
+-- transitions rows pending → running → passed | failed | error.
+CREATE TABLE IF NOT EXISTS verification_queue (
+    queue_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id          INTEGER NOT NULL,
+    deck_key         TEXT NOT NULL,                    -- contributor under review
+    enqueued_at      INTEGER NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'pending',  -- pending|running|passed|failed|error
+    started_at       INTEGER,
+    finished_at      INTEGER,
+    detail           TEXT NOT NULL DEFAULT '',
+    rng_seed         INTEGER NOT NULL DEFAULT 0,
+    n_seats          INTEGER NOT NULL DEFAULT 0,
+    deck_keys_json   TEXT NOT NULL DEFAULT '[]',
+    claimed_winner   INTEGER NOT NULL DEFAULT -1,
+    claimed_turns    INTEGER NOT NULL DEFAULT 0,
+    replayed_winner  INTEGER NOT NULL DEFAULT -1,
+    replayed_turns   INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_verqueue_status ON verification_queue(status, enqueued_at);
+CREATE INDEX IF NOT EXISTS idx_verqueue_deck ON verification_queue(deck_key, enqueued_at DESC);
+CREATE INDEX IF NOT EXISTS idx_verqueue_game ON verification_queue(game_id);
+
+-- contributor_sanctions: warnings + bans issued by the cauterize
+-- service when a verification fails. Escalation: 1st = warning,
+-- 2nd = 24-hour ban, 3rd+ = permanent ban. expires_at is NULL for
+-- warnings (no expiry) and permanent bans (never expire); set to a
+-- future unix timestamp for temp bans.
+CREATE TABLE IF NOT EXISTS contributor_sanctions (
+    sanction_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    deck_key     TEXT NOT NULL,
+    owner        TEXT NOT NULL DEFAULT '',
+    offense_num  INTEGER NOT NULL,                     -- 1, 2, 3, ...
+    severity     TEXT NOT NULL,                        -- warning|temp_ban|permanent_ban
+    issued_at    INTEGER NOT NULL,
+    expires_at   INTEGER,                              -- NULL for warnings + permanent
+    reason       TEXT NOT NULL DEFAULT '',
+    queue_id     INTEGER,                              -- triggering verification, if any
+    reviewed     INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_sanctions_deck ON contributor_sanctions(deck_key, issued_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sanctions_active ON contributor_sanctions(deck_key, severity, expires_at);

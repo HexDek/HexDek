@@ -60,6 +60,10 @@ func applyMigrations(db *sql.DB) error {
 		{"showmatch_elo", "hex_rating", "REAL NOT NULL DEFAULT 0.0"},
 		{"showmatch_elo", "hex_delta", "REAL NOT NULL DEFAULT 0.0"},
 		{"showmatch_game", "rng_seed", "INTEGER NOT NULL DEFAULT 0"},
+		// Phase 2 anti-cheat: a per-game verification flag set by the
+		// verification worker. 0 = unchecked (default), 1 = spot-check
+		// passed, -1 = spot-check failed OR quarantined by cauterize.
+		{"showmatch_game", "verified", "INTEGER NOT NULL DEFAULT 0"},
 	}
 	// Migrate showmatch_elo from commander-keyed to deck_key-keyed.
 	hasDeckKey, _ := columnExists(db, "showmatch_elo", "deck_key")
