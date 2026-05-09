@@ -74,7 +74,7 @@ kanban-plugin: board
 - [x] **BUG: Multiple B5 decks at 13-14% WR** — combo sequencer treated commanders in command zone as "missing" pieces + MDFC face aliases unrecognized. Command-zone awareness + DFC alias indexing + commander tax costing. PR #18 merged 2026-05-09. #engine #bug #combo
 - [x] **34K corpus audit — DONE (initial run)** — 31,963 cards tested, 181 unique failures (99.4% card coverage). #engine #qa
 - [x] **Corpus audit: draw handler gaps** — verified 2,032/2,032 PASS (was tests-run count, not failures). All draw tests already passing after keyword_dead fix 2026-05-08. #engine #handlers #draw
-- [ ] **Corpus audit: lifegain/lifeloss gaps (1,612)** — may be stale (needs verification like draw gaps). #engine #handlers #life
+- [x] **Corpus audit: lifegain/lifeloss gaps** — verified stale (1,101 gain_life + 511 lose_life = 1,612 was tests-run, not failures). All passing. Re-ran `hexdek-thor --corpus-audit` 2026-05-09: 18,934 tests, 0 fail, 0 panic. #engine #handlers #life
 - [ ] **Corpus audit: damage gaps (1,095)** — may be stale (needs verification). #engine #handlers #damage
 - [ ] **Corpus audit: discard/mill/buff gaps (534)** — may be stale (needs verification). #engine #handlers #misc
 - [x] **Thor test harness: conditional trigger setup** — 14 new scaffold kinds in conditional_setup.go (gained-life, cast-spell, ETB, drawn-card, attacked, sacrificed, combat-damage, landfall, discarded, enchanted, opponent-lost-life, life-threshold, upkeep). (2026-05-07) #engine #qa #thor
@@ -111,6 +111,7 @@ kanban-plugin: board
 ## Low Priority
 
 - [x] **i18n — catalog translated** — 52 UI keys translated into 7 locales (es, de, fr, pt, ja, ko, zh). MTG terminology localized per community convention. Remaining: migrate ~450 hardcoded JSX strings to useT() + Scryfall localized card names. PR #11 merged 2026-05-09. #platform
+- [ ] **Spectate background gradient morph** — when active commander / seat changes, the color-identity background gradient should slow-morph (CSS transition ~1-2s ease) to the next color instead of snapping instantly. #ui #spectator #polish
 - [ ] Multi-format support beyond Commander (Modern, Legacy deck ratings) #engine
 - [ ] **Tournament prize pools** — hat-vs-hat bracket tournaments with cash prizes (1st/2nd/3rd/4th splits). Starcraft model: deckbuilding is the skill, hat execution is the layer. Legally sound as skill competition (no entry-fee model safest, donations-funded). Needs: bracket system, payout logic, age verification (18+), tax reporting (>$600). #platform #economy #future
 

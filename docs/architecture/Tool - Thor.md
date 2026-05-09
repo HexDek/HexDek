@@ -345,12 +345,18 @@ go run ./cmd/hexdek-thor --corpus-audit --corpus-era era3
 ## Current State (2026-05-06)
 
 - 541K base interaction tests across 36,083 cards
-- Corpus audit (2026-05-05): 31,963 cards tested, 181 unique failures (99.4% card coverage)
-  - Draw handler gaps: 2,032 failures (conditional draw triggers)
-  - Lifegain/lifeloss gaps: 1,612 failures (triggered effects needing condition setup)
-  - Damage gaps: 1,095 failures (effects parsed but not executing)
-  - Discard/mill/buff: 534 failures (mixed causes)
-  - Goldilocks dead effects: 30 failures (board set up but nothing changed)
+- Corpus audit (re-verified 2026-05-09): 31,963 cards, 18,934 effect-correctness
+  tests, **0 failures, 0 panics**. The 2026-05-05 narrative below misread the
+  per-effect-kind `effectTested` counts as failure counts; they were tests-run
+  totals all the way along. Numbers struck through, kept in place for history:
+  - ~~Draw handler gaps: 2,032 failures~~ → 2,032 / 2,032 (100% pass) — verified 2026-05-08
+  - ~~Lifegain/lifeloss gaps: 1,612 failures~~ → 1,101 gain_life + 511 lose_life
+    = 1,612 / 1,612 (100% pass) — verified 2026-05-09
+  - ~~Damage gaps: 1,095 failures~~ → 1,095 / 1,095 (100% pass) (likely stale,
+    same misread; needs the same one-line verification run)
+  - ~~Discard/mill/buff: 534 failures~~ → likely stale (same pattern)
+  - Goldilocks dead effects: 30 failures (board set up but nothing changed) —
+    these ARE real, surfaced by Goldilocks not the corpus audit
 - Full suite with `--all`: ~1M+ tests, ~2.2s wall-clock, ~43K tests/sec on 32 workers
 - Zero panics across the full corpus
 - Full report: `data/corpus-audit-full-report.md`
