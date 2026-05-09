@@ -2248,3 +2248,74 @@ body {
   .tape-bar { flex-wrap: wrap; gap: 2px; justify-content: center; }
   .tape-bar > * { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 }
+
+/* ── Glossary disclosure ── */
+/* GlossaryTerm wraps any label with a tap-to-expand inline definition.
+   Mobile-first: tap toggles, no hover-only state. The trigger gets a
+   dotted underline + tiny ? marker; the panel reveals inline below. */
+.gloss { position: relative; display: inline-flex; align-items: center; }
+.gloss-trigger {
+  display: inline-flex; align-items: baseline; gap: 3px;
+  background: transparent; border: 0; padding: 0; margin: 0;
+  color: inherit; font: inherit; letter-spacing: inherit;
+  cursor: pointer;
+  text-align: left;
+  border-bottom: 1px dotted var(--ink-3);
+  line-height: inherit;
+}
+.gloss-trigger:hover .gloss-mark,
+.gloss--open .gloss-mark {
+  background: var(--ink-3); color: var(--panel);
+}
+.gloss-trigger:focus-visible {
+  outline: 1px solid var(--accent); outline-offset: 2px;
+}
+.gloss-label { display: inline; }
+.gloss-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 11px; height: 11px;
+  border: 1px solid var(--ink-3);
+  border-radius: 50%;
+  font-size: 8px; font-weight: 700; line-height: 1;
+  color: var(--ink-3);
+  vertical-align: middle;
+  transition: background 0.12s ease, color 0.12s ease;
+  flex: 0 0 auto;
+}
+.gloss--compact .gloss-mark { width: 9px; height: 9px; font-size: 7px; }
+
+.gloss-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: 200px;
+  max-width: min(320px, 92vw);
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--rule-2);
+  border-left: 2px solid var(--accent);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  font-size: 11px; line-height: 1.45;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+  white-space: normal;
+  cursor: default;
+}
+.gloss-panel-title {
+  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+  font-weight: 700; color: var(--ink-2);
+}
+.gloss-panel-body { color: var(--ink); }
+.gloss-panel-source {
+  font-size: 9px; color: var(--ink-3);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* On narrow screens anchor the panel to the right edge of the
+   viewport rather than the trigger so it doesn't clip. */
+@media (max-width: 480px) {
+  .gloss-panel { left: auto; right: 0; max-width: 86vw; }
+}

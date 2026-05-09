@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape } from '../components/chrome'
+import GlossaryTerm from '../components/GlossaryTerm'
 import { cardArtUrl, API_BASE } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { findGameChangerInText } from '../data/gameChangers'
@@ -26,6 +27,23 @@ const EVAL_LABELS = {
   threat_exposure: 'Threat',
   commander_progress: 'Cmdr',
   graveyard_value: 'Grave',
+}
+
+// Glossary id for each eval-grid cell. Lets the spectator panel wrap
+// every heatmap label with a tap-to-define disclosure without bloating
+// EVAL_LABELS itself (the short labels are also rendered into the
+// per-seat heatmap, where a glossary disclosure would be way too much
+// chrome).
+const EVAL_TERMS = {
+  board_presence: 'eval_board',
+  card_advantage: 'eval_cards',
+  mana_advantage: 'eval_mana',
+  combo_proximity: 'eval_combo',
+  score: 'eval_score',
+  life_resource: 'eval_life',
+  threat_exposure: 'eval_threat',
+  commander_progress: 'eval_cmdr',
+  graveyard_value: 'eval_grave',
 }
 
 const MAGMA = [
@@ -721,7 +739,11 @@ export default function Spectator() {
               <div className="volcmap-legend">
                 <div className="volcmap-grid">
                   {EVAL_GRID.flat().map(key => (
-                    <span key={key} className="volcmap-cell">{EVAL_LABELS[key]}</span>
+                    <span key={key} className="volcmap-cell">
+                      <GlossaryTerm term={EVAL_TERMS[key]} compact>
+                        {EVAL_LABELS[key]}
+                      </GlossaryTerm>
+                    </span>
                   ))}
                 </div>
                 <div className="volcmap-scale">
@@ -740,8 +762,10 @@ export default function Spectator() {
                         </span>
                         <Tag>{s.eval.archetype?.toUpperCase() || '?'}</Tag>
                         {s.eval.budget > 0 && (
-                          <span className="t-xs muted-2" title="Budget used / total">
-                            ⚡{s.eval.budget_used}/{s.eval.budget}
+                          <span className="t-xs muted-2">
+                            <GlossaryTerm term="budget" compact>
+                              ⚡{s.eval.budget_used}/{s.eval.budget}
+                            </GlossaryTerm>
                           </span>
                         )}
                       </div>
@@ -843,10 +867,10 @@ export default function Spectator() {
               <div style={{ minHeight: 120 }}>
                 {stats ? (
                   <KV rows={[
-                    ['GAMES PLAYED', `${stats.games_played}`],
+                    ['GAMES PLAYED', `${stats.games_played}`, 'games'],
                     ['AVG GAME', `${stats.avg_turns} TURNS`],
                     ['DOMINANT', (stats.dominant?.split('//')[0]?.trim() || '—').toUpperCase()],
-                    ['WIN RATE', `${stats.dominant_win_rate}%`],
+                    ['WIN RATE', `${stats.dominant_win_rate}%`, 'win_rate'],
                     ['GAMES/MIN', `${stats.games_per_min}`],
                     ['UPTIME', stats.uptime],
                     ['STATUS', stats.status?.toUpperCase()],

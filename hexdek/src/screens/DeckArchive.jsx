@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPie, computeColorByCmc } from '../components/chrome'
+import GlossaryTerm from '../components/GlossaryTerm'
 import CardRolesGrid from '../components/CardRolesGrid'
 import CardLink from '../components/CardLink'
 import CurseDisplay from '../components/CurseDisplay'
@@ -765,17 +766,17 @@ export default function DeckArchive() {
               ['OWNER', <Link to={`/profile/${owner}`} style={{ color: 'var(--ink)', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)' }}>{owner?.toUpperCase()}</Link>],
               ...(ownerFriendCount != null ? [['FRIENDS', String(ownerFriendCount)]] : []),
               ['CARDS', `${cardCount}`],
-              ['BRACKET', `B${wbs}${wbsLabel ? ' ' + wbsLabel : ''}`],
-              ['PLAYS LIKE', pls ? `B${pls}${plsLabel ? ' ' + plsLabel : ''}${pls != wbs ? ' ⬆' : ''}` : '—'],
-              ['GAME CHANGERS', gameChangers != null ? `${gameChangers}` : '—'],
-              ['ARCHETYPE', archetype],
-              ...(legality ? [['LEGALITY', <span style={{ color: legality.valid ? 'var(--ok)' : 'var(--danger)', fontWeight: 700 }}>{legality.valid ? 'LEGAL' : 'ILLEGAL'}</span>]] : []),
-              ...(manaBaseGrade ? [['MANA BASE', manaBaseGrade]] : []),
-              ...(powerPercentile != null ? [['POWER', `TOP ${powerPercentile}%`]] : []),
-              ...(commanderSynergy != null ? [['CMDR SYNERGY', `${Math.round(commanderSynergy * 100)}%`]] : []),
-              ...(keepableHandPct != null ? [['KEEPABLE HANDS', `${Math.round(keepableHandPct)}%`]] : []),
-              ...(interactionAvgCmc != null ? [['INTERACTION CMC', `AVG ${Math.round(interactionAvgCmc * 10) / 10}`]] : []),
-              ...(cheapInteraction != null ? [['CHEAP REMOVAL', `${cheapInteraction} AT ≤2 CMC`]] : []),
+              ['BRACKET', `B${wbs}${wbsLabel ? ' ' + wbsLabel : ''}`, 'bracket'],
+              ['PLAYS LIKE', pls ? `B${pls}${plsLabel ? ' ' + plsLabel : ''}${pls != wbs ? ' ⬆' : ''}` : '—', 'plays_like'],
+              ['GAME CHANGERS', gameChangers != null ? `${gameChangers}` : '—', 'game_changers'],
+              ['ARCHETYPE', archetype, 'archetype'],
+              ...(legality ? [['LEGALITY', <span style={{ color: legality.valid ? 'var(--ok)' : 'var(--danger)', fontWeight: 700 }}>{legality.valid ? 'LEGAL' : 'ILLEGAL'}</span>, 'legality']] : []),
+              ...(manaBaseGrade ? [['MANA BASE', manaBaseGrade, 'mana_base_grade']] : []),
+              ...(powerPercentile != null ? [['POWER', `TOP ${powerPercentile}%`, 'power_percentile']] : []),
+              ...(commanderSynergy != null ? [['CMDR SYNERGY', `${Math.round(commanderSynergy * 100)}%`, 'cmdr_synergy']] : []),
+              ...(keepableHandPct != null ? [['KEEPABLE HANDS', `${Math.round(keepableHandPct)}%`, 'keepable_hands']] : []),
+              ...(interactionAvgCmc != null ? [['INTERACTION CMC', `AVG ${Math.round(interactionAvgCmc * 10) / 10}`, 'interaction_avg_cmc']] : []),
+              ...(cheapInteraction != null ? [['CHEAP REMOVAL', `${cheapInteraction} AT ≤2 CMC`, 'cheap_interaction']] : []),
             ]} />
             {commanderThemes.length > 0 && (
               <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -786,16 +787,18 @@ export default function DeckArchive() {
               <>
                 <div className="hr" style={{ margin: '10px 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span className="t-xs muted">CONFIDENCE</span>
+                  <GlossaryTerm term="confidence" compact>
+                    <span className="t-xs muted">CONFIDENCE</span>
+                  </GlossaryTerm>
                   <ConfidenceDots games={deckElo.games} showLabel size="lg" />
                 </div>
                 <KV rows={[
-                  ['HexELO', <span className="punch">{Math.round(deckElo.hex_rating || 0)}</span>],
-                  ['TS μ', <span className="t-xs muted-2">{Math.round(deckElo.mu || 0)}</span>],
-                  ['RECORD', <span><span style={{ color: 'var(--ok)' }}>{deckElo.wins}W</span> — <span style={{ color: 'var(--danger)' }}>{deckElo.losses}L</span></span>],
-                  ['WIN RATE', `${deckElo.win_rate}%`],
-                  ['GAMES', `${deckElo.games?.toLocaleString()}`],
-                  ['DELTA', <span style={{ color: deckElo.delta >= 0 ? 'var(--ok)' : 'var(--danger)' }}>{deckElo.delta >= 0 ? '+' : ''}{Math.round(deckElo.delta)}</span>],
+                  ['HexELO', <span className="punch">{Math.round(deckElo.hex_rating || 0)}</span>, 'hexelo'],
+                  ['TS μ', <span className="t-xs muted-2">{Math.round(deckElo.mu || 0)}</span>, 'ts_mu'],
+                  ['RECORD', <span><span style={{ color: 'var(--ok)' }}>{deckElo.wins}W</span> — <span style={{ color: 'var(--danger)' }}>{deckElo.losses}L</span></span>, 'record'],
+                  ['WIN RATE', `${deckElo.win_rate}%`, 'win_rate'],
+                  ['GAMES', `${deckElo.games?.toLocaleString()}`, 'games'],
+                  ['DELTA', <span style={{ color: deckElo.delta >= 0 ? 'var(--ok)' : 'var(--danger)' }}>{deckElo.delta >= 0 ? '+' : ''}{Math.round(deckElo.delta)}</span>, 'delta'],
                 ]} />
               </>
             )}

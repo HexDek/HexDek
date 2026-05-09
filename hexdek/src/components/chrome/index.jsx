@@ -1,4 +1,5 @@
 import { Fragment } from 'react'
+import GlossaryTerm from '../GlossaryTerm'
 
 export const Crops = () => (
   <>
@@ -21,15 +22,23 @@ export const Panel = ({ title, code, right, children, solid, style, className = 
   </div>
 )
 
+// KV — label/value rows with leader-dot separators. Each row is
+// `[label, value]` or `[label, value, glossaryTerm]`. When a glossary
+// term id is provided as the third tuple slot, the label is wrapped
+// in <GlossaryTerm> so users can tap to read what the metric means.
 export const KV = ({ rows }) => (
   <div className="kv">
-    {rows.map((r, i) => (
-      <Fragment key={i}>
-        <span className="k">{r[0]}</span>
-        <span className="dots">{'.'.repeat(60)}</span>
-        <span className="v">{r[1]}</span>
-      </Fragment>
-    ))}
+    {rows.map((r, i) => {
+      const term = r[2]
+      const label = term ? <GlossaryTerm term={term} compact>{r[0]}</GlossaryTerm> : r[0]
+      return (
+        <Fragment key={i}>
+          <span className="k">{label}</span>
+          <span className="dots">{'.'.repeat(60)}</span>
+          <span className="v">{r[1]}</span>
+        </Fragment>
+      )
+    })}
   </div>
 )
 

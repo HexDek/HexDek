@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Tape, Tag, ConfidenceDots } from '../components/chrome'
+import GlossaryTerm from '../components/GlossaryTerm'
 import Meta from './Meta'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useArtContrast } from '../hooks/useArtContrast'
@@ -8,13 +9,13 @@ import { api, cardArtUrl } from '../services/api'
 import { countryFlagEmoji } from '../lib/flag'
 
 const SORT_KEYS = [
-  { key: 'hex_rating', label: 'HEXELO' },
-  { key: 'mu', label: 'TS μ' },
-  { key: 'games', label: 'GAMES' },
-  { key: 'win_rate', label: 'WIN %' },
-  { key: 'wins', label: 'WINS' },
-  { key: 'losses', label: 'LOSSES' },
-  { key: 'delta', label: 'DELTA' },
+  { key: 'hex_rating', label: 'HEXELO',  term: 'hexelo' },
+  { key: 'mu',         label: 'TS μ',    term: 'ts_mu' },
+  { key: 'games',      label: 'GAMES',   term: 'games' },
+  { key: 'win_rate',   label: 'WIN %',   term: 'win_rate' },
+  { key: 'wins',       label: 'WINS',    term: 'record' },
+  { key: 'losses',     label: 'LOSSES',  term: 'record' },
+  { key: 'delta',      label: 'DELTA',   term: 'delta' },
 ]
 
 const BRACKETS = [
@@ -233,7 +234,10 @@ function LeaderboardContent() {
         </div>
 
         {/* Bracket filter */}
-        <div className="lb-sort-bar">
+        <div className="lb-sort-bar" style={{ alignItems: 'center', gap: 8 }}>
+          <GlossaryTerm term="bracket" compact>
+            <span className="t-xs muted">BRACKET</span>
+          </GlossaryTerm>
           {BRACKETS.map(b => (
             <Tag
               key={b.label}
@@ -274,13 +278,22 @@ function LeaderboardContent() {
                   <th
                     key={sk.key}
                     className={`lb-th lb-th--${sk.key} lb-th--sortable${sortKey === sk.key ? ' lb-th--active' : ''}`}
-                    onClick={() => handleSort(sk.key)}
                   >
-                    {sk.label}{sortArrow(sk.key)}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <GlossaryTerm term={sk.term} compact>
+                        <span onClick={() => handleSort(sk.key)} style={{ cursor: 'pointer' }}>
+                          {sk.label}{sortArrow(sk.key)}
+                        </span>
+                      </GlossaryTerm>
+                    </span>
                   </th>
                 ))}
-                <th className="lb-th lb-th--conf">CONF</th>
-                <th className="lb-th lb-th--record">RECORD</th>
+                <th className="lb-th lb-th--conf">
+                  <GlossaryTerm term="confidence" compact>CONF</GlossaryTerm>
+                </th>
+                <th className="lb-th lb-th--record">
+                  <GlossaryTerm term="record" compact>RECORD</GlossaryTerm>
+                </th>
               </tr>
             </thead>
             <tbody>
