@@ -84,6 +84,8 @@ func AllInvariants() []Invariant {
 		{Name: "ResourceConservation", Check: checkResourceConservation},
 		{Name: "AttachmentConsistency", Check: checkAttachmentConsistency},
 		{Name: "StackOrderCorrectness", Check: checkStackOrderCorrectness},
+		{Name: "ExileLinkageIntegrity", Check: checkExileLinkageIntegrity},
+		{Name: "ZoneCastGrantExpiry", Check: checkZoneCastGrantExpiry},
 	}
 }
 
@@ -141,6 +143,13 @@ func checkZoneConservation(gs *GameState) error {
 				total++
 			}
 		}
+	}
+	// Count cards in the per-seat ParadigmExile bucket. Paradigm originals
+	// remain in this bucket for the rest of the game (only copies are cast),
+	// so omitting them double-debits the conservation total whenever a card
+	// is exiled this way.
+	for _, cards := range gs.ParadigmExile {
+		total += countRealCards(cards)
 	}
 	// Count cards on the stack (spells).
 	for _, item := range gs.Stack {
@@ -1532,6 +1541,83 @@ func checkStackOrderCorrectness(gs *GameState) error {
 		}
 	}
 
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// ExileLinkageIntegrity
+// ---------------------------------------------------------------------------
+
+// checkExileLinkageIntegrity verifies §406.7 linked-exile bookkeeping.
+// When a card is exiled "until [permanent] leaves the battlefield" via
+// ExileLinked, it gets ExiledByTimestamp set to the source permanent's
+// Timestamp. When that permanent leaves, ReturnLinkedExile resets the
+// timestamp and pulls the card out of exile. If we still see a card in
+// exile with a non-zero ExiledByTimestamp whose source is no longer on
+// any battlefield, the LTB return path was missed — those cards are
+// orphans and would never be returned.
+func checkExileLinkageIntegrity(gs *GameState) error {
+	if gs == nil {
+		return nil
+	}
+	// Build the set of live source timestamps on any battlefield.
+	live := map[int]bool{}
+	for _, s := range gs.Seats {
+		if s == nil {
+			continue
+		}
+		for _, p := range s.Battlefield {
+			if p != nil && p.Timestamp != 0 {
+				live[p.Timestamp] = true
+			}
+		}
+	}
+	for _, s := range gs.Seats {
+		if s == nil {
+			continue
+		}
+		for _, c := range s.Exile {
+			if c == nil || c.ExiledByTimestamp == 0 {
+				continue
+			}
+			if !live[c.ExiledByTimestamp] {
+				name := c.DisplayName()
+				return fmt.Errorf("ExileLinkageIntegrity: card %q in seat %d exile is linked to source timestamp %d which is no longer on any battlefield — LTB return missed (orphaned linked exile)",
+					name, s.Idx, c.ExiledByTimestamp)
+			}
+		}
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// ZoneCastGrantExpiry
+// ---------------------------------------------------------------------------
+
+// checkZoneCastGrantExpiry verifies that no entry in gs.ZoneCastGrants
+// has already expired by its Duration semantics. Cleanup (end of turn,
+// source LTB) is responsible for purging these via ExpireZoneCastGrants
+// / ExpireSourceGrants; if a stale grant survives, casting decisions
+// downstream may use it and the AI will believe it has permission to
+// cast a card that the rules no longer authorize.
+func checkZoneCastGrantExpiry(gs *GameState) error {
+	if gs == nil || len(gs.ZoneCastGrants) == 0 {
+		return nil
+	}
+	for card, p := range gs.ZoneCastGrants {
+		if p == nil {
+			continue
+		}
+		if !shouldExpireGrant(gs, p) {
+			continue
+		}
+		name := "<unknown>"
+		if card != nil {
+			name = card.DisplayName()
+		}
+		return fmt.Errorf("ZoneCastGrantExpiry: grant for %q (zone=%s duration=%s grantTurn=%d sourceTimestamp=%d source=%s) has expired but is still in ZoneCastGrants — cleanup missed",
+			name, p.Zone, p.Duration, p.GrantTurn, p.SourceTimestamp, p.SourceName)
+	}
 	return nil
 }
 
