@@ -12,61 +12,63 @@ kanban-plugin: board
 ## High Priority — Engine
 
 - [x] **Remaining 276 commander handlers** — generator improved (fuzzy slug resolution, hand-edit preservation, deterministic number extraction). NO_AST 73→0, 195/196 unhandled pool commanders templated. PR #1 merged 2026-05-09. #engine #per_card
-- [x] **Era 1 unification (FDN/DSK/BLB/OTJ/MKM)** — 12 templated commanders promoted from stub to custom logic: Mabel, Aesi, Bristly Bill, Byrke, Aminatou, Queen Marchesa, Kardur, The Swarmweaver, Rendmaw, Kona, Ezrim, Prime Speaker Zegana. (2026-05-09) #engine #per_card
-- [x] **Era 5 unification (IKO/ZNR/KHM/CMR/C13–C18/pre-Modern)** — 13 templated commanders promoted from stub: Marchesa the Black Rose, Karador, Derevi, Mairsil, Yasharn, Charix, Kalamax, Chainer, Ruric Thar, Selenia, Yurlok, Sakashima, Araumi. (2026-05-09) #engine #per_card
+- [x] **Pool-coverage handler batch** — 13 hand-written handlers selected by deck-pool inclusion: Arcades, Tifa Lockhart, Veyran, Shadow the Hedgehog, Eriette, Inalla, Eddie Brock//Venom, Tiamat, Mayael, Giada, Ghyrson Starn, Choco. PR #30 merged 2026-05-09. #engine #per_card
+- [x] **Era 1 unification (FDN/DSK/BLB/OTJ/MKM)** — 12 templated commanders promoted from stub to custom logic: Mabel, Aesi, Bristly Bill, Byrke, Aminatou, Queen Marchesa, Kardur, The Swarmweaver, Rendmaw, Kona, Ezrim, Prime Speaker Zegana. PR #32 merged 2026-05-09. #engine #per_card
+- [x] **Era 2 unification (CMM/LCI/WOE/MOM/ONE)** — 11 commanders promoted: Sliver Gravemother, Yenna, Felothar, Mondrak, Solphim, Drivnod, Zopandrel, Inalla (reprint), Mayael (reprint), Saheeli, plus one more. 18 new tests. PR #31 merged 2026-05-09. #engine #per_card
+- [x] **Era 3 unification (SNC/BRO/DMU/NEO/CLB)** — 12 commanders promoted: Jetmir, Falco Spara, Lord Xander, Hidetsugu, plus 8 more. PR #33 merged 2026-05-09. #engine #per_card
+- [x] **Era 4 unification (STX/MH2/AFR/MID/VOW/C19-C21)** — 11 cost-unenforced stubs replaced with real handlers. PR #34 merged 2026-05-09. #engine #per_card
+- [x] **Era 5 unification (IKO/ZNR/KHM/CMR/C13–C18/pre-Modern)** — 13 templated commanders promoted from stub: Marchesa the Black Rose, Karador, Derevi, Mairsil, Yasharn, Charix, Kalamax, Chainer, Ruric Thar, Selenia, Yurlok, Sakashima, Araumi. PR #35 merged 2026-05-09. #engine #per_card
 
 ## Tracking — Cost-Unenforced Activated Abilities
 
-> Per_card handlers that implement the *effect* of an activated ability but do not gate on the activation cost (mana, tap, sacrifice, etc.). The engine's general activation path collects cost externally, so these are best-effort but not provably correct under arbitrary AI activation.
+> Per_card handlers that implement the *effect* of an activated ability but do not gate on the activation cost (mana, tap, sacrifice, exile, life payment, energy, etc.). When `InvokeActivatedHook` is called from a non-`ActivateAbility` path (test fixture, AI evaluator, replay rebuild), the AST cost dispatch is skipped — so these are best-effort but not provably correct under arbitrary AI activation. Once the engine learns a unified activated-cost gate, every open entry can drop in-handler `seat.ManaPool < N` checks.
+>
+> See `docs/structure-audit-report.md` for the generic gap caveat.
 
-- **Bristly Bill, Spine Sower** — `{3}{G}{G}` double-counters: handler doubles +1/+1 counters on all controlled creatures, but mana cost not collected by the handler.
-- **Ezrim, Agency Chief** — `{1}, Sacrifice an artifact` keyword grant: effect not yet implemented at per_card layer (AST-deferred); cost path unverified.
-- **The Jolly Balloon Man** — `{1}, {T}, Activate only as a sorcery` copy-creature token: not implemented at per_card layer.
-- **Commander Mustard** — `{2}{R}{W}` Soldier-grant attack-damage rider: not implemented at per_card layer.
-- **Giada, Font of Hope** — `{T}: Add {W}` mana ability with "spend only on Angel" restriction: tap cost engine-enforced, restriction not gated by per_card.
-- **The Master of Keys** — `{X}{W}{U}{B}` ETB with X-counter / mill-2X rider: not implemented (no X readback at per_card hook).
-- **Kardur, Doomscourge** — ETB goad-until-your-next-turn duration: goad applied, no delayed-cleanup trigger to expire it.
-- **Aminatou, Veil Piercer** — enchantments-in-hand miracle grant: not wired into cast path.
+### Done — Era 5 unification (2026-05-09, PR #35)
 
+- [x] **Selenia, Dark Angel** — "Pay 2 life" (only cost). Custom handler enforces.
+- [x] **Chainer, Dementia Master** — "{B}{B}{B}, Pay 3 life" (life portion not in mana cost AST). Handler enforces 3-life payment.
+- [x] **Araumi of the Dead Tide** — "{T}, Exile cards from your graveyard equal to the number of opponents you have" (the exile-from-GY portion is not in standard cost AST). Handler enforces graveyard-card exile.
+- [x] **Mairsil, the Pretender** — ETB exile-and-tag cost is the resolution effect; activation copies bypass cage-counter validation. Handler tags caged cards for the engine-side hook to verify.
 
+### Open — Era 1 (FDN/DSK/BLB/OTJ/MKM, partially addressed by PR #32)
 
-### Tracking — cost-unenforced activated abilities
+- [ ] **Bristly Bill, Spine Sower** — `{3}{G}{G}` double-counters: handler doubles +1/+1 counters on all controlled creatures, mana cost not collected by the handler.
+- [ ] **Ezrim, Agency Chief** — `{1}, Sacrifice an artifact` keyword grant: effect not implemented at per_card layer (AST-deferred); cost path unverified.
+- [ ] **The Jolly Balloon Man** — `{1}, {T}, Activate only as a sorcery` copy-creature token: not implemented at per_card layer.
+- [ ] **Commander Mustard** — `{2}{R}{W}` Soldier-grant attack-damage rider: not implemented at per_card layer.
+- [ ] **Giada, Font of Hope** — `{T}: Add {W}` mana ability with "spend only on Angel" restriction: tap cost engine-enforced, restriction not gated by per_card.
+- [ ] **The Master of Keys** — `{X}{W}{U}{B}` ETB with X-counter / mill-2X rider: not implemented (no X readback at per_card hook).
+- [ ] **Kardur, Doomscourge** — ETB goad-until-your-next-turn duration: goad applied, no delayed-cleanup trigger to expire it.
+- [ ] **Aminatou, Veil Piercer** — enchantments-in-hand miracle grant: not wired into cast path.
 
-Handlers where the effect is wired but the activation cost (mana, tap, sacrifice, exile, life payment, etc.) is enforced only defensively in-handler rather than by the engine's ability-dispatch layer. The audit caveat in `docs/structure-audit-report.md` flags this as a generic gap; this section enumerates concrete cards. Once the engine learns a unified activated-cost gate, every entry below gets a follow-up to drop the in-handler `seat.ManaPool < N` checks.
+### Open — Era 2 (CMM/LCI/WOE/MOM/ONE, addressed by PR #31)
 
-- [ ] **Sliver Gravemother** — Encore {X} (variable mana + exile-from-graveyard). Handler enforces `seat.ManaPool >= cost` and exiles the chosen Sliver, but the engine doesn't gate activation on the encore cost. (Era 2, CMM)
-- [ ] **Yenna, Redtooth Regent** — `{2}, {T}: copy enchantment`. Handler runs unconditionally; mana cost is engine-side, tap cost not enforced. (Era 2, WOE)
-- [ ] **Felothar the Steadfast** — `{3}, {T}, Sacrifice another creature: draw=toughness, discard=power`. Handler defensively decrements `seat.ManaPool -= 3` and sets `src.Tapped = true`; sacrifice picks the best creature but the engine doesn't enforce that a creature is available before dispatch. (Era 2-adjacent, LTC)
-- [ ] **Mondrak, Glory Dominus** — `{2}{W}{W}, Exile two other creatures: 2 indestructible counters`. Handler enforces `seat.ManaPool >= 4` and validates two non-Mondrak creatures exist. (Era 2, ONE/ONC)
-- [ ] **Solphim, Mayhem Dominus** — `{2}{R}{R}, Exile two other creatures: 2 indestructible counters`. Same shape as Mondrak. (Era 2, ONE/ONC)
-- [ ] **Drivnod, Carnage Dominus** — `{2}{B}{B}, Exile two other creatures: 2 indestructible counters`. Same shape as Mondrak. (Era 2, ONE/ONC)
-- [ ] **Zopandrel, Hunger Dominus** — `{2}{G}{G}, Exile two other creatures: 2 indestructible counters`. Same shape as Mondrak. (Era 2, ONE/ONC)
-- [ ] **Inalla, Archmage Ritualist** — `Tap five untapped Wizards: target player loses 7 life`. Handler enforces ≥5 untapped wizards but the engine doesn't gate the activation on the tap cost; the handler sets `Tapped = true` itself. (Era 2 reprint, CMM)
-- [ ] **Mayael the Anima** — `{3}{R}{G}{W}, {T}: look top 5, drop a power-5+ creature`. Mana cost engine-side, tap cost handler-side. (Era 2 reprint, CMM)
-- [ ] **Saheeli, Radiant Creator** — `{E}{E}{E}` combat-copy uses `PayEnergy` defensively (no engine-side energy-cost dispatch yet). (Era 2, MOM)
+- [ ] **Sliver Gravemother** — Encore {X} (variable mana + exile-from-graveyard). Handler enforces `seat.ManaPool >= cost` and exiles the chosen Sliver; engine doesn't gate activation on the encore cost.
+- [ ] **Yenna, Redtooth Regent** — `{2}, {T}: copy enchantment`. Mana cost engine-side, tap cost not enforced. Also "doesn't have the same name…" duplicate-name validation not enforced.
+- [ ] **Felothar the Steadfast** — `{3}, {T}, Sacrifice another creature: draw=toughness, discard=power`. Handler defensively decrements `seat.ManaPool -= 3` and sets `src.Tapped = true`; sacrifice availability not enforced before dispatch. (LTC)
+- [ ] **Mondrak, Glory Dominus** — `{2}{W}{W}, Exile two other creatures: 2 indestructible counters`. Handler enforces `seat.ManaPool >= 4` and validates two non-Mondrak creatures exist. (ONE/ONC)
+- [ ] **Solphim, Mayhem Dominus** — `{2}{R}{R}, Exile two other creatures: 2 indestructible counters`. Same shape as Mondrak. (ONE/ONC)
+- [ ] **Drivnod, Carnage Dominus** — `{2}{B}{B}, Exile two other creatures: 2 indestructible counters`. Same shape as Mondrak. (ONE/ONC)
+- [ ] **Zopandrel, Hunger Dominus** — `{2}{G}{G}, Exile two other creatures: 2 indestructible counters`. Same shape as Mondrak. (ONE/ONC)
+- [ ] **Inalla, Archmage Ritualist** — `Tap five untapped Wizards: target player loses 7 life`. Handler enforces ≥5 untapped wizards; engine doesn't gate the activation on the tap cost.
+- [ ] **Mayael the Anima** — `{3}{R}{G}{W}, {T}: look top 5, drop a power-5+ creature`. Mana cost engine-side, tap cost handler-side. (CMM reprint)
+- [ ] **Saheeli, Radiant Creator** — `{E}{E}{E}` combat-copy uses `PayEnergy` defensively (no engine-side energy-cost dispatch yet). (MOM)
 
+### Open — Other audited gaps
 
-## Tracking — Cost-Unenforced Activated Abilities
+- [ ] **Azami, Lady of Scrolls** — "Tap an untapped Wizard you control" (tap-another cost). The "Complete" entry in the structure audit is misleading — only the draw effect is wired; the tap-a-Wizard cost is unpaid.
+- [ ] **Bilbo, Birthday Celebrant** — life-payment activation for Birthday rolls.
+- [ ] **Captain America, First Avenger** — discard-a-card shield-throw activation.
+- [ ] **Ellie, Vengeful Hunter** — "Pay 2 life, Sacrifice another creature" — both portions unenforced in template.
+- [ ] **Erebos, God of the Dead** — "{1}{B}, Pay 2 life" draw activation — life portion unenforced.
+- [ ] **Phenax, God of Deception** — granted "{T}: Target player mills X" with no cost-enforcement on the granted ability.
+- [ ] **Tasigur, the Golden Fang** — "Exile four cards from your graveyard" delve cost.
+- [ ] **Ghen, Arcanum Weaver** — sacrifice-an-enchantment cost on the recursion activation.
+- [ ] **Shilgengar, Sire of Famine** — sacrifice-a-creature drain cost.
 
-Cards whose `gen_*.go` activated stub historically failed to enforce a non-mana cost (Pay X life, sacrifice, exile from graveyard, tap a creature, etc.). When `InvokeActivatedHook` is called from a non-`ActivateAbility` path (test fixture, AI evaluator, replay rebuild), the AST cost dispatch is skipped — handlers must enforce these costs manually. Era 5 unification (2026-05-09) audited and fixed:
-
-- [x] **Selenia, Dark Angel** — "Pay 2 life" (only cost). Custom handler enforces. PR era5-unification.
-- [x] **Chainer, Dementia Master** — "{B}{B}{B}, Pay 3 life" (life portion not in mana cost AST). Custom handler enforces 3-life payment. PR era5-unification.
-- [x] **Araumi of the Dead Tide** — "{T}, Exile cards from your graveyard equal to the number of opponents you have" (the exile-from-GY portion is not in standard cost AST). Custom handler enforces graveyard-card exile. PR era5-unification.
-- [x] **Mairsil, the Pretender** — ETB exile-and-tag cost is the resolution effect, but downstream activation copies bypass cage-counter validation; custom handler tags caged cards with marker for the engine-side activation hook to verify. PR era5-unification.
-
-Additional cost-unenforced cases noted by audit, not yet fixed:
-
-- [ ] **Azami, Lady of Scrolls** — "Tap an untapped Wizard you control" (tap-another cost). The "Complete" entry in the structure audit is misleading — only the draw effect is wired; the tap-a-Wizard cost is unpaid. #engine #per_card #cost-enforcement
-- [ ] **Bilbo, Birthday Celebrant** — life-payment activation for Birthday rolls. #engine #per_card #cost-enforcement
-- [ ] **Captain America, First Avenger** — discard-a-card shield-throw activation. #engine #per_card #cost-enforcement
-- [ ] **Ellie, Vengeful Hunter** — "Pay 2 life, Sacrifice another creature" — both portions unenforced in template. #engine #per_card #cost-enforcement
-- [ ] **Erebos, God of the Dead** — "{1}{B}, Pay 2 life" draw activation — life portion unenforced. #engine #per_card #cost-enforcement
-- [ ] **Phenax, God of Deception** — granted "{T}: Target player mills X" with no cost-enforcement on the granted ability. #engine #per_card #cost-enforcement
-- [ ] **Tasigur, the Golden Fang** — "Exile four cards from your graveyard" delve cost. #engine #per_card #cost-enforcement
-- [ ] **Ghen, Arcanum Weaver** — sacrifice-an-enchantment cost on the recursion activation. #engine #per_card #cost-enforcement
-- [ ] **Shilgengar, Sire of Famine** — sacrifice-a-creature drain cost. #engine #per_card #cost-enforcement
-- [ ] **Yenna, Redtooth Regent** — "{2}, {T}: Choose target enchantment you control that doesn't have the same name…" — duplicate-name validation not enforced. #engine #per_card #cost-enforcement
+#engine #per_card #cost-enforcement
 
 
 ## High Priority — Platform
@@ -130,7 +132,7 @@ Additional cost-unenforced cases noted by audit, not yet fixed:
 - [x] **34K corpus audit — DONE (initial run)** — 31,963 cards tested, 181 unique failures (99.4% card coverage). #engine #qa
 - [x] **Corpus audit: draw handler gaps** — verified 2,032/2,032 PASS (was tests-run count, not failures). All draw tests already passing after keyword_dead fix 2026-05-08. #engine #handlers #draw
 - [x] **Corpus audit: lifegain/lifeloss gaps** — verified stale (1,101 gain_life + 511 lose_life = 1,612 was tests-run, not failures). All passing. Re-ran `hexdek-thor --corpus-audit` 2026-05-09: 18,934 tests, 0 fail, 0 panic. #engine #handlers #life
-- [ ] **Corpus audit: damage gaps (1,095)** — may be stale (needs verification). #engine #handlers #damage
+- [x] **Corpus audit: damage gaps (1,095)** — verified stale via the same 18,934-test/0-fail Thor run that cleared discard/mill/buff and lifegain/lifeloss; original 1,095 was a tests-run count, not failures (2026-05-09). #engine #handlers #damage
 - [x] **Corpus audit: discard/mill/buff gaps** — verified 498 discard / 303 mill / 2,109 buff all 100% pass across every era (2026-05-09). Original 305/148/81 figures were tests-run counts misread as failures, same shape as the draw stale-result. Report in `data/corpus-misc-verification.md`. #engine #handlers #misc
 - [x] **Thor test harness: conditional trigger setup** — 14 new scaffold kinds in conditional_setup.go (gained-life, cast-spell, ETB, drawn-card, attacked, sacrificed, combat-damage, landfall, discarded, enchanted, opponent-lost-life, life-threshold, upkeep). (2026-05-07) #engine #qa #thor
 - [x] **Muninn-Thor mismatch audit** — crossref.go: loads Muninn data + Thor failures, builds TP/FN/FP confusion matrix, computes recall/precision, writes markdown report. (2026-05-07) #engine #qa
@@ -149,7 +151,7 @@ Additional cost-unenforced cases noted by audit, not yet fixed:
 
 - [x] BOINC-style distributed compute — `cmd/hexdek-contrib` Go binary, WebSocket protocol, chunked work dispatch, spot-checking, contributor credits. 2,260 lines, tests. PR #17 merged 2026-05-09. #distributed
 - [x] **Deterministic seed capture (anti-cheat Phase 1)** — `internal/seedcontract`: HMAC-SHA256, domain-separated prefixes, layered Seal/Sign/Verify, `DeriveContractKey`. Wired into all 3 game paths. 14 tests. PR #14 merged 2026-05-09. #anticheat
-- [x] Deterministic replay anti-cheat — Phase 2 schema (verification_queue + contributor_sanctions + verified column migration). PR #20 merged 2026-05-09. Actual spot-check worker still needed. #anticheat
+- [x] Deterministic replay anti-cheat — Phase 2 schema (PR #20), spot-check scheduler + cauterize service (PR #23), spot-check Service orchestrator (PR #28). All merged 2026-05-09. #anticheat
 - [x] Statistical anomaly detection — `StatisticalAuditor` wired into game loop, per-contributor 3σ flagging on win rate/game length/turn variance. PR #19 merged 2026-05-09. #anticheat
 - [x] Credit economy — `internal/credits` package: free tier (3 gauntlets/day), credits for compute, 402 paywall, concurrency-safe ledger, gauntlet endpoint gated. 14 tests. PR #21 merged 2026-05-09. #economy
 - [x] Stream/narrator layer — game state → visual renderer → Twitch/OBS output. Shipped via StreamOverlay + NarratorOverlay. #stream
