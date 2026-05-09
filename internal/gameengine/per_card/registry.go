@@ -1638,6 +1638,18 @@ func registerDefaults() {
 	registerSakashimaOfAThousandFacesCustom(Global())
 	registerAraumiOfTheDeadTideCustom(Global())
 	registerMairsilThePretenderCustom(Global())
+
+	// Era 4 unification — STX, MH2, AFR, MID, VOW, C19-C21 commanders.
+	// Tiamat, Veyran, Acererak, and Kalamax are owned by other batches
+	// (handler-coverage-2 / Era 3 / Era 5) so are intentionally not
+	// re-registered here.
+	registerGalazethPrismariCustom(Global())
+	registerLierDiscipleOfTheDrownedCustom(Global())
+	registerToxrillTheCorrosiveCustom(Global())
+	registerAsmoranomardicadaistinaculdacarCustom(Global())
+	registerJadziOracleOfArcaviosCustom(Global())
+	registerSilverquillTheDisputantCustom(Global())
+	registerQuandrixTheProofCustom(Global())
 }
 
 func init() {
