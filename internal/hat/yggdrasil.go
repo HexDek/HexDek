@@ -1136,6 +1136,69 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 				}
 				score += float64(n) * float64(perms) * 0.05
 			}
+
+			// 4c. First/double-strike blocker penalty. A defender's
+			// untapped first-striker can kill our attacker before we
+			// get to deal damage — effectively a much bigger blocker
+			// from the swing's POV. Skip when our attacker also has
+			// first/double strike (they trade in the first-strike step
+			// together) or when evasion lets us bypass ground blockers.
+			atkFS := attacker.HasKeyword("first strike") ||
+				attacker.HasKeyword("first_strike") ||
+				attacker.HasKeyword("double strike") ||
+				attacker.HasKeyword("double_strike")
+			if !atkFS {
+				atkPow := gs.PowerOf(attacker)
+				atkTou := gs.ToughnessOf(attacker) - attacker.MarkedDamage
+				atkFlying := attacker.HasKeyword("flying")
+				atkUnblockable := attacker.HasKeyword("unblockable")
+				dangerousFS := 0
+				for _, b := range d.Battlefield {
+					if b == nil || !b.IsCreature() || b.Tapped {
+						continue
+					}
+					bFS := b.HasKeyword("first strike") || b.HasKeyword("first_strike") ||
+						b.HasKeyword("double strike") || b.HasKeyword("double_strike")
+					if !bFS {
+						continue
+					}
+					if atkFlying && !b.HasKeyword("flying") && !b.HasKeyword("reach") {
+						continue
+					}
+					if atkUnblockable {
+						continue
+					}
+					bPow := gs.PowerOf(b)
+					bDT := b.HasKeyword("deathtouch")
+					kills := bPow >= atkTou || (bDT && bPow >= 1)
+					if attacker.HasKeyword("indestructible") && !bDT {
+						kills = false
+					}
+					if kills {
+						dangerousFS++
+					}
+				}
+				if dangerousFS > 0 {
+					// Calibration: 0.4 per power of swing we'd lose,
+					// floored at 0.5 and capped at 1.5 per blocker —
+					// sized to sit between the open-defender bonus
+					// (+1.5) and the threat-eval term (×2-3.5). Total
+					// penalty capped at -3.0 so a wall of FS blockers
+					// can't fully veto a target that's otherwise lethal.
+					per := 0.4 * float64(atkPow)
+					if per > 1.5 {
+						per = 1.5
+					}
+					if per < 0.5 {
+						per = 0.5
+					}
+					penalty := per * float64(dangerousFS)
+					if penalty > 3.0 {
+						penalty = 3.0
+					}
+					score -= penalty
+				}
+			}
 		}
 
 		// 5. Retaliation risk penalty — skip when behind (focus fire).
@@ -3519,6 +3582,13 @@ func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, le
 		}
 		if p.HasKeyword("double strike") || p.HasKeyword("double_strike") {
 			val += 0.2
+		} else if p.HasKeyword("first strike") || p.HasKeyword("first_strike") {
+			// First-strikers kill blockers in the §510.5 step before
+			// taking return damage, so they're noticeably safer to send
+			// into a contested board than vanilla creatures of the same
+			// P/T. Less impact than double strike (no extra damage), but
+			// still meaningfully tilts marginal attack decisions.
+			val += 0.15
 		}
 		if p.HasKeyword("lifelink") {
 			val += 0.1
@@ -3694,6 +3764,74 @@ func (h *YggdrasilHat) ChooseAttackTarget(gs *gameengine.GameState, seatIdx int,
 	return h.bestTarget(gs, seatIdx, attacker, legalDefenders)
 }
 
+// simulateBlockerTrade resolves a single attacker-vs-blocker trade
+// taking first strike, double strike, deathtouch, and indestructible
+// into account, and returns whether each side dies. Used by tests
+// that need to verify combat outcomes without spinning up the full
+// engine combat phase.
+//
+// Damage steps:
+//  1. First-strike step: any creature with FS or DS deals damage. If
+//     either side dies here, it deals no damage in step 2.
+//  2. Regular step: surviving creatures with no FS (or with DS) deal
+//     damage. Deathtouch makes any non-zero damage lethal.
+//
+// Indestructible immunity is applied at the end of each step.
+func simulateBlockerTrade(gs *gameengine.GameState, atk, blk *gameengine.Permanent) (attackerDies, blockerDies bool) {
+	if atk == nil || blk == nil {
+		return false, false
+	}
+	atkPow := gs.PowerOf(atk)
+	if atkPow < 0 {
+		atkPow = 0
+	}
+	blkPow := gs.PowerOf(blk)
+	if blkPow < 0 {
+		blkPow = 0
+	}
+	atkTou := gs.ToughnessOf(atk) - atk.MarkedDamage
+	blkTou := gs.ToughnessOf(blk) - blk.MarkedDamage
+
+	atkFS := atk.HasKeyword("first strike") || atk.HasKeyword("first_strike")
+	atkDS := atk.HasKeyword("double strike") || atk.HasKeyword("double_strike")
+	atkDT := atk.HasKeyword("deathtouch")
+	atkIndest := atk.HasKeyword("indestructible")
+
+	blkFS := blk.HasKeyword("first strike") || blk.HasKeyword("first_strike")
+	blkDS := blk.HasKeyword("double strike") || blk.HasKeyword("double_strike")
+	blkDT := blk.HasKeyword("deathtouch")
+	blkIndest := blk.HasKeyword("indestructible")
+
+	// Step 1: first-strike damage.
+	atkStep1, blkStep1 := 0, 0
+	if atkFS || atkDS {
+		blkStep1 = atkPow
+	}
+	if blkFS || blkDS {
+		atkStep1 = blkPow
+	}
+	atkLost := atkStep1
+	blkLost := blkStep1
+	atkKilled := !atkIndest && (atkLost >= atkTou || (blkDT && atkLost >= 1))
+	blkKilled := !blkIndest && (blkLost >= blkTou || (atkDT && blkLost >= 1))
+
+	// Step 2: regular damage. Dead creatures deal no damage. Creatures
+	// with DS swing again; creatures with only FS do not.
+	if !atkKilled && (!atkFS || atkDS) {
+		blkLost += atkPow
+	}
+	if !blkKilled && (!blkFS || blkDS) {
+		atkLost += blkPow
+	}
+	if !atkIndest {
+		atkKilled = atkLost >= atkTou || (blkDT && atkLost >= 1)
+	}
+	if !blkIndest {
+		blkKilled = blkLost >= blkTou || (atkDT && blkLost >= 1)
+	}
+	return atkKilled, blkKilled
+}
+
 // -- Interface: AssignBlockers --
 
 func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, attackers []*gameengine.Permanent) map[*gameengine.Permanent][]*gameengine.Permanent {
@@ -3848,6 +3986,9 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 		willDieIfUnblocked := life-incoming <= 0
 		atkDT := atk.HasKeyword("deathtouch")
 		atkDS := atk.HasKeyword("double strike") || atk.HasKeyword("double_strike")
+		// First/double strike on the attacker — used by the deathtouch
+		// trade-up + trample chump-skip branches below.
+		atkFS := atk.HasKeyword("first strike") || atk.HasKeyword("first_strike") || atkDS
 		atkPow := gs.PowerOf(atk)
 		atkTou := gs.ToughnessOf(atk)
 		atkInfect := atk.HasKeyword("infect") || atk.HasKeyword("toxic") || atk.HasKeyword("poisonous")
@@ -3961,19 +4102,32 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 		// possible. Skipped for 0-power attackers (they kill the
 		// blocker for nothing). Combo / value-engine pieces were
 		// already filtered out of the pool above when willDie==false.
+		//
+		// First/double strike caveat (CR §510.5): a non-FS blocker
+		// thrown into an FS/DS attacker dies in the first-strike step
+		// before delivering damage — the trade is just a creature
+		// loss. Require the blocker to either kill the attacker or
+		// survive (e.g. indestructible) when the attacker has FS/DS.
 		if len(chosen) == 0 && atkPow > 0 {
 			atkSum := atkPow + atkTou
 			var best *gameengine.Permanent
-			bestSum := atkSum // strictly less is "favorable"
+			bestSum := atkSum
 			for _, b := range legal {
 				if b == nil {
 					continue
 				}
 				bSum := gs.PowerOf(b) + gs.ToughnessOf(b)
-				if bSum < bestSum {
-					best = b
-					bestSum = bSum
+				if bSum >= bestSum {
+					continue
 				}
+				if atkFS {
+					aDies, bDies := simulateBlockerTrade(gs, atk, b)
+					if bDies && !aDies {
+						continue
+					}
+				}
+				best = b
+				bestSum = bSum
 			}
 			if best != nil {
 				chosen = []*gameengine.Permanent{best}
@@ -3983,13 +4137,29 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 		if len(chosen) == 0 && (willDieIfUnblocked || mustBlock) {
 			// Deathtouch trade-up: prefer a deathtouch blocker that can
 			// take down the attacker (any damage is lethal) over a chump.
+			// CR §510.5 — if the attacker has first/double strike and our
+			// DT blocker LACKS first/double strike, the blocker dies in
+			// the FS step before it can deliver the deathtouch hit. So
+			// against an FS attacker, only an FS/DS deathtouch blocker
+			// is a real trade-up; otherwise it's just a chump.
 			var dtTrader *gameengine.Permanent
 			if !atkDT {
 				for _, b := range legal {
-					if b != nil && b.HasKeyword("deathtouch") && gs.PowerOf(b) >= 1 {
-						dtTrader = b
-						break
+					if b == nil || !b.HasKeyword("deathtouch") || gs.PowerOf(b) < 1 {
+						continue
 					}
+					if atkFS {
+						bFS := b.HasKeyword("first strike") || b.HasKeyword("first_strike") ||
+							b.HasKeyword("double strike") || b.HasKeyword("double_strike")
+						bIndestruct := b.HasKeyword("indestructible")
+						// Indestructible DT blocker survives the FS hit
+						// regardless and still gets to deliver DT.
+						if !bFS && !bIndestruct {
+							continue
+						}
+					}
+					dtTrader = b
+					break
 				}
 			}
 			// Even when nothing in `legal` is a strict survivor, prefer an
@@ -4007,7 +4177,37 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 			case dtTrader != nil:
 				chosen = []*gameengine.Permanent{dtTrader}
 			default:
-				chosen = []*gameengine.Permanent{bestChumpBlocker(gs, legal)}
+				chump := bestChumpBlocker(gs, legal)
+				useChump := chump != nil
+				// CR §702.19c trample with first/double strike: if the
+				// chump can't absorb enough damage to keep us alive, the
+				// block burns a creature for nothing. Skip the chump.
+				if useChump && atk.HasKeyword("trample") && atkFS &&
+					!chump.HasKeyword("deathtouch") &&
+					!chump.HasKeyword("first strike") && !chump.HasKeyword("first_strike") &&
+					!chump.HasKeyword("double strike") && !chump.HasKeyword("double_strike") {
+					ap := atkPow
+					if atkDS {
+						ap *= 2
+					}
+					absorbed := gs.ToughnessOf(chump) - chump.MarkedDamage
+					if absorbed < 0 {
+						absorbed = 0
+					}
+					leak := ap - absorbed
+					if leak < 0 {
+						leak = 0
+					}
+					// If the leak still kills us (and the attacker isn't
+					// must-block), the chump didn't save us — preserve
+					// the creature.
+					if life-leak <= 0 && !mustBlock {
+						useChump = false
+					}
+				}
+				if useChump {
+					chosen = []*gameengine.Permanent{chump}
+				}
 			}
 		}
 
