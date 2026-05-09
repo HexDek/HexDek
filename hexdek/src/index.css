@@ -2226,6 +2226,44 @@ body {
   .export-modal__btn { flex: 1 1 100%; }
 }
 
+/* ── ContextBox (action-button TLDR) ──
+   Renders above (or beside) action CTAs to give a 1–2 sentence preview of
+   what the button does. The component itself owns most of its styling
+   inline; these rules cover responsive stacking, dismiss-button polish,
+   and the deck-hero quick-action wrapper. */
+.ctx-box {
+  /* Block-level by default — stacks above the button it precedes.
+     On wider viewports a caller can place the box beside the button using
+     a flex parent; the box itself stays full-width within its column. */
+  display: block;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.ctx-box strong { color: var(--ink); font-weight: 700; }
+.ctx-box__dismiss:focus-visible {
+  outline: 1px solid var(--ink-2);
+  outline-offset: 2px;
+  opacity: 1 !important;
+}
+/* Wrapper used by the deck archive page to inset the hero quick-action
+   context box so it lines up with the page padding. */
+.deck-hero__actions-context {
+  padding: 10px 18px 0;
+}
+/* Mobile: ensure the context box always stacks ABOVE its button at small
+   widths even when the parent uses flex-row. */
+@media (max-width: 600px) {
+  .ctx-box-row {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .ctx-box {
+    font-size: 11px; /* slightly larger for readability on phones */
+    padding: 6px 10px;
+  }
+  .ctx-box--compact { font-size: 10px; padding: 4px 8px; }
+  .deck-hero__actions-context { padding: 10px 12px 0; }
+}
+
 /* ── MOBILE 480px — deck hero, landing, dashboard ── */
 @media (max-width: 480px) {
   .deck-hero { min-height: auto; }

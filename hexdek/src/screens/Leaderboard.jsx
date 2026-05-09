@@ -7,6 +7,7 @@ import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useArtContrast } from '../hooks/useArtContrast'
 import { api, cardArtUrl } from '../services/api'
 import { countryFlagEmoji } from '../lib/flag'
+import ContextBox from '../components/ContextBox'
 
 const SORT_KEYS = [
   { key: 'hex_rating', label: 'HEXELO',  term: 'hexelo' },
@@ -208,6 +209,9 @@ function LeaderboardContent() {
       <Tape left={`LEADERBOARD / ${bracketLabel} / LIVE RANKINGS`} mid={`${sorted.length} DECKS`} right="DOC HX-500" />
 
       <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <ContextBox id="leaderboard.intro">
+          Live HexDek ratings, ranked by Hex Rating (a TrueSkill-derived score combining win rate, opponent strength, and recency). Click any row to open that deck's archive — analysis, gauntlet results, matchups. Filter by bracket above or sort by a different column.
+        </ContextBox>
         {/* Search + Sort controls */}
         <div className="lb-search-row" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="panel" style={{ padding: 0, flex: 1, minWidth: 200, borderStyle: filter ? 'solid' : 'dashed' }}>

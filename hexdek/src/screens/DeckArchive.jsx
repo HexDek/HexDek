@@ -755,6 +755,19 @@ export default function DeckArchive() {
         </div>
       </div>
 
+      {/* Hero quick-actions context — explains the floating SHARE / COMPARE
+          / FRIEND buttons in the hero. Dismissible so it disappears once
+          the user has read it. */}
+      {owner && id && (
+        <div className="deck-hero__actions-context">
+          <ContextBox id="deck.hero.actions">
+            <strong>SHARE</strong> copies a public link to this deck page to your clipboard.
+            {' '}<strong>COMPARE</strong> opens a side-by-side diff with another deck (overlap, color identity, archetype).
+            {canFriend && <> <strong>+ ADD FRIEND</strong> follows {owner?.toUpperCase()} so their decks surface in your feed.</>}
+          </ContextBox>
+        </div>
+      )}
+
       {/* Deck stats summary — always visible between hero and main columns. */}
       <div className="deck-stats-summary-row">
         <DeckStatsSummary cards={cards} />
@@ -807,7 +820,7 @@ export default function DeckArchive() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {owner && id && (
                 <>
-                  <ContextBox compact>Opens an editor with the full deck list. Saving re-runs Freya analysis on the new list.</ContextBox>
+                  <ContextBox id="deck.edit" compact>Opens an editor with the full deck list. Saving re-runs Freya analysis on the new list.</ContextBox>
                   <Btn arrow="↗" onClick={() => {
                     if (editing) return
                     const lines = cards.map(c => {
@@ -821,7 +834,7 @@ export default function DeckArchive() {
                   }}>EDIT DECK</Btn>
                 </>
               )}
-              <ContextBox compact>Downloads the decklist in your chosen format (Moxfield, Arena, plain text).</ContextBox>
+              <ContextBox id="deck.export" compact>Downloads the decklist in your chosen format (Moxfield, Arena, plain text).</ContextBox>
               <Btn ghost arrow="↗" onClick={() => {
                 if (!cards.length) return
                 setExportOpen(true)
@@ -829,13 +842,13 @@ export default function DeckArchive() {
               {analyzing && <Tag solid kind="info">ANALYZING...</Tag>}
               {owner && id && (
                 <>
-                  <ContextBox compact>Opens this deck in the Forge — interactive playtester for testing draws, mulligans, and lines.</ContextBox>
+                  <ContextBox id="deck.forge" compact>Opens this deck in the Forge — interactive playtester for testing draws, mulligans, and lines.</ContextBox>
                   <Btn ghost arrow="↗" onClick={() => navigate(`/forge?deck=${owner}/${id}`)}>OPEN IN FORGE</Btn>
                 </>
               )}
               {owner && id && !isOwner && user && (
                 <>
-                  <ContextBox compact>Copies this deck into your account so you can edit and tune your own version. The clone re-runs Freya analysis on import.</ContextBox>
+                  <ContextBox id="deck.clone" compact>Copies this deck into your account so you can edit and tune your own version. The clone re-runs Freya analysis on import.</ContextBox>
                   {!confirmClone ? (
                     <Btn solid arrow="⎘" onClick={() => setConfirmClone(true)}>
                       CLONE DECK
@@ -854,8 +867,6 @@ export default function DeckArchive() {
                             toast.success('DECK CLONED — RUNNING FREYA')
                             navigate(`/decks/${res.owner}/${res.id}`)
                           }).catch(err => {
-                            // Surface the precise reason — the helper attaches
-                            // a status code so we don't have to string-match.
                             if (err?.status === 401) toast.error('SIGN IN TO CLONE')
                             else if (err?.status === 429) toast.error('CLONE LIMIT REACHED — TRY AGAIN IN AN HOUR')
                             else if (err?.status === 400) toast.error(err.message || 'CLONE REJECTED')
@@ -875,7 +886,7 @@ export default function DeckArchive() {
               )}
               {owner && id && !isOwner && !user && (
                 <>
-                  <ContextBox compact>Sign in to clone this deck into your own collection — Freya will re-analyze the copy on import.</ContextBox>
+                  <ContextBox id="deck.clone" compact>Sign in to clone this deck into your own collection — Freya will re-analyze the copy on import.</ContextBox>
                   <Btn ghost arrow="↗" onClick={() => navigate('/login')}>SIGN IN TO CLONE</Btn>
                 </>
               )}
@@ -884,7 +895,7 @@ export default function DeckArchive() {
                   <div className="hr" style={{ margin: '4px 0' }} />
                   {!confirmDelete ? (
                     <>
-                      <ContextBox compact tone="danger">Permanently removes this deck and its analysis. This cannot be undone.</ContextBox>
+                      <ContextBox id="deck.delete" compact tone="danger">Permanently removes this deck and its analysis. This cannot be undone.</ContextBox>
                       <Btn ghost onClick={() => setConfirmDelete(true)} style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}>DELETE DECK</Btn>
                     </>
                   ) : (
@@ -1024,7 +1035,7 @@ export default function DeckArchive() {
                 }}
                 spellCheck={false}
               />
-              <ContextBox style={{ marginTop: 10 }}>
+              <ContextBox id="deck.edit-save" style={{ marginTop: 10 }}>
                 <strong>SAVE UPDATE</strong> writes a new version of the deck and re-runs Freya analysis.
                 {' '}<strong>CANCEL</strong> discards your edits.
               </ContextBox>
@@ -1092,10 +1103,10 @@ export default function DeckArchive() {
           {/* Gauntlet button — prominent, right under Freya */}
           {owner && id && (
             <div>
-              <ContextBox>
-                <strong>RUN GAUNTLET</strong> simulates 500 AI-vs-AI games against the meta to measure win rate (takes a few minutes; runs on the server).
-                {' '}<strong>SPECTATE LIVE</strong> spawns a live game room you can watch in real time.
-                {' '}<strong>TEST VARIANT</strong> lets you swap cards and rerun analysis without saving.
+              <ContextBox id="deck.run-actions">
+                <strong>RUN GAUNTLET (500)</strong> queues 500 AI-vs-AI games against bracket-matched meta decks on the server. Win rate, ELO delta, and best/worst matchups land in the GAUNTLET REPORT panel below; takes a few minutes.
+                {' '}<strong>SPECTATE LIVE</strong> spawns a fresh 4-player room with this deck and opens the live spectator view — you can watch every decision as the AI plays it out.
+                {' '}<strong>TEST VARIANT</strong> opens a scratch editor where you can swap cards and rerun Freya analysis without overwriting the saved deck.
               </ContextBox>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <Btn solid arrow="▶" onClick={() => {

@@ -88,7 +88,7 @@ export default function DeckList() {
 
       <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {user && (
-          <ContextBox>
+          <ContextBox id="decklist.intro">
             Browse and search every deck on the platform. Click any deck to open its archive — analysis, gauntlet results, decklist, and matchups.
             {' '}Use <strong>ADD YOUR DECK</strong> (in the list view, or the upload tile on the shelf) to import a Moxfield link or paste a decklist; Freya analyzes it automatically after upload.
           </ContextBox>
@@ -201,7 +201,7 @@ function ListView({ decks, eloByDeckId, navigate, onUpload }) {
         <span>RECORD</span>
       </div>
       <div style={{ padding: '6px 10px 0', borderBottom: '1px solid var(--rule)' }}>
-        <ContextBox compact>Click below to import a deck — paste a Moxfield URL or raw decklist. Freya analyzes it automatically.</ContextBox>
+        <ContextBox id="decklist.import" compact>Click below to import a deck — paste a Moxfield URL or raw decklist. Freya analyzes it automatically (~10–20 seconds) and then redirects you to the new deck page.</ContextBox>
       </div>
       <div
         onClick={onUpload}
