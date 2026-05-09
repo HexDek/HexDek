@@ -1604,6 +1604,22 @@ func registerDefaults() {
 
 	// Auto-generated handlers (cmd/gen-handlers).
 	registerGeneratedHandlers(Global())
+
+	// Era 3 unification — SNC / BRO / DMU / NEO / CLB commanders. Each
+	// handler stacks alongside the gen_*.go stub that was emitting
+	// partials only.
+	registerJetmirEra3(Global())
+	registerFalcoSparaEra3(Global())
+	registerLordXanderEra3(Global())
+	registerHidetsuguAndKairiEra3(Global())
+	registerShorikaiEra3(Global())
+	registerAcererakEra3(Global())
+	registerTazriEra3(Global())
+	registerSivrissEra3(Global())
+	registerUrzaPrinceEra3(Global())
+	registerPlarggNassariEra3(Global())
+	registerWillScionEra3(Global())
+	registerFelotharEra3(Global())
 }
 
 func init() {
