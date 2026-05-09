@@ -1438,7 +1438,6 @@ func registerDefaults() {
 	registerNehebTheWorthy(Global())
 	registerNellyBorcaImpulsiveAccuser(Global())
 	registerNevinyrral(Global())
-	registerNicolBolasTheRavager(Global())
 	registerNineFingersKeene(Global())
 	registerNitaForumConciliator(Global())
 	registerNivMizzetTheFiremind(Global())
