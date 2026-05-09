@@ -594,9 +594,7 @@ func RegisterLevelUpContinuousEffect(gs *GameState, perm *Permanent) {
 			chars.Power = bracket.Power
 			chars.Toughness = bracket.Toughness
 			// Grant bracket keywords.
-			for _, kw := range bracket.Keywords {
-				chars.Keywords = append(chars.Keywords, kw)
-			}
+			chars.Keywords = append(chars.Keywords, bracket.Keywords...)
 		},
 	}
 	gs.ContinuousEffects = append(gs.ContinuousEffects, ce)

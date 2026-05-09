@@ -67,7 +67,7 @@ func chishiroEndStep(gs *gameengine.GameState, perm *gameengine.Permanent, ctx m
 			continue
 		}
 		modified := false
-		if p.Counters != nil && len(p.Counters) > 0 {
+		if len(p.Counters) > 0 {
 			modified = true
 		}
 		// Naive: any attached aura or equipment? — engine usually flags

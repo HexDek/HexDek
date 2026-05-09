@@ -27,10 +27,6 @@ func nellySuspect(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[
 	if gs == nil || perm == nil || ctx == nil {
 		return
 	}
-	attackerSeat, _ := ctx["seat"].(int)
-	if attackerSeat != perm.Controller {
-		attackerSeat = perm.Controller
-	}
 	var best *gameengine.Permanent
 	for _, opp := range gs.Opponents(perm.Controller) {
 		s := gs.Seats[opp]

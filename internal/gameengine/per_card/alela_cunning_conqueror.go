@@ -170,10 +170,7 @@ func alelaDealerIsFaerie(gs *gameengine.GameState, sourceSeat int, sourceName st
 				return true
 			}
 		}
-		if strings.Contains(strings.ToLower(p.Card.TypeLine), "faerie") {
-			return true
-		}
-		return false
+		return strings.Contains(strings.ToLower(p.Card.TypeLine), "faerie")
 	}
 	return false
 }

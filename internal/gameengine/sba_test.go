@@ -15,12 +15,6 @@ import (
 //   - addLibrary / addHand / countEvents / lastEventOfKind
 // -----------------------------------------------------------------------------
 
-// addToken places a token permanent on the battlefield (Types include "token"
-// so §704.5d's zone-sweep key recognizes it).
-func addToken(gs *GameState, seat int, name string, pow, tough int) *Permanent {
-	return addBattlefield(gs, seat, name, pow, tough, "creature", "token")
-}
-
 // addTokenCardInZone pushes a token-tagged Card into the given non-battlefield
 // zone so we can verify §704.5d's sweep.
 func addTokenCardInZone(gs *GameState, seat int, name, zone string) *Card {

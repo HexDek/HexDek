@@ -255,7 +255,6 @@ var (
 	reWinGame     = regexp.MustCompile(`^(?:you |that player )?wins? the game`)
 	// Compound effects: "each opponent loses N life and you gain N life"
 	reLoseGain = regexp.MustCompile(`^(?:each opponent|target (?:opponent|player)) loses? (\d+) life and you gain (\d+) life`)
-	reDrawGain = regexp.MustCompile(`^you (?:draw a card|gain \d+ life) and (?:you )?(?:draw a card|gain \d+ life)`)
 )
 
 // parseEffectText attempts to convert effect text into a structured Effect.

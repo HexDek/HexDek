@@ -598,7 +598,7 @@ func nevinyrralETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 					break
 				}
 			}
-			if p.IsCreature() || p.IsLand() == false && isTarget {
+			if p.IsCreature() || (!p.IsLand() && isTarget) {
 				gs.LogEvent(gameengine.Event{
 					Kind:   "destroy",
 					Seat:   p.Controller,

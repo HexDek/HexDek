@@ -1231,11 +1231,10 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 	case "exile_top_library":
 		seat := controllerSeat(src)
 		if seat >= 0 && seat < len(gs.Seats) {
-			if _, ok := gs.millOne(seat); ok {
-				// millOne moves to graveyard; for exile_top we'd want exile.
-				// Phase 5+ will do proper exile. For now the mill-one approximation
-				// is acceptable: it removes a card from the top of library.
-			}
+			// millOne moves to graveyard; for exile_top we'd want exile.
+			// Phase 5+ will do proper exile. For now the mill-one approximation
+			// is acceptable: it removes a card from the top of library.
+			gs.millOne(seat)
 		}
 		gs.LogEvent(Event{
 			Kind:   "exile_top_library",

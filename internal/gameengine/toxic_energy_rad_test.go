@@ -33,17 +33,6 @@ func addTestPerm(gs *GameState, seat int, name string, types ...string) *Permane
 	return p
 }
 
-// countTestEvents counts events with the given kind.
-func countTestEvents(gs *GameState, kind string) int {
-	n := 0
-	for _, ev := range gs.EventLog {
-		if ev.Kind == kind {
-			n++
-		}
-	}
-	return n
-}
-
 // ============================================================================
 // Toxic tests
 // ============================================================================

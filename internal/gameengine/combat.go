@@ -1269,19 +1269,6 @@ func alive(gs *GameState, p *Permanent) bool {
 	return false
 }
 
-// lethalAmount mirrors Python _lethal_amount — respects deathtouch +
-// pre-existing marked damage.
-func lethalAmount(attacker, blocker *Permanent) int {
-	if attacker.HasKeyword("deathtouch") {
-		return 1
-	}
-	need := blocker.Toughness() - blocker.MarkedDamage
-	if need < 1 {
-		return 1
-	}
-	return need
-}
-
 // lethalAmountGS is the layer-aware variant used by DealCombatDamageStep.
 func lethalAmountGS(gs *GameState, attacker, blocker *Permanent) int {
 	if attacker.HasKeyword("deathtouch") {
@@ -1693,13 +1680,6 @@ func isEndOfCombatTrigger(tr *gameast.Trigger) bool {
 // Deprecated: use CheckNinjutsuRefactored directly for new code.
 func CheckNinjutsu(gs *GameState, attackerSeat int, attackers []*Permanent, blockerMap map[*Permanent][]*Permanent) []*Permanent {
 	return CheckNinjutsuRefactored(gs, attackerSeat, attackers, blockerMap)
-}
-
-// cardHasNinjutsu checks if a card has the ninjutsu keyword.
-// Retained for backward compatibility; new code uses
-// cardHasNinjutsuOrCommanderNinjutsu in ninja_sneak.go.
-func cardHasNinjutsu(c *Card) bool {
-	return cardHasNinjutsuOrCommanderNinjutsu(c, false)
 }
 
 // removePermanentFromSlice removes a permanent from a slice by pointer.
