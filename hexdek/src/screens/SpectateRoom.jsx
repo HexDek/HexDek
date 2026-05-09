@@ -6,6 +6,7 @@ import { useSpectateRoom } from '../hooks/useSpectateRoom'
 import { findGameChangerInText } from '../data/gameChangers'
 import CardLink, { linkifyAction } from '../components/CardLink'
 import { narrate } from '../components/NarratorOverlay'
+import ArtAmbience from '../components/ArtAmbience'
 
 const SPEED_MARKS = [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2]
 
@@ -340,12 +341,7 @@ export default function SpectateRoom() {
       </div>
 
       <div className="spectator-layout">
-        {(() => {
-          const ambientName = seats[game.active_seat]?.commander || seats[0]?.commander
-          const ambientUrl = ambientName ? cardArtUrl(ambientName) : null
-          if (!ambientUrl) return null
-          return <img key={ambientName} className="art-ambience" src={ambientUrl} alt="" aria-hidden="true" />
-        })()}
+        <ArtAmbience name={seats[game.active_seat]?.commander || seats[0]?.commander} />
 
         <div className="spectator-seats">
           <div className="seat-grid">
