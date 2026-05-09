@@ -2984,6 +2984,21 @@ func (h *YggdrasilHat) activationHeuristic(gs *gameengine.GameState, seatIdx int
 		}
 	}
 
+	// Equipment equip: score based on best available target quality.
+	ot2 := gameengine.OracleTextLower(c)
+	if strings.Contains(ot2, "equip") && opt.Permanent != nil && opt.Permanent.IsEquipment() {
+		equipScore := scoreEquipTarget(gs, seatIdx, opt.Permanent, nil)
+		if equipScore > 0 {
+			base += float64(equipScore) * 0.015
+		}
+		hasConnect := strings.Contains(ot2, "deals combat damage")
+		hasDeath := strings.Contains(ot2, "equipped creature dies") ||
+			strings.Contains(ot2, "whenever equipped creature dies")
+		if hasConnect || hasDeath {
+			base += 0.20
+		}
+	}
+
 	if h.tutorTargetSet[c.DisplayName()] {
 		base += 0.10
 	}
@@ -3816,6 +3831,33 @@ func (h *YggdrasilHat) ChooseTarget(gs *gameengine.GameState, seatIdx int, filte
 					return t
 				}
 			}
+		}
+	}
+
+	// Equipment equip target selection: score friendly creatures for equip.
+	if filter.Base == "creature" && filter.YouControl {
+		type equipCandidate struct {
+			target gameengine.Target
+			score  int
+		}
+		var equipCandidates []equipCandidate
+		for _, t := range legal {
+			if t.Kind != gameengine.TargetKindPermanent || t.Permanent == nil {
+				continue
+			}
+			if t.Permanent.Controller != seatIdx {
+				continue
+			}
+			sc := scoreEquipTarget(gs, seatIdx, nil, t.Permanent)
+			if sc > 0 {
+				equipCandidates = append(equipCandidates, equipCandidate{t, sc})
+			}
+		}
+		if len(equipCandidates) > 0 {
+			sort.SliceStable(equipCandidates, func(i, j int) bool {
+				return equipCandidates[i].score > equipCandidates[j].score
+			})
+			return equipCandidates[0].target
 		}
 	}
 

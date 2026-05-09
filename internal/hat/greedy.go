@@ -531,24 +531,112 @@ func scoreEffect(e gameast.Effect, gs *gameengine.GameState, seatIdx int, perm *
 	// Check oracle text for equip patterns.
 	raw := strings.ToLower(gameengine.OracleTextLower(perm.Card))
 	if strings.Contains(raw, "equip") {
-		// Only equip if we have creatures to equip to.
 		if seatIdx >= 0 && seatIdx < len(gs.Seats) {
-			seat := gs.Seats[seatIdx]
-			hasCreature := false
-			for _, p := range seat.Battlefield {
-				if p != nil && p.IsCreature() && p != perm {
-					hasCreature = true
-					break
-				}
-			}
-			if hasCreature {
-				return 20
+			bestScore := scoreEquipTarget(gs, seatIdx, perm, nil)
+			if bestScore > 0 {
+				return bestScore
 			}
 		}
 		return 0
 	}
 
 	return 1 // Unknown effect, minimal score
+}
+
+// scoreEquipTarget scores the best creature target for an equipment.
+// If candidate is non-nil, scores only that creature; otherwise scans the
+// battlefield for the highest-value target. Returns 0 if no valid target.
+func scoreEquipTarget(gs *gameengine.GameState, seatIdx int, equipment *gameengine.Permanent, candidate *gameengine.Permanent) int {
+	if seatIdx < 0 || seatIdx >= len(gs.Seats) {
+		return 0
+	}
+	seat := gs.Seats[seatIdx]
+	if seat == nil {
+		return 0
+	}
+
+	equipOT := ""
+	if equipment != nil && equipment.Card != nil {
+		equipOT = gameengine.OracleTextLower(equipment.Card)
+	}
+	hasDeathTrigger := strings.Contains(equipOT, "equipped creature dies") ||
+		strings.Contains(equipOT, "whenever equipped creature dies")
+	hasConnectTrigger := strings.Contains(equipOT, "deals combat damage")
+	hasIndestructible := strings.Contains(equipOT, "indestructible")
+
+	scorePerm := func(p *gameengine.Permanent) int {
+		if p == nil || !p.IsCreature() || p.Controller != seatIdx {
+			return 0
+		}
+		if equipment != nil && p == equipment {
+			return 0
+		}
+
+		score := 10
+		pow := gs.PowerOf(p)
+		tgh := gs.ToughnessOf(p)
+		score += pow*2 + tgh
+
+		isCommander := gameengine.IsCommanderCard(gs, seatIdx, p.Card)
+		if isCommander {
+			score += 15
+			if hasIndestructible {
+				score += 10
+			}
+		}
+
+		hasEvasion := p.HasKeyword("flying") || p.HasKeyword("trample") ||
+			p.HasKeyword("menace") || p.HasKeyword("fear") ||
+			p.HasKeyword("intimidate") || p.HasKeyword("shadow") ||
+			p.HasKeyword("skulk") || p.HasKeyword("horsemanship")
+		if p.Card != nil {
+			pot := gameengine.OracleTextLower(p.Card)
+			if strings.Contains(pot, "can't be blocked") {
+				hasEvasion = true
+			}
+		}
+		if hasEvasion {
+			score += 8
+			if hasConnectTrigger {
+				score += 12
+			}
+		}
+
+		if hasDeathTrigger && isCommander {
+			score += 15
+		} else if hasDeathTrigger {
+			score += 5
+		}
+
+		attachedCount := 0
+		for _, bp := range seat.Battlefield {
+			if bp != nil && bp.IsEquipment() && bp.AttachedTo == p && bp != equipment {
+				attachedCount++
+			}
+		}
+		if attachedCount > 0 {
+			score += attachedCount * 4
+		}
+
+		if !p.SummoningSick {
+			score += 3
+		}
+
+		return score
+	}
+
+	if candidate != nil {
+		return scorePerm(candidate)
+	}
+
+	best := 0
+	for _, p := range seat.Battlefield {
+		s := scorePerm(p)
+		if s > best {
+			best = s
+		}
+	}
+	return best
 }
 
 // ---------------------------------------------------------------------

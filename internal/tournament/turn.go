@@ -829,16 +829,65 @@ func tryEquipAll(gs *gameengine.GameState, seatIdx int) {
 		if seat.Mana.Total() < cost {
 			continue
 		}
-		// Find best creature: highest power, prefer non-summoning-sick.
 		var bestTarget *gameengine.Permanent
 		bestScore := -1
+		equipOT := ""
+		if equip.Card != nil {
+			equipOT = gameengine.OracleTextLower(equip.Card)
+		}
+		hasDeathTrigger := strings.Contains(equipOT, "equipped creature dies") ||
+			strings.Contains(equipOT, "whenever equipped creature dies")
+		hasConnectTrigger := strings.Contains(equipOT, "deals combat damage")
+		hasIndestructible := strings.Contains(equipOT, "indestructible")
+
 		for _, p := range seat.Battlefield {
 			if p == nil || !p.IsCreature() || p.Controller != seatIdx {
 				continue
 			}
-			score := p.Card.BasePower + p.Card.BaseToughness
-			if !p.SummoningSick {
+			score := gs.PowerOf(p)*2 + gs.ToughnessOf(p)
+
+			isCommander := gs.CommanderFormat && gameengine.IsCommanderCard(gs, seatIdx, p.Card)
+			if isCommander {
+				score += 15
+				if hasIndestructible {
+					score += 10
+				}
+				if hasDeathTrigger {
+					score += 15
+				}
+			} else if hasDeathTrigger {
 				score += 5
+			}
+
+			hasEvasion := p.HasKeyword("flying") || p.HasKeyword("trample") ||
+				p.HasKeyword("menace") || p.HasKeyword("fear") ||
+				p.HasKeyword("intimidate") || p.HasKeyword("shadow") ||
+				p.HasKeyword("skulk") || p.HasKeyword("horsemanship")
+			if p.Card != nil {
+				pot := gameengine.OracleTextLower(p.Card)
+				if strings.Contains(pot, "can't be blocked") {
+					hasEvasion = true
+				}
+			}
+			if hasEvasion {
+				score += 8
+				if hasConnectTrigger {
+					score += 12
+				}
+			}
+
+			attachedCount := 0
+			for _, bp := range seat.Battlefield {
+				if bp != nil && bp.IsEquipment() && bp.AttachedTo == p && bp != equip {
+					attachedCount++
+				}
+			}
+			if attachedCount > 0 {
+				score += attachedCount * 4
+			}
+
+			if !p.SummoningSick {
+				score += 3
 			}
 			if score > bestScore {
 				bestScore = score
