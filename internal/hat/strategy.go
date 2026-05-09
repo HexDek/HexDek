@@ -84,6 +84,15 @@ type StrategyProfile struct {
 	// Low % = more aggressive mulliganing.
 	KeepableHandPct float64
 
+	// IsCommanderCentric flags decks whose primary gameplan IS the commander
+	// (Voltron, high-synergy engine commanders). When true, the hat treats
+	// resolving the commander as load-bearing — pays through more tax,
+	// ignores interaction risk, and skips intermediate hand casts to retry
+	// the commander after each ramp spell. Set by Freya's
+	// detectCommanderCentric (Voltron archetype, ≥45% commander synergy,
+	// or commander oracle text containing ≥2 engine phrases).
+	IsCommanderCentric bool
+
 	// PowerPercentile is this deck's estimated power level within its archetype (0-100).
 	// Scales hat budget: stronger decks warrant deeper search.
 	PowerPercentile int
