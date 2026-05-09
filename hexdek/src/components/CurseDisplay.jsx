@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Panel, KV, Tag } from './chrome'
+import GlossaryTerm from './GlossaryTerm'
 import { api } from '../services/api'
 
 // 7 personality params, in radar-axis order. Order is the visual angle
@@ -7,13 +8,13 @@ import { api } from '../services/api'
 // returned by /api/decks/:owner/:id/curse and the canonical key list in
 // hat.CurseTraitKeys (Go side).
 const TRAITS = [
-  { key: 'aggression',         label: 'AGGRESSION' },
-  { key: 'combo_patience',     label: 'COMBO PAT.' },
-  { key: 'threat_paranoia',    label: 'THREAT' },
-  { key: 'resource_greed',     label: 'GREED' },
-  { key: 'political_memory',   label: 'POLITICS' },
-  { key: 'drain_affinity',     label: 'DRAIN' },
-  { key: 'artifact_affinity',  label: 'ARTIFACT' },
+  { key: 'aggression',         label: 'AGGRESSION', term: 'curse_aggression' },
+  { key: 'combo_patience',     label: 'COMBO PAT.', term: 'curse_combo_patience' },
+  { key: 'threat_paranoia',    label: 'THREAT',     term: 'curse_threat_paranoia' },
+  { key: 'resource_greed',     label: 'GREED',      term: 'curse_greed' },
+  { key: 'political_memory',   label: 'POLITICS',   term: 'curse_politics' },
+  { key: 'drain_affinity',     label: 'DRAIN',      term: 'curse_drain' },
+  { key: 'artifact_affinity',  label: 'ARTIFACT',   term: 'curse_artifact' },
 ]
 
 function RadarChart({ values, locked, size = 220 }) {
@@ -133,7 +134,7 @@ function TraitLockGrid({ values, constraints, onChange, busy }) {
             }}
           >
             <div className="t-xs" style={{ fontWeight: 700, letterSpacing: '0.04em', color: cur ? 'var(--warn)' : 'var(--ink-2)' }}>
-              {t.label}
+              <GlossaryTerm term={t.term} compact>{t.label}</GlossaryTerm>
             </div>
             <button
               type="button"

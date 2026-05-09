@@ -267,11 +267,11 @@ export default function OperatorProfile() {
               ],
               ['EMAIL', user?.email || '—'],
               ['COUNTRY', country || '—'],
-              ['MEMBER SINCE', memberSince],
+              ['MEMBER SINCE', memberSince, 'member_since'],
               ['DECKS', String(decks.length)],
             ]} />
             <KV rows={[
-              ['TOTAL GAMES', aggregate.games > 0 ? String(aggregate.games) : '—'],
+              ['TOTAL GAMES', aggregate.games > 0 ? String(aggregate.games) : '—', 'games'],
               ['RECORD',
                 aggregate.games > 0
                   ? <span>
@@ -280,8 +280,9 @@ export default function OperatorProfile() {
                       <span style={{ color: 'var(--danger)' }}>{aggregate.losses}L</span>
                     </span>
                   : '—',
+                'record',
               ],
-              ['WIN RATE', aggregate.games > 0 ? `${aggregate.winRate.toFixed(1)}%` : '—'],
+              ['WIN RATE', aggregate.games > 0 ? `${aggregate.winRate.toFixed(1)}%` : '—', 'win_rate'],
               ['BEST ELO',
                 bestRating
                   ? <span>
@@ -291,6 +292,7 @@ export default function OperatorProfile() {
                       </span>
                     </span>
                   : '—',
+                'best_elo',
               ],
               ['FRIENDS', String(friends.length)],
             ]} />

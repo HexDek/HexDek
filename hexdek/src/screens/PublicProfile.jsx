@@ -225,12 +225,12 @@ export default function PublicProfile() {
                 </span>,
               ],
               ['COUNTRY', profile?.country || '—'],
-              ['MEMBER SINCE', memberSince],
+              ['MEMBER SINCE', memberSince, 'member_since'],
               ['DECKS', String(decks.length)],
               ['OPPONENTS FACED', String(achievements?.opponents_faced ?? '—')],
             ]} />
             <KV rows={[
-              ['TOTAL GAMES', aggregate.games > 0 ? String(aggregate.games) : '—'],
+              ['TOTAL GAMES', aggregate.games > 0 ? String(aggregate.games) : '—', 'games'],
               ['RECORD',
                 aggregate.games > 0
                   ? <span>
@@ -239,8 +239,9 @@ export default function PublicProfile() {
                       <span style={{ color: 'var(--danger)' }}>{aggregate.losses}L</span>
                     </span>
                   : '—',
+                'record',
               ],
-              ['WIN RATE', aggregate.games > 0 ? `${aggregate.winRate.toFixed(1)}%` : '—'],
+              ['WIN RATE', aggregate.games > 0 ? `${aggregate.winRate.toFixed(1)}%` : '—', 'win_rate'],
               ['BEST ELO',
                 bestRating
                   ? <span>
@@ -250,6 +251,7 @@ export default function PublicProfile() {
                       </span>
                     </span>
                   : '—',
+                'best_elo',
               ],
             ]} />
           </div>
