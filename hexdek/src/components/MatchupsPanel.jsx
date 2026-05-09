@@ -6,11 +6,12 @@ import { API_BASE, cardArtUrl } from '../services/api'
 // single deck. Backed by GET /api/decks/{owner}/{id}/matchups (returns
 // rows already sorted by games desc, wins desc).
 //
-// Renders three blocks:
-//   1. ALL MATCHUPS table  — every opponent ever faced, tightest WR bar.
-//   2. BEST MATCHUPS       — top 3 by win rate, min 3 games (otherwise
-//                            small samples dominate the leaderboard).
-//   3. WORST MATCHUPS      — bottom 3 by win rate, same min-games gate.
+// Renders four blocks:
+//   1. BEST MATCHUPS  — top 3 by win rate, min 3 games (otherwise
+//                       small samples dominate the leaderboard).
+//   2. WORST MATCHUPS — bottom 3 by win rate, same min-games gate.
+//   3. TOP 5 ledger    — top 5 by win rate (full row layout).
+//   4. BOTTOM 5 ledger — bottom 5 by win rate, deduped against top 5.
 //
 // The minimum-games filter is the natural fix for noisy aggregates: a
 // 1-0 record looks "best" without the gate. We surface the threshold
@@ -168,14 +169,25 @@ export default function MatchupsPanel({ owner, id, code = '04.MU' }) {
 
   // Best / worst: rank only opponents with enough games to be meaningful.
   // Backend sorts by games desc; we re-sort by win_rate within the
-  // qualified subset for the leaderboards.
-  const { best, worst } = useMemo(() => {
-    if (!rows || rows.length === 0) return { best: [], worst: [] }
+  // qualified subset for the leaderboards. The full ledger keeps top 5
+  // and bottom 5 — middle entries are dropped to keep the panel scannable.
+  const { best, worst, topFive, bottomFive } = useMemo(() => {
+    if (!rows || rows.length === 0) return { best: [], worst: [], topFive: [], bottomFive: [] }
     const qualified = rows.filter(r => r.games >= MIN_GAMES_FOR_RANKING)
     const byWinRate = [...qualified].sort((a, b) => b.win_rate - a.win_rate)
+    const top = byWinRate.slice(0, 5)
+    // Dedupe bottom against top so a small qualified pool (<10) doesn't
+    // render the same row in both groups.
+    const topKeys = new Set(top.map(r => r.opponent_commander))
+    const bottom = byWinRate
+      .filter(r => !topKeys.has(r.opponent_commander))
+      .slice(-5)
+      .reverse()
     return {
       best: byWinRate.slice(0, 3),
       worst: byWinRate.slice(-3).reverse(),
+      topFive: top,
+      bottomFive: bottom,
     }
   }, [rows])
 
@@ -251,28 +263,62 @@ export default function MatchupsPanel({ owner, id, code = '04.MU' }) {
         </div>
       )}
 
-      {/* Full ledger */}
-      <div>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '28px 1fr 36px 36px 36px 70px',
-          gap: 8,
-          padding: '4px 0',
-          borderBottom: '1px solid var(--rule-2)',
-          fontSize: 9,
-          letterSpacing: '0.1em',
-          color: 'var(--ink-3)',
-          fontWeight: 700,
-        }}>
-          <span></span>
-          <span>OPPONENT</span>
-          <span style={{ textAlign: 'right' }}>G</span>
-          <span style={{ textAlign: 'right' }}>W</span>
-          <span style={{ textAlign: 'right' }}>L</span>
-          <span style={{ textAlign: 'right' }}>WIN %</span>
+      {/* Top / bottom 5 ledger — middle entries dropped to keep the panel
+          scannable. Same min-games gate as the leaderboards above. */}
+      {(topFive.length > 0 || bottomFive.length > 0) && (
+        <div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '28px 1fr 36px 36px 36px 70px',
+            gap: 8,
+            padding: '4px 0',
+            borderBottom: '1px solid var(--rule-2)',
+            fontSize: 9,
+            letterSpacing: '0.1em',
+            color: 'var(--ink-3)',
+            fontWeight: 700,
+          }}>
+            <span></span>
+            <span>OPPONENT</span>
+            <span style={{ textAlign: 'right' }}>G</span>
+            <span style={{ textAlign: 'right' }}>W</span>
+            <span style={{ textAlign: 'right' }}>L</span>
+            <span style={{ textAlign: 'right' }}>WIN %</span>
+          </div>
+          {topFive.length > 0 && (
+            <>
+              <div style={{
+                fontSize: 9, fontWeight: 700, letterSpacing: '0.14em',
+                color: 'var(--ok)', textTransform: 'uppercase',
+                padding: '6px 0 3px',
+              }}>
+                TOP {topFive.length}
+                <span className="muted-2" style={{ fontWeight: 400, marginLeft: 6 }}>
+                  MIN {MIN_GAMES_FOR_RANKING} GAMES
+                </span>
+              </div>
+              {topFive.map((r) => <MatchupRow key={`t-${r.opponent_commander}`} row={r} />)}
+            </>
+          )}
+          {bottomFive.length > 0 && (
+            <>
+              <div style={{
+                marginTop: 8,
+                borderTop: '1px solid var(--rule-2)',
+                fontSize: 9, fontWeight: 700, letterSpacing: '0.14em',
+                color: 'var(--danger)', textTransform: 'uppercase',
+                padding: '8px 0 3px',
+              }}>
+                BOTTOM {bottomFive.length}
+                <span className="muted-2" style={{ fontWeight: 400, marginLeft: 6 }}>
+                  MIN {MIN_GAMES_FOR_RANKING} GAMES
+                </span>
+              </div>
+              {bottomFive.map((r) => <MatchupRow key={`bot-${r.opponent_commander}`} row={r} />)}
+            </>
+          )}
         </div>
-        {rows.map((r) => <MatchupRow key={r.opponent_commander} row={r} />)}
-      </div>
+      )}
     </Panel>
   )
 }
