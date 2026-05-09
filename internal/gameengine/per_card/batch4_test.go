@@ -412,17 +412,19 @@ func TestSylvanLibrary_DrawsExtraCards(t *testing.T) {
 	gs := newGame(t, 2)
 	gs.Seats[0].Life = 40
 	_ = addPerm(gs, 0, "Sylvan Library", "enchantment")
+	// Both drawn cards are cmc:4 threats — per-card heuristic keeps
+	// each (score >= 2 AND life - 4 stays above safetyFloor 7).
 	gs.Seats[0].Library = []*gameengine.Card{
-		{Name: "A", Owner: 0},
-		{Name: "B", Owner: 0},
-		{Name: "C", Owner: 0},
+		{Name: "A", Owner: 0, Types: []string{"creature", "cmc:4"}},
+		{Name: "B", Owner: 0, Types: []string{"creature", "cmc:4"}},
+		{Name: "C", Owner: 0, Types: []string{"creature", "cmc:4"}},
 	}
 
 	gameengine.FireCardTrigger(gs, "draw_step_controller", map[string]interface{}{
 		"active_seat": 0,
 	})
 
-	// At 40 life (>12), should keep both and pay 8 life.
+	// At 40 life and two keep-worthy cards, pays 8 life total.
 	if gs.Seats[0].Life != 32 {
 		t.Errorf("expected life 32 (paid 8 for 2 cards), got %d", gs.Seats[0].Life)
 	}
