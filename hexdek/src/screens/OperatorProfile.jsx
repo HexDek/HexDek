@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Panel, KV, Tag, Tape } from '../components/chrome'
+import CreditsPanel from '../components/CreditsPanel'
 import DeckShelf from '../components/DeckShelf'
 import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -302,6 +303,9 @@ export default function OperatorProfile() {
             ]} />
           </div>
         </Panel>
+
+        {/* Credit economy: balance, free-tier quota, transaction history. */}
+        <CreditsPanel />
 
         {/* My Decks */}
         <Panel code="OP.1" title="MY DECKS" right={<span className="t-xs muted">{decks.length} BUILDS</span>}>

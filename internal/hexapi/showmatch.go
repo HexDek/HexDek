@@ -25,6 +25,7 @@ import (
 	"github.com/hexdek/hexdek/internal/achievements"
 	"github.com/hexdek/hexdek/internal/astload"
 	"github.com/hexdek/hexdek/internal/cardstats"
+	"github.com/hexdek/hexdek/internal/credits"
 	"github.com/hexdek/hexdek/internal/db"
 	"github.com/hexdek/hexdek/internal/deckparser"
 	"github.com/hexdek/hexdek/internal/gameengine"
@@ -223,7 +224,20 @@ type Showmatch struct {
 	gauntletMu sync.RWMutex
 	gauntlets  map[string]*GauntletResult
 
+	// credits is the optional credit-economy gate for paid gauntlet
+	// runs. When nil (e.g. tests, dev runs without main wiring), the
+	// gauntlet handler falls back to "free for everyone" — the
+	// economy is a soft layer over the existing endpoint.
+	credits *credits.Store
+
 	rooms *RoomManager
+}
+
+// SetCreditStore attaches a credits.Store to the Showmatch. Called
+// once from main() after credit schema setup. Safe to leave unset
+// in tests.
+func (sm *Showmatch) SetCreditStore(c *credits.Store) {
+	sm.credits = c
 }
 
 type spectatorConn struct {
@@ -2552,6 +2566,70 @@ func (sm *Showmatch) handleStartGauntlet(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	numGames := 500
+	if n := parseInt(r.URL.Query().Get("games")); n > 0 && n <= 50000 {
+		numGames = n
+	}
+
+	// Credit-economy gate. Caller identity comes from X-HexDek-Owner;
+	// if absent we fall through to free behaviour for backwards
+	// compatibility with the (already-public) gauntlet endpoint.
+	caller := strings.ToLower(strings.TrimSpace(r.Header.Get("X-HexDek-Owner")))
+	chargedFree := true
+	var chargedAmount int64
+	if sm.credits != nil && caller != "" {
+		quota, err := sm.credits.QuotaState(r.Context(), caller)
+		if err != nil {
+			log.Printf("gauntlet: quota check failed: %v", err)
+		} else if quota.CanRunFree {
+			// Within the daily allowance — no charge, just log usage.
+			chargedFree = true
+		} else if quota.CanRunPaid {
+			// Past the free quota; debit credits before launching.
+			if _, err := sm.credits.Spend(r.Context(), caller,
+				credits.CreditsPerGauntlet, credits.ReasonGauntletRun, deckKey); err != nil {
+				if err == credits.ErrInsufficientCredits {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusPaymentRequired)
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"error":   "insufficient_credits",
+						"balance": quota.Balance,
+						"needed":  credits.CreditsPerGauntlet,
+						"quota":   quota,
+					})
+					return
+				}
+				http.Error(w, "credit charge failed: "+err.Error(),
+					http.StatusInternalServerError)
+				return
+			}
+			chargedFree = false
+			chargedAmount = credits.CreditsPerGauntlet
+		} else {
+			// Out of free runs and short on credits — surface the
+			// quota state so the frontend can render an actionable
+			// "earn or wait" message.
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusPaymentRequired)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":   "free_quota_exhausted",
+				"balance": quota.Balance,
+				"needed":  credits.CreditsPerGauntlet,
+				"quota":   quota,
+			})
+			return
+		}
+		// Best-effort log of the gauntlet usage for the audit trail
+		// and the next quota check. We don't refund on a launch
+		// failure below — the spend is committed; if RunGauntlet
+		// can't actually start, the user can re-run within the
+		// existing free-tier window.
+		if err := sm.credits.LogGauntlet(r.Context(), caller, deckKey,
+			numGames, chargedFree, chargedAmount); err != nil {
+			log.Printf("gauntlet: usage log failed: %v", err)
+		}
+	}
+
 	select {
 	case gauntletSem <- struct{}{}:
 	default:
@@ -2559,20 +2637,19 @@ func (sm *Showmatch) handleStartGauntlet(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	numGames := 500
-	if n := parseInt(r.URL.Query().Get("games")); n > 0 && n <= 50000 {
-		numGames = n
-	}
-
 	go func() {
 		defer func() { <-gauntletSem }()
 		sm.RunGauntlet(owner, id, numGames)
 	}()
-	writeJSON(w, map[string]any{
+	resp := map[string]any{
 		"status":   "started",
 		"deck_key": deckKey,
 		"games":    numGames,
-	})
+	}
+	if !chargedFree {
+		resp["credits_charged"] = chargedAmount
+	}
+	writeJSON(w, resp)
 }
 
 func (sm *Showmatch) handleGetGauntlet(w http.ResponseWriter, r *http.Request) {
