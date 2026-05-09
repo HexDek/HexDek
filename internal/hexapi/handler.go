@@ -362,12 +362,14 @@ func (h *Handler) handleGetDeck(w http.ResponseWriter, r *http.Request) {
 	}
 	production := computeManaProduction(h.cardDB, cards)
 	customName := h.loadCustomName(r.Context(), owner, id)
+	clonedFrom := h.loadClonedFrom(r.Context(), owner, id)
 	writeJSON(w, map[string]any{
 		"id":              id,
 		"owner":           owner,
 		"commander":       commander,
 		"commander_card":  cmdrCard,
 		"custom_name":     customName,
+		"cloned_from":     clonedFrom,
 		"bracket":         bracket,
 		"color":           color,
 		"card_count":      totalCards,
@@ -571,6 +573,27 @@ func (h *Handler) handleCloneDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Rate-limit: at most CloneRateLimit clones per owner per rolling
+	// hour. Counted from clone_log; the limiter is permissive when no
+	// DB is attached (tests can inject one or accept unlimited).
+	since := time.Now().Add(-time.Hour).Unix()
+	if n, err := h.cloneCountSince(r.Context(), dstOwner, since); err == nil && n >= CloneRateLimit {
+		w.Header().Set("Retry-After", "3600")
+		http.Error(w,
+			fmt.Sprintf("clone rate limit exceeded (max %d per hour)", CloneRateLimit),
+			http.StatusTooManyRequests)
+		return
+	}
+
+	// Disallow self-cloning — the owner can already edit their own
+	// deck, and a "(CLONE)" duplicate in the same collection is just
+	// confusing. Other handlers (PATCH, PUT) cover the legitimate
+	// "make a copy on my own deck" workflow via versioning.
+	if strings.EqualFold(srcOwner, dstOwner) {
+		http.Error(w, "cannot clone your own deck", http.StatusBadRequest)
+		return
+	}
+
 	srcPath := findDeckFile(h.DecksDir, srcOwner, srcID)
 	if srcPath == "" {
 		http.Error(w, "deck not found", http.StatusNotFound)
@@ -657,14 +680,31 @@ func (h *Handler) handleCloneDeck(w http.ResponseWriter, r *http.Request) {
 	cloneName = cloneName + " (CLONE)"
 	h.saveCustomName(r.Context(), dstOwner, dstID, cloneName)
 
+	srcKey := srcOwner + "/" + srcID
+	dstKey := dstOwner + "/" + dstID
+	if err := h.saveClonedFrom(r.Context(), dstOwner, dstID, srcKey); err != nil {
+		log.Printf("clone: saveClonedFrom failed: %v", err)
+	}
+	if err := h.recordClone(r.Context(), dstOwner, srcKey, dstKey); err != nil {
+		log.Printf("clone: recordClone failed: %v", err)
+	}
+
 	h.logImport(r.Context(), db.ImportLogEntry{
 		Owner:     dstOwner,
-		DeckKey:   dstOwner + "/" + dstID,
+		DeckKey:   dstKey,
 		DeckName:  cloneName,
 		Commander: cmdrCard,
-		Source:    "clone:" + srcOwner + "/" + srcID,
+		Source:    "clone:" + srcKey,
 		CardCount: len(cards),
 	})
+
+	// Kick off a fresh Freya analysis on the clone. We've already
+	// copied the source's strategy.json above so the deck page has
+	// something to render immediately; this re-run replaces it with
+	// analysis tied to the new deck path so subsequent edits land on
+	// a correct baseline. SSE clients see freya_started/_complete.
+	h.publishDeck(dstKey, deckEvent{Event: "freya_started", Data: `{"status":"analyzing"}`})
+	go h.runFreya(dstPath)
 
 	writeJSON(w, map[string]any{
 		"id":             dstID,
@@ -672,7 +712,8 @@ func (h *Handler) handleCloneDeck(w http.ResponseWriter, r *http.Request) {
 		"name":           cloneName,
 		"commander_card": cmdrCard,
 		"card_count":     len(cards),
-		"source":         srcOwner + "/" + srcID,
+		"source":         srcKey,
+		"cloned_from":    srcKey,
 	})
 }
 

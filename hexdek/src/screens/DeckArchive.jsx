@@ -254,6 +254,7 @@ export default function DeckArchive() {
   const [savingName, setSavingName] = useState(false)
   const [winLinesExpanded, setWinLinesExpanded] = useState(false)
   const [cloning, setCloning] = useState(false)
+  const [confirmClone, setConfirmClone] = useState(false)
   const [spawningRoom, setSpawningRoom] = useState(false)
   const [isFriend, setIsFriend] = useState(false)
   const [friendBusy, setFriendBusy] = useState(false)
@@ -834,21 +835,48 @@ export default function DeckArchive() {
               )}
               {owner && id && !isOwner && user && (
                 <>
-                  <ContextBox compact>Copies this deck into your account so you can edit and tune your own version.</ContextBox>
-                  <Btn solid arrow="⎘" disabled={cloning} onClick={() => {
-                    if (cloning) return
-                    setCloning(true)
-                    trackEvent('clone_deck', { deck: `${owner}/${id}` })
-                    api.cloneDeck(`${owner}/${id}`).then(res => {
-                      toast.success('DECK CLONED')
-                      navigate(`/decks/${res.owner}/${res.id}`)
-                    }).catch(err => {
-                      const msg = String(err?.message || '')
-                      if (msg.includes('401')) toast.error('SIGN IN TO CLONE')
-                      else toast.error('CLONE FAILED')
-                      setCloning(false)
-                    })
-                  }}>{cloning ? 'CLONING...' : 'CLONE DECK'}</Btn>
+                  <ContextBox compact>Copies this deck into your account so you can edit and tune your own version. The clone re-runs Freya analysis on import.</ContextBox>
+                  {!confirmClone ? (
+                    <Btn solid arrow="⎘" onClick={() => setConfirmClone(true)}>
+                      CLONE DECK
+                    </Btn>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <Btn
+                        solid
+                        arrow="⎘"
+                        disabled={cloning}
+                        onClick={() => {
+                          if (cloning) return
+                          setCloning(true)
+                          trackEvent('clone_deck', { deck: `${owner}/${id}` })
+                          api.cloneDeck(`${owner}/${id}`).then(res => {
+                            toast.success('DECK CLONED — RUNNING FREYA')
+                            navigate(`/decks/${res.owner}/${res.id}`)
+                          }).catch(err => {
+                            // Surface the precise reason — the helper attaches
+                            // a status code so we don't have to string-match.
+                            if (err?.status === 401) toast.error('SIGN IN TO CLONE')
+                            else if (err?.status === 429) toast.error('CLONE LIMIT REACHED — TRY AGAIN IN AN HOUR')
+                            else if (err?.status === 400) toast.error(err.message || 'CLONE REJECTED')
+                            else if (err?.status === 404) toast.error('SOURCE DECK NOT FOUND')
+                            else toast.error('CLONE FAILED')
+                            setCloning(false)
+                            setConfirmClone(false)
+                          })
+                        }}
+                      >
+                        {cloning ? 'CLONING (FREYA RUNNING)...' : 'CONFIRM CLONE'}
+                      </Btn>
+                      <Btn ghost arrow="✕" onClick={() => setConfirmClone(false)} disabled={cloning}>CANCEL</Btn>
+                    </div>
+                  )}
+                </>
+              )}
+              {owner && id && !isOwner && !user && (
+                <>
+                  <ContextBox compact>Sign in to clone this deck into your own collection — Freya will re-analyze the copy on import.</ContextBox>
+                  <Btn ghost arrow="↗" onClick={() => navigate('/login')}>SIGN IN TO CLONE</Btn>
                 </>
               )}
               {owner && id && (
