@@ -25,7 +25,7 @@ func bilboBirthdayCelebrantActivate(gs *gameengine.GameState, src *gameengine.Pe
 	if seat < 0 || seat >= len(gs.Seats) {
 		return
 	}
-	gameengine.GainLife(gs, src.Controller, 1, src.Card.DisplayName())
+	emitPartial(gs, slug, src.Card.DisplayName(), "auto-gen: activated effect not parsed from oracle text")
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 		"seat": seat,
 	})
