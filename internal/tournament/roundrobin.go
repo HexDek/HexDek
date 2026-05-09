@@ -139,10 +139,17 @@ func RunRoundRobin(cfg RoundRobinConfig) (*TournamentResult, error) {
 					podDecks[i] = cfg.Decks[gIdx]
 					podHats[i] = hatPerDeck[gIdx]
 				}
+				// RoundRobinConfig doesn't carry a SeedContract key today,
+				// so contracts are constructed (digest only) and left
+				// unsigned. Downstream verifiers can still detect tampering
+				// via CheckIntegrity's digest re-derivation; signing can be
+				// added by extending RoundRobinConfig with the same
+				// ContractKey/Context fields TournamentConfig has.
 				outcome := runOneGameSafe(
 					item.gameInPod, podDecks, podHats, cfg.NSeats,
 					cfg.Seed+int64(item.podIdx)*10000, maxTurns, gameTimeout,
 					cfg.CommanderMode, cfg.AuditEnabled, cfg.AnalyticsEnabled,
+					contractParams{},
 				)
 				outcomes <- rrOutcome{outcome: outcome, deckIdxs: item.deckIdxs}
 

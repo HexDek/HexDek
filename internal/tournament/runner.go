@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"runtime"
 	rpprof "runtime/pprof"
 	"strings"
@@ -17,7 +18,54 @@ import (
 	"github.com/hexdek/hexdek/internal/hat"
 	"github.com/hexdek/hexdek/internal/huginn"
 	"github.com/hexdek/hexdek/internal/muninn"
+	"github.com/hexdek/hexdek/internal/seedcontract"
 )
+
+// contractParams bundles the per-tournament SeedContract metadata so
+// each of the three game-path entry points (Run / runPool /
+// runLazyPool) can hand it down to runOneGame without growing four
+// separate parameters. Zero-value (nil key, empty strings) disables
+// signing — contracts are still constructed and digests computed so
+// downstream tooling can detect "unsigned" runs and refuse them.
+type contractParams struct {
+	key           []byte
+	context       string
+	engineVersion string
+}
+
+func contractParamsFromConfig(cfg TournamentConfig) contractParams {
+	return contractParams{
+		key:           cfg.ContractKey,
+		context:       cfg.ContractContext,
+		engineVersion: cfg.EngineVersion,
+	}
+}
+
+// deckKeyFromPath extracts the canonical "owner/name" deck key used by
+// Heimdall and the SeedContract. Mirrors heimdall/replay.go's
+// resolveDeck convention so a contract emitted here can be re-resolved
+// to the same deck file later. Falls back to filename-stem for paths
+// outside data/decks/, and to commander name when path is empty.
+func deckKeyFromPath(td *deckparser.TournamentDeck) string {
+	if td == nil {
+		return ""
+	}
+	if td.Path != "" {
+		dir, file := filepath.Split(td.Path)
+		stem := strings.TrimSuffix(file, filepath.Ext(file))
+		dir = strings.TrimRight(dir, string(filepath.Separator))
+		// Take the last directory component as the "owner".
+		owner := filepath.Base(dir)
+		if owner != "." && owner != "" && owner != "/" {
+			return owner + "/" + stem
+		}
+		return stem
+	}
+	if td.CommanderName != "" {
+		return "?/" + strings.ToLower(td.CommanderName)
+	}
+	return ""
+}
 
 // startingHand mirrors playloop.STARTING_HAND.
 const startingHand = 7
@@ -105,7 +153,7 @@ func Run(cfg TournamentConfig) (*TournamentResult, error) {
 		go func(workerID int) {
 			defer wg.Done()
 			for gameIdx := range seeds {
-				outcome := runOneGameSafe(gameIdx, decks, hats, cfg.NSeats, cfg.Seed, maxTurns, gameTimeout, cfg.CommanderMode, cfg.AuditEnabled, cfg.AnalyticsEnabled)
+				outcome := runOneGameSafe(gameIdx, decks, hats, cfg.NSeats, cfg.Seed, maxTurns, gameTimeout, cfg.CommanderMode, cfg.AuditEnabled, cfg.AnalyticsEnabled, contractParamsFromConfig(cfg))
 				outcomes <- outcome
 				done := atomic.AddInt64(&completed, 1)
 				if progressEvery > 0 && done%int64(progressEvery) == 0 {
@@ -253,7 +301,7 @@ type gameProgress struct {
 }
 
 func runOneGameSafe(gameIdx int, decks []*deckparser.TournamentDeck, hats []HatFactory,
-	nSeats int, masterSeed int64, maxTurns int, gameTimeout time.Duration, commanderMode, auditEnabled, analyticsEnabled bool) (outcome GameOutcome) {
+	nSeats int, masterSeed int64, maxTurns int, gameTimeout time.Duration, commanderMode, auditEnabled, analyticsEnabled bool, contracts contractParams) (outcome GameOutcome) {
 	outcome.GameIdx = gameIdx
 	outcome.Winner = -1
 	outcome.WinnerCommanderIdx = -1
@@ -276,7 +324,7 @@ func runOneGameSafe(gameIdx int, decks []*deckparser.TournamentDeck, hats []HatF
 				}
 			}
 		}()
-		ch <- runOneGame(gameIdx, decks, hats, nSeats, masterSeed, maxTurns, commanderMode, auditEnabled, analyticsEnabled, &prog)
+		ch <- runOneGame(gameIdx, decks, hats, nSeats, masterSeed, maxTurns, commanderMode, auditEnabled, analyticsEnabled, &prog, contracts)
 	}()
 
 	select {
@@ -296,7 +344,7 @@ func runOneGameSafe(gameIdx int, decks []*deckparser.TournamentDeck, hats []HatF
 //
 // Semantic reference: scripts/gauntlet_poker.py _run_one_game_with_policy.
 func runOneGame(gameIdx int, decks []*deckparser.TournamentDeck, hats []HatFactory,
-	nSeats int, masterSeed int64, maxTurns int, commanderMode, auditEnabled, analyticsEnabled bool, prog *gameProgress) GameOutcome {
+	nSeats int, masterSeed int64, maxTurns int, commanderMode, auditEnabled, analyticsEnabled bool, prog *gameProgress, contracts contractParams) GameOutcome {
 	out := GameOutcome{
 		GameIdx:            gameIdx,
 		Rot:                gameIdx % nSeats,
@@ -319,6 +367,25 @@ func runOneGame(gameIdx int, decks []*deckparser.TournamentDeck, hats []HatFacto
 	// which is the seed contract in the Phase 11 spec.
 	gameSeed := masterSeed + int64(gameIdx)*1000 + 1
 	rng := rand.New(rand.NewSource(gameSeed))
+
+	// Phase 1 anti-cheat: build the per-game SeedContract from inputs
+	// before the first shuffle. We snapshot deck keys in the
+	// post-rotation seat order so the contract reads "seat 0 played
+	// X, seat 1 played Y, ..." — the same order the game logs.
+	contractInputs := seedcontract.Inputs{
+		RNGSeed:       gameSeed,
+		NSeats:        nSeats,
+		EngineVersion: contracts.engineVersion,
+		SealedAtUnix:  time.Now().Unix(),
+	}
+	for i := 0; i < seedcontract.MaxSeats && i < nSeats; i++ {
+		orig := (i + out.Rot) % nSeats
+		if orig < len(decks) {
+			contractInputs.DeckKeys[i] = deckKeyFromPath(decks[orig])
+		}
+	}
+	contract := seedcontract.New(contractInputs)
+	out.SeedContract = contract
 
 	gs := gameengine.NewGameState(nSeats, rng, nil)
 	if !auditEnabled {
@@ -712,7 +779,67 @@ func runOneGame(gameIdx int, decks []*deckparser.TournamentDeck, hats []HatFacto
 		out.PostGameStats[i] = ss
 	}
 
+	// Phase 1 anti-cheat: seal the SeedContract with the observed
+	// outcome, then sign with the per-tournament HMAC key. We seal
+	// even when key is nil so downstream tooling sees a consistent
+	// "outcome digest computed but unsigned" record — easier to
+	// detect skipped signing than to reconstruct it later. Final life
+	// reads from gs.Seats post-game; eliminationOrder is stored on
+	// out by commander idx and we map back to seat order here so the
+	// outcome digest's positions match the digest's seat-indexed
+	// inputs.
+	if out.SeedContract != nil {
+		var elim, finalLife [seedcontract.MaxSeats]int
+		for i := range elim {
+			elim[i] = -1
+		}
+		for i := 0; i < seedcontract.MaxSeats && i < nSeats; i++ {
+			orig := (i + out.Rot) % nSeats
+			if orig < len(out.EliminationOrder) {
+				elim[i] = out.EliminationOrder[orig]
+			}
+			if i < len(gs.Seats) && gs.Seats[i] != nil {
+				finalLife[i] = gs.Seats[i].Life
+			}
+		}
+		killMethod := ""
+		if out.Winner >= 0 && out.Winner < len(gs.Seats) && gs.Seats[out.Winner] != nil {
+			killMethod = inferKillMethodFromOutcome(out.EndReason)
+		}
+		out.SeedContract.Seal(seedcontract.Outcome{
+			Winner:           out.Winner,
+			Turns:            out.Turns,
+			KillMethod:       killMethod,
+			EndReason:        out.EndReason,
+			EliminationOrder: elim,
+			FinalLife:        finalLife,
+		})
+		if len(contracts.key) > 0 {
+			out.SeedContract.Sign(contracts.key)
+		}
+	}
+
 	return out
+}
+
+// inferKillMethodFromOutcome maps the runner's EndReason to the same
+// kill-method enum heimdall uses for its 1-byte binary encoding.
+// "last_seat_standing" leaves the method blank — Heimdall's classifier
+// (gameengine.ClassifyKillWithMaxTurns) does the finer-grained
+// "combat / commander / combo / mill" inference from event-log data
+// when audit mode is on; this fallback is just for the contract's
+// outcome digest.
+func inferKillMethodFromOutcome(endReason string) string {
+	switch endReason {
+	case "turn_cap", "turn_cap_leader", "turn_cap_tie", "turn_cap_all_dead":
+		return "timeout"
+	case "draw":
+		return "draw"
+	case "crash":
+		return "crash"
+	default:
+		return endReason
+	}
 }
 
 // runPool executes a tournament where each game samples NSeats random
@@ -777,7 +904,7 @@ func runPool(cfg TournamentConfig, workers, maxTurns int, gameTimeout time.Durat
 					podHats[i] = uniformHat
 				}
 				o := runOneGameSafe(job.gameIdx, podDecks, podHats, nSeats,
-					cfg.Seed, maxTurns, gameTimeout, cfg.CommanderMode, cfg.AuditEnabled, cfg.AnalyticsEnabled)
+					cfg.Seed, maxTurns, gameTimeout, cfg.CommanderMode, cfg.AuditEnabled, cfg.AnalyticsEnabled, contractParamsFromConfig(cfg))
 				outcomes <- poolOutcome{o, job.deckIdxs}
 				done := atomic.AddInt64(&completed, 1)
 				if progressEvery > 0 && done%int64(progressEvery) == 0 {
@@ -1031,7 +1158,7 @@ func runLazyPool(cfg TournamentConfig, workers, maxTurns int, gameTimeout time.D
 				var o GameOutcome
 				if parseOK {
 					o = runOneGameSafe(job.gameIdx, podDecks, podHats, nSeats,
-						cfg.Seed, maxTurns, gameTimeout, cfg.CommanderMode, cfg.AuditEnabled, cfg.AnalyticsEnabled)
+						cfg.Seed, maxTurns, gameTimeout, cfg.CommanderMode, cfg.AuditEnabled, cfg.AnalyticsEnabled, contractParamsFromConfig(cfg))
 				} else {
 					o = GameOutcome{
 						GameIdx:   job.gameIdx,

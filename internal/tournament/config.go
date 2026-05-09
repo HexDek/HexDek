@@ -129,6 +129,26 @@ type TournamentConfig struct {
 	// OnGameComplete call per finished game. Nil disables awarding;
 	// non-nil works for all three runner modes (rotate / pool / lazy).
 	Achievements *achievements.Tracker
+
+	// EngineVersion is stamped on every per-game SeedContract so the
+	// replay verifier can refuse contracts produced by an engine build
+	// that no longer matches today's behavior. Empty string is allowed
+	// (will surface as "unset" in the digest); production runs should
+	// set this to a build-stable identifier (e.g. git commit + date).
+	EngineVersion string
+
+	// ContractKey is the HMAC-SHA256 key used to sign each per-game
+	// SeedContract. Nil disables signing — contracts are still
+	// constructed and attached to GameOutcome (digests computed) but
+	// the Sig field stays empty. Use seedcontract.DeriveContractKey
+	// from a master server secret + tournament context to populate.
+	ContractKey []byte
+
+	// ContractContext is the canonical context string that was passed
+	// to seedcontract.DeriveContractKey to mint ContractKey. Stored on
+	// the contract so verifiers can reconstruct the same key from the
+	// master secret without out-of-band coordination.
+	ContractContext string
 }
 
 // defaultMaxTurns mirrors playloop.MAX_TURNS_MULTIPLAYER.

@@ -411,7 +411,7 @@ func TestTurnCapResolution(t *testing.T) {
 	}
 	// Force turn cap with maxTurns=3 — games can't end naturally that fast.
 	for gameIdx := 0; gameIdx < 20; gameIdx++ {
-		out := runOneGame(gameIdx, decks, hats, nSeats, int64(gameIdx*7+1), 3, true, true, false, nil)
+		out := runOneGame(gameIdx, decks, hats, nSeats, int64(gameIdx*7+1), 3, true, true, false, nil, contractParams{})
 		if out.Winner < 0 {
 			t.Errorf("game %d: no winner (EndReason=%s)", gameIdx, out.EndReason)
 			continue
