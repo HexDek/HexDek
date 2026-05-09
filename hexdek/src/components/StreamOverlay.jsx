@@ -1,9 +1,10 @@
 import { useEffect, useMemo } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { cardArtUrl } from '../services/api'
 
-// StreamOverlay — transparent OBS-friendly HUD for /stream/:gameId.
+// StreamOverlay — transparent OBS-friendly HUD for /stream/:gameId
+// (also reachable at /obs/:gameId for streamer convenience).
 //
 // Design constraints:
 //   * No AppShell chrome (route is mounted outside AppShell).
@@ -16,11 +17,127 @@ import { cardArtUrl } from '../services/api'
 //     uses. The :gameId URL param is a sanity check: when it doesn't
 //     match the current live game, the HUD shows a small "waiting"
 //     pill instead of the wrong game's data.
+//
+// URL params (all optional, all parsed defensively):
+//   * ?phase=off            — hide the three-act caption strip.
+//   * ?order=2,0,1,3        — explicit seat ordering for the lower-
+//                             third tiles. Indices not listed are
+//                             appended in their natural order.
+//   * ?focus=N (or ?seat=N) — rotate the lower-third so seat N is
+//                             on top (camera focus). Ignored when
+//                             ?order is also set.
 
 const SHORT_NAME = (commander) => {
   if (!commander) return 'UNKNOWN'
   const trimmed = commander.split(',')[0].split('//')[0].trim()
   return trimmed.toUpperCase()
+}
+
+// deriveStreamPhase classifies the current game state into a three-act
+// caption — OPENING / MIDGAME / CLIMAX, plus a CURTAIN state for finished
+// games. Pure function; no React state, no side effects, works on the
+// raw `game` payload returned by useLiveSocket.
+//
+// Heuristics, in priority order:
+//   - finished                                   → CURTAIN
+//   - any seat eliminated in the last few logs   → CLIMAX · ELIMINATION
+//   - 4-player pod down to two living seats      → CLIMAX · 1V1 ENDGAME
+//   - any living seat ≤ 8 life                   → CLIMAX · LETHAL RANGE
+//   - turn ≥ 9 / huge battlefield / loaded yard  → CLIMAX · COMBO ASSEMBLY
+//   - turn ≥ 5                                   → MIDGAME · BOARD DEVELOPMENT
+//   - turn ≥ 1                                   → OPENING · RAMP PHASE
+//   - everything else                            → OPENING · MULLIGAN
+//
+// Returns { act, label } or null when there's no game to caption.
+export function deriveStreamPhase(game) {
+  if (!game) return null
+  if (game.finished) {
+    return {
+      act: 'CURTAIN',
+      label: game.winner >= 0 ? 'CURTAIN · WINNER DECLARED' : 'CURTAIN · DRAW',
+    }
+  }
+  const turn = game.turn ?? 0
+  const seats = Array.isArray(game.seats) ? game.seats : []
+  const totalSeats = seats.length
+  const alive = seats.filter(s => s && !s.lost)
+  const aliveCount = alive.length
+
+  const log = Array.isArray(game.log) ? game.log : []
+  const recentElim = log.slice(-6).some(e =>
+    e && (e.kind === 'elimination' || e.kind === 'player_lost')
+  )
+  if (recentElim) {
+    return { act: 'CLIMAX', label: 'CLIMAX · ELIMINATION' }
+  }
+  if (totalSeats >= 3 && aliveCount === 2) {
+    return { act: 'CLIMAX', label: 'CLIMAX · 1V1 ENDGAME' }
+  }
+
+  const minLife = aliveCount > 0
+    ? Math.min(...alive.map(s => (typeof s.life === 'number' ? s.life : 40)))
+    : 40
+  if (minLife <= 8) {
+    return { act: 'CLIMAX', label: 'CLIMAX · LETHAL RANGE' }
+  }
+
+  // Board complexity proxy — sum across living seats. Either large
+  // battlefield or a loaded graveyard signals combo assembly window.
+  const bf = alive.reduce((sum, s) => {
+    const len = Array.isArray(s.battlefield) ? s.battlefield.length : (s.battlefield_count ?? 0)
+    return sum + len
+  }, 0)
+  const gy = alive.reduce((sum, s) => {
+    const len = Array.isArray(s.graveyard) ? s.graveyard.length : (s.graveyard_count ?? 0)
+    return sum + len
+  }, 0)
+
+  if (turn >= 9 || bf >= 25 || gy >= 35) {
+    return { act: 'CLIMAX', label: 'CLIMAX · COMBO ASSEMBLY' }
+  }
+  if (turn >= 5) {
+    return { act: 'MIDGAME', label: 'MIDGAME · BOARD DEVELOPMENT' }
+  }
+  if (turn >= 1) {
+    return { act: 'OPENING', label: 'OPENING · RAMP PHASE' }
+  }
+  return { act: 'OPENING', label: 'OPENING · MULLIGAN' }
+}
+
+// parseSeatOrder turns the ?order / ?focus URL params into a permutation
+// of seat indices. Always returns an array of length seatCount, with each
+// valid seat index appearing exactly once. Pure function for testability.
+export function parseSeatOrder(seatCount, orderParam, focusParam) {
+  const fallback = []
+  for (let i = 0; i < seatCount; i++) fallback.push(i)
+  if (seatCount <= 0) return fallback
+
+  if (orderParam) {
+    const parts = String(orderParam)
+      .split(',')
+      .map(s => parseInt(String(s).trim(), 10))
+      .filter(n => Number.isInteger(n) && n >= 0 && n < seatCount)
+    const seen = new Set()
+    const out = []
+    for (const n of parts) {
+      if (seen.has(n)) continue
+      seen.add(n)
+      out.push(n)
+    }
+    if (out.length > 0) {
+      for (const i of fallback) {
+        if (!seen.has(i)) out.push(i)
+      }
+      return out
+    }
+  }
+
+  const focus = parseInt(String(focusParam ?? '').trim(), 10)
+  if (Number.isInteger(focus) && focus >= 0 && focus < seatCount) {
+    return [...fallback.slice(focus), ...fallback.slice(0, focus)]
+  }
+
+  return fallback
 }
 
 function useTransparentRoot() {
@@ -149,6 +266,7 @@ function Ticker({ entries }) {
 export default function StreamOverlay() {
   useTransparentRoot()
   const { gameId } = useParams()
+  const [searchParams] = useSearchParams()
   const { game, status } = useLiveSocket()
 
   const seats = game?.seats || []
@@ -158,6 +276,17 @@ export default function StreamOverlay() {
   const finished = !!game?.finished
   const winner = finished ? game?.winner ?? -1 : -1
   const liveGameId = game?.game_id != null ? String(game.game_id) : null
+
+  const phaseEnabled = (searchParams.get('phase') ?? 'on').toLowerCase() !== 'off'
+  const phase = useMemo(
+    () => phaseEnabled ? deriveStreamPhase(game) : null,
+    [game, phaseEnabled]
+  )
+
+  const seatOrder = useMemo(
+    () => parseSeatOrder(seats.length, searchParams.get('order'), searchParams.get('focus') ?? searchParams.get('seat')),
+    [seats.length, searchParams]
+  )
 
   // The most-recent 3 log lines, newest first. Reverse since the
   // engine appends in chronological order.
@@ -259,23 +388,47 @@ export default function StreamOverlay() {
         {finished && <StatusPill label={winner >= 0 ? `WINNER · ${SHORT_NAME(seats[winner]?.commander)}` : 'DRAW'} tone="ok" />}
       </div>
 
-      {/* Top-right: seat life totals + commanders */}
+      {/* Top-center: three-act narrative caption strip */}
+      {phase && (
+        <div style={{
+          position: 'absolute',
+          top: 18, left: '50%',
+          transform: 'translateX(-50%)',
+          padding: '6px 14px',
+          background: 'rgba(0,0,0,0.82)',
+          border: `1px solid ${PHASE_ACCENT[phase.act] || 'rgba(255,255,255,0.25)'}`,
+          fontSize: 11, fontWeight: 800, letterSpacing: '0.18em',
+          color: '#f4f0e6', textTransform: 'uppercase',
+          textShadow: '0 1px 2px rgba(0,0,0,0.85)',
+          maxWidth: '60%',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {phase.label}
+        </div>
+      )}
+
+      {/* Top-right: seat life totals + commanders (lower-third tiles
+          stacked top-down; order respects ?order / ?focus URL params). */}
       <div style={{
         position: 'absolute',
         top: 18, right: 18,
         display: 'flex', flexDirection: 'column',
         gap: 6, width: 280,
       }}>
-        {seats.map((s, i) => (
-          <SeatTile
-            key={i}
-            seat={s}
-            idx={i}
-            isActive={i === activeSeat && !finished}
-            isWinner={finished && i === winner}
-            isLost={!!s.lost}
-          />
-        ))}
+        {seatOrder.map((i) => {
+          const s = seats[i]
+          if (!s) return null
+          return (
+            <SeatTile
+              key={i}
+              seat={s}
+              idx={i}
+              isActive={i === activeSeat && !finished}
+              isWinner={finished && i === winner}
+              isLost={!!s.lost}
+            />
+          )
+        })}
       </div>
 
       {/* Bottom-left: action ticker */}
@@ -303,6 +456,16 @@ const overlayShellStyle = {
   fontFamily: "'JetBrains Mono', ui-monospace, monospace",
   background: 'transparent',
   overflow: 'hidden',
+}
+
+// Border accents for the three-act caption strip — picks up the same
+// CSS variables the rest of the overlay already uses, so theme changes
+// flow through without touching this file.
+const PHASE_ACCENT = {
+  OPENING: 'rgba(160, 200, 255, 0.55)',
+  MIDGAME: 'var(--warn)',
+  CLIMAX:  'var(--danger)',
+  CURTAIN: 'var(--ok)',
 }
 
 function StatusPill({ label, tone = 'muted' }) {
