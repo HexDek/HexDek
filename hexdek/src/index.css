@@ -2245,6 +2245,23 @@ body {
 
   .spectator-seats { grid-template-columns: 1fr; }
 
+  /* Fishtank-only spectator view on mobile — hide telemetry panels
+     (live ELO, eval heatmap key, speed control, session stats, history,
+     action log). The 4-seat fishtank readout above the fold is the
+     mobile-relevant view; the dense telemetry sidebar is desktop-only. */
+  .spectator-page .spectator-lower { display: none; }
+
+  /* Push the genetic-curse section to the bottom of the deck-archive
+     main column on mobile. The analysis tab has many conditional panels,
+     so without an explicit reorder the curse can render mid-page when a
+     panel ahead of it (cuttable, tutor targets) renders empty. */
+  .deck-archive-page .archive-main { display: flex; flex-direction: column; }
+  .deck-archive-page .archive-curse-section { order: 999; }
+
+  /* Meta page — desktop padding is 24px 30px; trim side padding so charts
+     and panels can use the full 375px viewport. */
+  .meta-page-body { padding: 14px 12px !important; }
+
   .tape-bar { flex-wrap: wrap; gap: 2px; justify-content: center; }
   .tape-bar > * { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 }

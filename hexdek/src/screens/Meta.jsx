@@ -341,7 +341,7 @@ export default function Meta() {
         right="REV C.25"
       />
 
-      <div style={{ padding: '24px 30px', maxWidth: 1100, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16, overflowX: 'hidden', width: '100%', boxSizing: 'border-box' }}>
+      <div className="meta-page-body" style={{ padding: '24px 30px', maxWidth: 1100, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16, overflowX: 'hidden', width: '100%', boxSizing: 'border-box' }}>
         {error && (
           <div className="panel" style={{ borderColor: 'var(--danger)' }}>
             <div className="panel-bd t-xs" style={{ color: 'var(--danger)' }}>
