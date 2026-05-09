@@ -131,12 +131,16 @@ func RunChunk(cfg ChunkConfig) ([]ChunkOutcome, error) {
 				}
 				// runOneGameSafe wraps runOneGame in a recover() and a
 				// per-game timeout, returning a draw on either failure.
+				// chunk-mode runs are unsigned (no contract key threaded
+				// through ChunkConfig); pass an empty contractParams so
+				// the contract is constructed with digests but no Sig.
 				go0 := runOneGameSafe(
 					gi, cfg.Decks, hats, cfg.NSeats,
 					cfg.Seed, maxTurns, timeout,
 					commanderMode,
 					false, // auditEnabled — no event-log retention for chunks
 					false, // analyticsEnabled — no per-game analytics
+					contractParams{},
 				)
 				out[gi] = ChunkOutcome{
 					GameIdx: gi,
