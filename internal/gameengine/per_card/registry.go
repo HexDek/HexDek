@@ -1605,17 +1605,29 @@ func registerDefaults() {
 	// Auto-generated handlers (cmd/gen-handlers).
 	registerGeneratedHandlers(Global())
 
-	// Era 4 unification — custom handlers that upgrade auto-generated
-	// gen_*.go stubs for STX, MH2, AFR, MID, VOW, and C19-C21 commanders.
-	// Each custom handler runs after the gen stub via the registry's
-	// append-on-register list; the gen stub still emits its partial
-	// breadcrumb so audits can trace coverage history.
-	registerTiamatCustom(Global())
-	registerVeyranVoiceOfDualityCustom(Global())
+	// Era 3 unification — SNC / BRO / DMU / NEO / CLB commanders. Each
+	// handler stacks alongside the gen_*.go stub that was emitting
+	// partials only.
+	registerJetmirEra3(Global())
+	registerFalcoSparaEra3(Global())
+	registerLordXanderEra3(Global())
+	registerHidetsuguAndKairiEra3(Global())
+	registerShorikaiEra3(Global())
+	registerAcererakEra3(Global())
+	registerTazriEra3(Global())
+	registerSivrissEra3(Global())
+	registerUrzaPrinceEra3(Global())
+	registerPlarggNassariEra3(Global())
+	registerWillScionEra3(Global())
+	registerFelotharEra3(Global())
+
+	// Era 4 unification — STX, MH2, AFR, MID, VOW, C19-C21 commanders.
+	// Tiamat, Veyran, and Acererak are covered by handler-coverage-2 /
+	// Era 3 batches (zz_handler_coverage_2_register.go,
+	// era3_batch.go) so they are intentionally not re-registered here.
 	registerGalazethPrismariCustom(Global())
 	registerLierDiscipleOfTheDrownedCustom(Global())
 	registerToxrillTheCorrosiveCustom(Global())
-	registerAcererakTheArchlichCustom(Global())
 	registerAsmoranomardicadaistinaculdacarCustom(Global())
 	registerJadziOracleOfArcaviosCustom(Global())
 	registerKalamaxTheStormsireCustom(Global())

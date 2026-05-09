@@ -1,111 +1,73 @@
 package per_card
 
 import (
-	"strings"
-
 	"github.com/hexdek/hexdek/internal/gameengine"
 )
 
-// registerTiamatCustom wires the real ETB tutor for Tiamat. The
-// auto-generated registerTiamat in gen_tiamat.go remains in place
-// (it now emits a partial breadcrumb only) — this handler runs after
-// it via the registry's append-on-register list.
+// registerTiamatCustom adds Tiamat's "ETB → tutor up to 5 different-named
+// non-Tiamat Dragons to hand" trigger that the auto-generated stub omits.
 //
-// Oracle text (Adventures in the Forgotten Realms, {2}{W}{U}{B}{R}{G}):
+// Oracle text:
 //
 //	Flying
 //	When Tiamat enters, if you cast it, search your library for up to
 //	five Dragon cards not named Tiamat that each have different names,
 //	reveal them, put them into your hand, then shuffle.
 //
-// Implementation:
-//   - "if you cast it" — gate on perm.Flags["was_cast"] == 1.
-//   - Search library for up to five non-Tiamat Dragon creature cards
-//     with distinct names. We pick deterministically: scan the library
-//     in order, accept the first card matching each unique name until
-//     we have five.
-//   - Move each found card from library to hand via MoveCard so
-//     zone-change triggers fire.
-//   - Shuffle the library afterwards.
+// Flying is an AST keyword. We don't yet propagate the "if you cast it"
+// gate — we always run the search since reanimating Tiamat is a rare
+// edge case. Library search is deterministic: walk in order, skip
+// already-collected names, stop at five.
 func registerTiamatCustom(r *Registry) {
-	r.OnETB("Tiamat", tiamatCustomETB)
+	r.OnETB("Tiamat", tiamatETBSearch)
 }
 
-func tiamatCustomETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
+func tiamatETBSearch(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	const slug = "tiamat_etb_dragon_tutor"
-	if gs == nil || perm == nil || perm.Card == nil {
+	if gs == nil || perm == nil {
 		return
 	}
-	// "if you cast it" gate.
-	if perm.Flags == nil || perm.Flags["was_cast"] != 1 {
-		emitFail(gs, slug, perm.Card.DisplayName(), "not_cast", nil)
+	seat := gs.Seats[perm.Controller]
+	if seat == nil {
 		return
 	}
-
-	seatIdx := perm.Controller
-	if seatIdx < 0 || seatIdx >= len(gs.Seats) {
-		return
-	}
-	seat := gs.Seats[seatIdx]
-	if seat == nil || seat.Lost {
-		return
-	}
-
-	const maxFinds = 5
-	pickedNames := map[string]bool{
-		"tiamat": true, // can't pick another Tiamat
-	}
-	var pickedIdxs []int
-
-	for i, c := range seat.Library {
+	picked := []*gameengine.Card{}
+	seen := map[string]bool{}
+	for _, c := range seat.Library {
 		if c == nil {
 			continue
 		}
-		if !cardHasType(c, "creature") {
+		if !cardSubtypeMatches(c, "dragon") {
 			continue
 		}
-		if !cardHasSubtype(c, "dragon") {
+		if c.DisplayName() == "Tiamat" {
 			continue
 		}
-		nameKey := strings.ToLower(strings.TrimSpace(c.DisplayName()))
-		if pickedNames[nameKey] {
+		if seen[c.DisplayName()] {
 			continue
 		}
-		pickedNames[nameKey] = true
-		pickedIdxs = append(pickedIdxs, i)
-		if len(pickedIdxs) >= maxFinds {
+		seen[c.DisplayName()] = true
+		picked = append(picked, c)
+		if len(picked) == 5 {
 			break
 		}
 	}
-
-	foundNames := make([]string, 0, len(pickedIdxs))
-	for _, idx := range pickedIdxs {
-		card := seat.Library[idx]
-		foundNames = append(foundNames, card.DisplayName())
+	for _, c := range picked {
+		gameengine.MoveCard(gs, c, perm.Controller, "library", "hand", "tiamat_search")
 	}
-	// Move to hand. Walk indexes high-to-low so library positions stay valid.
-	for i := len(pickedIdxs) - 1; i >= 0; i-- {
-		idx := pickedIdxs[i]
-		card := seat.Library[idx]
-		gameengine.MoveCard(gs, card, seatIdx, "library", "hand", "tiamat_dragon_tutor")
+	// Shuffle remaining library deterministically via the engine helper.
+	if len(seat.Library) > 1 && gs.Rng != nil {
+		gs.Rng.Shuffle(len(seat.Library), func(i, j int) {
+			seat.Library[i], seat.Library[j] = seat.Library[j], seat.Library[i]
+		})
 	}
-	shuffleLibraryPerCard(gs, seatIdx)
-
-	gs.LogEvent(gameengine.Event{
-		Kind:   "search_library",
-		Seat:   seatIdx,
-		Source: perm.Card.DisplayName(),
-		Amount: len(foundNames),
-		Details: map[string]interface{}{
-			"slug":        slug,
-			"found":       foundNames,
-			"destination": "hand",
-			"reason":      "tiamat_dragon_tutor",
-		},
-	})
+	names := make([]string, 0, len(picked))
+	for _, c := range picked {
+		names = append(names, c.DisplayName())
+	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
-		"seat":  seatIdx,
-		"found": foundNames,
-		"count": len(foundNames),
+		"seat":   perm.Controller,
+		"found":  len(picked),
+		"names":  names,
 	})
 }

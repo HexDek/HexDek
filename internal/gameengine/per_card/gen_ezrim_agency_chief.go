@@ -6,19 +6,25 @@ import (
 
 // registerEzrimAgencyChief wires Ezrim, Agency Chief.
 //
-// Oracle text:
+// Oracle text (MKM, {1}{W}{W}{U}{U}, 5/5):
 //
-//   Flying
-//   When Ezrim enters, investigate twice. (To investigate, create a Clue token. It's an artifact with "{2}, Sacrifice this token: Draw a card.")
-//   {1}, Sacrifice an artifact: Ezrim gains your choice of vigilance, lifelink, or hexproof until end of turn.
+//	Flying
+//	When Ezrim enters, investigate twice.
+//	{1}, Sacrifice an artifact: Ezrim gains your choice of vigilance,
+//	lifelink, or hexproof until end of turn.
 //
-// Auto-generated ETB handler.
+// Implementation:
+//   - ETB creates two Clue tokens (the standard investigate effect).
+//   - The activated grant ({1}, sacrifice an artifact) is left to the
+//     AST engine — it's a cost-bearing ability with no auto-activation
+//     hook on this card. Cost-unenforced flag retained for the
+//     tracking section.
 func registerEzrimAgencyChief(r *Registry) {
-	r.OnETB("Ezrim, Agency Chief", ezrimAgencyChiefETB)
+	r.OnETB("Ezrim, Agency Chief", ezrimETB)
 }
 
-func ezrimAgencyChiefETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
-	const slug = "ezrim_agency_chief_etb"
+func ezrimETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
+	const slug = "ezrim_etb_investigate_twice"
 	if gs == nil || perm == nil {
 		return
 	}
@@ -26,17 +32,16 @@ func ezrimAgencyChiefETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	if seat < 0 || seat >= len(gs.Seats) {
 		return
 	}
-	drawOne(gs, seat, perm.Card.DisplayName())
-	token := &gameengine.Card{
-		Name:          "1/1 Creature Token",
-		Owner:         seat,
-		BasePower:     1,
-		BaseToughness: 1,
-		Types:         []string{"token", "creature", "creature"},
-	}
-	enterBattlefieldWithETB(gs, seat, token, false)
-	emitPartial(gs, slug, perm.Card.DisplayName(), "additional non-ETB abilities not implemented")
+	gameengine.CreateClueToken(gs, seat)
+	gameengine.CreateClueToken(gs, seat)
+	gs.LogEvent(gameengine.Event{
+		Kind:   "investigate",
+		Seat:   seat,
+		Source: perm.Card.DisplayName(),
+		Amount: 2,
+	})
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
-		"seat": seat,
+		"seat":  seat,
+		"clues": 2,
 	})
 }
