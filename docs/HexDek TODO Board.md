@@ -70,8 +70,8 @@ kanban-plugin: board
 ## Medium Priority — Engine
 
 - [x] **Temporal Pincer** — implemented 2026-05-04. SQLite schema, REST handlers, frontend wiring. #infra #platform
-- [ ] **BUG: Esika/Prismatic Bridge 9.2% WR** — systemic B5 combo execution issue. **IN PROGRESS** (hex-dev, 2026-05-09). #engine #bug #per_card
-- [ ] **BUG: Multiple B5 decks at 13-14% WR** — combo execution ceiling. **IN PROGRESS** (hex-dev, 2026-05-09). #engine #bug #combo
+- [x] **BUG: Esika/Prismatic Bridge 9.2% WR** — `tryCastCommander` never set `CastingBackFace=true` for MDFC commanders. Bridge never reached battlefield. PR #15 merged 2026-05-09. #engine #bug #per_card
+- [x] **BUG: Multiple B5 decks at 13-14% WR** — combo sequencer treated commanders in command zone as "missing" pieces + MDFC face aliases unrecognized. Command-zone awareness + DFC alias indexing + commander tax costing. PR #18 merged 2026-05-09. #engine #bug #combo
 - [x] **34K corpus audit — DONE (initial run)** — 31,963 cards tested, 181 unique failures (99.4% card coverage). #engine #qa
 - [x] **Corpus audit: draw handler gaps** — verified 2,032/2,032 PASS (was tests-run count, not failures). All draw tests already passing after keyword_dead fix 2026-05-08. #engine #handlers #draw
 - [ ] **Corpus audit: lifegain/lifeloss gaps (1,612)** — may be stale (needs verification like draw gaps). #engine #handlers #life
@@ -92,13 +92,13 @@ kanban-plugin: board
 
 ## Medium Priority — Platform
 
-- [ ] BOINC-style distributed compute (desktop client → contribute games → earn credits) — **IN PROGRESS** (hex-dev-3, 2026-05-09) #distributed
-- [ ] **Deterministic seed capture (anti-cheat Phase 1)** — **IN PROGRESS** (hex-dev-4, 2026-05-09) #anticheat
-- [ ] Deterministic replay anti-cheat (cryptographic seed, spot-check 2-5%, auto-cauterize bad actors) — *enhanced by seed capture from Phase 1* #anticheat
-- [ ] Statistical anomaly detection (per-contributor distribution tracking, 3σ flagging) #anticheat
-- [ ] Credit economy (contribute compute → earn credits → spend on own deck testing) #economy
-- [ ] Stream/narrator layer (game state → visual renderer → Twitch/OBS output) #stream
-- [ ] **Stream/narrator OBS overlay** — concrete OBS browser-source build of the narrator layer: transparent-background spectator viewport, Ive three-act narrative caption strip, lower-third commander tags, configurable seat order. Targets streamer use over the open spectator feed. #stream #ui
+- [x] BOINC-style distributed compute — `cmd/hexdek-contrib` Go binary, WebSocket protocol, chunked work dispatch, spot-checking, contributor credits. 2,260 lines, tests. PR #17 merged 2026-05-09. #distributed
+- [x] **Deterministic seed capture (anti-cheat Phase 1)** — `internal/seedcontract`: HMAC-SHA256, domain-separated prefixes, layered Seal/Sign/Verify, `DeriveContractKey`. Wired into all 3 game paths. 14 tests. PR #14 merged 2026-05-09. #anticheat
+- [x] Deterministic replay anti-cheat — Phase 2 schema (verification_queue + contributor_sanctions + verified column migration). PR #20 merged 2026-05-09. Actual spot-check worker still needed. #anticheat
+- [x] Statistical anomaly detection — `StatisticalAuditor` wired into game loop, per-contributor 3σ flagging on win rate/game length/turn variance. PR #19 merged 2026-05-09. #anticheat
+- [x] Credit economy — `internal/credits` package: free tier (3 gauntlets/day), credits for compute, 402 paywall, concurrency-safe ledger, gauntlet endpoint gated. 14 tests. PR #21 merged 2026-05-09. #economy
+- [x] Stream/narrator layer — game state → visual renderer → Twitch/OBS output. Shipped via StreamOverlay + NarratorOverlay. #stream
+- [x] **Stream/narrator OBS overlay** — `deriveStreamPhase` three-act narrative captions (OPENING/MIDGAME/CLIMAX/CURTAIN), configurable seat order via `?seats=`, `?phase=off` toggle. PR #16 merged 2026-05-09. #stream #ui
 
 
 ## Low Priority — Hat Research (Bronze tier) — MOSTLY DONE
