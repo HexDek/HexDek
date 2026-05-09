@@ -3227,6 +3227,35 @@ func (h *YggdrasilHat) activationHeuristic(gs *gameengine.GameState, seatIdx int
 	}
 	c := opt.Permanent.Card
 
+	// The One Ring — burden counters compound life loss each upkeep.
+	// Activation adds another counter and draws N cards, so over a
+	// full life cycle we lose 1 + 2 + 3 + ... per consecutive activation.
+	// Heuristic: refuse to activate when life can't survive the next
+	// upkeep tick after this one. life > burdens*2 from the user spec.
+	if c.DisplayName() == "The One Ring" {
+		burdens := 0
+		if opt.Permanent.Counters != nil {
+			burdens = opt.Permanent.Counters["burden"]
+		}
+		life := 0
+		if seatIdx >= 0 && seatIdx < len(gs.Seats) && gs.Seats[seatIdx] != nil {
+			life = gs.Seats[seatIdx].Life
+		}
+		// After this activation: burdens+1 counters → next upkeep
+		// drains burdens+1 life. We need to outlive at least one more
+		// upkeep. Per spec: skip when life <= burdens*2 (proxy for
+		// "won't survive the cumulative drain").
+		if life > 0 && life <= burdens*2 {
+			return -1.0 // forces ucb1 below pass threshold
+		}
+		// Each fresh draw is +1 cards − burden lost; positively scale
+		// based on how cheap it is to take the next drain.
+		base += 0.30
+		if life > burdens*4 {
+			base += 0.10
+		}
+	}
+
 	if h.isValueEngineKey(c) {
 		base += 0.25
 	}
@@ -4984,8 +5013,108 @@ func (h *YggdrasilHat) ShouldRedirectCommanderZone(gs *gameengine.GameState, sea
 
 // -- Interface: OrderReplacements --
 
+// OrderReplacements implements §616.1: when multiple replacement effects
+// apply to the same event AND tie within a category, the AFFECTED player
+// chooses the order. Earlier-applied effects feed their modified payload
+// into later-applied ones (CR §614.6), so the order changes the outcome
+// when one effect's mutation makes another stop applying.
+//
+// Heuristic (deterministic, stable sort):
+//
+//	1. Self-controlled effects first — we benefit most from our own
+//	   replacements landing before the opponent's.
+//	2. Within self-vs-opponent groups, score by event-type benefit:
+//	     - For events targeting US (TargetSeat == seatIdx):
+//	         "would_be_dealt_damage" / "would_lose_life" / "would_die" /
+//	         "would_be_put_into_graveyard" / "would_lose_game" → boost
+//	         (our replacement likely prevents/redirects, fire it first).
+//	     - For events benefiting US (TargetSeat == seatIdx, gain side):
+//	         "would_draw" / "would_gain_life" / "would_put_counter" /
+//	         "would_create_token" → boost (our replacement likely doubles).
+//	     - For events targeting OPPONENTS controlled by US:
+//	         "would_lose_life" / "would_be_dealt_damage" → boost
+//	         (our replacement likely amplifies — Torment of Hailfire path).
+//	   Low-life override: when our life is critical (≤ 1/4 starting), every
+//	   damage/lose-life replacement targeting us pulls to the top.
+//	3. Timestamp ascending (older first) breaks remaining ties — matches
+//	   APNAP fallback in GreedyHat.
+//
+// Beneficial replacements applied first means the post-mutation payload
+// fed to subsequent replacements reflects our gains, so a later opponent
+// replacement that would penalize the original event has less to grab.
 func (h *YggdrasilHat) OrderReplacements(gs *gameengine.GameState, seatIdx int, candidates []*gameengine.ReplacementEffect) []*gameengine.ReplacementEffect {
-	return candidates
+	if len(candidates) <= 1 {
+		return candidates
+	}
+	out := make([]*gameengine.ReplacementEffect, len(candidates))
+	copy(out, candidates)
+
+	lowLife := false
+	if seatIdx >= 0 && seatIdx < len(gs.Seats) && gs.Seats[seatIdx] != nil {
+		s := gs.Seats[seatIdx]
+		threshold := s.StartingLife / 4
+		if threshold < 5 {
+			threshold = 5
+		}
+		lowLife = s.Life <= threshold
+	}
+
+	score := func(re *gameengine.ReplacementEffect) int {
+		if re == nil {
+			return -1 << 30
+		}
+		s := 0
+		// Self-controlled goes first.
+		if re.ControllerSeat == seatIdx {
+			s += 100
+		}
+		// Event-type benefit. Without firing the candidate's Applies
+		// predicate (would mutate cached event state) we approximate by
+		// SourcePerm controller + event type semantics.
+		switch re.EventType {
+		case "would_be_dealt_damage",
+			"would_lose_life",
+			"would_die",
+			"would_be_put_into_graveyard",
+			"would_lose_game":
+			// Self-replacement on a harm event = prevention/redirection;
+			// fire first so the modified payload reaches downstream effects.
+			if re.ControllerSeat == seatIdx {
+				s += 30
+			}
+			if lowLife && re.ControllerSeat == seatIdx {
+				s += 200 // existential — pull to top
+			}
+		case "would_draw", "would_gain_life", "would_put_counter",
+			"would_create_token", "would_win_game":
+			// Self-replacement on a gain event = amplification (Doubling
+			// Season, Alhammarret's Archive, Boon Reflection). Earlier =
+			// the doubled count flows into anything downstream.
+			if re.ControllerSeat == seatIdx {
+				s += 20
+			}
+		case "would_fire_etb_trigger":
+			// Panharmonicon-style: fire amplifiers before suppressors.
+			if re.ControllerSeat == seatIdx {
+				s += 15
+			}
+		}
+		return s
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		si, sj := score(out[i]), score(out[j])
+		if si != sj {
+			return si > sj
+		}
+		// Older timestamp first — matches GreedyHat fallback for APNAP-
+		// style determinism within an otherwise-equal group.
+		if out[i] == nil || out[j] == nil {
+			return out[i] != nil
+		}
+		return out[i].Timestamp < out[j].Timestamp
+	})
+	return out
 }
 
 // hasGraveyardRecursionValue returns true if the card has intrinsic
