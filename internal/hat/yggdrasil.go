@@ -413,6 +413,18 @@ func (h *YggdrasilHat) graveyardExploitationMult() float64 {
 	return 1.0 + (h.DNA.GraveyardExploitation-0.5)*0.8
 }
 
+// curseAxis returns the value of a DNA axis, or fallback if no DNA is
+// attached. Use the [0,1] axis directly with this helper, or for a
+// neutral-centered shift use the result minus 0.5. Keeps decision-site
+// reads concise and nil-safe so callers don't have to repeat
+// `if h.DNA != nil` everywhere.
+func (h *YggdrasilHat) curseAxis(getter func(*CurseDNA) float64, fallback float64) float64 {
+	if h == nil || h.DNA == nil {
+		return fallback
+	}
+	return getter(h.DNA)
+}
+
 // NewYggdrasilHatWithPool creates a hat using DNA + learned dimension
 // corrections from the pool's outcome-correlation statistics (T3.2).
 func NewYggdrasilHatWithPool(dna *CurseDNA, sp *StrategyProfile, budget int, ds *DimensionStats) *YggdrasilHat {
@@ -1051,6 +1063,12 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 		if focusFire {
 			leaderWeight = 3.5
 		}
+		// DNA ThreatParanoia: high paranoia inflates the leader-eval
+		// term so high-eval seats become bigger targets. Low paranoia
+		// flattens the term so the hat distributes damage more evenly.
+		// Max swing ±50% on leaderWeight at the extremes.
+		paranoiaShift := (h.curseAxis(func(d *CurseDNA) float64 { return d.ThreatParanoia }, 0.5) - 0.5) * 1.0
+		leaderWeight *= 1.0 + paranoiaShift
 		score += threat.EvalScore * leaderWeight
 
 		// 4. Prefer open defenders (fewer untapped blockers). Bumped
@@ -1633,6 +1651,19 @@ func (h *YggdrasilHat) cardHeuristic(gs *gameengine.GameState, seatIdx int, c *g
 	}
 
 	cat := h.categorizeWithFreya(c)
+
+	// DNA ResourceGreed: high → bias toward card draw + ramp (resource
+	// hoarding); low → bias toward CatThreat (board presence). Applied
+	// before archetype bonuses so the same nudge stacks coherently with
+	// the archetype's own draw/ramp bias for ramp/control decks.
+	// Max swing ±0.15 per relevant card category.
+	greedShift := (h.curseAxis(func(d *CurseDNA) float64 { return d.ResourceGreed }, 0.5) - 0.5) * 0.3
+	switch cat {
+	case CatDraw, CatRamp:
+		base += greedShift
+	case CatThreat:
+		base -= greedShift
+	}
 
 	// Archetype-specific bonuses.
 	arch := ArchetypeMidrange
@@ -2811,7 +2842,14 @@ func (h *YggdrasilHat) ChooseCastFromHand(gs *gameengine.GameState, seatIdx int,
 		}
 	}
 	if hasCounter {
-		passBoost += 0.25
+		// DNA CounterplayTiming: high → strongly prefer holding the
+		// counterspell (boost pass), low → prefer slamming proactive
+		// plays even when a counter is in hand. Max swing ±0.20 from
+		// the 0.25 baseline.
+		cpBoost := 0.25
+		cpShift := (h.curseAxis(func(d *CurseDNA) float64 { return d.CounterplayTiming }, 0.5) - 0.5) * 0.4
+		cpBoost += cpShift
+		passBoost += cpBoost
 	}
 	// Mana bluffing: even without a counter, represent interaction by
 	// leaving 2+ mana open if we're in blue/black. The threat of a
@@ -3216,6 +3254,7 @@ func (h *YggdrasilHat) activationHeuristic(gs *gameengine.GameState, seatIdx int
 			base += 0.10
 		}
 	}
+	gyMult := h.graveyardExploitationMult()
 	if strings.Contains(ot, "graveyard") && (strings.Contains(ot, "onto the battlefield") || strings.Contains(ot, "return")) {
 		gyTargets := 0
 		for _, gc := range gs.Seats[seatIdx].Graveyard {
@@ -3223,7 +3262,9 @@ func (h *YggdrasilHat) activationHeuristic(gs *gameengine.GameState, seatIdx int
 				gyTargets++
 			}
 		}
-		base += 0.25 + float64(gyTargets)*0.10
+		// DNA GraveyardExploitation: high → boost recursion-activation
+		// score (route reanimator decks to fire activations sooner).
+		base += (0.25 + float64(gyTargets)*0.10) * gyMult
 		if base > 0.60 {
 			base = 0.60
 		}
@@ -3301,6 +3342,13 @@ func (h *YggdrasilHat) activationHeuristic(gs *gameengine.GameState, seatIdx int
 		if payoffBonus > 0.80 {
 			payoffBonus = 0.80
 		}
+		// DNA DrainAffinity: high → lean harder into the aristocrats
+		// payoff bonus (max +60% at the extreme); low → underweight it.
+		// Operates in lockstep with the centralized DrainEngine eval-
+		// weight nudge so the activation site biases the SAME direction
+		// the planner is biased.
+		drainShift := (h.curseAxis(func(d *CurseDNA) float64 { return d.DrainAffinity }, 0.5) - 0.5) * 1.2
+		payoffBonus *= 1.0 + drainShift
 		base += payoffBonus
 		if strings.Contains(ot, "add") && (strings.Contains(ot, "mana") || strings.Contains(ot, "{")) {
 			base += 0.15
@@ -3918,6 +3966,25 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 			aheadNoBlock = 0.3
 			survivalFrac = 2
 		}
+	}
+	// DNA Aggression (inverse): high aggression → less willing to
+	// block (prefer racing). Lower aheadNoBlock means a smaller lead
+	// suffices to skip blocks; lower survivalFrac means a larger
+	// damage budget before forced to block. Both push toward racing.
+	// Max swing: aheadNoBlock ±0.15, survivalFrac ±1 (clamped to ≥1).
+	aggroShift := (h.curseAxis(func(d *CurseDNA) float64 { return d.Aggression }, 0.5) - 0.5) * 0.3
+	aheadNoBlock -= aggroShift
+	if aheadNoBlock < 0.05 {
+		aheadNoBlock = 0.05
+	}
+	if aheadNoBlock > 0.95 {
+		aheadNoBlock = 0.95
+	}
+	// Aggression > 0.5 → reduce survivalFrac (skip more); < 0.5 →
+	// increase (block more). Translate ±0.5 axis to ±1 integer step.
+	survivalFrac -= int((h.curseAxis(func(d *CurseDNA) float64 { return d.Aggression }, 0.5) - 0.5) * 2.0)
+	if survivalFrac < 1 {
+		survivalFrac = 1
 	}
 	// "Comfortably ahead" no longer skips ALL blocking. The old guard
 	// returned an empty map whenever relPos was high enough and total
