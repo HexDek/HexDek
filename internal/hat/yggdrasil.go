@@ -4852,71 +4852,227 @@ func (h *YggdrasilHat) ChooseMode(gs *gameengine.GameState, seatIdx int, modes [
 func (h *YggdrasilHat) scoreModeEffect(gs *gameengine.GameState, seatIdx int, eff gameast.Effect, pos float64) float64 {
 	score := 0.0
 	switch eff.Kind() {
-	case "damage", "lose_life":
-		score = 0.4
-		if pos > 0.3 {
-			score = 0.6
-		}
 	case "destroy", "exile":
-		oppPerms := 0
-		for i, s := range gs.Seats {
-			if i != seatIdx && s != nil && !s.Lost {
-				oppPerms += len(s.Battlefield)
-			}
+		// Score by the value of the best legal opponent permanent we
+		// could remove. A combo piece on the board pushes this to 0.95;
+		// a vanilla creature only is 0.40; nothing legal is near-zero.
+		score = h.bestOpponentRemovalScore(gs, seatIdx)
+		if score == 0 {
+			score = 0.05
 		}
-		if oppPerms > 0 {
-			score = 0.7
+
+	case "damage", "lose_life":
+		// Scale by how close to lethal the closest opponent is. The
+		// effect's own amount is consulted when present — a "deal 3"
+		// vs a 3-life opponent is lethal regardless of position.
+		amount := 1
+		switch e := eff.(type) {
+		case *gameast.Damage:
+			amount = effectAmount(e.Amount)
+		case *gameast.LoseLife:
+			amount = effectAmount(e.Amount)
 		}
+		score = lethalIncomingScore(gs, seatIdx, amount)
+		// Aggression / position nudges ride on top of the kill-math.
+		if pos > 0.3 {
+			score += 0.10
+		}
+
 	case "draw":
-		score = 0.5
-		if pos < -0.2 {
-			score = 0.8
-		}
-	case "create_token":
-		score = 0.5
-		if h.Strategy != nil && (h.Strategy.Archetype == ArchetypeTribal || h.Strategy.Archetype == ArchetypeAggro) {
-			score = 0.7
-		}
-	case "counter_mod":
-		score = 0.4
-	case "gain_life":
+		// Empty-hand draw is huge; full-hand draw is incremental and
+		// risks hand-size discard at end of turn.
 		seat := gs.Seats[seatIdx]
-		if seat != nil && seat.Life < 15 {
-			score = 0.6
-		} else {
-			score = 0.2
+		hand := 0
+		if seat != nil {
+			hand = len(seat.Hand)
 		}
+		switch {
+		case hand == 0:
+			score = 0.90
+		case hand <= 2:
+			score = 0.75
+		case hand <= 4:
+			score = 0.55
+		case hand <= 6:
+			score = 0.40
+		default:
+			score = 0.30
+		}
+		if pos < -0.2 {
+			score += 0.05
+		}
+
+	case "create_token":
+		// Go-wider value scales with our existing creature count — each
+		// extra body compounds anthems, sacrifice density, and combat
+		// pressure. Commanders that explicitly care about creatures
+		// (Krenko, Edgar, Slimefoot) push it further.
+		count := ourCreatureCount(gs, seatIdx)
+		switch {
+		case count == 0:
+			score = 0.55
+		case count <= 2:
+			score = 0.65
+		case count <= 5:
+			score = 0.75
+		default:
+			score = 0.85
+		}
+		if commanderCaresAboutCreatures(gs, seatIdx) {
+			score += 0.08
+		}
+		if h.Strategy != nil &&
+			(h.Strategy.Archetype == ArchetypeTribal || h.Strategy.Archetype == ArchetypeAggro) {
+			score += 0.05
+		}
+
+	case "counter_mod":
+		// +1/+1 counters need a recipient. No creature → near-zero;
+		// a vanilla creature → modest; a payoff card → strong.
+		anyCreature, payoff := h.hasCounterPayoff(gs, seatIdx)
+		switch {
+		case payoff:
+			score = 0.70
+		case anyCreature:
+			score = 0.45
+		default:
+			score = 0.10
+		}
+
+	case "gain_life":
+		// Curve: at 5 life this is panic mode (0.90); at 30+ it's
+		// nearly worthless (0.20).
+		seat := gs.Seats[seatIdx]
+		life := 40
+		if seat != nil {
+			life = seat.Life
+		}
+		switch {
+		case life <= 5:
+			score = 0.90
+		case life <= 10:
+			score = 0.70
+		case life <= 20:
+			score = 0.45
+		case life <= 30:
+			score = 0.30
+		default:
+			score = 0.20
+		}
+
 	case "bounce":
-		score = 0.5
+		// Tempo per swap scales with the highest-CMC permanent on
+		// either board we could legally return.
+		cmc := bestBounceCMC(gs, seatIdx)
+		switch {
+		case cmc >= 6:
+			score = 0.80
+		case cmc >= 4:
+			score = 0.60
+		case cmc >= 2:
+			score = 0.45
+		default:
+			score = 0.30
+		}
+
 	case "tutor":
-		score = 0.7
+		// Tutoring is almost always strong, but only if we have a
+		// known target list. Combo decks search first.
+		score = 0.75
+		if len(h.tutorTargetSet) > 0 {
+			score = 0.85
+		}
+		if h.Strategy != nil && h.Strategy.Archetype == ArchetypeCombo {
+			score += 0.05
+		}
+
 	case "reanimate", "recurse":
-		score = 0.6
+		// Value scales with graveyard size; reanimator decks treat it
+		// as their best effect.
+		seat := gs.Seats[seatIdx]
+		gy := 0
+		if seat != nil {
+			gy = len(seat.Graveyard)
+		}
+		switch {
+		case gy == 0:
+			score = 0.30
+		case gy <= 3:
+			score = 0.50
+		case gy <= 7:
+			score = 0.70
+		default:
+			score = 0.85
+		}
 		if h.Strategy != nil && h.Strategy.Archetype == ArchetypeReanimator {
-			score = 0.9
+			score += 0.10
 		}
+
 	case "add_mana":
-		if gs.Turn <= 5 {
-			score = 0.5
-		} else {
-			score = 0.2
+		// Early mana = ramp value; late mana = mostly empty-floor.
+		switch {
+		case gs.Turn <= 3:
+			score = 0.65
+		case gs.Turn <= 6:
+			score = 0.45
+		default:
+			score = 0.25
 		}
+
 	case "sacrifice":
-		score = 0.3
-	case "buff", "grant_ability":
-		score = 0.4
-	case "discard":
-		score = 0.3
-		if h.Strategy != nil && h.Strategy.Archetype == ArchetypeStax {
-			score = 0.6
+		// With aristocrats payoffs on the board, our own sacrifices
+		// are net positive. Without them, it's a creature loss.
+		if h.hasAristocratsPayoff(gs, seatIdx) {
+			score = 0.70
+		} else {
+			score = 0.10
 		}
+
+	case "buff", "grant_ability":
+		// Useful when we have at least one creature; better when the
+		// board is wide enough for the buff to compound.
+		count := ourCreatureCount(gs, seatIdx)
+		switch {
+		case count == 0:
+			score = 0.10
+		case count <= 2:
+			score = 0.40
+		default:
+			score = 0.55
+		}
+
+	case "discard":
+		score = 0.35
+		if h.Strategy != nil && h.Strategy.Archetype == ArchetypeStax {
+			score = 0.65
+		}
+
 	case "mill":
-		score = 0.2
+		// Mill against an opponent is tempo if their library is small;
+		// for self-mill (graveyard decks), we're filling a resource —
+		// the DNA nudge below covers the self-mill case for graveyard
+		// decks. Here we score by minimum opponent library size.
+		minLib := minOpponentLibrarySize(gs, seatIdx)
+		switch {
+		case minLib == 0:
+			score = 0.10
+		case minLib <= 5:
+			score = 0.85
+		case minLib <= 15:
+			score = 0.55
+		case minLib <= 30:
+			score = 0.30
+		default:
+			score = 0.15
+		}
+
 	case "scry", "surveil":
-		score = 0.4
+		score = 0.45
+
 	default:
-		score = 0.3
+		score = 0.30
 	}
+	score = h.applyDNANudge(eff, score)
 	return score
 }
 
