@@ -1620,6 +1620,24 @@ func registerDefaults() {
 	registerPlarggNassariEra3(Global())
 	registerWillScionEra3(Global())
 	registerFelotharEra3(Global())
+
+	// Era 5 unification — replace gen_*.go static stubs with real
+	// implementations for IKO/ZNR/KHM/CMR/C13-C18/pre-Modern commanders.
+	// (Aesi already wired by Era 1's modified gen_*.go; Kardur already
+	// wired by Era 2's zz_era2_register.go init().)
+	registerMarchesaTheBlackRoseCustom(Global())
+	registerKaradorGhostChieftainCustom(Global())
+	registerDereviEmpyrialTacticianCustom(Global())
+	registerYasharnImplacableEarthCustom(Global())
+	registerCharixTheRagingIsleCustom(Global())
+	registerKalamaxTheStormsireCustom(Global())
+	registerChainerDementiaMasterCustom(Global())
+	registerRuricTharTheUnbowedCustom(Global())
+	registerSeleniaDarkAngelCustom(Global())
+	registerYurlokOfScorchThrashCustom(Global())
+	registerSakashimaOfAThousandFacesCustom(Global())
+	registerAraumiOfTheDeadTideCustom(Global())
+	registerMairsilThePretenderCustom(Global())
 }
 
 func init() {
