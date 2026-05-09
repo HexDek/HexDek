@@ -1,0 +1,9 @@
+[001] SETUP: card="Reaver Drone" kind=modification_effect abilityKind=triggered
+[002] SETUP: battlefield seat=0 size=2 srcPerm=true
+[003] CONDITION_SETUP: "phase" → no priming (phase advance happens in fireTriggerEvent)
+[004] TRIGGER_FIRE: upkeep primed on "Reaver Drone"
+[005] EFFECT_ATTEMPT: kind=modification_effect usingFullEffect=true
+[006] TRIGGER_CHECK: event="phase" resolving via fireTriggerEvent
+[007] HANDLER_ENTER: fireTriggerEvent srcPerm="Reaver Drone"
+[008] STATE_CHANGE: events=0 changed=false
+[009] ASSERT_FAIL: goldilocks_dead_effect effect=modification_effect abilityKind=triggered filterBase=""

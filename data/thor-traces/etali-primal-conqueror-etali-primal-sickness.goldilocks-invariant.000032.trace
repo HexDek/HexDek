@@ -1,0 +1,15 @@
+[001] SETUP: card="Etali, Primal Conqueror // Etali, Primal Sickness" kind=modification_effect abilityKind=triggered
+[002] SETUP: battlefield seat=0 size=2 srcPerm=true
+[003] CONDITION_SETUP: "etb" → no-op (source's own ETB will fire trigger)
+[004] TRIGGER_FIRE: creature_etb primed on "Etali, Primal Conqueror // Etali, Primal Sickness"
+[005] EFFECT_ATTEMPT: kind=modification_effect usingFullEffect=true
+[006] TRIGGER_CHECK: event="etb" resolving via fireTriggerEvent
+[007] HANDLER_ENTER: fireTriggerEvent srcPerm="Etali, Primal Conqueror // Etali, Primal Sickness"
+[008] STATE_CHANGE: events=6 changed=true
+[009] EVENT: kind=zone_change source="LibCard 0-0" seat=0 target=-1 amount=0
+[010] EVENT: kind=zone_change source="LibCard 1-0" seat=1 target=-1 amount=0
+[011] EVENT: kind=zone_change source="LibCard 0-0" seat=0 target=-1 amount=0
+[012] EVENT: kind=zone_change source="LibCard 1-0" seat=1 target=-1 amount=0
+[013] EVENT: kind=per_card_handler source="Etali, Primal Conqueror // Etali, Primal Sickness" seat=0 target=0 amount=0
+[014] EVENT: kind=each_player_effect source="Etali, Primal Conqueror // Etali, Primal Sickness" seat=0 target=0 amount=4
+[015] ASSERT_FAIL: goldilocks_invariant invariant=CardIdentity msg=CardIdentity: card "LibCard 1-0" (ptr 0xc005936e10) appears in both seat 0 battlefield and seat 0 battlefield

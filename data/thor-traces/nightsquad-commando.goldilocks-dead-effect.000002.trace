@@ -1,0 +1,9 @@
+[001] SETUP: card="Nightsquad Commando" kind=create_token abilityKind=triggered
+[002] SETUP: battlefield seat=0 size=1 srcPerm=true
+[003] CONDITION_SETUP: "etb" → no-op (source's own ETB will fire trigger)
+[004] TRIGGER_FIRE: creature_etb primed on "Nightsquad Commando"
+[005] EFFECT_ATTEMPT: kind=create_token usingFullEffect=true
+[006] TRIGGER_CHECK: event="etb" resolving via fireTriggerEvent
+[007] HANDLER_ENTER: fireTriggerEvent srcPerm="Nightsquad Commando"
+[008] STATE_CHANGE: events=0 changed=false
+[009] ASSERT_FAIL: goldilocks_dead_effect effect=create_token abilityKind=triggered filterBase=""

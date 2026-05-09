@@ -1,0 +1,2 @@
+card,interaction,ability_kind,invariant,message
+"Dread","corpus_audit_destroy","triggered","","[destroy] CardIdentity: CardIdentity: card ""Dread"" (ptr 0xc008509a40) appears in both seat 0 library and seat 0 graveyard"

@@ -1,0 +1,6 @@
+[001] SETUP: card="Michelangelo, Game Master" kind=ability_word abilityKind=static
+[002] SETUP: battlefield seat=0 size=2 srcPerm=true
+[003] EFFECT_ATTEMPT: kind=ability_word usingFullEffect=false
+[004] HANDLER_ENTER: ResolveEffect (static/default path)
+[005] STATE_CHANGE: events=0 changed=false
+[006] ASSERT_FAIL: goldilocks_dead_effect effect=ability_word abilityKind=static filterBase=""

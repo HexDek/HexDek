@@ -1,0 +1,16 @@
+[001] SETUP: card="Dread" kind=destroy abilityKind=triggered
+[002] SETUP: battlefield seat=0 size=2 srcPerm=true
+[003] CONDITION_SETUP: event="deals_damage" (unrecognised) → fallback to fireTriggerEvent default
+[004] EFFECT_ATTEMPT: kind=destroy usingFullEffect=true
+[005] TRIGGER_CHECK: event="deals_damage" resolving via fireTriggerEvent
+[006] HANDLER_ENTER: fireTriggerEvent srcPerm="Dread"
+[007] STATE_CHANGE: events=8 changed=true
+[008] EVENT: kind=destroy source="Dread" seat=0 target=0 amount=0
+[009] EVENT: kind=zone_change source="Dread" seat=0 target=-1 amount=0
+[010] EVENT: kind=stack_push source="Dread" seat=0 target=0 amount=0
+[011] EVENT: kind=priority_pass source="" seat=1 target=0 amount=0
+[012] EVENT: kind=priority_pass source="" seat=2 target=0 amount=0
+[013] EVENT: kind=priority_pass source="" seat=3 target=0 amount=0
+[014] EVENT: kind=stack_resolve source="Dread" seat=0 target=0 amount=0
+[015] EVENT: kind=shuffle_into_library source="Dread" seat=0 target=0 amount=0
+[016] ASSERT_FAIL: goldilocks_invariant invariant=CardIdentity msg=CardIdentity: card "Dread" (ptr 0xc009722c30) appears in both seat 0 library and seat 0 graveyard

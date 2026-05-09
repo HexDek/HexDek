@@ -1,0 +1,9 @@
+[001] SETUP: card="Trynn, Champion of Freedom" kind=create_token abilityKind=triggered
+[002] SETUP: battlefield seat=0 size=1 srcPerm=true
+[003] CONDITION_SETUP: "phase" → no priming (phase advance happens in fireTriggerEvent)
+[004] TRIGGER_FIRE: end_step primed on "Trynn, Champion of Freedom"
+[005] EFFECT_ATTEMPT: kind=create_token usingFullEffect=true
+[006] TRIGGER_CHECK: event="phase" resolving via fireTriggerEvent
+[007] HANDLER_ENTER: fireTriggerEvent srcPerm="Trynn, Champion of Freedom"
+[008] STATE_CHANGE: events=0 changed=false
+[009] ASSERT_FAIL: goldilocks_dead_effect effect=create_token abilityKind=triggered filterBase=""

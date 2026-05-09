@@ -1,0 +1,9 @@
+[001] SETUP: card="Fathom Fleet Boarder" kind=modification_effect abilityKind=triggered
+[002] SETUP: battlefield seat=0 size=2 srcPerm=true
+[003] CONDITION_SETUP: "etb" → no-op (source's own ETB will fire trigger)
+[004] TRIGGER_FIRE: creature_etb primed on "Fathom Fleet Boarder"
+[005] EFFECT_ATTEMPT: kind=modification_effect usingFullEffect=true
+[006] TRIGGER_CHECK: event="etb" resolving via fireTriggerEvent
+[007] HANDLER_ENTER: fireTriggerEvent srcPerm="Fathom Fleet Boarder"
+[008] STATE_CHANGE: events=0 changed=false
+[009] ASSERT_FAIL: goldilocks_dead_effect effect=modification_effect abilityKind=triggered filterBase=""
