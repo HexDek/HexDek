@@ -4093,6 +4093,59 @@ func (h *YggdrasilHat) hasGraveyardRecursionValue(c *gameengine.Card) bool {
 		strings.Contains(ot, "dredge")
 }
 
+// hasActiveGraveyardCastGrant returns true if the seat has at least one
+// ZoneCastGrant whose Zone is "graveyard" — i.e. some permanent (Underworld
+// Breach, Yawgmoth's Will-style, Past in Flames residual) currently lets
+// this seat cast cards out of their graveyard. The card-side filter (which
+// card kinds the grant applies to) varies per source; this helper just
+// tells callers "a graveyard cast path exists for this seat right now."
+func (h *YggdrasilHat) hasActiveGraveyardCastGrant(gs *gameengine.GameState, seatIdx int) bool {
+	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) || gs.ZoneCastGrants == nil {
+		return false
+	}
+	for _, perm := range gs.ZoneCastGrants {
+		if perm == nil {
+			continue
+		}
+		if perm.RequireController >= 0 && perm.RequireController != seatIdx {
+			continue
+		}
+		if strings.EqualFold(perm.Zone, "graveyard") {
+			return true
+		}
+	}
+	return false
+}
+
+// hasGraveyardRecursionPotential is the hand-side question this hat asks
+// when valuing a card for discard / surveil / put-back / bottom: "is this
+// card actually playable from the graveyard?" The answer is yes if EITHER
+// the card has an intrinsic recursion keyword (flashback, unearth, etc.)
+// OR the seat has an active graveyard-rooted zone-cast grant whose filter
+// type (instant/sorcery for Underworld Breach, etc.) covers this card.
+//
+// We don't try to match the grant's filter precisely — most graveyard-cast
+// grants in current MTG cover instants/sorceries, so we approximate by
+// treating any non-permanent spell as covered when a grant exists.
+// Permanents (creatures/artifacts/enchantments) without an intrinsic
+// recursion keyword are not covered by this approximation, since most
+// graveyard-cast grants do NOT let you cast permanents from the yard.
+func (h *YggdrasilHat) hasGraveyardRecursionPotential(gs *gameengine.GameState, seatIdx int, c *gameengine.Card) bool {
+	if c == nil {
+		return false
+	}
+	if h.hasGraveyardRecursionValue(c) {
+		return true
+	}
+	if !h.hasActiveGraveyardCastGrant(gs, seatIdx) {
+		return false
+	}
+	if typeLineContains(c, "instant") || typeLineContains(c, "sorcery") {
+		return true
+	}
+	return false
+}
+
 // hasGraveyardRecursionEnabler returns true if the seat controls a
 // permanent that returns cards from the graveyard to the battlefield
 // or hand (Muldrotha, Sun Titan, Meren, Karador, Sheoldred, etc.) or
@@ -4140,6 +4193,131 @@ func (h *YggdrasilHat) hasGraveyardRecursionEnabler(gs *gameengine.GameState, se
 	return false
 }
 
+// sacrificePreferenceScore ranks a candidate permanent for forced
+// sacrifice. Higher = more willing to feed it to a sac cost. The intent
+// is that recurring permanents (persist, undying, unearth, "return to
+// hand on death" triggers, dredge-style escape value) are net-positive
+// to sacrifice; vanilla creatures are neutral; key threats and the
+// commander are last-resort.
+func (h *YggdrasilHat) sacrificePreferenceScore(gs *gameengine.GameState, seatIdx int, p *gameengine.Permanent) float64 {
+	if p == nil || p.Card == nil {
+		return -1e6
+	}
+	score := 0.0
+	c := p.Card
+	ot := gameengine.OracleTextLower(c)
+
+	// Tokens have no card-form to lose — sacrificing them costs only the
+	// board presence. They go on top.
+	if p.IsToken() {
+		score += 6.0
+	}
+
+	// Persist (CR §702.79) returns the creature with a -1/-1 counter, so
+	// long as it doesn't have one already. Undying (§702.93) returns it
+	// with a +1/+1 counter, so long as it doesn't have one already.
+	if strings.Contains(ot, "persist") {
+		if p.Counters == nil || p.Counters["-1/-1"] == 0 {
+			score += 5.0
+		}
+	}
+	if strings.Contains(ot, "undying") {
+		if p.Counters == nil || p.Counters["+1/+1"] == 0 {
+			score += 5.0
+		}
+	}
+
+	// Unearth / escape / embalm / eternalize / encore: card returns or
+	// can be re-cast from graveyard.
+	if strings.Contains(ot, "unearth") {
+		score += 3.5
+	}
+	if strings.Contains(ot, "escape") {
+		score += 3.0
+	}
+	if strings.Contains(ot, "embalm") || strings.Contains(ot, "eternalize") {
+		score += 2.5
+	}
+	if strings.Contains(ot, "encore") {
+		score += 2.0
+	}
+
+	// "When ~ dies/leaves the battlefield, return it to your hand/owner's
+	// hand" (Reassembling Skeleton, Bloodghast-style returns). Conservative
+	// pattern: oracle text mentions both "dies" and "return ... to your
+	// hand" (or "to its owner's hand").
+	if strings.Contains(ot, "dies") &&
+		(strings.Contains(ot, "return it to its owner's hand") ||
+			strings.Contains(ot, "return it to your hand") ||
+			strings.Contains(ot, "to your hand") ||
+			strings.Contains(ot, "to your owner's hand")) {
+		score += 3.0
+	}
+
+	// Dies-trigger that draws or otherwise pays off death (Bone Shards,
+	// Bridge from Below proxy, blood artist, etc.).
+	if strings.Contains(ot, "when") && strings.Contains(ot, "dies") &&
+		(strings.Contains(ot, "draw") || strings.Contains(ot, "create") ||
+			strings.Contains(ot, "each opponent")) {
+		score += 1.5
+	}
+
+	// Penalize value: commanders, equipped/buffed key creatures, finishers.
+	if gameengine.IsCommanderCard(gs, seatIdx, c) {
+		score -= 5.0
+	}
+	if h.finisherSet != nil && h.finisherSet[c.DisplayName()] {
+		score -= 3.0
+	}
+	if h.comboPieceSet != nil && h.comboPieceSet[c.DisplayName()] {
+		score -= 4.0
+	}
+	if h.valueEngineSet != nil && h.valueEngineSet[c.DisplayName()] {
+		score -= 2.0
+	}
+
+	// Mild penalty proportional to the creature's combat power so a vanilla
+	// 6/6 isn't sacrificed before a vanilla 1/1 if neither has recursion.
+	if p.IsCreature() {
+		// p.Card.BasePower can be negative (mods); clamp.
+		pow := c.BasePower
+		if pow < 0 {
+			pow = 0
+		}
+		score -= float64(pow) * 0.1
+	} else {
+		// Non-creature permanents (artifacts, enchantments) without
+		// recursion are usually doing more work in play than in the
+		// graveyard — small penalty.
+		score -= 0.5
+	}
+
+	return score
+}
+
+// -- Interface: SacrificeChooser --
+
+// ChooseSacrifice picks the permanent we'd most happily lose. See
+// sacrificePreferenceScore for the priority schedule.
+func (h *YggdrasilHat) ChooseSacrifice(gs *gameengine.GameState, seatIdx int, source *gameengine.Permanent, reason string, candidates []*gameengine.Permanent) *gameengine.Permanent {
+	if len(candidates) == 0 {
+		return nil
+	}
+	if len(candidates) == 1 {
+		return candidates[0]
+	}
+	bestIdx := 0
+	bestScore := h.sacrificePreferenceScore(gs, seatIdx, candidates[0])
+	for i := 1; i < len(candidates); i++ {
+		sc := h.sacrificePreferenceScore(gs, seatIdx, candidates[i])
+		if sc > bestScore {
+			bestScore = sc
+			bestIdx = i
+		}
+	}
+	return candidates[bestIdx]
+}
+
 // -- Interface: ChooseDiscard --
 
 func (h *YggdrasilHat) ChooseDiscard(gs *gameengine.GameState, seatIdx int, hand []*gameengine.Card, n int) []*gameengine.Card {
@@ -4183,10 +4361,12 @@ func (h *YggdrasilHat) ChooseDiscard(gs *gameengine.GameState, seatIdx int, hand
 		if h.isCuttable(c) {
 			v -= 0.5
 		}
-		// Cards with intrinsic graveyard recursion (flashback, unearth,
-		// escape, disturb, etc.) are better in the graveyard than rotting
-		// in hand. Deck-agnostic — works for any deck running these cards.
-		if h.hasGraveyardRecursionValue(c) {
+		// Cards with graveyard recursion potential are better in the
+		// graveyard than rotting in hand. Deck-agnostic. Triggers on either
+		// (a) intrinsic keywords (flashback, unearth, escape, disturb...)
+		// or (b) instants/sorceries when the seat has an active graveyard
+		// cast grant in play (Underworld Breach, Past in Flames residual).
+		if h.hasGraveyardRecursionPotential(gs, seatIdx, c) {
 			v -= 0.4
 		}
 		// Reanimator archetype OR any deck with a graveyard-recursion
@@ -4361,10 +4541,11 @@ func (h *YggdrasilHat) ChooseSurveil(gs *gameengine.GameState, seatIdx int, card
 		}
 		val := h.cardHeuristic(gs, seatIdx, c)
 
-		// Cards with intrinsic graveyard recursion (flashback, unearth,
-		// escape, disturb, etc.) belong in the yard regardless of deck —
-		// they can be cast or reanimated from there.
-		if h.hasGraveyardRecursionValue(c) {
+		// Cards with graveyard recursion potential belong in the yard
+		// regardless of deck — castable via intrinsic keyword (flashback,
+		// unearth, escape...) or via an active graveyard cast grant on
+		// the battlefield covering this card type.
+		if h.hasGraveyardRecursionPotential(gs, seatIdx, c) {
 			graveyard = append(graveyard, c)
 			continue
 		}

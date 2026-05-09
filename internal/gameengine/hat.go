@@ -326,6 +326,29 @@ type DamageDistributor interface {
 	ChooseDamageDistribution(gs *GameState, seatIdx int, targets []Target, total int) []int
 }
 
+// SacrificeChooser is an optional interface Hats may implement to control
+// which permanent the engine sacrifices when paying a cost-side or
+// effect-driven sacrifice (CR §602.1b activation costs, §608.2c effect
+// sacrifices). The engine routes through FindSacrificeTarget; if the
+// seat's Hat implements this interface, the Hat's preference wins.
+//
+// Hats that don't implement this fall back to the deterministic
+// "first matching battlefield permanent" path.
+//
+// Implementations MUST return one of the supplied candidates (or nil
+// if no candidate is acceptable, in which case the engine treats the
+// cost as unpayable). MUST NOT mutate gs.
+type SacrificeChooser interface {
+	// ChooseSacrifice returns the preferred permanent to sacrifice from
+	// `candidates`. `source` is the permanent whose ability or effect
+	// requires the sacrifice (may be nil for non-source contexts);
+	// callers can use it to recognize "sacrifice ~" / "sacrifice itself"
+	// situations. `reason` is "activation_cost", "additional_cost",
+	// "bargain", or "effect" so the chooser can adjust priority by
+	// context (e.g. paying for a recurring engine vs. a one-shot effect).
+	ChooseSacrifice(gs *GameState, seatIdx int, source *Permanent, reason string, candidates []*Permanent) *Permanent
+}
+
 // ConcedeGame marks a seat as having conceded. CR §104.3a.
 func ConcedeGame(gs *GameState, seatIdx int) {
 	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
