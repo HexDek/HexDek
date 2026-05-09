@@ -135,8 +135,9 @@ func main() {
 	astDB := loadAST(filepath.Join(repoRoot, "data", "rules", "ast_dataset.jsonl"))
 	fmt.Printf("Cards in AST dataset: %d\n", len(astDB))
 
-	// 4. Build normalized AST lookup.
+	// 4. Build normalized + tight AST lookups.
 	normAST := buildNormalizedAST(astDB)
+	tightAST := buildTightAST(astDB)
 
 	// 5. Filter to unhandled commanders only.
 	var unhandled []string
@@ -148,7 +149,7 @@ func main() {
 			continue
 		}
 		// Also check the actual card name if we can resolve it
-		cardName := resolveCardName(slug, normAST)
+		cardName := resolveCardName(slug, normAST, tightAST)
 		if cardName != "" {
 			normCard := normalizeForMatch(cardName)
 			if registered[normCard] {
@@ -165,7 +166,7 @@ func main() {
 	var classified []ClassifiedCard
 	var noAST []string
 	for _, slug := range unhandled {
-		cardName := resolveCardName(slug, normAST)
+		cardName := resolveCardName(slug, normAST, tightAST)
 		if cardName == "" {
 			noAST = append(noAST, slug)
 			classified = append(classified, ClassifiedCard{
@@ -264,8 +265,8 @@ func parseRegistered(dir string) map[string]bool {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
 			continue
 		}
-		// Skip generated files and the batch registration file.
-		if strings.HasPrefix(e.Name(), "gen_") || e.Name() == "batch_generated.go" {
+		// Skip the batch registration file outright.
+		if e.Name() == "batch_generated.go" {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
@@ -273,6 +274,13 @@ func parseRegistered(dir string) map[string]bool {
 			continue
 		}
 		content := string(data)
+		// For gen_*.go files, only treat them as authoritative registrations
+		// when they have been hand-edited (no "Auto-generated" marker). Pure
+		// auto-gen files will be regenerated this run, so they shouldn't
+		// suppress themselves from the unhandled list.
+		if strings.HasPrefix(e.Name(), "gen_") && strings.Contains(content, "Auto-generated") {
+			continue
+		}
 		for _, pat := range regPatterns {
 			matches := pat.FindAllStringSubmatch(content, -1)
 			for _, m := range matches {
@@ -325,6 +333,45 @@ func buildNormalizedAST(cards []ASTDataset) map[string]ASTDataset {
 	return m
 }
 
+// buildTightAST builds an alphanumeric-only index (no spaces, no punctuation)
+// keyed off card names. Lets us resolve slugs whose underscores don't line
+// up with the original spaces — e.g. "niv_mizzet_parun" → "Niv-Mizzet, Parun"
+// or "abdel_adrian_gorion_s_ward" → "Abdel Adrian, Gorion's Ward". For DFCs
+// we also index just the front face.
+func buildTightAST(cards []ASTDataset) map[string]ASTDataset {
+	m := make(map[string]ASTDataset, len(cards)*2)
+	for _, c := range cards {
+		key := tightenForMatch(c.Name)
+		if _, exists := m[key]; !exists {
+			m[key] = c
+		}
+		// DFC front face fallback: index just the part before "//".
+		if idx := strings.Index(c.Name, "//"); idx > 0 {
+			front := strings.TrimSpace(c.Name[:idx])
+			fkey := tightenForMatch(front)
+			if _, exists := m[fkey]; !exists {
+				m[fkey] = c
+			}
+		}
+	}
+	return m
+}
+
+// tightenForMatch strips every non-alphanumeric character and lowercases the
+// rest. Maps both "Niv-Mizzet, Parun" and "niv_mizzet_parun" to
+// "nivmizzetparun".
+func tightenForMatch(s string) string {
+	s = strings.ToLower(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 // ---------------------------------------------------------------------------
 // Name normalization and resolution
 // ---------------------------------------------------------------------------
@@ -363,20 +410,102 @@ func slugToDisplay(slug string) string {
 	return strings.Join(parts, " ")
 }
 
-func resolveCardName(slug string, normAST map[string]ASTDataset) string {
+func resolveCardName(slug string, normAST map[string]ASTDataset, tightAST map[string]ASTDataset) string {
 	norm := normalizeForMatch(slugToSpaces(slug))
 	if card, ok := normAST[norm]; ok {
 		return card.Name
 	}
+	// Tight (alphanumeric-only) index handles hyphen/apostrophe mismatches
+	// like "niv_mizzet_parun" → "Niv-Mizzet, Parun".
+	tight := tightenForMatch(slug)
+	if card, ok := tightAST[tight]; ok {
+		return card.Name
+	}
 	// Try DFC: slug might be "front_back" where card is "Front // Back"
-	// Also try just the front face
+	// Also try just the front face. Progressively try longer prefixes.
 	parts := strings.SplitN(slug, "_", -1)
-	// Progressively try longer prefixes
 	for i := len(parts) - 1; i > 0; i-- {
 		prefix := normalizeForMatch(strings.Join(parts[:i], " "))
 		if card, ok := normAST[prefix]; ok {
 			return card.Name
 		}
+		tightPrefix := tightenForMatch(strings.Join(parts[:i], ""))
+		if card, ok := tightAST[tightPrefix]; ok {
+			return card.Name
+		}
+	}
+	// Last resort: fuzzy regex fallback for slugs where unicode characters
+	// in the original card name became "_" separators (e.g. Altaïr →
+	// "alta_r_..."). Each "_" stands in for >=1 dropped letters. Match the
+	// slug against tightened card names with that allowance, anchored at
+	// both ends, and accept only when exactly one card matches.
+	if name := fuzzyResolveSlug(slug, tightAST); name != "" {
+		return name
+	}
+	return ""
+}
+
+func fuzzyResolveSlug(slug string, tightAST map[string]ASTDataset) string {
+	parts := strings.Split(slug, "_")
+	// Drop empty parts (leading/trailing underscores or doubled separators).
+	pruned := parts[:0]
+	for _, p := range parts {
+		if p != "" {
+			pruned = append(pruned, p)
+		}
+	}
+	if len(pruned) < 2 {
+		return ""
+	}
+	// Underscores in the slug correspond to either word boundaries (zero
+	// extra chars in the tightened name) or stripped unicode characters
+	// (one or more chars). Use ".*?" so both cases match. False positives
+	// are filtered by the unique-match requirement below.
+	pattern := "^"
+	if len(slug) > 0 && slug[0] == '_' {
+		pattern += ".*?"
+	}
+	for i, p := range pruned {
+		pattern += regexp.QuoteMeta(p)
+		if i < len(pruned)-1 {
+			pattern += ".*?"
+		}
+	}
+	if len(slug) > 0 && slug[len(slug)-1] == '_' {
+		pattern += ".*?"
+	}
+	pattern += "$"
+	if name := uniqueRegexMatch(pattern, tightAST); name != "" {
+		return name
+	}
+	// Loosen the front anchor: the slug may have lost a leading unicode
+	// character (e.g. "owyn_shieldmaiden" ← "Éowyn, Shieldmaiden").
+	if loosened := strings.Replace(pattern, "^", "^.*?", 1); loosened != pattern {
+		if name := uniqueRegexMatch(loosened, tightAST); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+func uniqueRegexMatch(pattern string, tightAST map[string]ASTDataset) string {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return ""
+	}
+	var match string
+	matches := 0
+	for tight, card := range tightAST {
+		if re.MatchString(tight) {
+			matches++
+			match = card.Name
+			if matches > 1 {
+				return ""
+			}
+		}
+	}
+	if matches == 1 {
+		return match
 	}
 	return ""
 }
@@ -1270,7 +1399,12 @@ func generateStaticHandler(cc ClassifiedCard, outDir string) *GeneratedHandler {
 // ---------------------------------------------------------------------------
 
 func generateBatchFile(handlers []GeneratedHandler, outDir string) {
-	if len(handlers) == 0 {
+	// Collect hand-edited gen_*.go files (preserved by cleanOldGenFiles)
+	// and append their register*() calls so they actually get wired into
+	// the registry. Without this, hand-improved handlers become dead code.
+	handEdited := collectHandEditedHandlers(outDir)
+
+	if len(handlers) == 0 && len(handEdited) == 0 {
 		return
 	}
 
@@ -1293,12 +1427,90 @@ func generateBatchFile(handlers []GeneratedHandler, outDir string) {
 		return handlers[i].CardName < handlers[j].CardName
 	})
 
+	// Build a unified, deduped, sorted list (auto-gen + hand-edited).
+	type entry struct {
+		registerName string
+		comment      string
+	}
+	seen := map[string]bool{}
+	var entries []entry
 	for _, h := range handlers {
 		registerName := strings.ToUpper(h.FuncPrefix[:1]) + h.FuncPrefix[1:]
-		fmt.Fprintf(f, "\tregister%s(r) // %s [%s]\n", registerName, h.CardName, h.Category)
+		if seen["register"+registerName] {
+			continue
+		}
+		seen["register"+registerName] = true
+		entries = append(entries, entry{
+			registerName: registerName,
+			comment:      fmt.Sprintf("%s [%s]", h.CardName, h.Category),
+		})
+	}
+	for _, he := range handEdited {
+		if seen[he.registerCall] {
+			continue
+		}
+		seen[he.registerCall] = true
+		entries = append(entries, entry{
+			registerName: strings.TrimPrefix(he.registerCall, "register"),
+			comment:      fmt.Sprintf("%s [hand-edited]", he.cardName),
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].comment < entries[j].comment
+	})
+	for _, e := range entries {
+		fmt.Fprintf(f, "\tregister%s(r) // %s\n", e.registerName, e.comment)
 	}
 
 	fmt.Fprintln(f, "}")
+}
+
+type handEditedHandler struct {
+	registerCall string // e.g. "registerAlaundoTheSeer"
+	cardName     string // e.g. "Alaundo the Seer"
+}
+
+// collectHandEditedHandlers walks the per_card directory for gen_*.go files
+// that lack the "Auto-generated" marker and extracts their register*() entry
+// points so we can wire them into batch_generated.go.
+func collectHandEditedHandlers(dir string) []handEditedHandler {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	funcRe := regexp.MustCompile(`func\s+(register[A-Za-z0-9_]+)\s*\(r \*Registry\)`)
+	nameRe := regexp.MustCompile(`\.On(?:ETB|Cast|Resolve|Activated|Trigger)\("((?:[^"\\]|\\.)+)"`)
+	var out []handEditedHandler
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasPrefix(name, "gen_") || !strings.HasSuffix(name, ".go") {
+			continue
+		}
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			continue
+		}
+		content := string(data)
+		if strings.Contains(content, "Auto-generated") {
+			continue
+		}
+		funcMatches := funcRe.FindStringSubmatch(content)
+		if len(funcMatches) < 2 {
+			continue
+		}
+		card := ""
+		if nm := nameRe.FindStringSubmatch(content); len(nm) > 1 {
+			card = nm[1]
+		}
+		out = append(out, handEditedHandler{
+			registerCall: funcMatches[1],
+			cardName:     card,
+		})
+	}
+	return out
 }
 
 // ---------------------------------------------------------------------------
@@ -1452,14 +1664,28 @@ func extractDrawN(oracle string) (bool, int) {
 	return false, 0
 }
 
-func extractNumber(oracle, before, after string) int {
-	words := map[string]int{
-		"1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10,
-		"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-		"six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
-		"a": 1, "an": 1,
-	}
+// numberAlternatives is scanned in deterministic priority order — multi-char
+// digits and named numerals before single-char fallbacks, with "a"/"an" last
+// because they otherwise match inside words like "gain" or "ranger". Each
+// entry is treated as a whole-token match against the oracle segment.
+var numberAlternatives = []struct {
+	tok string
+	n   int
+}{
+	{"10", 10}, {"ten", 10},
+	{"9", 9}, {"nine", 9},
+	{"8", 8}, {"eight", 8},
+	{"7", 7}, {"seven", 7},
+	{"6", 6}, {"six", 6},
+	{"5", 5}, {"five", 5},
+	{"4", 4}, {"four", 4},
+	{"3", 3}, {"three", 3},
+	{"2", 2}, {"two", 2},
+	{"1", 1}, {"one", 1},
+	{"an", 1}, {"a", 1},
+}
 
+func extractNumber(oracle, before, after string) int {
 	idx := strings.Index(oracle, before)
 	if idx < 0 {
 		return 0
@@ -1469,9 +1695,14 @@ func extractNumber(oracle, before, after string) int {
 		return 0
 	}
 	segment := oracle[idx : idx+afterIdx]
-	for word, n := range words {
-		if strings.Contains(segment, word) {
-			return n
+	for _, alt := range numberAlternatives {
+		// Word-boundary match avoids "a" inside "gain", "1" inside "1/1", etc.
+		re, err := regexp.Compile(`(^|[^a-z0-9])` + regexp.QuoteMeta(alt.tok) + `([^a-z0-9]|$)`)
+		if err != nil {
+			continue
+		}
+		if re.MatchString(segment) {
+			return alt.n
 		}
 	}
 	return 0
@@ -1583,9 +1814,10 @@ func detectEffectsFromOracle(oracle, cardName, varName string) []string {
 			// Opponents lose life
 			lines = append(lines, fmt.Sprintf("\tfor _, opp := range gs.Opponents(%s) {", ctrl))
 			lines = append(lines, "\t\tif gs.Seats[opp] != nil && !gs.Seats[opp].Lost {")
-			lines = append(lines, fmt.Sprintf("\t\t\tgs.Seats[opp].Life -= %d", n))
+			lines = append(lines, fmt.Sprintf("\t\t\tgameengine.LoseLife(gs, opp, %d, %s)", n, disp))
 			lines = append(lines, "\t\t}")
 			lines = append(lines, "\t}")
+			lines = append(lines, "\t_ = gs.CheckEnd()")
 		}
 	}
 
@@ -1645,19 +1877,33 @@ func capitalize(s string) string {
 // Utilities
 // ---------------------------------------------------------------------------
 
+// cleanOldGenFiles removes auto-generated handlers so the tool is idempotent.
+// It preserves any gen_*.go file that does NOT contain the "Auto-generated"
+// marker string (those are hand-edited handlers we want to keep) and never
+// touches *_test.go files.
 func cleanOldGenFiles(dir string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
 	removed := 0
+	preserved := 0
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
 		name := e.Name()
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
 		if strings.HasPrefix(name, "gen_") && strings.HasSuffix(name, ".go") {
-			os.Remove(filepath.Join(dir, name))
+			path := filepath.Join(dir, name)
+			data, err := os.ReadFile(path)
+			if err == nil && !strings.Contains(string(data), "Auto-generated") {
+				preserved++
+				continue
+			}
+			os.Remove(path)
 			removed++
 		}
 		if name == "batch_generated.go" {
@@ -1665,8 +1911,8 @@ func cleanOldGenFiles(dir string) {
 			removed++
 		}
 	}
-	if removed > 0 {
-		fmt.Printf("Cleaned %d old generated files.\n", removed)
+	if removed > 0 || preserved > 0 {
+		fmt.Printf("Cleaned %d old generated files (preserved %d hand-edited).\n", removed, preserved)
 	}
 }
 
