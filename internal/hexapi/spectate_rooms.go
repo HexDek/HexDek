@@ -540,7 +540,7 @@ func (room *SpectateRoom) runOneSpectateGame() {
 	sm.mu.Lock()
 	sm.stats.gamesPlayed++
 	sm.stats.totalTurns += gs.Turn
-	sm.updateELO(deckKeys, commanders, pickedDecks, winner)
+	sm.updateELO(deckKeys, commanders, pickedDecks, winner, gs.Turn)
 
 	completed := CompletedGame{
 		GameID:     gameNum,
