@@ -83,8 +83,9 @@ type strategyFileJSON struct {
 	InteractionAvgCMC float64             `json:"interaction_avg_cmc,omitempty"`
 	CheapInteraction  int                 `json:"cheap_interaction,omitempty"`
 	ManaBaseGrade     string              `json:"mana_base_grade,omitempty"`
-	KeepableHandPct   float64             `json:"keepable_hand_pct,omitempty"`
-	PowerPercentile   int                 `json:"power_percentile,omitempty"`
+	KeepableHandPct    float64             `json:"keepable_hand_pct,omitempty"`
+	IsCommanderCentric bool                `json:"is_commander_centric,omitempty"`
+	PowerPercentile    int                 `json:"power_percentile,omitempty"`
 	MetaMatchups      []freyaMetaMatchup      `json:"meta_matchups,omitempty"`
 	EmergentSynergies []freyaEmergentSynergy  `json:"emergent_synergies,omitempty"`
 }
@@ -167,9 +168,10 @@ func buildFromStrategyJSON(sj *strategyFileJSON) *StrategyProfile {
 		VulnerableTo:      sj.VulnerableTo,
 		InteractionAvgCMC: sj.InteractionAvgCMC,
 		CheapInteraction:  sj.CheapInteraction,
-		ManaBaseGrade:     sj.ManaBaseGrade,
-		KeepableHandPct:   sj.KeepableHandPct,
-		PowerPercentile:   sj.PowerPercentile,
+		ManaBaseGrade:      sj.ManaBaseGrade,
+		KeepableHandPct:    sj.KeepableHandPct,
+		IsCommanderCentric: sj.IsCommanderCentric,
+		PowerPercentile:    sj.PowerPercentile,
 	}
 
 	if len(sj.MetaMatchups) > 0 {

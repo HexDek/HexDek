@@ -5293,14 +5293,65 @@ func (h *YggdrasilHat) scoreModeEffect(gs *gameengine.GameState, seatIdx int, ef
 
 // -- Interface: ShouldCastCommander --
 
+// commanderUrgency returns a 0.0–1.0 score for how strategy-critical
+// resolving the named commander is for this deck. Higher = the deck
+// doesn't function without the commander on the battlefield, so the hat
+// should pay through more tax and ignore interaction risk to land it.
+//
+// Tiers (highest match wins):
+//
+//	0.95 — Strategy.IsCommanderCentric set by Freya's
+//	       detectCommanderCentric (Voltron / engine commanders / ≥45%
+//	       commander synergy). The deck's gameplan IS the commander.
+//	0.90 — Commander name appears in any ComboPlan piece list — the
+//	       commander is a literal combo piece (Kiki, Niv-Mizzet, Thrasios).
+//	0.80 — Strategy archetype is Tribal — the commander is the lord/
+//	       anthem the rest of the tribe is built around.
+//	0.70 — Strategy has ≥3 ValueEngineKeys — commander is a key enabler
+//	       of a value-engine-dense deck.
+//	0.40 — Default. Generic creature commander, not load-bearing.
+// CommanderUrgency exposes commanderUrgency for callers outside the hat
+// package (e.g. the tournament runner deciding whether to retry the
+// commander cast inside the main-phase cast loop).
+func (h *YggdrasilHat) CommanderUrgency(commanderName string) float64 {
+	return h.commanderUrgency(commanderName)
+}
+
+func (h *YggdrasilHat) commanderUrgency(commanderName string) float64 {
+	if h.Strategy == nil {
+		return 0.4
+	}
+	if h.Strategy.IsCommanderCentric {
+		return 0.95
+	}
+	for _, cp := range h.Strategy.ComboPieces {
+		for _, p := range cp.Pieces {
+			if p == commanderName {
+				return 0.9
+			}
+		}
+	}
+	if h.Strategy.Archetype == ArchetypeTribal {
+		return 0.8
+	}
+	if len(h.Strategy.ValueEngineKeys) >= 3 {
+		return 0.7
+	}
+	return 0.4
+}
+
 func (h *YggdrasilHat) ShouldCastCommander(gs *gameengine.GameState, seatIdx int, commanderName string, tax int) bool {
 	if seatIdx < 0 || seatIdx >= len(gs.Seats) {
 		return false
 	}
 	avail := gameengine.AvailableManaEstimate(gs, gs.Seats[seatIdx])
 	if avail <= 0 && tax > 0 {
+		h.logf("CMDR-CAST decision=skip name=%s urgency=n/a reason=no_mana avail=%d tax=%d",
+			commanderName, avail, tax)
 		return false
 	}
+
+	urgency := h.commanderUrgency(commanderName)
 
 	maxTax := 6
 	manaBuffer := 1
@@ -5350,29 +5401,53 @@ func (h *YggdrasilHat) ShouldCastCommander(gs *gameengine.GameState, seatIdx int
 			}
 		}
 	}
+	// High-urgency: the deck needs this commander out. Pay through more
+	// tax and don't reserve mana for interaction.
+	if urgency >= 0.8 {
+		maxTax += 4
+		manaBuffer = 0
+	}
+
 	// Phase-aware caps. Deploy is "deploy commander" — always cast when
 	// affordable (the commander IS the deploy goal). Execute is the close
 	// — pay any tax we can afford, the commander is too important to leave
 	// in zone. Develop is the default tax-aware path.
 	switch h.detectPhase(gs, seatIdx) {
 	case PhaseDeploy:
+		h.logf("CMDR-CAST decision=cast name=%s urgency=%.2f reason=deploy_phase tax=%d avail=%d",
+			commanderName, urgency, tax, avail)
 		return true
 	case PhaseExecute:
 		// Existing "always recast if affordable" semantics that the old
 		// `gs.Turn > 15` branch covered.
+		h.logf("CMDR-CAST decision=cast name=%s urgency=%.2f reason=execute_phase tax=%d avail=%d",
+			commanderName, urgency, tax, avail)
 		return true
 	}
 
 	// 3rd Eye: If high interaction risk and commander tax is already 2+,
 	// wait until we have enough mana to also hold up protection, or until
-	// the blue player taps out.
-	if tax >= 2 {
+	// the blue player taps out. Only enforced for low-urgency commanders;
+	// strategy-critical commanders cast through the risk because the deck
+	// can't function without them on the battlefield.
+	if urgency < 0.6 && tax >= 2 {
 		intRisk := h.tableInteractionRisk(gs, seatIdx)
 		if intRisk > 0.5 && avail < tax*2+2 {
+			h.logf("CMDR-CAST decision=skip name=%s urgency=%.2f reason=interaction_risk intRisk=%.2f tax=%d avail=%d",
+				commanderName, urgency, intRisk, tax, avail)
 			return false
 		}
 	}
-	return tax <= maxTax || avail >= tax*2+manaBuffer
+
+	cast := tax <= maxTax || avail >= tax*2+manaBuffer
+	if cast {
+		h.logf("CMDR-CAST decision=cast name=%s urgency=%.2f tax=%d maxTax=%d avail=%d buffer=%d",
+			commanderName, urgency, tax, maxTax, avail, manaBuffer)
+	} else {
+		h.logf("CMDR-CAST decision=skip name=%s urgency=%.2f reason=tax_above_cap tax=%d maxTax=%d avail=%d buffer=%d",
+			commanderName, urgency, tax, maxTax, avail, manaBuffer)
+	}
+	return cast
 }
 
 // -- Interface: ShouldRedirectCommanderZone --

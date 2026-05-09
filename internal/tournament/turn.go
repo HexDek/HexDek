@@ -9,6 +9,7 @@ import (
 	"github.com/hexdek/hexdek/internal/gameast"
 	"github.com/hexdek/hexdek/internal/gameengine"
 	"github.com/hexdek/hexdek/internal/gameengine/per_card"
+	"github.com/hexdek/hexdek/internal/hat"
 )
 
 const turnTimeBudget = 15 * time.Second
@@ -746,10 +747,28 @@ func runMainPhase(gs *gameengine.GameState, seatIdx int, precombat bool) {
 		}
 		// Re-tap any new mana sources that ETB'd from the spell.
 		tapAllManaSources(gs, seat)
+
+		// High-urgency commander bias: for decks where the commander IS the
+		// gameplan (Voltron, combo commanders, tribal lords), retry the
+		// commander after every successful in-loop cast. A ramp spell may
+		// have just added the missing mana, and waiting until the post-loop
+		// retry means we burn the rest of the cast budget on filler the
+		// deck doesn't need until the commander is on the battlefield.
+		if gs.CommanderFormat && len(seat.CommandZone) > 0 {
+			if highUrgencyCommanderInZone(seat) {
+				tryCastCommander(gs, seatIdx)
+				if gs.CheckEnd() {
+					return
+				}
+			}
+		}
 	}
 
 	// Retry commander cast after the cast loop — ramp spells may have
 	// added mana sources that weren't available on the first attempt.
+	// Catches the low-urgency case (single post-loop retry) and serves as
+	// a backstop for high-urgency commanders if the in-loop retries above
+	// all failed (e.g. spells were cast but no ramp was among them).
 	if gs.CommanderFormat && seat.Hat != nil && len(seat.CommandZone) > 0 {
 		tapAllManaSources(gs, seat)
 		tryCastCommander(gs, seatIdx)
@@ -1215,8 +1234,39 @@ func tryPlayLand(gs *gameengine.GameState, seatIdx int) {
 	})
 }
 
+// highUrgencyCommanderInZone returns true if the seat's hat is a
+// YggdrasilHat AND any commander currently in the command zone scores
+// ≥0.7 on commander urgency. Used to gate the in-loop commander retry
+// — for low-urgency commanders we keep the original behavior (one
+// pre-loop attempt + one post-loop retry).
+func highUrgencyCommanderInZone(seat *gameengine.Seat) bool {
+	if seat == nil || seat.Hat == nil || len(seat.CommanderNames) == 0 {
+		return false
+	}
+	yh, ok := seat.Hat.(*hat.YggdrasilHat)
+	if !ok {
+		return false
+	}
+	for _, name := range seat.CommanderNames {
+		if yh.CommanderUrgency(name) >= 0.7 {
+			return true
+		}
+	}
+	return false
+}
+
 // tryCastCommander asks the Hat if it wants to cast the commander at
 // current mana, and if yes invokes CastCommanderFromCommandZone.
+//
+// Retry flow:
+//   - runMainPhase calls this once BEFORE the hand-cast loop (line ~707).
+//   - For high-urgency commanders (Voltron, combo, tribal — see
+//     hat.YggdrasilHat.CommanderUrgency), runMainPhase ALSO calls this
+//     after every successful in-loop cast so a ramp spell that just
+//     resolved can immediately fund the commander.
+//   - Finally, runMainPhase calls this once AFTER the loop (line ~775)
+//     as a backstop for the low-urgency case and for high-urgency decks
+//     that didn't ramp this turn.
 //
 // For MDFC commanders whose back face is a non-creature spell (Esika /
 // The Prismatic Bridge, Jadzi / Journey to the Oracle), prefer the back
