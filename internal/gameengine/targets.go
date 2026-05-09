@@ -136,26 +136,6 @@ func allPermanentTargets(gs *GameState, f gameast.Filter, srcSeat int) []Target 
 	return out
 }
 
-// allPermanentTargetsExcluding is like allPermanentTargets but excludes a
-// specific permanent (for "each other creature" / "each other permanent").
-func allPermanentTargetsExcluding(gs *GameState, f gameast.Filter, srcSeat int, exclude *Permanent) []Target {
-	out := []Target{}
-	for i, s := range gs.Seats {
-		if !matchesControl(f, i, srcSeat) {
-			continue
-		}
-		for _, p := range s.Battlefield {
-			if p == exclude {
-				continue
-			}
-			if matchesPermanent(f, p) {
-				out = append(out, Target{Kind: TargetKindPermanent, Permanent: p, Seat: p.Controller})
-			}
-		}
-	}
-	return out
-}
-
 // pickPlayerTarget selects a single seat target.
 func pickPlayerTarget(gs *GameState, f gameast.Filter, srcSeat int) []Target {
 	switch f.Base {

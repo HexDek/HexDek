@@ -34,7 +34,7 @@ func aetherfluxOnSpellCast(gs *gameengine.GameState, perm *gameengine.Permanent,
 	}
 	// Only trigger when the caster is the Reservoir's controller. Oracle
 	// text is "Whenever YOU cast a spell".
-	casterSeatAny, _ := ctx["caster_seat"]
+	casterSeatAny := ctx["caster_seat"]
 	casterSeat, _ := casterSeatAny.(int)
 	if casterSeat != perm.Controller {
 		return

@@ -308,17 +308,3 @@ func considerResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 	})
 }
 
-// ============================================================================
-// Helper
-// ============================================================================
-
-// removeCardFromSlice removes the first occurrence of card (by pointer
-// identity) from the slice.
-func removeCardFromSlice(hand *[]*gameengine.Card, card *gameengine.Card) {
-	for i, c := range *hand {
-		if c == card {
-			*hand = append((*hand)[:i], (*hand)[i+1:]...)
-			return
-		}
-	}
-}

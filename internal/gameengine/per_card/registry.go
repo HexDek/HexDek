@@ -762,6 +762,7 @@ func registerDefaults() {
 	registerAuraShards(Global())
 	registerCoalitionVictory(Global())
 	registerGrandArbiterAugustinIV(Global())
+	registerGrunnTheLonelyKing(Global())
 	registerFieldOfTheDead(Global())
 	registerGaeasCradle(Global())
 	registerGlacialChasm(Global())

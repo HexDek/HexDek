@@ -277,13 +277,9 @@ func ApplyMutate(gs *GameState, mutatingPerm *Permanent, targetPerm *Permanent, 
 	if onTop {
 		// Mutating card goes on top — takes over characteristics.
 		// Absorb target's granted abilities.
-		for _, ab := range targetPerm.GrantedAbilities {
-			mutatingPerm.GrantedAbilities = append(mutatingPerm.GrantedAbilities, ab)
-		}
+		mutatingPerm.GrantedAbilities = append(mutatingPerm.GrantedAbilities, targetPerm.GrantedAbilities...)
 		// Absorb keyword abilities from the target card's AST.
-		for _, kw := range getKeywordNames(targetPerm) {
-			mutatingPerm.GrantedAbilities = append(mutatingPerm.GrantedAbilities, kw)
-		}
+		mutatingPerm.GrantedAbilities = append(mutatingPerm.GrantedAbilities, getKeywordNames(targetPerm)...)
 		// Copy target's counters.
 		if targetPerm.Counters != nil {
 			if mutatingPerm.Counters == nil {
@@ -302,13 +298,9 @@ func ApplyMutate(gs *GameState, mutatingPerm *Permanent, targetPerm *Permanent, 
 	} else {
 		// Mutating card goes under — target keeps characteristics.
 		// Target gains mutating card's keyword abilities.
-		for _, kw := range getKeywordNames(mutatingPerm) {
-			targetPerm.GrantedAbilities = append(targetPerm.GrantedAbilities, kw)
-		}
+		targetPerm.GrantedAbilities = append(targetPerm.GrantedAbilities, getKeywordNames(mutatingPerm)...)
 		// Also absorb mutating perm's already-granted abilities.
-		for _, ab := range mutatingPerm.GrantedAbilities {
-			targetPerm.GrantedAbilities = append(targetPerm.GrantedAbilities, ab)
-		}
+		targetPerm.GrantedAbilities = append(targetPerm.GrantedAbilities, mutatingPerm.GrantedAbilities...)
 		// Remove mutating perm from battlefield.
 		gs.removePermanent(mutatingPerm)
 		if targetPerm.Flags == nil {

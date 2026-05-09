@@ -1296,7 +1296,7 @@ func checkTiming(gs *GameState) error {
 				}
 			}
 			if !hasFlash {
-				return fmt.Errorf("Timing: sorcery %q on stack during combat phase %s/%s without flash",
+				return fmt.Errorf("timing: sorcery %q on stack during combat phase %s/%s without flash",
 					item.Card.DisplayName(), gs.Phase, gs.Step)
 			}
 		}
@@ -1336,7 +1336,7 @@ func checkTiming(gs *GameState) error {
 					if item.Source != nil && item.Source.Card != nil {
 						name = item.Source.Card.DisplayName()
 					}
-					return fmt.Errorf("Timing: activated ability from %q on stack while split second is active",
+					return fmt.Errorf("timing: activated ability from %q on stack while split second is active",
 						name)
 				}
 			}
