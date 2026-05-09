@@ -953,6 +953,56 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 		return spiteTarget
 	}
 
+	// Unconditional-evasion hijack: when the attacker has shadow,
+	// horsemanship, or is unblockable, blockers are irrelevant — there
+	// is no "easier" opponent. Aim it at the biggest threat. Kingmakers
+	// outrank raw eval here because runaway leaders are the priority.
+	if hasUnconditionalEvasion(attacker) && len(threats) > 1 {
+		bestEval := -2.0
+		hijackTarget := -1
+		bestKingmaker := false
+		for _, th := range threats {
+			isLegal := false
+			for _, d := range legalDefenders {
+				if d == th.Seat {
+					isLegal = true
+					break
+				}
+			}
+			if !isLegal {
+				continue
+			}
+			if th.IsKingmaker && !bestKingmaker {
+				bestEval = th.EvalScore
+				hijackTarget = th.Seat
+				bestKingmaker = true
+				continue
+			}
+			if bestKingmaker && !th.IsKingmaker {
+				continue
+			}
+			if th.EvalScore > bestEval {
+				bestEval = th.EvalScore
+				hijackTarget = th.Seat
+			}
+		}
+		if hijackTarget >= 0 {
+			return hijackTarget
+		}
+	}
+
+	// Archenemy avoidance: if we have already focused damage on one
+	// opponent (>50% of total damage we've dealt) and they aren't a
+	// runaway leader, we'd be making ourselves the table's archenemy
+	// by piling on. Compute the share once for use as a per-candidate
+	// penalty below.
+	totalDealt := 0
+	for _, d := range h.damageDealtTo {
+		if d > 0 {
+			totalDealt += d
+		}
+	}
+
 	type candidate struct {
 		seat  int
 		score float64
@@ -1006,6 +1056,36 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 		// landwalk, etc.). Engine's CanBlockGS encodes the full ruleset.
 		if attacker != nil && noLegalBlockerOnSeat(gs, attacker, gs.Seats[def]) {
 			score += 1.5
+		}
+
+		// 4b. Evasion match: graded bonus for defenders whose blocker
+		// pool can only partially block our attacker (e.g. flyer into a
+		// pod with one flier-blocker, skulk into all-large blockers).
+		// Rewards aiming evasive creatures at low-defense pods even
+		// when some blockers still exist. Stacks with 4 / 4a — those
+		// are binary "fully clear" signals, this is a graded fallback.
+		if attacker != nil {
+			es := evasionScore(gs, attacker, gs.Seats[def])
+			if es > 0.5 {
+				score += (es - 0.5) * 2.0
+			}
+		}
+
+		// 4c. Archenemy avoidance: if we've already dealt >50% of our
+		// total damage to this seat AND they aren't a kingmaker, ease
+		// off — continued focus paints us as the archenemy. The
+		// existing spread-damage penalty (#7) only triggers when behind;
+		// this one runs unconditionally so a winning hat doesn't make
+		// itself the table's target either.
+		if totalDealt > 30 && def < len(h.damageDealtTo) && !threat.IsKingmaker {
+			share := float64(h.damageDealtTo[def]) / float64(totalDealt)
+			if share > 0.5 {
+				penalty := (share - 0.5) * 3.0 // up to -1.5 at share=1.0
+				if penalty > 1.5 {
+					penalty = 1.5
+				}
+				score -= penalty
+			}
 		}
 
 		// 4b. Damage-swing keyword targeting:
@@ -3490,6 +3570,41 @@ func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, le
 			attackers = append(attackers, p)
 		}
 		h.logf("  %-30s pow=%d val=%.2f %s%s", p.Card.DisplayName(), pw, val, tag, evStr)
+	}
+
+	// Profitability prune: drop attackers that lose to a clean block on
+	// every legal target. Skip in desperation mode (relPos very low),
+	// when stance is ALL-IN, or when the creature is a strategic asset
+	// (commander, value engine, combo piece). Lethal-swing path returns
+	// early above, so we don't gate on it here.
+	if relPos > -0.5 && !strings.Contains(stance, "ALL-IN") && len(attackers) > 0 {
+		opponents := make([]*gameengine.Seat, 0, len(gs.Seats)-1)
+		for i, s := range gs.Seats {
+			if i == seatIdx || s == nil || s.Lost || s.LeftGame {
+				continue
+			}
+			opponents = append(opponents, s)
+		}
+		if len(opponents) > 0 {
+			kept := attackers[:0]
+			for _, p := range attackers {
+				keep := true
+				if p != nil && p.Card != nil {
+					strategic := isCommanderCard(gs, seatIdx, p.Card) ||
+						h.isValueEngineKey(p.Card) ||
+						h.isComboRelevant(p.Card)
+					if !strategic && !canSwingProfitably(gs, p, opponents) {
+						keep = false
+						h.logf("  PRUNE: %s would die to clean block on every target",
+							p.Card.DisplayName())
+					}
+				}
+				if keep {
+					kept = append(kept, p)
+				}
+			}
+			attackers = kept
+		}
 	}
 
 	// Overcommitment guard: if committing 3+ creatures and we're not in a
