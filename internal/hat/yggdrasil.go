@@ -420,6 +420,111 @@ func (h *YggdrasilHat) graveyardExploitationMult() float64 {
 	return 1.0 + (h.DNA.GraveyardExploitation-0.5)*0.8
 }
 
+// commanderOnBattlefield reports whether any of seat's commander names
+// is currently on its battlefield, returning the matched permanent so
+// callers can read its types for tribal / theme matching. Match is
+// case-insensitive and DFC-aware via DisplayName.
+func commanderOnBattlefield(seat *gameengine.Seat) (bool, *gameengine.Permanent) {
+	if seat == nil {
+		return false, nil
+	}
+	for _, p := range seat.Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		name := p.Card.DisplayName()
+		for _, cn := range seat.CommanderNames {
+			if strings.EqualFold(cn, name) {
+				return true, p
+			}
+		}
+	}
+	return false, nil
+}
+
+// commanderInCommandZone reports whether any of seat's commanders is
+// currently sitting in the command zone (i.e., uncast or returned).
+func commanderInCommandZone(seat *gameengine.Seat) bool {
+	if seat == nil {
+		return false
+	}
+	for _, c := range seat.CommandZone {
+		if c == nil {
+			continue
+		}
+		name := c.DisplayName()
+		for _, cn := range seat.CommanderNames {
+			if strings.EqualFold(cn, name) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// sharesCreatureSubtype returns true when commander and other share at
+// least one creature subtype (case-insensitive), using Types as the
+// canonical subtype container per this engine's convention. The base
+// "creature" type itself is excluded so two random creatures don't
+// match each other tribally.
+func sharesCreatureSubtype(commander, other *gameengine.Card) bool {
+	if commander == nil || other == nil {
+		return false
+	}
+	skip := map[string]bool{
+		"creature": true, "legendary": true, "token": true,
+		"artifact": true, "enchantment": true, "land": true,
+		"instant": true, "sorcery": true, "planeswalker": true, "tribal": true,
+	}
+	cmdrSubs := make(map[string]bool, len(commander.Types))
+	for _, t := range commander.Types {
+		lt := strings.ToLower(strings.TrimSpace(t))
+		if lt == "" || skip[lt] || strings.HasPrefix(lt, "cost:") {
+			continue
+		}
+		cmdrSubs[lt] = true
+	}
+	for _, t := range other.Types {
+		lt := strings.ToLower(strings.TrimSpace(t))
+		if lt == "" || skip[lt] || strings.HasPrefix(lt, "cost:") {
+			continue
+		}
+		if cmdrSubs[lt] {
+			return true
+		}
+	}
+	return false
+}
+
+// isCommanderProtectionCard returns true when c plausibly protects the
+// commander on cast or while attacking — counterspells, hexproof /
+// indestructible / shroud / ward grants, and "your commander" /
+// "target creature you control" protection effects. Heuristic only;
+// good enough for a +0.15 nudge.
+func isCommanderProtectionCard(c *gameengine.Card) bool {
+	if c == nil {
+		return false
+	}
+	if gameengine.CardHasCounterSpell(c) {
+		return true
+	}
+	ot := gameengine.OracleTextLower(c)
+	if ot == "" {
+		return false
+	}
+	// Oracle-text fallback for counterspells whose AST shape isn't
+	// reachable via CardHasCounterSpell (e.g. test fixtures or
+	// partially-modeled cards) — and for built-in protection grants
+	// the engine doesn't surface as activated abilities.
+	if strings.Contains(ot, "counter target") ||
+		strings.Contains(ot, "hexproof") || strings.Contains(ot, "indestructible") ||
+		strings.Contains(ot, "shroud") || strings.Contains(ot, "ward ") ||
+		strings.Contains(ot, "protection from") {
+		return true
+	}
+	return false
+}
+
 // curseAxis returns the value of a DNA axis, or fallback if no DNA is
 // attached. Use the [0,1] axis directly with this helper, or for a
 // neutral-centered shift use the result minus 0.5. Keeps decision-site
@@ -584,6 +689,147 @@ func (h *YggdrasilHat) categorizeWithFreya(c *gameengine.Card) CardCategory {
 		return CatUtility
 	}
 	return categorizeCard(c)
+}
+
+// -----------------------------------------------------------------------------
+// Game phase model — continuous awareness of where we are in the game.
+//
+// Replaces ad-hoc `gs.Turn > 15` checks. Real Commander games have three
+// distinct phases where optimal play looks different:
+//
+//   PhaseDeploy   (turns 1–4 baseline): ramp up, deploy commander, fix mana.
+//                                       Conservative attacks; expensive threats
+//                                       are mostly dead in hand.
+//   PhaseDevelop  (turns 5–9 baseline): build the board, run value engines,
+//                                       gather card advantage.
+//   PhaseExecute  (turns 10+ baseline): push wins, deploy combo finishers,
+//                                       cast commander even at high tax.
+//
+// Detection is multi-signal: turn number is the spine but board state, mana
+// availability, commander deployment, and hand exhaustion can pull the phase
+// forward (or, rarely, hold it back).
+// -----------------------------------------------------------------------------
+
+// GamePhase classifies the current strategic moment of the game.
+type GamePhase int
+
+const (
+	PhaseDeploy  GamePhase = iota // turns 1-4: ramp, deploy commander, fix mana
+	PhaseDevelop                  // turns 5-9: build board, value engine, card advantage
+	PhaseExecute                  // turns 10+: push win conditions, close the game
+)
+
+// String returns a short label for logging.
+func (p GamePhase) String() string {
+	switch p {
+	case PhaseDeploy:
+		return "Deploy"
+	case PhaseDevelop:
+		return "Develop"
+	case PhaseExecute:
+		return "Execute"
+	}
+	return "?"
+}
+
+// detectPhase blends turn number with board / mana / hand signals so a deck
+// that ramps to 7 mana on turn 3 is treated as past Deploy, and a deck that
+// hits turn 12 with an empty hand is treated as Execute regardless of the
+// turn count being "only" 12.
+//
+// Signals (in order of weight):
+//
+//  1. Turn number (primary). 1-4 → Deploy, 5-9 → Develop, 10+ → Execute.
+//  2. Mana availability. avail >= 9 OR avail >= 7 with a commander on the
+//     battlefield → bump Deploy → Develop. avail >= 12 → Execute.
+//  3. Commander on battlefield. Deploy is "deploy commander"; once it's out,
+//     bump to at least Develop.
+//  4. Board size. 5+ controlled creatures or 8+ permanents = past Deploy.
+//  5. Cards in hand. Hand size <= 1 with avail mana spent = Execute (no fuel
+//     left, only thing to do is push).
+//
+// All bumps are monotonic (never demote past the turn-spine baseline) — a
+// conservative deck that didn't ramp still gets the turn-based phase.
+func (h *YggdrasilHat) detectPhase(gs *gameengine.GameState, seatIdx int) GamePhase {
+	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) || gs.Seats[seatIdx] == nil {
+		return PhaseDeploy
+	}
+	turn := gs.Turn
+	phase := PhaseDeploy
+	switch {
+	case turn >= 10:
+		phase = PhaseExecute
+	case turn >= 5:
+		phase = PhaseDevelop
+	}
+
+	seat := gs.Seats[seatIdx]
+	avail := gameengine.AvailableManaEstimate(gs, seat)
+
+	// Commander on battlefield → past initial Deploy goal.
+	commanderOut := false
+	for _, p := range seat.Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		if gameengine.IsCommanderCard(gs, seatIdx, p.Card) {
+			commanderOut = true
+			break
+		}
+	}
+
+	// Board size — count creatures + total nonland permanents.
+	creatureCount := 0
+	nonlandCount := 0
+	for _, p := range seat.Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		if p.IsCreature() {
+			creatureCount++
+		}
+		if !p.IsLand() {
+			nonlandCount++
+		}
+	}
+
+	bumpToDevelop := func() {
+		if phase < PhaseDevelop {
+			phase = PhaseDevelop
+		}
+	}
+	bumpToExecute := func() {
+		if phase < PhaseExecute {
+			phase = PhaseExecute
+		}
+	}
+
+	// Mana / commander signals → at least Develop.
+	if avail >= 9 {
+		bumpToDevelop()
+	}
+	if avail >= 7 && commanderOut {
+		bumpToDevelop()
+	}
+	if commanderOut {
+		bumpToDevelop()
+	}
+	if creatureCount >= 5 || nonlandCount >= 8 {
+		bumpToDevelop()
+	}
+
+	// Heavy mana / hand exhaustion / huge board → Execute.
+	if avail >= 12 {
+		bumpToExecute()
+	}
+	if len(seat.Hand) <= 1 && turn >= 6 {
+		bumpToExecute()
+	}
+	if creatureCount >= 8 || nonlandCount >= 12 {
+		bumpToExecute()
+	}
+
+	return phase
 }
 
 // isFinisher returns true if the card is a Freya-classified game finisher.
@@ -1676,6 +1922,63 @@ func (h *YggdrasilHat) cardHeuristic(gs *gameengine.GameState, seatIdx int, c *g
 
 	cat := h.categorizeWithFreya(c)
 
+	// Phase-of-game shaping. Different cards matter at different stages:
+	//   Deploy  → ramp / mana rocks early; expensive threats are dead weight.
+	//   Develop → value engines, draw, removal — out-resource opponents.
+	//   Execute → finishers, combo pieces, mass removal — close the game.
+	// The shifts are additive on top of the archetype switch below; they
+	// don't override archetype identity, just sharpen the curve.
+	switch h.detectPhase(gs, seatIdx) {
+	case PhaseDeploy:
+		switch cat {
+		case CatRamp:
+			base += 0.20
+		case CatThreat:
+			if cmc >= 5 {
+				base -= 0.10 // top-end is dead in hand on turn 2
+			}
+		}
+		// Mana-rock heuristic: low-CMC artifact = rock-shaped.
+		if typeLineContains(c, "artifact") && cmc <= 2 && cat != CatThreat {
+			base += 0.15
+		}
+		// Commander-color enabler: any sub-3 spell that produces mana.
+		if cmc <= 3 {
+			ot := gameengine.OracleTextLower(c)
+			if strings.Contains(ot, "add {") || strings.Contains(ot, "add one mana") ||
+				strings.Contains(ot, "search your library for a") && strings.Contains(ot, "land") {
+				base += 0.10
+			}
+		}
+	case PhaseDevelop:
+		if h.isValueEngineKey(c) {
+			base += 0.15
+		}
+		switch cat {
+		case CatDraw:
+			base += 0.10
+		case CatRemoval:
+			base += 0.10
+		}
+	case PhaseExecute:
+		if h.isFinisher(c) {
+			base += 0.25
+		}
+		if h.isComboRelevant(c) {
+			base += 0.20
+		}
+		// Mass removal / sweeper detection.
+		ot := gameengine.OracleTextLower(c)
+		if strings.Contains(ot, "destroy all") || strings.Contains(ot, "exile all") ||
+			strings.Contains(ot, "each creature") && strings.Contains(ot, "damage") {
+			base += 0.15
+		}
+		// Late ramp is mostly wasted draws.
+		if cat == CatRamp {
+			base -= 0.10
+		}
+	}
+
 	// DNA ResourceGreed: high → bias toward card draw + ramp (resource
 	// hoarding); low → bias toward CatThreat (board presence). Applied
 	// before archetype bonuses so the same nudge stacks coherently with
@@ -1765,6 +2068,61 @@ func (h *YggdrasilHat) cardHeuristic(gs *gameengine.GameState, seatIdx int, c *g
 				if strings.Contains(ot, lt) || strings.Contains(tl, lt) {
 					base += 0.12
 					break
+				}
+			}
+		}
+	}
+
+	// Commander Synergy Amplifier — the Lovelace boost above is
+	// commander-AGNOSTIC (it fires whether the commander is in play or
+	// not). This block shifts scoring based on WHERE the commander is
+	// right now: if it's on the battlefield, cards that feed its engine
+	// or finish its win line are concretely better; if it's still in
+	// the command zone, we want to deploy the commander first and pick
+	// protection over generic value while we wait. Skipped when no
+	// strategy profile or commander metadata is available.
+	if gs != nil && h.Strategy != nil && seatIdx >= 0 && seatIdx < len(gs.Seats) {
+		seat := gs.Seats[seatIdx]
+		if seat != nil && len(seat.CommanderNames) > 0 {
+			cName := c.DisplayName()
+			cmdrOnField, cmdrOnFieldPerm := commanderOnBattlefield(seat)
+			cmdrInCommandZone := commanderInCommandZone(seat)
+
+			if cmdrOnField {
+				if h.valueEngineSet[cName] {
+					base += 0.25
+				}
+				if h.comboPieceSet[cName] {
+					base += 0.30
+				}
+				if len(h.Strategy.CommanderThemes) > 0 {
+					ot := gameengine.OracleTextLower(c)
+					for _, theme := range h.Strategy.CommanderThemes {
+						lt := strings.ToLower(strings.TrimSpace(theme))
+						if lt == "" {
+							continue
+						}
+						if strings.Contains(ot, lt) {
+							base += 0.15
+							break
+						}
+					}
+				}
+				if cmdrOnFieldPerm != nil && cmdrOnFieldPerm.Card != nil &&
+					typeLineContains(c, "creature") &&
+					sharesCreatureSubtype(cmdrOnFieldPerm.Card, c) {
+					base += 0.10
+				}
+			} else if cmdrInCommandZone {
+				// Bias toward deploying the commander first: small
+				// across-the-board penalty on non-ramp / non-land cards
+				// so ramp and lands keep their priority while generic
+				// value gets nudged behind the commander.
+				if !typeLineContains(c, "land") && cat != CatRamp {
+					base -= 0.05
+				}
+				if isCommanderProtectionCard(c) {
+					base += 0.15
 				}
 			}
 		}
@@ -3562,11 +3920,24 @@ func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, le
 		stance = "BEHIND→selective"
 	}
 
+	// Phase-of-game shift on attack threshold:
+	//   Deploy  → +0.15 (very conservative; we'd rather develop board)
+	//   Develop → 0.0   (default behavior)
+	//   Execute → -0.10 (more aggressive; lower bar to swing)
+	switch h.detectPhase(gs, seatIdx) {
+	case PhaseDeploy:
+		threshold += 0.15
+		stance += "+DEPLOY"
+	case PhaseExecute:
+		threshold -= 0.10
+		stance += "+EXECUTE"
+	}
+
 	// Opponent-archetype clock bias: race confident aggro pods (lower
 	// the swing threshold so we keep pace) and stay cautious into
 	// confident control pods (raise it so we don't dump value into
-	// removal). Effect is bounded: 0.05 per point of confidence above
-	// 0.5, applied once per archetype found anywhere at the table.
+	// removal). Effect is bounded: ±0.05 per archetype found at the
+	// table, scanned once.
 	racingAggro := false
 	dodgingControl := false
 	for i := range gs.Seats {
@@ -5056,11 +5427,32 @@ func (h *YggdrasilHat) ShouldCastCommander(gs *gameengine.GameState, seatIdx int
 			maxTax = 8
 			manaBuffer = 0
 		}
+		// Strategy-enabler commander: when the deck has ≥3 ValueEngineKeys,
+		// the commander is the load-bearing piece for those engines, so
+		// paying through tax matters more than holding mana for protection.
+		// Lower buffer (we'll spend our mana on the commander), raise the
+		// max tax we'll pay (we keep recasting even when expensive).
+		if len(h.Strategy.ValueEngineKeys) >= 3 {
+			manaBuffer--
+			maxTax += 2
+			if manaBuffer < 0 {
+				manaBuffer = 0
+			}
+		}
 	}
-	// Late-game: always recast if affordable — the commander is the deck.
-	if gs.Turn > 15 {
+	// Phase-aware caps. Deploy is "deploy commander" — always cast when
+	// affordable (the commander IS the deploy goal). Execute is the close
+	// — pay any tax we can afford, the commander is too important to leave
+	// in zone. Develop is the default tax-aware path.
+	switch h.detectPhase(gs, seatIdx) {
+	case PhaseDeploy:
+		return true
+	case PhaseExecute:
+		// Existing "always recast if affordable" semantics that the old
+		// `gs.Turn > 15` branch covered.
 		return true
 	}
+
 	// 3rd Eye: If high interaction risk and commander tax is already 2+,
 	// wait until we have enough mana to also hold up protection, or until
 	// the blue player taps out.
