@@ -25,6 +25,7 @@ kanban-plugin: board
 - [ ] **Value Engine rationale** — explain WHY each value engine was identified for this deck (what cards/interactions trigger it, how the engine functions). #ui #deck #freya
 - [ ] **Win Condition rationale** — show detection logic for each win-con (which cards form the line, what conditions are needed, how the combo resolves). #ui #deck #freya
 - [ ] **Deck clone** — non-owners can clone a deck to their own collection for editing. Clone creates a copy under the cloner's owner dir, then they can rename/edit freely. #ui #platform
+- [ ] **Ephemeral spectator rooms** — "Spectate Live" button on deck drilldown spawns a dedicated game instance for that deck. Keyed by deck_id (second viewer joins existing room, no duplicates). Room runs games continuously while viewers are connected; after last viewer leaves, finishes current game then tears down. Per-room speed dial. Max 8 concurrent rooms. Main fishtank `/spectate` untouched. Games feed into ELO/Heimdall/cardstats (rated). Spectated deck always seat 1 (camera focus). Bracket-matched opponents. Max 50 concurrent rooms, unlimited viewers per room. Backend: `POST /api/spectate/spawn {deck_id}` → `room_id`, WebSocket at `/ws/spectate/{room_id}`. Frontend: same Spectator component, room-aware. #platform #spectate #backend #ui
 - [ ] **Reconnection countdown** — when WebSocket disconnects, show attempt number and countdown timer per reconnection attempt (currently just shows "DISCONNECTED — RECONNECTING"). #ui #ux
 - [ ] **Magic link graceful flow** — user clicks email link → new tab catches the auth post and logs them in → tab auto-closes → original tab plays a console-style "logging in" feed animation → redirects to /operator. #ui #auth #ux
 
@@ -56,6 +57,15 @@ kanban-plugin: board
 *Ref: `docs/architecture-hat-evolution.md` Levels 4-5.*
 *Level 4 (Staged Decision Architecture), Level 5 (IS-MCTS) complete 2026-05-02/04.*
 
+
+## Medium Priority — Hat Decision Making
+
+- [ ] **Equipment stacking intelligence** — hat currently scores equip at a flat 20 with no awareness of existing attachments. Needs: (1) prefer stacking multiple equipment on the same high-value creature over spreading thin, (2) prioritize commander as equip target (survives recast, Voltron payoff), (3) evaluate equipment synergies (Resurrection Orb on commander = recursive value engine). Currently in `greedy.go:scoreEffect` + `ChooseTarget`. #hat #equipment #voltron
+- [ ] **Equipment-specific target scoring** — `ChooseTarget` for equip abilities picks first legal creature. Should score targets by: power/toughness, commander status, evasion keywords (flying/trample/unblockable), existing equipment count (diminishing returns vs stacking value), and equipment-creature synergy (e.g. deathtouch creature + equipment that grants first strike). #hat #equipment #targeting
+- [ ] **Equipment recurrence awareness** — hat should recognize "equip → creature dies → re-equip" loops as value patterns (Skullclamp, Sword cycle). Equipment that generates advantage on connect (Sword of Feast and Famine) should be prioritized on evasive creatures. #hat #equipment #strategy
+- [ ] **Graveyard recursion awareness (non-reanimator)** — all graveyard intelligence (intentional yard dumping, "let it die we can bring it back" logic, reanimation spell scanning) is gated behind `ArchetypeReanimator`. Decks with recursion effects (Szarekh, Meren, Karador) that aren't classified as reanimator don't get strategic graveyard play. Needs: detect recursion density in decklist regardless of archetype classification, apply yard-valuation logic proportionally. #hat #graveyard #strategy
+- [ ] **Zone-cast grant strategic valuation** — Yggdrasil tracks zone-cast grants (flashback, escape, unearth, etc.) but doesn't factor them into discard/surveil decisions for non-reanimator decks. If a creature has Unearth, the hat should value it LESS in hand (can recover from yard) and MORE as a discard target. Same for flashback instants/sorceries. Currently only ArchetypeReanimator gets surveil-to-yard logic. #hat #graveyard #zonecast
+- [ ] **Recursion-aware sacrifice evaluation** — hat should recognize when sacrificing a permanent with a recursion path (Persist, Undying, Unearth, etc.) is net-positive. Currently treats all sacrifices as pure loss unless ArchetypeReanimator. Sacrifice + Persist = free death trigger + creature returns. #hat #sacrifice #recursion
 
 ## Medium Priority — Engine
 
