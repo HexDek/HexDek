@@ -1020,6 +1020,334 @@ func TestClassifyTrigger_AllKnownEvents(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Tier 1 audit additions — paid_optional_cost / for_each / etb_as /
+// did_prior_action. These exercise both detection (structured Cond.Kind +
+// raw text fallbacks) and apply (engine-state mutation).
+// ---------------------------------------------------------------------------
+
+func TestDetectConditionScaffold_Tier1Kinds(t *testing.T) {
+	cases := []struct {
+		name     string
+		kind     string
+		text     string
+		wantKind conditionScaffoldKind
+		wantSub  string
+		wantCnt  int
+	}{
+		{
+			name:     "paid_optional_cost structured kind",
+			kind:     "paid_optional_cost",
+			text:     "kicker {2}{R}",
+			wantKind: condScaffoldPaidOptionalCost,
+			wantCnt:  1,
+		},
+		{
+			name:     "multikicker text fallback",
+			kind:     "intervening_if",
+			text:     "for each time ~ was kicked",
+			wantKind: condScaffoldPaidOptionalCost,
+			wantCnt:  2,
+		},
+		{
+			name:     "kicker text fallback",
+			kind:     "raw",
+			text:     "if ~ was kicked, draw a card",
+			wantKind: condScaffoldPaidOptionalCost,
+			wantCnt:  1,
+		},
+		{
+			name:     "for_each structured kind — creatures",
+			kind:     "for_each",
+			text:     "creature you control",
+			wantKind: condScaffoldForEach,
+			wantSub:  "creature",
+			wantCnt:  3,
+		},
+		{
+			name:     "for_each structured kind — artifacts",
+			kind:     "for_each",
+			text:     "artifact",
+			wantKind: condScaffoldForEach,
+			wantSub:  "artifact",
+			wantCnt:  3,
+		},
+		{
+			name:     "for_each text fallback",
+			kind:     "raw",
+			text:     "for each goblin you control, ...",
+			wantKind: condScaffoldForEach,
+			wantSub:  "goblin",
+		},
+		{
+			name:     "etb_as structured kind — counters",
+			kind:     "etb_as",
+			text:     "with two +1/+1 counters on it",
+			wantKind: condScaffoldETBAs,
+			wantSub:  "+1/+1",
+			wantCnt:  2,
+		},
+		{
+			name:     "enters_with structured kind — three counters",
+			kind:     "enters_with",
+			text:     "with three loyalty counters on it",
+			wantKind: condScaffoldETBAs,
+			wantSub:  "loyalty",
+			wantCnt:  3,
+		},
+		{
+			name:     "etb_as modal choose",
+			kind:     "etb_as",
+			text:     "as ~ enters the battlefield, choose a creature type",
+			wantKind: condScaffoldETBAs,
+			wantSub:  "choose_mode",
+		},
+		{
+			name:     "etb_as text fallback",
+			kind:     "raw",
+			text:     "as this enters the battlefield, you may choose a color",
+			wantKind: condScaffoldETBAs,
+			wantSub:  "choose_mode",
+		},
+		{
+			name:     "did_prior_action attacked",
+			kind:     "did_prior_action",
+			text:     "you attacked this turn",
+			wantKind: condScaffoldDidPriorAction,
+			wantSub:  "attacked",
+		},
+		{
+			name:     "did_prior_action cast a spell",
+			kind:     "did_prior_action",
+			text:     "you cast a spell this turn",
+			wantKind: condScaffoldDidPriorAction,
+			wantSub:  "cast",
+		},
+		{
+			name:     "did_prior_action sacrificed",
+			kind:     "did_prior_action",
+			text:     "you sacrificed a permanent this turn",
+			wantKind: condScaffoldDidPriorAction,
+			wantSub:  "sacrificed",
+		},
+		{
+			name:     "did_prior_action creature died",
+			kind:     "did_prior_action",
+			text:     "a creature died this turn",
+			wantKind: condScaffoldDidPriorAction,
+			wantSub:  "creature_died",
+		},
+		{
+			name:     "did_prior_action gained life",
+			kind:     "did_prior_action",
+			text:     "you gained life this turn",
+			wantKind: condScaffoldDidPriorAction,
+			wantSub:  "gained_life",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cond := &gameast.Condition{Kind: tc.kind, Args: []interface{}{tc.text}}
+			got := detectConditionScaffold(cond)
+			if got.kind != tc.wantKind {
+				t.Errorf("kind: want %v, got %v (raw=%q)", tc.wantKind, got.kind, got.rawText)
+			}
+			if tc.wantSub != "" && got.subtype != tc.wantSub {
+				t.Errorf("subtype: want %q, got %q", tc.wantSub, got.subtype)
+			}
+			if tc.wantCnt != 0 && got.count != tc.wantCnt {
+				t.Errorf("count: want %d, got %d", tc.wantCnt, got.count)
+			}
+		})
+	}
+}
+
+func TestApplyConditionScaffolding_PaidOptionalCost_Kicker(t *testing.T) {
+	gs := newTestGameState(2)
+	srcPerm := &gameengine.Permanent{
+		Card:       &gameengine.Card{Name: "Kicked Source", Owner: 0, Types: []string{"creature"}},
+		Controller: 0, Owner: 0,
+		Flags: map[string]int{},
+	}
+	gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, srcPerm)
+
+	cond := &gameast.Condition{Kind: "paid_optional_cost", Args: []interface{}{"kicker {2}{R}"}}
+	cs := applyConditionScaffolding(gs, cond, srcPerm)
+
+	if cs.kind != condScaffoldPaidOptionalCost {
+		t.Fatalf("expected PaidOptionalCost, got %v", cs.kind)
+	}
+	if gs.Flags["paid_optional_cost"] != 1 {
+		t.Errorf("paid_optional_cost flag not set")
+	}
+	if srcPerm.Flags["kicked"] != 1 {
+		t.Errorf("srcPerm.Flags[kicked] want 1, got %d", srcPerm.Flags["kicked"])
+	}
+}
+
+func TestApplyConditionScaffolding_PaidOptionalCost_Multikicker(t *testing.T) {
+	gs := newTestGameState(2)
+	srcPerm := &gameengine.Permanent{
+		Card:       &gameengine.Card{Name: "Multi Source", Owner: 0, Types: []string{"creature"}},
+		Controller: 0, Owner: 0,
+		Flags: map[string]int{},
+	}
+	gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, srcPerm)
+
+	cond := &gameast.Condition{Kind: "raw", Args: []interface{}{"for each time ~ was kicked"}}
+	cs := applyConditionScaffolding(gs, cond, srcPerm)
+
+	if cs.kind != condScaffoldPaidOptionalCost {
+		t.Fatalf("expected PaidOptionalCost (multikicker), got %v", cs.kind)
+	}
+	if srcPerm.Flags["kicked"] < 2 {
+		t.Errorf("multikicker should set kicked>=2, got %d", srcPerm.Flags["kicked"])
+	}
+}
+
+func TestApplyConditionScaffolding_ForEach_Creature(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "for_each", Args: []interface{}{"creature you control"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+
+	if cs.kind != condScaffoldForEach {
+		t.Fatalf("expected ForEach, got %v", cs.kind)
+	}
+	creatures := 0
+	for _, p := range gs.Seats[0].Battlefield {
+		for _, ty := range p.Card.Types {
+			if ty == "creature" {
+				creatures++
+				break
+			}
+		}
+	}
+	if creatures < 3 {
+		t.Errorf("seat 0 wanted >=3 creatures, got %d", creatures)
+	}
+}
+
+func TestApplyConditionScaffolding_ForEach_Land(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "for_each", Args: []interface{}{"land"}}
+	applyConditionScaffolding(gs, cond, nil)
+
+	lands := 0
+	for _, p := range gs.Seats[0].Battlefield {
+		for _, ty := range p.Card.Types {
+			if ty == "land" {
+				lands++
+				break
+			}
+		}
+	}
+	if lands < 3 {
+		t.Errorf("seat 0 wanted >=3 lands, got %d", lands)
+	}
+}
+
+func TestApplyConditionScaffolding_ETBAs_WithCounters(t *testing.T) {
+	gs := newTestGameState(2)
+	srcPerm := &gameengine.Permanent{
+		Card:       &gameengine.Card{Name: "Counter Source", Owner: 0, Types: []string{"creature"}},
+		Controller: 0, Owner: 0,
+		Flags:    map[string]int{},
+		Counters: map[string]int{},
+	}
+	gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, srcPerm)
+
+	cond := &gameast.Condition{Kind: "etb_as", Args: []interface{}{"with two +1/+1 counters on it"}}
+	cs := applyConditionScaffolding(gs, cond, srcPerm)
+
+	if cs.kind != condScaffoldETBAs {
+		t.Fatalf("expected ETBAs, got %v", cs.kind)
+	}
+	if srcPerm.Counters["+1/+1"] < 2 {
+		t.Errorf("srcPerm should have >=2 +1/+1 counters, got %d", srcPerm.Counters["+1/+1"])
+	}
+}
+
+func TestApplyConditionScaffolding_ETBAs_ChooseMode(t *testing.T) {
+	gs := newTestGameState(2)
+	srcPerm := &gameengine.Permanent{
+		Card:       &gameengine.Card{Name: "Modal Source", Owner: 0, Types: []string{"creature"}},
+		Controller: 0, Owner: 0,
+		Flags:    map[string]int{},
+		Counters: map[string]int{},
+	}
+	gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, srcPerm)
+
+	cond := &gameast.Condition{Kind: "etb_as", Args: []interface{}{"as ~ enters the battlefield, choose a creature type"}}
+	cs := applyConditionScaffolding(gs, cond, srcPerm)
+
+	if cs.kind != condScaffoldETBAs {
+		t.Fatalf("expected ETBAs (modal), got %v", cs.kind)
+	}
+	if srcPerm.Flags["etb_choice_set"] != 1 {
+		t.Errorf("etb_choice_set flag not set: %v", srcPerm.Flags)
+	}
+}
+
+func TestApplyConditionScaffolding_DidPriorAction_Attacked(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "did_prior_action", Args: []interface{}{"you attacked this turn"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+
+	if cs.kind != condScaffoldDidPriorAction {
+		t.Fatalf("expected DidPriorAction, got %v", cs.kind)
+	}
+	if !gs.Seats[0].Turn.Attacked {
+		t.Errorf("Turn.Attacked should be true")
+	}
+}
+
+func TestApplyConditionScaffolding_DidPriorAction_CastSpell(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "did_prior_action", Args: []interface{}{"you cast a spell this turn"}}
+	applyConditionScaffolding(gs, cond, nil)
+
+	if gs.Seats[0].Turn.SpellsCast < 1 {
+		t.Errorf("Turn.SpellsCast want >=1, got %d", gs.Seats[0].Turn.SpellsCast)
+	}
+	if len(gs.Seats[0].Turn.Casts) < 1 {
+		t.Errorf("Turn.Casts should have >=1 record")
+	}
+}
+
+func TestApplyConditionScaffolding_DidPriorAction_Sacrificed(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "did_prior_action", Args: []interface{}{"you sacrificed a permanent this turn"}}
+	applyConditionScaffolding(gs, cond, nil)
+
+	if gs.Seats[0].Turn.Sacrificed < 1 {
+		t.Errorf("Turn.Sacrificed want >=1, got %d", gs.Seats[0].Turn.Sacrificed)
+	}
+}
+
+func TestApplyConditionScaffolding_DidPriorAction_CreatureDied(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "did_prior_action", Args: []interface{}{"a creature died this turn"}}
+	applyConditionScaffolding(gs, cond, nil)
+
+	if gs.Seats[0].Turn.CreaturesDied < 1 {
+		t.Errorf("Turn.CreaturesDied want >=1, got %d", gs.Seats[0].Turn.CreaturesDied)
+	}
+	if gs.Flags["creature_died_this_turn"] != 1 {
+		t.Errorf("creature_died_this_turn flag not set")
+	}
+}
+
+func TestApplyConditionScaffolding_DidPriorAction_GainedLife(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "did_prior_action", Args: []interface{}{"you gained life this turn"}}
+	applyConditionScaffolding(gs, cond, nil)
+
+	if gs.Seats[0].Turn.LifeGained < 1 {
+		t.Errorf("Turn.LifeGained want >=1, got %d", gs.Seats[0].Turn.LifeGained)
+	}
+}
+
 func newTestGameState(seats int) *gameengine.GameState {
 	gs := &gameengine.GameState{
 		Turn:   1,

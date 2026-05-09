@@ -802,6 +802,15 @@ const (
 	condScaffoldTokensCreatedCount  // X = tokens created — Turn.TokensCreated
 	condScaffoldCastFromExile       // cast from exile — Turn.CastFromExile
 	condScaffoldExileLinkedReturn   // exile-until-leaves — ExileLinked/ReturnLinkedExile
+
+	// Tier 1 audit additions — bridge structured AST condition Kinds that
+	// the scaffold detector currently ignores. Each maps to existing engine
+	// state (no new fields required); see Permanent.Flags["kicked"] for
+	// kicker, Seat.Turn.* for did_prior_action, Permanent.Counters for ETB.
+	condScaffoldPaidOptionalCost // Cond.Kind="paid_optional_cost" / kicker
+	condScaffoldForEach          // Cond.Kind="for_each" / "for each X"
+	condScaffoldETBAs            // Cond.Kind="etb_as"/"enters_with" / "enters with N counters"
+	condScaffoldDidPriorAction   // Cond.Kind="did_prior_action" — generic prior-turn action
 )
 
 type conditionScaffold struct {
@@ -832,6 +841,14 @@ var (
 	metalcraftRe     = regexp.MustCompile(`(?:three|3)\s+or\s+more\s+artifacts?`)
 	ferociousRe      = regexp.MustCompile(`creature\s+with\s+power\s+(?:four|4)\s+or\s+(?:more|greater)`)
 	formidableRe     = regexp.MustCompile(`total\s+power\s+(?:eight|8)\s+or\s+(?:more|greater)`)
+	// Tier 1 audit patterns.
+	kickerWasPaidRe  = regexp.MustCompile(`(?:was kicked|kicker (?:cost )?was paid|if (?:it|this) was kicked)`)
+	multikickerRe    = regexp.MustCompile(`for each time .* (?:was )?kicked|multikicker`)
+	forEachRe        = regexp.MustCompile(`for (?:each|every)\s+([a-z]+)`)
+	entersWithCntrRe = regexp.MustCompile(`enters?(?:\s+the\s+battlefield)?\s+with\s+(\d+|a|an|one|two|three|four)\s+([+\-]\d+/[+\-]\d+|[a-z]+)\s+counters?`)
+	entersAsRe       = regexp.MustCompile(`(?:as\s+~|as\s+\w[\w\s]*?)\s+enters(?:\s+the\s+battlefield)?,\s*(?:choose|you may choose)`)
+	// did_prior_action verb scanner — order matters: most specific first.
+	priorActionVerbRe = regexp.MustCompile(`(attacked|cast (?:a |an )?(?:noncreature |creature )?spell|cast a spell|sacrificed|(?:a )?creature died|gained life|drew (?:a )?card|discarded|played (?:a )?land|dealt damage)`)
 )
 
 func conditionRawText(cond *gameast.Condition) string {
@@ -850,7 +867,23 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 	if cond == nil {
 		return conditionScaffold{}
 	}
-	switch strings.ToLower(cond.Kind) {
+	kind := strings.ToLower(cond.Kind)
+
+	// Tier 1 audit additions — structured AST kinds the existing whitelist
+	// dropped on the floor. Detect these BEFORE the whitelist filter
+	// because they don't use intervening_if/as_long_as packaging.
+	switch kind {
+	case "paid_optional_cost":
+		return detectPaidOptionalCost(cond)
+	case "for_each":
+		return detectForEach(cond)
+	case "etb_as", "enters_as", "enters_with":
+		return detectETBAs(cond)
+	case "did_prior_action":
+		return detectDidPriorAction(cond)
+	}
+
+	switch kind {
 	case "intervening_if", "as_long_as", "conditional", "raw":
 		// proceed
 	default:
@@ -861,6 +894,24 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 		return conditionScaffold{}
 	}
 	cs := conditionScaffold{rawText: txt}
+
+	// Tier 1: text-form fallbacks for the same patterns when AST emitted a
+	// raw/intervening_if instead of the structured Kind.
+	if kickerWasPaidRe.MatchString(txt) || multikickerRe.MatchString(txt) {
+		out := conditionScaffold{kind: condScaffoldPaidOptionalCost, rawText: txt, count: 1}
+		if multikickerRe.MatchString(txt) {
+			out.count = 2
+		}
+		return out
+	}
+	if forEachRe.MatchString(txt) {
+		return parseForEachText(txt)
+	}
+	if strings.Contains(txt, "enters") &&
+		(strings.Contains(txt, " with ") || strings.Contains(txt, " as ") ||
+			strings.Contains(txt, "choose") || strings.Contains(txt, "choosing")) {
+		return parseETBAsText(txt)
+	}
 
 	// "an opponent controls more lands than you" / "more lands than you do"
 	if (strings.Contains(txt, "more land") || strings.Contains(txt, "controls more")) &&
@@ -1148,6 +1199,20 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 	return conditionScaffold{}
 }
 
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func nonEmpty(a, fallback string) string {
+	if a == "" {
+		return fallback
+	}
+	return a
+}
+
 func isGenericWord(s string) bool {
 	switch s {
 	case "creature", "permanent", "card", "spell", "ability",
@@ -1156,6 +1221,184 @@ func isGenericWord(s string) bool {
 		return true
 	}
 	return false
+}
+
+// detectPaidOptionalCost handles structured Cond.Kind="paid_optional_cost"
+// emitted by the AST for kicker / additional-cost gates. Args[0] (when
+// present) is the human-readable cost description; we sniff it for
+// "kicked" / multikicker so applyConditionScaffolding can set the right
+// count on Permanent.Flags["kicked"].
+func detectPaidOptionalCost(cond *gameast.Condition) conditionScaffold {
+	cs := conditionScaffold{kind: condScaffoldPaidOptionalCost, count: 1}
+	if cond == nil {
+		return cs
+	}
+	if len(cond.Args) > 0 {
+		if s, ok := cond.Args[0].(string); ok {
+			cs.rawText = strings.ToLower(strings.TrimSpace(s))
+			if multikickerRe.MatchString(cs.rawText) {
+				cs.count = 2
+			}
+			cs.subtype = cs.rawText
+		}
+	}
+	return cs
+}
+
+// detectForEach handles structured Cond.Kind="for_each". Args[0] is the
+// counted thing ("creature you control", "artifact", "opponent", etc).
+// We extract the noun via parseForEachText and stash it in subtype so the
+// apply step seeds the right type of permanent.
+func detectForEach(cond *gameast.Condition) conditionScaffold {
+	if cond == nil {
+		return conditionScaffold{kind: condScaffoldForEach, subtype: "creature", count: 3}
+	}
+	txt := ""
+	if len(cond.Args) > 0 {
+		if s, ok := cond.Args[0].(string); ok {
+			txt = strings.ToLower(strings.TrimSpace(s))
+		}
+	}
+	if txt == "" {
+		return conditionScaffold{kind: condScaffoldForEach, subtype: "creature", count: 3}
+	}
+	cs := parseForEachText("for each " + txt)
+	cs.rawText = txt
+	return cs
+}
+
+// parseForEachText extracts the counted noun from a "for each X" phrase.
+// Default count is 3 (engine-side checks for `>= 1` are common, but 3
+// covers `>= 2`/`>= 3` thresholds without overshooting).
+func parseForEachText(txt string) conditionScaffold {
+	cs := conditionScaffold{kind: condScaffoldForEach, count: 3, rawText: txt, subtype: "creature"}
+	m := forEachRe.FindStringSubmatch(txt)
+	if len(m) >= 2 {
+		noun := m[1]
+		// Trim trailing 's' so plurals normalize.
+		if len(noun) > 3 && strings.HasSuffix(noun, "s") {
+			noun = strings.TrimSuffix(noun, "s")
+		}
+		switch noun {
+		case "creature", "land", "artifact", "enchantment", "planeswalker", "permanent":
+			cs.subtype = noun
+		case "opponent":
+			cs.subtype = "opponent" // no-op apply: game already has opponents
+		default:
+			// Treat unknown nouns as creature subtype tokens
+			// ("for each goblin you control") so we still satisfy the count.
+			if !isGenericWord(noun) {
+				cs.subtype = noun
+			}
+		}
+	}
+	return cs
+}
+
+// detectETBAs handles structured Cond.Kind="etb_as" / "enters_as" /
+// "enters_with". Args[0] (when present) describes the modal payload:
+// "with N +1/+1 counters", "as a copy of", "choose a creature type", etc.
+func detectETBAs(cond *gameast.Condition) conditionScaffold {
+	cs := conditionScaffold{kind: condScaffoldETBAs}
+	if cond == nil {
+		return cs
+	}
+	if len(cond.Args) > 0 {
+		if s, ok := cond.Args[0].(string); ok {
+			cs.rawText = strings.ToLower(strings.TrimSpace(s))
+		}
+	}
+	if cs.rawText == "" {
+		return cs
+	}
+	parsed := parseETBAsText("enters " + cs.rawText)
+	parsed.kind = condScaffoldETBAs
+	parsed.rawText = cs.rawText
+	return parsed
+}
+
+// parseETBAsText pulls the "enters with N <kind> counters" payload out of
+// a raw ETB phrase. subtype carries the counter kind ("+1/+1", "loyalty",
+// "charge", etc.); count carries N. When the phrase is the modal "as ~
+// enters, choose ..." form, subtype="choose_mode" and count=0.
+func parseETBAsText(txt string) conditionScaffold {
+	cs := conditionScaffold{kind: condScaffoldETBAs, rawText: txt}
+	if m := entersWithCntrRe.FindStringSubmatch(txt); len(m) >= 3 {
+		nWord := m[1]
+		kind := strings.TrimSpace(m[2])
+		n := 1
+		switch nWord {
+		case "a", "an", "one":
+			n = 1
+		case "two":
+			n = 2
+		case "three":
+			n = 3
+		case "four":
+			n = 4
+		default:
+			if v, err := strconv.Atoi(nWord); err == nil && v > 0 {
+				n = v
+			}
+		}
+		cs.count = n
+		cs.subtype = kind
+		return cs
+	}
+	if entersAsRe.MatchString(txt) || strings.Contains(txt, "choose") || strings.Contains(txt, "choosing") {
+		cs.subtype = "choose_mode"
+		return cs
+	}
+	// Generic "enters as a copy" / "enters as <subtype>" — no counter to
+	// place; flag-only apply.
+	cs.subtype = "etb_modal"
+	return cs
+}
+
+// detectDidPriorAction handles structured Cond.Kind="did_prior_action".
+// Args[0] is the verb phrase ("attacked", "cast a spell", "sacrificed",
+// "creature died", "gained life", etc.). We map it to a TurnCounters
+// field via the subtype slug; apply does the actual mutation.
+func detectDidPriorAction(cond *gameast.Condition) conditionScaffold {
+	cs := conditionScaffold{kind: condScaffoldDidPriorAction}
+	if cond == nil {
+		return cs
+	}
+	if len(cond.Args) > 0 {
+		if s, ok := cond.Args[0].(string); ok {
+			cs.rawText = strings.ToLower(strings.TrimSpace(s))
+		}
+	}
+	cs.subtype = classifyPriorActionVerb(cs.rawText)
+	return cs
+}
+
+// classifyPriorActionVerb returns one of: "attacked", "cast", "sacrificed",
+// "creature_died", "gained_life", "drew_card", "discarded", "played_land",
+// "dealt_damage", or "" when nothing matches.
+func classifyPriorActionVerb(txt string) string {
+	switch {
+	case strings.Contains(txt, "attacked"):
+		return "attacked"
+	case strings.Contains(txt, "cast a spell") || strings.Contains(txt, "cast an instant") ||
+		strings.Contains(txt, "cast a noncreature") || strings.Contains(txt, "cast a creature"):
+		return "cast"
+	case strings.Contains(txt, "sacrific"):
+		return "sacrificed"
+	case strings.Contains(txt, "creature died") || strings.Contains(txt, "creature you controlled died"):
+		return "creature_died"
+	case strings.Contains(txt, "gained life") || strings.Contains(txt, "gain life"):
+		return "gained_life"
+	case strings.Contains(txt, "drew a card") || strings.Contains(txt, "drawn a card"):
+		return "drew_card"
+	case strings.Contains(txt, "discarded"):
+		return "discarded"
+	case strings.Contains(txt, "played a land"):
+		return "played_land"
+	case strings.Contains(txt, "dealt damage"):
+		return "dealt_damage"
+	}
+	return ""
 }
 
 func parseGraveyardCount(txt string) int {
@@ -1565,6 +1808,153 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 			gs.Seats[1].Exile = append(gs.Seats[1].Exile, exiledCard)
 		}
 		cs.description = "attached exile-linked card to source permanent (O-Ring scaffold)"
+
+	case condScaffoldPaidOptionalCost:
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["paid_optional_cost"] = 1
+		// Engine reads Permanent.Flags["kicked"] (count, with multikicker
+		// stacking) — see resolve.go condition handling. Mark srcPerm when
+		// available so a kicker-gated trigger condition resolves true.
+		n := cs.count
+		if n < 1 {
+			n = 1
+		}
+		if srcPerm != nil {
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["kicked"] = n
+		}
+		cs.description = fmt.Sprintf("set Flags[paid_optional_cost]=1 + srcPerm.Flags[kicked]=%d", n)
+
+	case condScaffoldForEach:
+		count := cs.count
+		if count < 3 {
+			count = 3
+		}
+		switch cs.subtype {
+		case "land":
+			seedSeatLands(gs, 0, count, "Forest", "forest")
+			cs.description = fmt.Sprintf("seeded %d lands on seat 0 (for_each land)", count)
+		case "artifact":
+			seedSeatArtifacts(gs, 0, count)
+			cs.description = fmt.Sprintf("seeded %d artifacts on seat 0 (for_each artifact)", count)
+		case "opponent":
+			cs.description = "for_each opponent — no priming required"
+		case "creature", "permanent", "":
+			seedSeatCreatures(gs, 0, count, "ForEach Creature", "")
+			cs.description = fmt.Sprintf("seeded %d creatures on seat 0 (for_each %s)", count, cs.subtype)
+		default:
+			// Subtype token — wizard, goblin, etc. Place creatures with the
+			// subtype tag.
+			seedSeatCreatures(gs, 0, count, "ForEach "+cs.subtype, cs.subtype)
+			cs.description = fmt.Sprintf("seeded %d %s creatures on seat 0", count, cs.subtype)
+		}
+
+	case condScaffoldETBAs:
+		if srcPerm != nil {
+			if srcPerm.Counters == nil {
+				srcPerm.Counters = map[string]int{}
+			}
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			switch cs.subtype {
+			case "choose_mode":
+				srcPerm.Flags["etb_choice_set"] = 1
+				cs.description = "set srcPerm.Flags[etb_choice_set]=1 (modal ETB)"
+			case "etb_modal", "":
+				// Generic ETB — let the ETB handler do its job. We just mark
+				// the flag so any downstream condition that asks "did this
+				// permanent enter via the modal path" sees a positive answer.
+				srcPerm.Flags["etb_modal"] = 1
+				cs.description = "set srcPerm.Flags[etb_modal]=1 (generic ETB-as)"
+			default:
+				n := cs.count
+				if n < 1 {
+					n = 1
+				}
+				srcPerm.Counters[cs.subtype] += n
+				cs.description = fmt.Sprintf("placed %d %q counters on srcPerm (ETB-with)", n, cs.subtype)
+			}
+		} else {
+			cs.description = "etb_as detected but srcPerm nil — flag-only"
+		}
+
+	case condScaffoldDidPriorAction:
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			seat := gs.Seats[0]
+			if seat.Flags == nil {
+				seat.Flags = map[string]int{}
+			}
+			switch cs.subtype {
+			case "attacked":
+				seat.Turn.Attacked = true
+				seat.Flags["attacked_this_turn"] = 1
+				cs.description = "set Turn.Attacked=true (did_prior_action: attacked)"
+			case "cast":
+				seat.Turn.SpellsCast++
+				seat.Turn.Casts = append(seat.Turn.Casts, gameengine.CastRecord{
+					CardName:  "PriorAction Spell",
+					Types:     []string{"instant"},
+					ManaValue: 2,
+				})
+				seat.SpellsCastThisTurn++
+				gs.SpellsCastThisTurn++
+				seat.Flags["cast_spell_this_turn"] = 1
+				cs.description = "incremented Turn.SpellsCast + appended CastRecord (did_prior_action: cast)"
+			case "sacrificed":
+				seat.Turn.Sacrificed++
+				seat.Turn.PermanentsLeft++
+				seat.Flags["sacrificed_this_turn"] = 1
+				cs.description = "incremented Turn.Sacrificed (did_prior_action: sacrificed)"
+			case "creature_died":
+				seat.Turn.CreaturesDied++
+				seat.Turn.PermanentsLeft++
+				if gs.Flags == nil {
+					gs.Flags = map[string]int{}
+				}
+				gs.Flags["creature_died_this_turn"] = 1
+				seat.Graveyard = append(seat.Graveyard, &gameengine.Card{
+					Name:          "Prior Death",
+					Owner:         0,
+					Types:         []string{"creature"},
+					BasePower:     1,
+					BaseToughness: 1,
+				})
+				cs.description = "incremented Turn.CreaturesDied + added creature to graveyard"
+			case "gained_life":
+				seat.Turn.LifeGained += 3
+				seat.Life += 3
+				seat.Flags["life_gained_this_turn"] = 3
+				cs.description = "added 3 to Turn.LifeGained + Life (did_prior_action: gained_life)"
+			case "drew_card":
+				seat.Turn.CardsDrawn++
+				seat.Flags["drawn_card_this_turn"] = 1
+				cs.description = "incremented Turn.CardsDrawn (did_prior_action: drew_card)"
+			case "discarded":
+				seat.Turn.Discarded++
+				seat.Flags["discarded_this_turn"] = 1
+				cs.description = "incremented Turn.Discarded (did_prior_action: discarded)"
+			case "played_land":
+				seat.Turn.LandsPlayed++
+				seat.Flags["landfall_this_turn"] = 1
+				cs.description = "incremented Turn.LandsPlayed (did_prior_action: played_land)"
+			case "dealt_damage":
+				if gs.Flags == nil {
+					gs.Flags = map[string]int{}
+				}
+				gs.Flags["combat_damage_dealt_this_turn"] = 1
+				seat.Flags["combat_damage_dealt_this_turn"] = 1
+				cs.description = "set combat_damage_dealt_this_turn flag (did_prior_action: dealt_damage)"
+			default:
+				// Unknown verb — nothing to prime, but still valid scaffold so
+				// the caller logs it instead of dropping it.
+				cs.description = "did_prior_action with unrecognized verb — no-op prime"
+			}
+		}
 	}
 	return cs
 }
@@ -1641,6 +2031,18 @@ func traceConditionScaffolding(cond *gameast.Condition, tr *Tracer) {
 		desc = "placed 4/4 creature on seat 0 (ferocious active)"
 	case condScaffoldFormidable:
 		desc = "placed creatures totaling 8 power on seat 0 (formidable active)"
+	case condScaffoldPaidOptionalCost:
+		desc = fmt.Sprintf("set kicked=%d on srcPerm + paid_optional_cost flag", maxInt(cs.count, 1))
+	case condScaffoldForEach:
+		desc = fmt.Sprintf("seeded %d %s on seat 0 (for_each)", maxInt(cs.count, 3), nonEmpty(cs.subtype, "creature"))
+	case condScaffoldETBAs:
+		if cs.subtype == "choose_mode" || cs.subtype == "etb_modal" {
+			desc = "set ETB modal flag on srcPerm"
+		} else {
+			desc = fmt.Sprintf("placed %d %q counters on srcPerm", maxInt(cs.count, 1), cs.subtype)
+		}
+	case condScaffoldDidPriorAction:
+		desc = fmt.Sprintf("primed Turn counter for did_prior_action verb=%q", cs.subtype)
 	}
 	tr.Record("CONDITION_SETUP", "%q → %s", cs.rawText, desc)
 }
@@ -1832,6 +2234,54 @@ func seedSeatArtifacts(gs *gameengine.GameState, seat, count int) {
 			Flags:      map[string]int{},
 			Counters:   map[string]int{},
 		})
+	}
+}
+
+// seedSeatCreatures tops up `seat`'s battlefield to at least `count`
+// creatures. Existing creatures of the requested subtype (or any creature
+// when subtype is empty) count toward the total. Used by for_each priming.
+func seedSeatCreatures(gs *gameengine.GameState, seat, count int, name, subtype string) {
+	if seat >= len(gs.Seats) || gs.Seats[seat] == nil {
+		return
+	}
+	have := 0
+	for _, p := range gs.Seats[seat].Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		isCreature := false
+		hasSub := subtype == ""
+		for _, t := range p.Card.Types {
+			if t == "creature" {
+				isCreature = true
+			}
+			if subtype != "" && t == subtype {
+				hasSub = true
+			}
+		}
+		if isCreature && hasSub {
+			have++
+		}
+	}
+	for i := have; i < count; i++ {
+		types := []string{"creature"}
+		if subtype != "" {
+			types = append(types, subtype)
+		}
+		perm := &gameengine.Permanent{
+			Card: &gameengine.Card{
+				Name:          fmt.Sprintf("%s %d", name, i),
+				Owner:         seat,
+				Types:         types,
+				BasePower:     1,
+				BaseToughness: 1,
+			},
+			Controller: seat,
+			Owner:      seat,
+			Flags:      map[string]int{},
+			Counters:   map[string]int{},
+		}
+		gs.Seats[seat].Battlefield = append(gs.Seats[seat].Battlefield, perm)
 	}
 }
 
