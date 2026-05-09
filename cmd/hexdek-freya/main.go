@@ -633,8 +633,10 @@ type strategyJSON struct {
 	FinisherCards   []string          `json:"finisher_cards,omitempty"`
 	ColorDemand     map[string]int    `json:"color_demand,omitempty"`
 
-	StarCards        []string `json:"star_cards,omitempty"`
-	CuttableCards    []string `json:"cuttable_cards,omitempty"`
+	StarCards            []string          `json:"star_cards,omitempty"`
+	CuttableCards        []string          `json:"cuttable_cards,omitempty"`
+	CuttableCardRationale []jsonCardQuality `json:"cuttable_card_rationale,omitempty"`
+	ValueChains          []jsonValueChain  `json:"value_chains,omitempty"`
 	CommanderThemes  []string `json:"commander_themes,omitempty"`
 	CommanderSynergy float64  `json:"commander_synergy,omitempty"`
 	VulnerableTo     []string `json:"vulnerable_to,omitempty"`
@@ -671,9 +673,11 @@ type strategyMatchup struct {
 }
 
 type strategyWinLine struct {
-	Pieces     []string         `json:"pieces"`
-	Type       string           `json:"type"`
-	TutorPaths []jsonTutorChain `json:"tutor_paths,omitempty"`
+	Pieces      []string              `json:"pieces"`
+	Type        string                `json:"type"`
+	TutorPaths  []jsonTutorChain      `json:"tutor_paths,omitempty"`
+	Description string                `json:"description,omitempty"`
+	Rationale   *jsonWinLineRationale `json:"rationale,omitempty"`
 }
 
 func saveStrategyJSON(path string, report *FreyaReport) {
@@ -701,8 +705,16 @@ func saveStrategyJSON(path string, report *FreyaReport) {
 	if report.WinLines != nil {
 		for _, wl := range report.WinLines.WinLines {
 			swl := strategyWinLine{
-				Pieces: wl.Pieces,
-				Type:   wl.Type,
+				Pieces:      wl.Pieces,
+				Type:        wl.Type,
+				Description: wl.Desc,
+			}
+			if wl.Rationale != nil {
+				swl.Rationale = &jsonWinLineRationale{
+					Forms:      wl.Rationale.Forms,
+					Conditions: wl.Rationale.Conditions,
+					Resolves:   wl.Rationale.Resolves,
+				}
 			}
 			seen := map[string]bool{}
 			for _, tp := range wl.TutorPaths {
@@ -739,6 +751,9 @@ func saveStrategyJSON(path string, report *FreyaReport) {
 			}
 		}
 	}
+
+	// Full value-chain payloads with rationale, for the deck-drilldown UI.
+	sj.ValueChains = buildJSONValueChains(report.ValueChains)
 
 	// Tutor targets: all win line pieces (ordered by win line priority).
 	seenTargets := map[string]bool{}
@@ -795,6 +810,15 @@ func saveStrategyJSON(path string, report *FreyaReport) {
 		}
 		for _, cc := range dp.CuttableCards {
 			sj.CuttableCards = append(sj.CuttableCards, cc.Name)
+			sj.CuttableCardRationale = append(sj.CuttableCardRationale, jsonCardQuality{
+				Name:      cc.Name,
+				Tier:      cc.Tier,
+				Reason:    cc.Reason,
+				Detected:  cc.Detected,
+				WhyCut:    cc.WhyCut,
+				Effect:    cc.Effect,
+				Suggested: cc.Suggested,
+			})
 		}
 		sj.CommanderThemes = dp.CommanderThemes
 		sj.CommanderSynergy = dp.CommanderSynergy

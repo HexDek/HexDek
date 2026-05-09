@@ -800,11 +800,15 @@ func computeCardQualityTiers(dp *DeckProfile, report *FreyaReport, oracle *oracl
 	}
 
 	type cardScore struct {
-		name   string
-		score  float64
-		roles  []RoleTag
-		cmc    int
-		reason string
+		name      string
+		score     float64
+		roles     []RoleTag
+		cmc       int
+		reason    string
+		detected  string
+		whyCut    string
+		effect    string
+		suggested []string
 	}
 
 	var scores []cardScore
@@ -881,6 +885,9 @@ func computeCardQualityTiers(dp *DeckProfile, report *FreyaReport, oracle *oracl
 		if p.CMC >= 5 && len(s.roles) == 1 && s.roles[0] == RoleUtility {
 			s.score -= 2.0
 			s.reason = "high CMC with no clear role"
+			s.detected = fmt.Sprintf("CMC %d, single role: utility", p.CMC)
+			s.whyCut = "Pays full price but contributes neither pressure nor synergy. Top-end slots should accelerate the gameplan."
+			s.effect = "Frees a top-end slot for a payoff threat, draw engine, or finisher tied to the deck's value chain."
 		}
 
 		// Cards with only Utility role and high CMC
@@ -888,6 +895,9 @@ func computeCardQualityTiers(dp *DeckProfile, report *FreyaReport, oracle *oracl
 			s.score -= 1.0
 			if s.reason == "" {
 				s.reason = "filler — no synergy role at CMC " + fmt.Sprint(p.CMC)
+				s.detected = fmt.Sprintf("CMC %d, single role: utility", p.CMC)
+				s.whyCut = "Mid-range slot consumed by a card with no synergy tag — likely a generic value piece duplicated by stronger options in the same colors."
+				s.effect = "Opens a CMC " + fmt.Sprint(p.CMC) + " slot for a synergy-tagged replacement."
 			}
 		}
 
@@ -902,6 +912,9 @@ func computeCardQualityTiers(dp *DeckProfile, report *FreyaReport, oracle *oracl
 			if cheaperTutors >= 3 {
 				s.score -= 1.5
 				s.reason = fmt.Sprintf("expensive tutor (CMC %d) with %d cheaper alternatives", p.CMC, cheaperTutors)
+				s.detected = fmt.Sprintf("CMC %d tutor, %d cheaper tutors already in deck", p.CMC, cheaperTutors)
+				s.whyCut = "Strictly slower than the existing tutor suite. The deck already has cheaper, equivalent search options that beat this card on tempo."
+				s.effect = "Removes a redundant tutor slot — replace with interaction, draw, or a missing combo piece you currently can't fetch."
 			}
 		}
 
@@ -929,19 +942,73 @@ func computeCardQualityTiers(dp *DeckProfile, report *FreyaReport, oracle *oracl
 	}
 
 	// Bottom cards with low scores = cuttable
+	suggestedSwaps := suggestCuttableSwaps(dp, report)
 	for i := len(scores) - 1; i >= 0 && i > len(scores)-6; i-- {
-		if scores[i].score <= 0 {
-			reason := scores[i].reason
-			if reason == "" {
-				reason = "low synergy with deck strategy"
+		s := scores[i]
+		if s.score > 0 {
+			continue
+		}
+		reason := s.reason
+		if reason == "" {
+			reason = "low synergy with deck strategy"
+		}
+		detected := s.detected
+		whyCut := s.whyCut
+		effect := s.effect
+		if detected == "" {
+			roleNames := make([]string, len(s.roles))
+			for ri, r := range s.roles {
+				roleNames[ri] = string(r)
 			}
-			dp.CuttableCards = append(dp.CuttableCards, CardQuality{
-				Name:   scores[i].name,
-				Tier:   "cuttable",
-				Reason: reason,
-			})
+			roleStr := "no roles"
+			if len(roleNames) > 0 {
+				roleStr = strings.Join(roleNames, ", ")
+			}
+			detected = fmt.Sprintf("CMC %d, roles: %s, score %.1f", s.cmc, roleStr, s.score)
+		}
+		if whyCut == "" {
+			whyCut = "Card scored at the bottom of the deck on the role/synergy/win-line evaluator. It contributes little to the detected gameplan."
+		}
+		if effect == "" {
+			effect = "Removing it costs the deck almost nothing on offense or defense and clears a slot for a synergy-tagged replacement."
+		}
+		dp.CuttableCards = append(dp.CuttableCards, CardQuality{
+			Name:      s.name,
+			Tier:      "cuttable",
+			Reason:    reason,
+			Detected:  detected,
+			WhyCut:    whyCut,
+			Effect:    effect,
+			Suggested: suggestedSwaps,
+		})
+	}
+}
+
+// suggestCuttableSwaps returns a short, archetype-flavoured list of swap
+// candidates. We keep this generic on purpose — the per-card "perfect upgrade"
+// problem is too card-pool dependent to solve heuristically; the goal is to
+// prompt the deckbuilder with categories worth shopping for.
+func suggestCuttableSwaps(dp *DeckProfile, report *FreyaReport) []string {
+	var out []string
+	if dp == nil {
+		return out
+	}
+	if dp.WinLineCount > 0 && len(dp.PrimaryWinLine) > 0 {
+		out = append(out, "redundant copy of a missing combo piece in "+dp.PrimaryWinLine)
+	}
+	if report != nil && report.Stats != nil {
+		if report.Stats.RampCount < 10 {
+			out = append(out, fmt.Sprintf("ramp piece (deck has %d ramp sources, target ≥10)", report.Stats.RampCount))
+		}
+		if report.Stats.DrawSourceCount < 10 {
+			out = append(out, fmt.Sprintf("draw engine (deck has %d draw sources, target ≥10)", report.Stats.DrawSourceCount))
 		}
 	}
+	if dp.PrimaryArchetype != "" {
+		out = append(out, "tagged synergy piece for "+dp.PrimaryArchetype)
+	}
+	out = append(out, "additional removal/interaction at low CMC")
+	return out
 }
 
 // ---------------------------------------------------------------------------

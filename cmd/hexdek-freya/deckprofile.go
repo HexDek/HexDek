@@ -121,6 +121,11 @@ type CardQuality struct {
 	Name   string
 	Tier   string // "star", "good", "filler", "cuttable"
 	Reason string
+	// Rationale fields (populated for cuttable tier).
+	Detected  string   // what stat/pattern triggered the recommendation
+	WhyCut    string   // why cutting it is recommended
+	Effect    string   // resulting effect on the deck if cut
+	Suggested []string // suggested swap candidates
 }
 
 func BuildDeckProfile(report *FreyaReport, oracle *oracleDB) *DeckProfile {
