@@ -1,1 +1,73 @@
-{}
+{
+  "app": {
+    "brand": "HEXDEK//",
+    "build_label": "SYS.BUILD 25.04.28 · HEXDEK V0.10D",
+    "core_ready": "+ + +  NÚCLEO HEXDEK PRONTO  + + +",
+    "tagline": "CÓDIGO ABERTO / / MOVIDO POR DOAÇÕES / / SEM ANÚNCIOS",
+    "guest": "VISITANTE"
+  },
+  "nav": {
+    "decks": "DECKS",
+    "leaderboard": "CLASSIFICAÇÃO",
+    "meta": "META",
+    "spectate": "ASSISTIR",
+    "my_decks": "MEUS DECKS",
+    "operator": "OPERADOR",
+    "friends": "AMIGOS",
+    "about": "SOBRE",
+    "feedback": "BUG / SUGESTÃO",
+    "donate": "DOAR ♥",
+    "discord": "DISCORD",
+    "login": "ENTRAR ↗",
+    "logout": "SAIR"
+  },
+  "theme": {
+    "dark": "☽ ESCURO",
+    "light": "☀ CLARO"
+  },
+  "common": {
+    "save": "SALVAR",
+    "cancel": "CANCELAR",
+    "delete": "EXCLUIR",
+    "confirm": "CONFIRMAR",
+    "edit": "EDITAR",
+    "export": "EXPORTAR",
+    "share": "COMPARTILHAR",
+    "copied": "COPIADO!",
+    "loading": "CARREGANDO",
+    "saving": "SALVANDO...",
+    "analyzing": "ANALISANDO..."
+  },
+  "deck": {
+    "owner": "DONO",
+    "cards": "CARTAS",
+    "bracket": "NÍVEL",
+    "archetype": "ARQUÉTIPO",
+    "win_rate": "VITÓRIAS",
+    "games": "PARTIDAS",
+    "record": "HISTÓRICO",
+    "no_analysis": "SEM ANÁLISE DA FREYA"
+  },
+  "achievements": {
+    "title": "CONQUISTAS",
+    "stats": {
+      "games": "PARTIDAS",
+      "wins": "VITÓRIAS",
+      "streak": "SEQUÊNCIA",
+      "opponents": "OPONENTES"
+    },
+    "rarity": {
+      "common": "COMUM",
+      "uncommon": "INCOMUM",
+      "rare": "RARO",
+      "mythic": "MÍTICO",
+      "secret": "SECRETO"
+    },
+    "secret_hidden": "Conquista oculta.",
+    "secret_tooltip": "Conquista oculta — continue jogando."
+  },
+  "status": {
+    "no_game": "NENHUMA PARTIDA EM ANDAMENTO",
+    "in_progress": "EM ANDAMENTO"
+  }
+}

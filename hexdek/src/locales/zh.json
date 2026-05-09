@@ -1,1 +1,73 @@
-{}
+{
+  "app": {
+    "brand": "HEXDEK//",
+    "build_label": "SYS.BUILD 25.04.28 · HEXDEK V0.10D",
+    "core_ready": "+ + +  HEXDEK 核心就绪  + + +",
+    "tagline": "开源 / / 由捐款支持 / / 无广告",
+    "guest": "访客"
+  },
+  "nav": {
+    "decks": "套牌",
+    "leaderboard": "排行榜",
+    "meta": "环境",
+    "spectate": "观战",
+    "my_decks": "我的套牌",
+    "operator": "操作员",
+    "friends": "好友",
+    "about": "关于",
+    "feedback": "问题 / 建议",
+    "donate": "捐款 ♥",
+    "discord": "Discord",
+    "login": "登录 ↗",
+    "logout": "登出"
+  },
+  "theme": {
+    "dark": "☽ 深色",
+    "light": "☀ 浅色"
+  },
+  "common": {
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "confirm": "确认",
+    "edit": "编辑",
+    "export": "导出",
+    "share": "分享",
+    "copied": "已复制!",
+    "loading": "加载中",
+    "saving": "保存中...",
+    "analyzing": "分析中..."
+  },
+  "deck": {
+    "owner": "拥有者",
+    "cards": "卡牌",
+    "bracket": "等级",
+    "archetype": "原型",
+    "win_rate": "胜率",
+    "games": "对局",
+    "record": "战绩",
+    "no_analysis": "无 FREYA 分析"
+  },
+  "achievements": {
+    "title": "成就",
+    "stats": {
+      "games": "对局",
+      "wins": "胜利",
+      "streak": "连胜",
+      "opponents": "对手"
+    },
+    "rarity": {
+      "common": "普通",
+      "uncommon": "非普通",
+      "rare": "稀有",
+      "mythic": "秘稀",
+      "secret": "隐藏"
+    },
+    "secret_hidden": "隐藏成就。",
+    "secret_tooltip": "隐藏成就 —— 继续游戏。"
+  },
+  "status": {
+    "no_game": "没有进行中的对局",
+    "in_progress": "进行中"
+  }
+}

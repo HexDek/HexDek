@@ -1,1 +1,73 @@
-{}
+{
+  "app": {
+    "brand": "HEXDEK//",
+    "build_label": "SYS.BUILD 25.04.28 · HEXDEK V0.10D",
+    "core_ready": "+ + +  CŒUR HEXDEK PRÊT  + + +",
+    "tagline": "OPEN SOURCE / / FINANCÉ PAR LES DONS / / SANS PUB",
+    "guest": "INVITÉ"
+  },
+  "nav": {
+    "decks": "DECKS",
+    "leaderboard": "CLASSEMENT",
+    "meta": "META",
+    "spectate": "OBSERVER",
+    "my_decks": "MES DECKS",
+    "operator": "OPÉRATEUR",
+    "friends": "AMIS",
+    "about": "À PROPOS",
+    "feedback": "BUG / SUGGESTION",
+    "donate": "FAIRE UN DON ♥",
+    "discord": "DISCORD",
+    "login": "CONNEXION ↗",
+    "logout": "DÉCONNEXION"
+  },
+  "theme": {
+    "dark": "☽ SOMBRE",
+    "light": "☀ CLAIR"
+  },
+  "common": {
+    "save": "ENREGISTRER",
+    "cancel": "ANNULER",
+    "delete": "SUPPRIMER",
+    "confirm": "CONFIRMER",
+    "edit": "MODIFIER",
+    "export": "EXPORTER",
+    "share": "PARTAGER",
+    "copied": "COPIÉ !",
+    "loading": "CHARGEMENT",
+    "saving": "ENREGISTREMENT...",
+    "analyzing": "ANALYSE..."
+  },
+  "deck": {
+    "owner": "PROPRIÉTAIRE",
+    "cards": "CARTES",
+    "bracket": "NIVEAU",
+    "archetype": "ARCHÉTYPE",
+    "win_rate": "VICTOIRES",
+    "games": "PARTIES",
+    "record": "BILAN",
+    "no_analysis": "AUCUNE ANALYSE FREYA DISPONIBLE"
+  },
+  "achievements": {
+    "title": "SUCCÈS",
+    "stats": {
+      "games": "PARTIES",
+      "wins": "VICTOIRES",
+      "streak": "SÉRIE",
+      "opponents": "ADVERSAIRES"
+    },
+    "rarity": {
+      "common": "COMMUN",
+      "uncommon": "INHABITUEL",
+      "rare": "RARE",
+      "mythic": "MYTHIQUE",
+      "secret": "SECRET"
+    },
+    "secret_hidden": "Succès caché.",
+    "secret_tooltip": "Succès caché — continue à jouer."
+  },
+  "status": {
+    "no_game": "AUCUNE PARTIE EN COURS",
+    "in_progress": "EN COURS"
+  }
+}

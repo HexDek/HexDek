@@ -1,1 +1,73 @@
-{}
+{
+  "app": {
+    "brand": "HEXDEK//",
+    "build_label": "SYS.BUILD 25.04.28 · HEXDEK V0.10D",
+    "core_ready": "+ + +  HEXDEKコア準備完了  + + +",
+    "tagline": "オープンソース / / 寄付で運営 / / 広告なし",
+    "guest": "ゲスト"
+  },
+  "nav": {
+    "decks": "デッキ",
+    "leaderboard": "ランキング",
+    "meta": "メタ",
+    "spectate": "観戦",
+    "my_decks": "マイデッキ",
+    "operator": "オペレーター",
+    "friends": "フレンド",
+    "about": "概要",
+    "feedback": "バグ / 提案",
+    "donate": "寄付 ♥",
+    "discord": "Discord",
+    "login": "サインイン ↗",
+    "logout": "ログアウト"
+  },
+  "theme": {
+    "dark": "☽ ダーク",
+    "light": "☀ ライト"
+  },
+  "common": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "confirm": "確定",
+    "edit": "編集",
+    "export": "エクスポート",
+    "share": "共有",
+    "copied": "コピー完了！",
+    "loading": "読み込み中",
+    "saving": "保存中...",
+    "analyzing": "解析中..."
+  },
+  "deck": {
+    "owner": "所有者",
+    "cards": "カード",
+    "bracket": "ブラケット",
+    "archetype": "アーキタイプ",
+    "win_rate": "勝率",
+    "games": "ゲーム数",
+    "record": "戦績",
+    "no_analysis": "フレイア解析なし"
+  },
+  "achievements": {
+    "title": "実績",
+    "stats": {
+      "games": "ゲーム",
+      "wins": "勝利",
+      "streak": "連勝",
+      "opponents": "対戦相手"
+    },
+    "rarity": {
+      "common": "コモン",
+      "uncommon": "アンコモン",
+      "rare": "レア",
+      "mythic": "神話レア",
+      "secret": "シークレット"
+    },
+    "secret_hidden": "隠し実績。",
+    "secret_tooltip": "隠し実績 — プレイを続けてください。"
+  },
+  "status": {
+    "no_game": "進行中のゲームはありません",
+    "in_progress": "進行中"
+  }
+}

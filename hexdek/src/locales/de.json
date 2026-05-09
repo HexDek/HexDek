@@ -1,1 +1,73 @@
-{}
+{
+  "app": {
+    "brand": "HEXDEK//",
+    "build_label": "SYS.BUILD 25.04.28 · HEXDEK V0.10D",
+    "core_ready": "+ + +  HEXDEK CORE BEREIT  + + +",
+    "tagline": "OPEN SOURCE / / SPENDENFINANZIERT / / KEINE WERBUNG",
+    "guest": "GAST"
+  },
+  "nav": {
+    "decks": "DECKS",
+    "leaderboard": "RANGLISTE",
+    "meta": "META",
+    "spectate": "ZUSCHAUEN",
+    "my_decks": "MEINE DECKS",
+    "operator": "OPERATOR",
+    "friends": "FREUNDE",
+    "about": "ÜBER",
+    "feedback": "FEHLER / VORSCHLAG",
+    "donate": "SPENDEN ♥",
+    "discord": "DISCORD",
+    "login": "ANMELDEN ↗",
+    "logout": "ABMELDEN"
+  },
+  "theme": {
+    "dark": "☽ DUNKEL",
+    "light": "☀ HELL"
+  },
+  "common": {
+    "save": "SPEICHERN",
+    "cancel": "ABBRECHEN",
+    "delete": "LÖSCHEN",
+    "confirm": "BESTÄTIGEN",
+    "edit": "BEARBEITEN",
+    "export": "EXPORTIEREN",
+    "share": "TEILEN",
+    "copied": "KOPIERT!",
+    "loading": "LÄDT",
+    "saving": "SPEICHERT...",
+    "analyzing": "ANALYSIERT..."
+  },
+  "deck": {
+    "owner": "BESITZER",
+    "cards": "KARTEN",
+    "bracket": "STUFE",
+    "archetype": "ARCHETYP",
+    "win_rate": "SIEGRATE",
+    "games": "PARTIEN",
+    "record": "BILANZ",
+    "no_analysis": "KEINE FREYA-ANALYSE VORHANDEN"
+  },
+  "achievements": {
+    "title": "ERFOLGE",
+    "stats": {
+      "games": "PARTIEN",
+      "wins": "SIEGE",
+      "streak": "SERIE",
+      "opponents": "GEGNER"
+    },
+    "rarity": {
+      "common": "GEWÖHNLICH",
+      "uncommon": "UNGEWÖHNLICH",
+      "rare": "SELTEN",
+      "mythic": "MYTHISCH",
+      "secret": "GEHEIM"
+    },
+    "secret_hidden": "Geheimer Erfolg.",
+    "secret_tooltip": "Geheimer Erfolg — spiel weiter."
+  },
+  "status": {
+    "no_game": "KEINE PARTIE LÄUFT",
+    "in_progress": "LÄUFT"
+  }
+}
