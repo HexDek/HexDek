@@ -99,20 +99,6 @@ type cachedCharacteristics struct {
 	Epoch uint64
 }
 
-// clone returns a deep-ish copy of the characteristic slices so an
-// apply-fn mutation in one layer doesn't bleed into the baseline.
-func (c *Characteristics) clone() *Characteristics {
-	out := *c
-	out.Types = append([]string(nil), c.Types...)
-	out.Subtypes = append([]string(nil), c.Subtypes...)
-	out.Supertypes = append([]string(nil), c.Supertypes...)
-	out.Colors = append([]string(nil), c.Colors...)
-	out.ColorIdentity = append([]string(nil), c.ColorIdentity...)
-	out.Abilities = append([]gameast.Ability(nil), c.Abilities...)
-	out.Keywords = append([]string(nil), c.Keywords...)
-	return &out
-}
-
 // -----------------------------------------------------------------------------
 // ContinuousEffect — the registry entry
 // -----------------------------------------------------------------------------

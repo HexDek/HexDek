@@ -27,8 +27,6 @@ func registerVihaanGoldwaker(r *Registry) {
 	r.OnTrigger("Vihaan, Goldwaker", "combat_begin", vihaanCombatBegin)
 }
 
-var vihaanOutlawTypes = []string{"assassin", "mercenary", "pirate", "rogue", "warlock"}
-
 func vihaanCombatBegin(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
 	const slug = "vihaan_goldwaker_animate_treasures"
 	if gs == nil || perm == nil || ctx == nil {

@@ -794,15 +794,3 @@ func isTargetStillLegal(gs *GameState, t Target) bool {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Utility
-// ---------------------------------------------------------------------------
-
-func stringSliceContains(ss []string, s string) bool {
-	for _, v := range ss {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}

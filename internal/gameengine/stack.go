@@ -514,18 +514,6 @@ func ManaCostContainsX(card *Card) bool {
 	return false
 }
 
-// baseCostExcludingX returns the mana cost of a card WITHOUT the X portion.
-// For cards with X in cost, this is the non-X component that must be paid
-// regardless of the chosen X value.
-func baseCostExcludingX(card *Card) int {
-	if card == nil {
-		return 0
-	}
-	// The cost:N convention in Types already excludes X (it represents
-	// the base cost). CMC fallback also excludes X (CMC treats X as 0).
-	return manaCostOf(card)
-}
-
 // manaCostOf extracts the generic mana cost for MVP. CardAST doesn't
 // currently carry a ManaCost field (the parser stores cost on Activated
 // abilities via Cost.Mana). For spell-cost, tests encode the cost as a

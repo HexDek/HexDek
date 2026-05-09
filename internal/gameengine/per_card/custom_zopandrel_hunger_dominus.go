@@ -94,10 +94,7 @@ func zopandrelIndestructibleActivate(gs *gameengine.GameState, src *gameengine.P
 	seat.ManaPool -= 4
 	gameengine.MoveCard(gs, sac1.Card, sac1.Controller, "battlefield", "exile", "zopandrel_activation_cost")
 	gameengine.MoveCard(gs, sac2.Card, sac2.Controller, "battlefield", "exile", "zopandrel_activation_cost")
-	if src.Counters == nil {
-		src.Counters = map[string]int{}
-	}
-	src.Counters["indestructible"] += 2
+	src.AddCounter("indestructible", 2)
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 		"seat":           src.Controller,
 		"exiled":         []string{sac1.Card.DisplayName(), sac2.Card.DisplayName()},

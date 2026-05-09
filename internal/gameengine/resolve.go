@@ -331,7 +331,7 @@ func evalCondition(gs *GameState, src *Permanent, c *gameast.Condition) bool {
 		if src == nil {
 			return false
 		}
-		kickCount, _ := src.Flags["kicked"]
+		kickCount := src.Flags["kicked"]
 		needed := 1
 		if len(c.Args) > 0 {
 			needed, _ = asInt(c.Args[0])
@@ -342,7 +342,7 @@ func evalCondition(gs *GameState, src *Permanent, c *gameast.Condition) bool {
 		if src == nil {
 			return false
 		}
-		desc, _ := gs.Flags["descended_"+strconv.Itoa(src.Controller)]
+		desc := gs.Flags["descended_"+strconv.Itoa(src.Controller)]
 		return desc > 0
 
 	case "opponent_discarded_this_turn":
@@ -364,7 +364,7 @@ func evalCondition(gs *GameState, src *Permanent, c *gameast.Condition) bool {
 		if gs.Flags == nil {
 			return true
 		}
-		combats, _ := gs.Flags["combat_phases_this_turn"]
+		combats := gs.Flags["combat_phases_this_turn"]
 		return combats <= 1
 
 	case "not_your_turn":
@@ -407,7 +407,7 @@ func evalCondition(gs *GameState, src *Permanent, c *gameast.Condition) bool {
 		if src != nil {
 			key = "permanent_left_bf_" + strconv.Itoa(src.Controller)
 		}
-		left, _ := gs.Flags[key]
+		left := gs.Flags[key]
 		return left > 0
 
 	case "mana_spent":
@@ -639,34 +639,36 @@ func distributeDamage(gs *GameState, src *Permanent, targets []Target, total int
 	controller := controllerSeat(src)
 	if controller >= 0 && controller < len(gs.Seats) {
 		seat := gs.Seats[controller]
-		if dd, ok := seat.Hat.(DamageDistributor); seat != nil && seat.Hat != nil && ok {
-			amounts := dd.ChooseDamageDistribution(gs, controller, targets, total)
-			if len(amounts) == n {
-				// Validate: sum must equal total, each >= 1.
-				sum := 0
-				valid := true
-				for _, a := range amounts {
-					if a < 1 {
-						valid = false
-						break
+		if seat != nil && seat.Hat != nil {
+			if dd, ok := seat.Hat.(DamageDistributor); ok {
+				amounts := dd.ChooseDamageDistribution(gs, controller, targets, total)
+				if len(amounts) == n {
+					// Validate: sum must equal total, each >= 1.
+					sum := 0
+					valid := true
+					for _, a := range amounts {
+						if a < 1 {
+							valid = false
+							break
+						}
+						sum += a
 					}
-					sum += a
-				}
-				if valid && sum == total {
-					for i, t := range targets {
-						applyDamage(gs, src, t, amounts[i])
+					if valid && sum == total {
+						for i, t := range targets {
+							applyDamage(gs, src, t, amounts[i])
+						}
+						gs.LogEvent(Event{
+							Kind:   "damage_distributed",
+							Seat:   controller,
+							Source: sourceName(src),
+							Amount: total,
+							Details: map[string]interface{}{
+								"distribution": amounts,
+								"rule":         "601.2d",
+							},
+						})
+						return
 					}
-					gs.LogEvent(Event{
-						Kind:   "damage_distributed",
-						Seat:   controller,
-						Source: sourceName(src),
-						Amount: total,
-						Details: map[string]interface{}{
-							"distribution": amounts,
-							"rule":         "601.2d",
-						},
-					})
-					return
 				}
 			}
 		}

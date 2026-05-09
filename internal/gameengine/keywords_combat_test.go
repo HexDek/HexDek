@@ -67,12 +67,6 @@ func addKWCombatBattlefieldWithKeywords(gs *GameState, seat int, name string, po
 	return p
 }
 
-func addKWCombatBattlefieldColored(gs *GameState, seat int, name string, pow, tough int, colors []string, types ...string) *Permanent {
-	p := addKWCombatBattlefield(gs, seat, name, pow, tough, types...)
-	p.Card.Colors = colors
-	return p
-}
-
 func addKWCombatHandCard(gs *GameState, seat int, name string, cost int, types ...string) *Card {
 	c := &Card{
 		Name:  name,

@@ -112,8 +112,8 @@ func winotaAttackTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, c
 				break
 			}
 		}
-		// Drop from our local snapshot so the rest go to the bottom.
-		top = append(top[:humanIdx], top[humanIdx+1:]...)
+		// One fewer card to put on the bottom; the snapshot itself isn't
+		// read again, so just track the new count.
 		look--
 
 		newPerm := enterBattlefieldWithETB(gs, perm.Controller, human, true)
