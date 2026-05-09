@@ -835,6 +835,27 @@ const (
 	condScaffoldBeginningOfOrdinalStep // beginning of combat/draw/end/main step
 	condScaffoldTribeYouControlETB     // "another <type> enters under your control"
 	condScaffoldManaSpentThreshold     // "if N or more mana was spent to cast"
+
+	// Era 4 Tier 1 — three highest-hit pre-Modern scaffold gaps.
+	condScaffoldAnyPlayerPhase          // "each player's upkeep/end step" — fires for all seats
+	condScaffoldDelayedDrawNextUpkeep   // "draw a card at the beginning of the next turn's upkeep"
+	condScaffoldETBModalChoice          // "as ~ enters, choose a color/creature type/player"
+
+	// Era 4 Tier 2 — four medium-hit pre-Modern trigger clusters that
+	// the existing whitelist misses:
+	//   - BecomesTapped: Insolence/Lifetap/Seizures (16 cards) — prime by
+	//     placing a target permanent on battlefield and tapping it.
+	//   - BecomesTarget: Tar Pit Warrior/Cephalid Illusionist (14 cards) —
+	//     prime by simulating a spell-on-stack targeting srcPerm.
+	//   - UntilEOTDelayed: Spiritualize/"next cleanup" auras (13 cards) —
+	//     prime by advancing to the end / cleanup step.
+	//   - LandPlayOrTap: Pangosaur/Storm Cauldron/Mana Web (11 cards) —
+	//     prime by seeding lands on both seats and logging a land-play
+	//     event. NOT landfall (that is controller-only via existing slug).
+	condScaffoldBecomesTapped   // "becomes tapped" / "is tapped"
+	condScaffoldBecomesTarget   // "becomes the target of a spell or ability"
+	condScaffoldUntilEOTDelayed // "until end of turn" / "next cleanup step"
+	condScaffoldLandPlayOrTap   // "whenever a player plays a land" / "tapped for mana"
 )
 
 type conditionScaffold struct {
@@ -954,10 +975,79 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 	if forEachRe.MatchString(txt) {
 		return parseForEachText(txt)
 	}
+	// Era 4 — ETBModalChoice: "as ~ enters, choose a color/creature
+	// type/player/card name". Distinguished from generic ETBAs (counter
+	// placement) by requiring an explicit "choose" + category noun. Must
+	// come BEFORE the generic ETBAs catch so "enters...choose" doesn't
+	// collapse into the counter-placement path.
+	if strings.Contains(txt, "enters") &&
+		(strings.Contains(txt, "choose") || strings.Contains(txt, "choosing")) &&
+		(strings.Contains(txt, "color") || strings.Contains(txt, "creature type") ||
+			strings.Contains(txt, "player") || strings.Contains(txt, "card name") ||
+			strings.Contains(txt, "basic land type") || strings.Contains(txt, "a type")) {
+		cs.kind = condScaffoldETBModalChoice
+		cs.subtype = parseETBChoiceCategory(txt)
+		return cs
+	}
 	if strings.Contains(txt, "enters") &&
 		(strings.Contains(txt, " with ") || strings.Contains(txt, " as ") ||
 			strings.Contains(txt, "choose") || strings.Contains(txt, "choosing")) {
 		return parseETBAsText(txt)
+	}
+
+	// Era 4 Tier 2 detection — placed HIGH in the chain because all four
+	// patterns are highly specific (no false-positive overlap with later
+	// matchers) and several of them ("becomes tapped", "until end of turn,
+	// whenever", "plays a land") sit inside texts that downstream matchers
+	// would otherwise grab first (e.g. "enchanted creature becomes tapped"
+	// would be eaten by EnchantedCreature; "you played a land this turn,
+	// draw a card" by DrawnCardThisTurn). Order within this block: most
+	// specific first.
+
+	// Era 4 Tier 2 — BecomesTapped: Insolence, Lifetap, Seizures, Relic
+	// Bind. Anchor on present-tense "becomes/is tapped" so we don't
+	// collide with "tap target permanent" effect text.
+	if strings.Contains(txt, "becomes tapped") ||
+		strings.Contains(txt, "becomes the tapped") ||
+		(strings.Contains(txt, " is tapped") && !strings.Contains(txt, "is tapped for mana") &&
+			!strings.Contains(txt, "as long as")) {
+		cs.kind = condScaffoldBecomesTapped
+		return cs
+	}
+
+	// Era 4 Tier 2 — BecomesTarget: Tar Pit Warrior, Cephalid Illusionist,
+	// Cursed Monstrosity, Skulking Fugitive. "becomes the target" is
+	// unique to this trigger shape; BecomesTargetByAlly is a strict subset.
+	if strings.Contains(txt, "becomes the target") ||
+		strings.Contains(txt, "becomes a target of") {
+		cs.kind = condScaffoldBecomesTarget
+		return cs
+	}
+
+	// Era 4 Tier 2 — UntilEOTDelayed: Spiritualize, Bubbling Muck,
+	// "next cleanup step" auras. "until end of turn" alone is too broad
+	// (every P/T pump uses it), so we anchor on "whenever"/"delayed"
+	// pairing or the explicit cleanup phrase.
+	if (strings.Contains(txt, "until end of turn") &&
+		(strings.Contains(txt, "whenever") || strings.Contains(txt, "delayed"))) ||
+		strings.Contains(txt, "next cleanup step") ||
+		strings.Contains(txt, "beginning of the next cleanup") {
+		cs.kind = condScaffoldUntilEOTDelayed
+		return cs
+	}
+
+	// Era 4 Tier 2 — LandPlayOrTap: Pangosaur, Storm Cauldron, Mana Web.
+	// Anchored on present-tense "plays a land" (no "this turn" qualifier
+	// — that's controller-only landfall) or "tapped for mana".
+	if (strings.Contains(txt, "plays a land") &&
+		!strings.Contains(txt, "this turn")) ||
+		strings.Contains(txt, "tapped for mana") {
+		cs.kind = condScaffoldLandPlayOrTap
+		cs.subtype = "any_player"
+		if strings.Contains(txt, "opponent") {
+			cs.subtype = "opponent"
+		}
+		return cs
 	}
 
 	// "an opponent controls more lands than you" / "more lands than you do"
@@ -1118,6 +1208,30 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 		n, _ := strconv.Atoi(m[1])
 		cs.kind = condScaffoldLifeBelowThreshold
 		cs.threshold = n
+		return cs
+	}
+
+	// Era 4 — AnyPlayerPhase: "each player's upkeep/end step" fires for
+	// all seats, not just the active player. Must come BEFORE the generic
+	// upkeep catch-all so "each player's upkeep" doesn't collapse to
+	// condScaffoldUpkeepPhase.
+	if (strings.Contains(txt, "each player") || strings.Contains(txt, "each opponent")) &&
+		(strings.Contains(txt, "upkeep") || strings.Contains(txt, "end step")) {
+		cs.kind = condScaffoldAnyPlayerPhase
+		if strings.Contains(txt, "end step") {
+			cs.subtype = "end_step"
+		} else {
+			cs.subtype = "upkeep"
+		}
+		return cs
+	}
+
+	// Era 4 — DelayedDrawNextUpkeep: "draw a card at the beginning of
+	// the next turn's upkeep" — Mirage/Visions delayed draw pattern.
+	// Must come BEFORE generic upkeep catch-all.
+	if strings.Contains(txt, "next turn") && strings.Contains(txt, "upkeep") &&
+		(strings.Contains(txt, "draw") || strings.Contains(txt, "next turn's upkeep")) {
+		cs.kind = condScaffoldDelayedDrawNextUpkeep
 		return cs
 	}
 
@@ -1569,6 +1683,26 @@ func detectDidPriorAction(cond *gameast.Condition) conditionScaffold {
 // classifyPriorActionVerb returns one of: "attacked", "cast", "sacrificed",
 // "creature_died", "gained_life", "drew_card", "discarded", "played_land",
 // "dealt_damage", or "" when nothing matches.
+// parseETBChoiceCategory returns the category of the modal ETB choice:
+// "color", "creature_type", "player", "card_name", "basic_land_type".
+func parseETBChoiceCategory(txt string) string {
+	switch {
+	case strings.Contains(txt, "creature type"):
+		return "creature_type"
+	case strings.Contains(txt, "basic land type"):
+		return "basic_land_type"
+	case strings.Contains(txt, "card name"):
+		return "card_name"
+	case strings.Contains(txt, "color"):
+		return "color"
+	case strings.Contains(txt, "player"):
+		return "player"
+	case strings.Contains(txt, "a type"):
+		return "creature_type"
+	}
+	return "color"
+}
+
 func classifyPriorActionVerb(txt string) string {
 	switch {
 	case strings.Contains(txt, "attacked"):
@@ -2370,6 +2504,187 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 			})
 		}
 		cs.description = fmt.Sprintf("set srcPerm.Flags[mana_spent]=%d (threshold=%d) + CastRecord", paid, threshold)
+
+	case condScaffoldAnyPlayerPhase:
+		if cs.subtype == "end_step" {
+			gs.Phase, gs.Step = "ending", "end_step"
+		} else {
+			gs.Phase, gs.Step = "beginning", "upkeep"
+		}
+		if len(gs.Seats) > 1 {
+			gs.Active = 1
+		}
+		cs.description = fmt.Sprintf("set Phase=%s Step=%s Active=1 (any-player phase)", gs.Phase, gs.Step)
+
+	case condScaffoldDelayedDrawNextUpkeep:
+		gs.Phase, gs.Step = "beginning", "upkeep"
+		gs.Turn++
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if len(gs.Seats[0].Library) < 5 {
+				fillLibrary(gs, 0, 5)
+			}
+		}
+		cs.description = fmt.Sprintf("set Phase=beginning Step=upkeep Turn=%d + filled library (delayed draw)", gs.Turn)
+
+	case condScaffoldETBModalChoice:
+		target := srcPerm
+		if target == nil {
+			target = placeNamedFriendlyCreature(gs, "ETB Choice Subject")
+		}
+		if target != nil {
+			if target.Flags == nil {
+				target.Flags = map[string]int{}
+			}
+			target.Flags["etb_choice_set"] = 1
+			switch cs.subtype {
+			case "color":
+				target.Flags["chosen_color"] = 1
+			case "creature_type":
+				target.Flags["chosen_creature_type"] = 1
+			case "basic_land_type":
+				target.Flags["chosen_land_type"] = 1
+			case "player":
+				target.Flags["chosen_player"] = 1
+			case "card_name":
+				target.Flags["chosen_card_name"] = 1
+			}
+		}
+		cs.description = fmt.Sprintf("set ETB modal choice=%s on srcPerm", cs.subtype)
+
+	case condScaffoldBecomesTapped:
+		// Place (or reuse) a target permanent untapped, then tap it so the
+		// "becomes tapped" trigger has a state transition to observe. We
+		// also stamp the source's Flags so observers that read attachment
+		// state (e.g. Insolence's "enchanted creature becomes tapped")
+		// see a friendly target. NOT calling TapPermanent here because the
+		// trigger registry uses Permanent.Tapped directly during fire.
+		target := placeNamedFriendlyCreature(gs, "Becomes-Tapped Subject")
+		if target != nil {
+			target.Tapped = false
+			if target.Flags == nil {
+				target.Flags = map[string]int{}
+			}
+			target.Flags["scaffold_becomes_tapped_target"] = 1
+			// Toggle the tap state so the trigger sees an untapped → tapped
+			// transition during the fire pass.
+			target.Tapped = true
+		}
+		if srcPerm != nil && target != nil {
+			srcPerm.AttachedTo = target
+		}
+		gs.LogEvent(gameengine.Event{
+			Kind:   "becomes_tapped",
+			Seat:   0,
+			Source: nonEmpty(func() string {
+				if target != nil && target.Card != nil {
+					return target.Card.Name
+				}
+				return ""
+			}(), "Becomes-Tapped Subject"),
+			Details: map[string]interface{}{
+				"reason": "scaffold_prime",
+			},
+		})
+		cs.description = "tapped subject permanent + logged becomes_tapped event"
+
+	case condScaffoldBecomesTarget:
+		// Simulate targeting srcPerm by pushing a placeholder spell onto
+		// the stack with srcPerm as its sole target. The trigger registry's
+		// "becomes_target" alias fires off the targeted-event observer in
+		// engine resolve flow; here we just need state that a downstream
+		// observer can read. We also flag the permanent so static reads
+		// like "if ~ has been targeted this turn" succeed.
+		target := srcPerm
+		if target == nil {
+			target = placeNamedFriendlyCreature(gs, "Target Subject")
+		}
+		if target != nil {
+			if target.Flags == nil {
+				target.Flags = map[string]int{}
+			}
+			target.Flags["was_targeted_this_turn"] = 1
+		}
+		// Push a synthetic stack item targeting the permanent.
+		if target != nil {
+			gs.Stack = append(gs.Stack, &gameengine.StackItem{
+				Controller: 1, // simulate an opponent's spell targeting us
+				Card: &gameengine.Card{
+					Name:  "Targeting Spell Setup",
+					Owner: 1,
+					Types: []string{"instant"},
+				},
+				Targets: []gameengine.Target{
+					{Kind: gameengine.TargetKindPermanent, Permanent: target, Seat: 0},
+				},
+			})
+		}
+		gs.LogEvent(gameengine.Event{
+			Kind:   "becomes_target",
+			Seat:   0,
+			Target: 1,
+			Details: map[string]interface{}{
+				"reason": "scaffold_prime",
+			},
+		})
+		cs.description = "pushed targeting spell on stack + flagged permanent + logged becomes_target"
+
+	case condScaffoldUntilEOTDelayed:
+		// Advance the clock to the end / cleanup step so a delayed trigger
+		// scheduled "until end of turn" / "at the next cleanup step" has
+		// a phase boundary to fire on. Cleanup is the strict "end-of-turn"
+		// fire point per CR §514; end_step is where most "at the beginning
+		// of the end step" triggers land.
+		if strings.Contains(cs.rawText, "cleanup") {
+			gs.Phase, gs.Step = "ending", "cleanup"
+		} else {
+			gs.Phase, gs.Step = "ending", "end_step"
+		}
+		// Mark the delayed trigger as registered so static reads can see
+		// pending triggers in scope.
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["delayed_eot_trigger_active"] = 1
+		cs.description = fmt.Sprintf("set Phase=ending Step=%s + delayed_eot_trigger_active flag", gs.Step)
+
+	case condScaffoldLandPlayOrTap:
+		// Seed lands on both seats so any-player and opponent variants
+		// have a target, then log a land_played / land_tapped_for_mana
+		// event for the right seats. Default subtype "any_player" primes
+		// both; "opponent" primes only seat 1.
+		seats := []int{0, 1}
+		if cs.subtype == "opponent" {
+			seats = []int{1}
+		}
+		for _, s := range seats {
+			seedSeatLands(gs, s, 3, "Forest", "forest")
+		}
+		// Move to a main phase so the trigger has a legal land-play window.
+		gs.Phase, gs.Step = "precombat_main", "precombat_main"
+		// Log both event flavors so detect-vs-apply handlers downstream
+		// see at least one signal (the audit collapsed three slugs into
+		// this single scaffold).
+		landSeat := seats[len(seats)-1]
+		gs.LogEvent(gameengine.Event{
+			Kind:   "land_played",
+			Seat:   landSeat,
+			Source: "Forest",
+			Details: map[string]interface{}{
+				"reason":      "scaffold_prime",
+				"any_player":  cs.subtype == "any_player",
+				"opp_only":    cs.subtype == "opponent",
+			},
+		})
+		gs.LogEvent(gameengine.Event{
+			Kind:   "land_tapped_for_mana",
+			Seat:   landSeat,
+			Source: "Forest",
+			Details: map[string]interface{}{
+				"reason": "scaffold_prime",
+				"color":  "G",
+			},
+		})
+		cs.description = fmt.Sprintf("seeded lands on %v + logged land_played/tapped_for_mana (subtype=%s)", seats, cs.subtype)
 	}
 	return cs
 }
@@ -2476,6 +2791,20 @@ func traceConditionScaffolding(cond *gameast.Condition, tr *Tracer) {
 		desc = fmt.Sprintf("placed %s creature on seat 0 (tribe-ETB)", cs.subtype)
 	case condScaffoldManaSpentThreshold:
 		desc = fmt.Sprintf("stamped srcPerm mana_spent=%d (+CastRecord)", cs.count+2)
+	case condScaffoldAnyPlayerPhase:
+		desc = fmt.Sprintf("set Phase/Step for any-player %s, Active=1", cs.subtype)
+	case condScaffoldDelayedDrawNextUpkeep:
+		desc = "set Phase=upkeep Turn++ + filled library (delayed draw next upkeep)"
+	case condScaffoldETBModalChoice:
+		desc = fmt.Sprintf("set ETB modal choice=%s on srcPerm", cs.subtype)
+	case condScaffoldBecomesTapped:
+		desc = "tapped subject permanent + logged becomes_tapped event"
+	case condScaffoldBecomesTarget:
+		desc = "pushed targeting spell on stack + flagged permanent + logged becomes_target"
+	case condScaffoldUntilEOTDelayed:
+		desc = "set Phase=ending Step=end_step/cleanup + delayed_eot_trigger_active"
+	case condScaffoldLandPlayOrTap:
+		desc = fmt.Sprintf("seeded lands + logged land_played/tapped_for_mana (subtype=%s)", cs.subtype)
 	}
 	tr.Record("CONDITION_SETUP", "%q → %s", cs.rawText, desc)
 }

@@ -1103,11 +1103,11 @@ func TestDetectConditionScaffold_Tier1Kinds(t *testing.T) {
 			wantSub:  "choose_mode",
 		},
 		{
-			name:     "etb_as text fallback",
+			name:     "etb_as text fallback (modal choice)",
 			kind:     "raw",
 			text:     "as this enters the battlefield, you may choose a color",
-			wantKind: condScaffoldETBAs,
-			wantSub:  "choose_mode",
+			wantKind: condScaffoldETBModalChoice,
+			wantSub:  "color",
 		},
 		{
 			name:     "did_prior_action attacked",
@@ -1829,6 +1829,153 @@ func TestApplyScaffoldManaSpentThreshold_Structured(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Era 4 Tier 1 — Detection + apply tests.
+// ---------------------------------------------------------------------------
+
+func TestDetectConditionScaffold_Era4Tier1(t *testing.T) {
+	cases := []struct {
+		name     string
+		kind     string
+		text     string
+		wantKind conditionScaffoldKind
+	}{
+		// AnyPlayerPhase
+		{"each player upkeep", "raw", "at the beginning of each player's upkeep, this deals 1 damage", condScaffoldAnyPlayerPhase},
+		{"each opponent upkeep", "raw", "at the beginning of each opponent's upkeep, draw a card", condScaffoldAnyPlayerPhase},
+		{"each player end step", "raw", "at the beginning of each player's end step, deal X damage", condScaffoldAnyPlayerPhase},
+		// DelayedDrawNextUpkeep
+		{"draw next turn upkeep", "raw", "draw a card at the beginning of the next turn's upkeep", condScaffoldDelayedDrawNextUpkeep},
+		{"next turn upkeep draw", "raw", "at the beginning of the next turn's upkeep, draw a card", condScaffoldDelayedDrawNextUpkeep},
+		// ETBModalChoice
+		{"ETB choose color", "raw", "as this enchantment enters the battlefield, choose a color", condScaffoldETBModalChoice},
+		{"ETB choose creature type", "raw", "as this creature enters the battlefield, choose a creature type", condScaffoldETBModalChoice},
+		{"ETB choose player", "raw", "as this enchantment enters the battlefield, choose a player", condScaffoldETBModalChoice},
+		// Ensure generic upkeep still works
+		{"generic upkeep", "raw", "during your upkeep, you may pay 2", condScaffoldUpkeepPhase},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cond := &gameast.Condition{Kind: tc.kind, Args: []interface{}{tc.text}}
+			got := detectConditionScaffold(cond)
+			if got.kind != tc.wantKind {
+				t.Errorf("kind: want %v, got %v", tc.wantKind, got.kind)
+			}
+		})
+	}
+}
+
+func TestApplyScaffoldAnyPlayerPhase_Upkeep(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{
+		Kind: "raw",
+		Args: []interface{}{"at the beginning of each player's upkeep, this deals 1 damage"},
+	}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldAnyPlayerPhase {
+		t.Fatalf("expected AnyPlayerPhase, got %v", cs.kind)
+	}
+	if gs.Phase != "beginning" || gs.Step != "upkeep" {
+		t.Errorf("expected beginning/upkeep, got %s/%s", gs.Phase, gs.Step)
+	}
+	if gs.Active != 1 {
+		t.Errorf("expected Active=1 (non-controller seat), got %d", gs.Active)
+	}
+}
+
+func TestApplyScaffoldAnyPlayerPhase_EndStep(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{
+		Kind: "raw",
+		Args: []interface{}{"at the beginning of each player's end step, deal X damage"},
+	}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldAnyPlayerPhase {
+		t.Fatalf("expected AnyPlayerPhase, got %v", cs.kind)
+	}
+	if gs.Phase != "ending" || gs.Step != "end_step" {
+		t.Errorf("expected ending/end_step, got %s/%s", gs.Phase, gs.Step)
+	}
+	if gs.Active != 1 {
+		t.Errorf("expected Active=1, got %d", gs.Active)
+	}
+}
+
+func TestApplyScaffoldDelayedDrawNextUpkeep(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{
+		Kind: "raw",
+		Args: []interface{}{"draw a card at the beginning of the next turn's upkeep"},
+	}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldDelayedDrawNextUpkeep {
+		t.Fatalf("expected DelayedDrawNextUpkeep, got %v", cs.kind)
+	}
+	if gs.Phase != "beginning" || gs.Step != "upkeep" {
+		t.Errorf("expected beginning/upkeep, got %s/%s", gs.Phase, gs.Step)
+	}
+	if gs.Turn != 2 {
+		t.Errorf("expected Turn=2 (incremented), got %d", gs.Turn)
+	}
+	if len(gs.Seats[0].Library) < 5 {
+		t.Errorf("expected library filled to >=5, got %d", len(gs.Seats[0].Library))
+	}
+}
+
+func TestApplyScaffoldETBModalChoice_Color(t *testing.T) {
+	gs := newTestGameState(2)
+	src := &gameengine.Permanent{
+		Card:       &gameengine.Card{Name: "Harsh Judgment", Owner: 0, Types: []string{"enchantment"}},
+		Controller: 0,
+		Owner:      0,
+		Flags:      map[string]int{},
+	}
+	gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, src)
+	cond := &gameast.Condition{
+		Kind: "raw",
+		Args: []interface{}{"as this enchantment enters the battlefield, choose a color"},
+	}
+	cs := applyConditionScaffolding(gs, cond, src)
+	if cs.kind != condScaffoldETBModalChoice {
+		t.Fatalf("expected ETBModalChoice, got %v", cs.kind)
+	}
+	if cs.subtype != "color" {
+		t.Errorf("expected subtype=color, got %q", cs.subtype)
+	}
+	if src.Flags["etb_choice_set"] != 1 {
+		t.Errorf("etb_choice_set flag not set")
+	}
+	if src.Flags["chosen_color"] != 1 {
+		t.Errorf("chosen_color flag not set")
+	}
+}
+
+func TestApplyScaffoldETBModalChoice_CreatureType(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{
+		Kind: "raw",
+		Args: []interface{}{"as this artifact enters the battlefield, choose a creature type"},
+	}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldETBModalChoice {
+		t.Fatalf("expected ETBModalChoice, got %v", cs.kind)
+	}
+	if cs.subtype != "creature_type" {
+		t.Errorf("expected subtype=creature_type, got %q", cs.subtype)
+	}
+	// Should have placed a stand-in creature with the choice flags.
+	found := false
+	for _, p := range gs.Seats[0].Battlefield {
+		if p != nil && p.Flags["etb_choice_set"] == 1 && p.Flags["chosen_creature_type"] == 1 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected a creature with etb_choice_set + chosen_creature_type on battlefield")
+	}
+}
+
 func newTestGameState(seats int) *gameengine.GameState {
 	gs := &gameengine.GameState{
 		Turn:         1,
@@ -1844,4 +1991,236 @@ func newTestGameState(seats int) *gameengine.GameState {
 		})
 	}
 	return gs
+}
+
+// ---------------------------------------------------------------------------
+// Era 4 Tier 2 — Detection + apply tests.
+// ---------------------------------------------------------------------------
+
+func TestDetectConditionScaffold_Era4Tier2(t *testing.T) {
+	cases := []struct {
+		name     string
+		kind     string
+		text     string
+		wantKind conditionScaffoldKind
+		wantSub  string
+	}{
+		// BecomesTapped
+		{"insolence enchanted creature", "raw", "whenever enchanted creature becomes tapped, this aura deals 2 damage", condScaffoldBecomesTapped, ""},
+		{"lifetap forest", "raw", "whenever a forest an opponent controls becomes tapped, you gain 1 life", condScaffoldBecomesTapped, ""},
+		{"relic bind", "raw", "whenever enchanted artifact becomes tapped, choose one", condScaffoldBecomesTapped, ""},
+		// BecomesTarget
+		{"tar pit warrior", "raw", "when this creature becomes the target of a spell or ability, sacrifice it", condScaffoldBecomesTarget, ""},
+		{"cursed monstrosity", "raw", "whenever this creature becomes the target of a spell or ability, sacrifice it unless you pay {2}", condScaffoldBecomesTarget, ""},
+		{"cephalid illusionist", "raw", "whenever this creature becomes the target of a spell or ability, mill three cards", condScaffoldBecomesTarget, ""},
+		// UntilEOTDelayed
+		{"spiritualize", "raw", "until end of turn, whenever target creature deals damage, you gain that much life", condScaffoldUntilEOTDelayed, ""},
+		{"bubbling muck", "raw", "until end of turn, whenever a player taps a swamp for mana, that player adds an additional", condScaffoldUntilEOTDelayed, ""},
+		{"next cleanup", "raw", "at the beginning of the next cleanup step, sacrifice this aura", condScaffoldUntilEOTDelayed, ""},
+		// LandPlayOrTap
+		{"pangosaur", "raw", "whenever a player plays a land, return this creature to its owner's hand", condScaffoldLandPlayOrTap, "any_player"},
+		{"storm cauldron", "raw", "whenever a land is tapped for mana, return it to its owner's hand", condScaffoldLandPlayOrTap, "any_player"},
+		{"mana web opp", "raw", "whenever a land an opponent controls is tapped for mana, tap all lands that player controls", condScaffoldLandPlayOrTap, "opponent"},
+		// Negative cases — must NOT match these new kinds.
+		{"landfall (controller-only)", "raw", "if you played a land this turn", condScaffoldLandfallThisTurn, ""},
+		{"plain pump should not match UntilEOT", "raw", "target creature gets +2/+2 until end of turn", condScaffoldNone, ""},
+		{"tap target effect should not match BecomesTapped", "raw", "tap target creature", condScaffoldNone, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cond := &gameast.Condition{Kind: tc.kind, Args: []interface{}{tc.text}}
+			got := detectConditionScaffold(cond)
+			if got.kind != tc.wantKind {
+				t.Errorf("kind: want %v, got %v", tc.wantKind, got.kind)
+			}
+			if tc.wantSub != "" && got.subtype != tc.wantSub {
+				t.Errorf("subtype: want %q, got %q", tc.wantSub, got.subtype)
+			}
+		})
+	}
+}
+
+func TestApplyScaffoldBecomesTapped(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{
+		Kind: "raw",
+		Args: []interface{}{"whenever enchanted creature becomes tapped, deal 2 damage"},
+	}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldBecomesTapped {
+		t.Fatalf("expected BecomesTapped, got %v", cs.kind)
+	}
+	// Should have placed a tapped target creature on seat 0.
+	foundTapped := false
+	for _, p := range gs.Seats[0].Battlefield {
+		if p != nil && p.Tapped && p.Flags["scaffold_becomes_tapped_target"] == 1 {
+			foundTapped = true
+			break
+		}
+	}
+	if !foundTapped {
+		t.Errorf("expected a tapped subject permanent on seat 0 battlefield")
+	}
+	// Should have logged a becomes_tapped event.
+	foundEvent := false
+	for _, ev := range gs.EventLog {
+		if ev.Kind == "becomes_tapped" {
+			foundEvent = true
+			break
+		}
+	}
+	if !foundEvent {
+		t.Errorf("expected becomes_tapped event in EventLog")
+	}
+}
+
+func TestApplyScaffoldBecomesTarget(t *testing.T) {
+	gs := newTestGameState(2)
+	src := &gameengine.Permanent{
+		Card:       &gameengine.Card{Name: "Tar Pit Warrior", Owner: 0, Types: []string{"creature"}, BasePower: 2, BaseToughness: 2},
+		Controller: 0,
+		Owner:      0,
+		Flags:      map[string]int{},
+	}
+	gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, src)
+	cond := &gameast.Condition{
+		Kind: "raw",
+		Args: []interface{}{"when this creature becomes the target of a spell or ability, sacrifice it"},
+	}
+	cs := applyConditionScaffolding(gs, cond, src)
+	if cs.kind != condScaffoldBecomesTarget {
+		t.Fatalf("expected BecomesTarget, got %v", cs.kind)
+	}
+	if src.Flags["was_targeted_this_turn"] != 1 {
+		t.Errorf("expected was_targeted_this_turn=1 on src, got %d", src.Flags["was_targeted_this_turn"])
+	}
+	if len(gs.Stack) == 0 {
+		t.Errorf("expected at least one stack item targeting src")
+	} else {
+		top := gs.Stack[len(gs.Stack)-1]
+		if len(top.Targets) == 0 || top.Targets[0].Permanent != src {
+			t.Errorf("expected stack top to target src permanent")
+		}
+	}
+	foundEvent := false
+	for _, ev := range gs.EventLog {
+		if ev.Kind == "becomes_target" {
+			foundEvent = true
+			break
+		}
+	}
+	if !foundEvent {
+		t.Errorf("expected becomes_target event in EventLog")
+	}
+}
+
+func TestApplyScaffoldUntilEOTDelayed_EndStep(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{
+		Kind: "raw",
+		Args: []interface{}{"until end of turn, whenever target creature deals damage, you gain that much life"},
+	}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldUntilEOTDelayed {
+		t.Fatalf("expected UntilEOTDelayed, got %v", cs.kind)
+	}
+	if gs.Phase != "ending" || gs.Step != "end_step" {
+		t.Errorf("expected ending/end_step, got %s/%s", gs.Phase, gs.Step)
+	}
+	if gs.Flags["delayed_eot_trigger_active"] != 1 {
+		t.Errorf("expected delayed_eot_trigger_active=1, got %d", gs.Flags["delayed_eot_trigger_active"])
+	}
+}
+
+func TestApplyScaffoldUntilEOTDelayed_Cleanup(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{
+		Kind: "raw",
+		Args: []interface{}{"at the beginning of the next cleanup step, sacrifice this aura"},
+	}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldUntilEOTDelayed {
+		t.Fatalf("expected UntilEOTDelayed, got %v", cs.kind)
+	}
+	if gs.Phase != "ending" || gs.Step != "cleanup" {
+		t.Errorf("expected ending/cleanup, got %s/%s", gs.Phase, gs.Step)
+	}
+}
+
+func TestApplyScaffoldLandPlayOrTap_AnyPlayer(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{
+		Kind: "raw",
+		Args: []interface{}{"whenever a player plays a land, return this creature to its owner's hand"},
+	}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldLandPlayOrTap {
+		t.Fatalf("expected LandPlayOrTap, got %v", cs.kind)
+	}
+	if cs.subtype != "any_player" {
+		t.Errorf("expected subtype=any_player, got %q", cs.subtype)
+	}
+	// Both seats should have lands.
+	for i := 0; i < 2; i++ {
+		landCount := 0
+		for _, p := range gs.Seats[i].Battlefield {
+			if p == nil || p.Card == nil {
+				continue
+			}
+			for _, t := range p.Card.Types {
+				if t == "land" {
+					landCount++
+					break
+				}
+			}
+		}
+		if landCount < 3 {
+			t.Errorf("seat %d: expected >=3 lands, got %d", i, landCount)
+		}
+	}
+	// Should have logged both flavors of land event.
+	gotPlayed := false
+	gotTapped := false
+	for _, ev := range gs.EventLog {
+		if ev.Kind == "land_played" {
+			gotPlayed = true
+		}
+		if ev.Kind == "land_tapped_for_mana" {
+			gotTapped = true
+		}
+	}
+	if !gotPlayed || !gotTapped {
+		t.Errorf("expected both land_played and land_tapped_for_mana events; got played=%v tapped=%v", gotPlayed, gotTapped)
+	}
+}
+
+func TestApplyScaffoldLandPlayOrTap_OpponentOnly(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{
+		Kind: "raw",
+		Args: []interface{}{"whenever a land an opponent controls is tapped for mana, tap all lands"},
+	}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldLandPlayOrTap {
+		t.Fatalf("expected LandPlayOrTap, got %v", cs.kind)
+	}
+	if cs.subtype != "opponent" {
+		t.Errorf("expected subtype=opponent, got %q", cs.subtype)
+	}
+	// Only seat 1 should have new lands seeded.
+	seat1Lands := 0
+	for _, p := range gs.Seats[1].Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		for _, t := range p.Card.Types {
+			if t == "land" {
+				seat1Lands++
+				break
+			}
+		}
+	}
+	if seat1Lands < 3 {
+		t.Errorf("seat 1: expected >=3 lands, got %d", seat1Lands)
+	}
 }
