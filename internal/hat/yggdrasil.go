@@ -992,9 +992,43 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 		}
 		score += threat.EvalScore * leaderWeight
 
-		// 4. Prefer open defenders (fewer untapped blockers).
+		// 4. Prefer open defenders (fewer untapped blockers). Bumped
+		// when the attacker has evasion the defender can't answer
+		// (already detected by isOpenForAttacker — flying without reach,
+		// menace into a single blocker, etc.).
 		if attacker != nil && isOpenForAttacker(gs, attacker, gs.Seats[def]) {
 			score += 1.5
+		}
+
+		// 4b. Damage-swing keyword targeting:
+		//   - Lifelink → finish off low-life opponents (each point heals
+		//     us AND removes them, so the closer they are to 0 the bigger
+		//     the win-condition swing).
+		//   - Infect/Toxic/Poisonous → pile on opponents already deep in
+		//     poison (10 = lethal, no life-gain mitigation).
+		//   - Annihilator → strip the opponent with the most permanents
+		//     (highest expected value per attack trigger).
+		if attacker != nil && def >= 0 && def < len(gs.Seats) && gs.Seats[def] != nil {
+			d := gs.Seats[def]
+			if attacker.HasKeyword("lifelink") && d.Life > 0 && d.Life < 20 {
+				score += 1.5 * (1.0 - float64(d.Life)/20.0)
+			}
+			if attacker.HasKeyword("infect") || attacker.HasKeyword("toxic") || attacker.HasKeyword("poisonous") {
+				if d.PoisonCounters > 0 {
+					score += float64(d.PoisonCounters) * 0.4
+				}
+				// First infect hit anywhere is also worth biasing.
+				score += 0.5
+			}
+			if n := gameengine.GetAnnihilatorN(attacker); n > 0 {
+				perms := 0
+				for _, p := range d.Battlefield {
+					if p != nil {
+						perms++
+					}
+				}
+				score += float64(n) * float64(perms) * 0.05
+			}
 		}
 
 		// 5. Retaliation risk penalty — skip when behind (focus fire).
@@ -3422,8 +3456,15 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 	}
 	seat := gs.Seats[seatIdx]
 
-	// Calculate incoming damage.
+	// Calculate incoming damage and effective life-swing pressure.
+	// Lifelink doubles the swing (we lose N + they gain N). Infect
+	// converts damage into poison counters — treat 1 poison ≈ 2 life
+	// (10 poison kills, 20 life kills). Annihilator forces sacrifices
+	// that aren't life damage but ARE catastrophic; we surface that as
+	// a "must-block" flag rather than mixing it into the life math.
 	incoming := 0
+	myPoison := seat.PoisonCounters
+	addedPoison := 0
 	for _, a := range attackers {
 		if a == nil {
 			continue
@@ -3432,7 +3473,27 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 		if a.HasKeyword("double strike") || a.HasKeyword("double_strike") {
 			mul = 2
 		}
-		incoming += gs.PowerOf(a) * mul
+		dmg := gs.PowerOf(a) * mul
+		if dmg < 0 {
+			dmg = 0
+		}
+		switch {
+		case a.HasKeyword("infect") || a.HasKeyword("toxic") || a.HasKeyword("poisonous"):
+			// Damage from infect goes to poison instead of life.
+			// Convert into a life-equivalent so the survival check still
+			// fires (1 poison ≈ 2 life since 10 kills vs 20 kills).
+			addedPoison += dmg
+			incoming += dmg * 2
+		case a.HasKeyword("lifelink"):
+			// Effective swing is 2x — they gain, we lose.
+			incoming += dmg * 2
+		default:
+			incoming += dmg
+		}
+	}
+	// Treat being one poison hit from death the same as being lethaled.
+	if myPoison+addedPoison >= 10 {
+		incoming = seat.Life + 1
 	}
 
 	relPos := h.relativePosition(gs, seatIdx)
@@ -3509,14 +3570,63 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 
 		willDieIfUnblocked := life-incoming <= 0
 		atkDT := atk.HasKeyword("deathtouch")
+		atkDS := atk.HasKeyword("double strike") || atk.HasKeyword("double_strike")
+		atkPow := gs.PowerOf(atk)
+		atkTou := gs.ToughnessOf(atk)
+		atkInfect := atk.HasKeyword("infect") || atk.HasKeyword("toxic") || atk.HasKeyword("poisonous")
+		// Annihilator and infect attackers are effectively must-block (any
+		// unblocked hit is catastrophic). Force the must-block path even
+		// when raw life damage isn't lethal.
+		mustBlock := false
+		if gameengine.GetAnnihilatorN(atk) > 0 {
+			mustBlock = true
+		}
+		if atkInfect {
+			mustBlock = true
+		}
 
-		// Find survivors (blockers that outlive the attacker).
+		// Find survivors (blockers that outlive the attacker after the
+		// trade resolves). With double strike on the attacker, the
+		// blocker effectively eats `power * 2` damage unless our blocker
+		// has first/double strike and can kill the attacker before the
+		// regular damage step. Likewise, our deathtouch blocker survives
+		// any attacker without first/double strike.
 		var survivors []*gameengine.Permanent
-		if !atkDT {
-			for _, b := range legal {
-				if gs.ToughnessOf(b)-b.MarkedDamage > gs.PowerOf(atk) {
-					survivors = append(survivors, b)
+		for _, b := range legal {
+			if b == nil {
+				continue
+			}
+			bTou := gs.ToughnessOf(b) - b.MarkedDamage
+			bPow := gs.PowerOf(b)
+			bDT := b.HasKeyword("deathtouch")
+			bFS := b.HasKeyword("first strike") || b.HasKeyword("first_strike")
+			bDS := b.HasKeyword("double strike") || b.HasKeyword("double_strike")
+
+			// Does the blocker kill the attacker in the first-strike
+			// step? (Blocker has FS/DS and attacker lacks FS/DS, AND
+			// blocker's damage suffices — deathtouch makes 1 damage do.)
+			killsInFirstStrike := false
+			if (bFS || bDS) && !atkDS {
+				if bPow >= atkTou || (bDT && bPow >= 1) {
+					killsInFirstStrike = true
 				}
+			}
+
+			// How much damage does the blocker take?
+			incomingToBlocker := atkPow
+			if atkDS {
+				incomingToBlocker = atkPow * 2
+			}
+			if killsInFirstStrike {
+				incomingToBlocker = 0
+			}
+
+			// Deathtouch attacker kills any blocker that takes ≥1 damage.
+			if atkDT && incomingToBlocker >= 1 {
+				continue
+			}
+			if bTou > incomingToBlocker {
+				survivors = append(survivors, b)
 			}
 		}
 		sort.SliceStable(survivors, func(i, j int) bool {
@@ -3530,8 +3640,23 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 		var chosen []*gameengine.Permanent
 		if len(survivors) > 0 {
 			chosen = []*gameengine.Permanent{survivors[0]}
-		} else if willDieIfUnblocked {
-			chosen = []*gameengine.Permanent{bestChumpBlocker(gs, legal)}
+		} else if willDieIfUnblocked || mustBlock {
+			// Deathtouch trade-up: prefer a deathtouch blocker that can
+			// take down the attacker (any damage is lethal) over a chump.
+			var dtTrader *gameengine.Permanent
+			if !atkDT {
+				for _, b := range legal {
+					if b != nil && b.HasKeyword("deathtouch") && gs.PowerOf(b) >= 1 {
+						dtTrader = b
+						break
+					}
+				}
+			}
+			if dtTrader != nil {
+				chosen = []*gameengine.Permanent{dtTrader}
+			} else {
+				chosen = []*gameengine.Permanent{bestChumpBlocker(gs, legal)}
+			}
 		}
 
 		// Menace: need a second blocker.
@@ -3560,11 +3685,20 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 		}
 		out[atk] = chosen
 
-		// Update incoming for trample accounting.
+		// Update incoming for trample accounting. Scale the absorbed
+		// damage by the same multiplier we used when adding it (lifelink
+		// = 2x, infect = 2x life-equivalent) so partial blocks stay in
+		// sync with the inflated `incoming` budget.
 		atkDmg := gs.PowerOf(atk)
 		if atk.HasKeyword("double strike") || atk.HasKeyword("double_strike") {
 			atkDmg *= 2
 		}
+		swingMul := 1
+		if atk.HasKeyword("lifelink") ||
+			atk.HasKeyword("infect") || atk.HasKeyword("toxic") || atk.HasKeyword("poisonous") {
+			swingMul = 2
+		}
+		var absorbed int
 		if atk.HasKeyword("trample") {
 			totalT := 0
 			for _, b := range chosen {
@@ -3574,10 +3708,11 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 			if leak < 0 {
 				leak = 0
 			}
-			incoming -= (atkDmg - leak)
+			absorbed = atkDmg - leak
 		} else {
-			incoming -= atkDmg
+			absorbed = atkDmg
 		}
+		incoming -= absorbed * swingMul
 	}
 	return out
 }

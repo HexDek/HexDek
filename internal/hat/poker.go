@@ -1939,20 +1939,49 @@ func isOpenForAttacker(gs *gameengine.GameState, attacker *gameengine.Permanent,
 	return true
 }
 
-// attackerRank returns a deadliest-first numeric score.
+// attackerRank returns a deadliest-first numeric score. The bumps are
+// scaled to interact with raw power (a 3-power vanilla = 3, a 3-power
+// deathtouch = 8, a 3-power lifelink doubles to 6, a 1-power infect tops
+// the table at ~21). Calibration goal: keep the existing dt/ds ordering
+// stable while letting damage-swing keywords pull ahead of pure power.
 func attackerRank(gs *gameengine.GameState, a *gameengine.Permanent) int {
 	if a == nil {
 		return -1 << 30
 	}
-	dt := 0
+	pow := gs.PowerOf(a)
+	if pow < 0 {
+		pow = 0
+	}
+	score := pow
+
+	// Deathtouch: any damage trades up. Flat bump (existing behavior).
 	if a.HasKeyword("deathtouch") {
-		dt = 5
+		score += 5
 	}
-	ds := 0
+	// Double strike: doubled damage hurts more, and trade math gets
+	// uglier for blockers.
 	if a.HasKeyword("double strike") || a.HasKeyword("double_strike") {
-		ds = 3
+		score += 3
 	}
-	return gs.PowerOf(a) + dt + ds
+	// Lifelink: every point of damage is a 2-point life swing relative
+	// to the opponent — block these first when life is in question.
+	if a.HasKeyword("lifelink") {
+		score += pow // effectively doubles the power weight
+	}
+	// Infect / Toxic / Poisonous: poison kills at 10 and is not reduced
+	// by life gain. Treat any infect attacker as top-priority.
+	if a.HasKeyword("infect") || a.HasKeyword("toxic") || a.HasKeyword("poisonous") {
+		score += 15
+	}
+	// Annihilator N: each unblocked hit costs N permanents. Scale by N.
+	if n := gameengine.GetAnnihilatorN(a); n > 0 {
+		score += 4 + 3*n
+	}
+	// Trample: excess damage leaks past the chump — small bump.
+	if a.HasKeyword("trample") {
+		score += 1
+	}
+	return score
 }
 
 // bestChumpBlocker picks the best creature to sacrifice as a chump blocker.
