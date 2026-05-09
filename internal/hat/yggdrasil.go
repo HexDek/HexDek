@@ -351,7 +351,66 @@ func NewYggdrasilHatWithDNA(dna *CurseDNA, sp *StrategyProfile, budget int) *Ygg
 	artifactShift := (dna.ArtifactAffinity - 0.5) * 0.8
 	h.Evaluator.Weights.ArtifactSynergy *= 1.0 + artifactShift
 
+	// LandGreed: high → favor mana development. Scales ManaAdvantage up
+	// and BoardPresence down (vice versa for low). Max swing ±30%.
+	landShift := (dna.LandGreed - 0.5) * 0.6
+	h.Evaluator.Weights.ManaAdvantage *= 1.0 + landShift
+	h.Evaluator.Weights.BoardPresence *= 1.0 - landShift*0.5
+
+	// EquipmentAffinity: high → care more about ArtifactSynergy on the
+	// eval side AND scale equipment-specific scoring inline at equip
+	// option sites (see equipmentAffinityMult). Max ±20% on the
+	// archetype weight, since EquipmentAffinity stacks with
+	// ArtifactAffinity for true Voltron decks.
+	equipShift := (dna.EquipmentAffinity - 0.5) * 0.4
+	h.Evaluator.Weights.ArtifactSynergy *= 1.0 + equipShift
+
+	// GraveyardExploitation: high → prize GraveyardValue (recursion,
+	// reanimator targets) and amplify the discount on cards with
+	// graveyard recursion potential when discarding from hand. Max ±40%
+	// on the eval weight; the inline discount lives in card-pick
+	// helpers via graveyardExploitationMult().
+	gyShift := (dna.GraveyardExploitation - 0.5) * 0.8
+	h.Evaluator.Weights.GraveyardValue *= 1.0 + gyShift
+
+	// CounterplayTiming: high → hold up interaction (boost
+	// StackInteraction); low → slam threats (suppress StackInteraction,
+	// nudge ThreatTrajectory). Max ±40% on StackInteraction, ±20% on
+	// ThreatTrajectory.
+	cpShift := (dna.CounterplayTiming - 0.5) * 0.8
+	h.Evaluator.Weights.StackInteraction *= 1.0 + cpShift
+	h.Evaluator.Weights.ThreatTrajectory *= 1.0 - cpShift*0.5
+
+	// TokenPressure: high → go-wide bias. Boost BoardPresence and
+	// ActivationTempo (token producers tend to be activated abilities);
+	// low → go-tall, boost CommanderProgress. Max ±30%.
+	tokShift := (dna.TokenPressure - 0.5) * 0.6
+	h.Evaluator.Weights.BoardPresence *= 1.0 + tokShift
+	h.Evaluator.Weights.ActivationTempo *= 1.0 + tokShift*0.5
+	h.Evaluator.Weights.CommanderProgress *= 1.0 - tokShift*0.3
+
 	return h
+}
+
+// equipmentAffinityMult returns a multiplier applied at equipment-scoring
+// sites to scale equip-target value by the hat's EquipmentAffinity DNA.
+// Returns 1.0 when DNA is absent, [0.6, 1.4] otherwise.
+func (h *YggdrasilHat) equipmentAffinityMult() float64 {
+	if h == nil || h.DNA == nil {
+		return 1.0
+	}
+	return 1.0 + (h.DNA.EquipmentAffinity-0.5)*0.8
+}
+
+// graveyardExploitationMult returns a multiplier for inline graveyard-
+// recursion discounts when picking discards / surveils / mill targets.
+// High DNA → bigger discount on recursion-bearing cards (route them to
+// the yard); low DNA → smaller discount. Returns 1.0 without DNA.
+func (h *YggdrasilHat) graveyardExploitationMult() float64 {
+	if h == nil || h.DNA == nil {
+		return 1.0
+	}
+	return 1.0 + (h.DNA.GraveyardExploitation-0.5)*0.8
 }
 
 // NewYggdrasilHatWithPool creates a hat using DNA + learned dimension
@@ -2991,15 +3050,16 @@ func (h *YggdrasilHat) activationHeuristic(gs *gameengine.GameState, seatIdx int
 	// want to activate every turn.
 	ot2 := gameengine.OracleTextLower(c)
 	if strings.Contains(ot2, "equip") && opt.Permanent != nil && opt.Permanent.IsEquipment() {
+		equipMult := h.equipmentAffinityMult()
 		equipScore := scoreEquipTarget(gs, seatIdx, opt.Permanent, nil)
 		if equipScore > 0 {
-			base += float64(equipScore) * 0.015
+			base += float64(equipScore) * 0.015 * equipMult
 		}
 		hasConnect := strings.Contains(ot2, "deals combat damage")
 		hasDeath := strings.Contains(ot2, "equipped creature dies") ||
 			strings.Contains(ot2, "whenever equipped creature dies")
 		if hasConnect || hasDeath {
-			base += 0.20
+			base += 0.20 * equipMult
 		}
 		equipCost := equipCostFromText(ot2)
 		// Skullclamp-style recurrence engine: cheap to equip + death
@@ -4413,7 +4473,7 @@ func (h *YggdrasilHat) ChooseDiscard(gs *gameengine.GameState, seatIdx int, hand
 		// or (b) instants/sorceries when the seat has an active graveyard
 		// cast grant in play (Underworld Breach, Past in Flames residual).
 		if h.hasGraveyardRecursionPotential(gs, seatIdx, c) {
-			v -= 0.4
+			v -= 0.4 * h.graveyardExploitationMult()
 		}
 		// Reanimator archetype OR any deck with a graveyard-recursion
 		// enabler on the battlefield (Muldrotha, Sun Titan, Meren, etc.)

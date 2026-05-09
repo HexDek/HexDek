@@ -24,7 +24,20 @@ type CurseDNA struct {
 	PoliticalMemory float64 `json:"political_memory"`   // grudge/gratitude decay rate [0,1]
 	DrainAffinity   float64 `json:"drain_affinity"`     // aristocrats drain engine weighting [0,1]
 	ArtifactAffinity float64 `json:"artifact_affinity"` // artifact synergy weighting [0,1]
+
+	// New axes (handler-coverage-3 / curse-expansion).
+	LandGreed             float64 `json:"land_greed"`              // ramp/lands vs board dev [0,1]
+	EquipmentAffinity     float64 `json:"equipment_affinity"`      // Voltron equip routing [0,1]
+	GraveyardExploitation float64 `json:"graveyard_exploitation"`  // recursion/reanimator bias [0,1]
+	CounterplayTiming     float64 `json:"counterplay_timing"`      // hold interaction vs slam threats [0,1]
+	TokenPressure         float64 `json:"token_pressure"`          // go-wide vs go-tall [0,1]
 }
+
+// NumCurseAxes is the number of evolvable [0,1] personality axes on a
+// CurseDNA. The axisIndexes() method below returns them in the same
+// order as CurseTraitKeys, and CurseAxisStats arrays are sized to
+// NumCurseAxes so per-axis EMA correlations can be computed per-deck.
+const NumCurseAxes = 12
 
 const (
 	CursePopSize    = 8
@@ -34,6 +47,7 @@ const (
 	curseImmigrationInterval = 10 // every N generations, inject fresh random DNA
 	dimStatsAlpha    = 0.04 // EMA decay for dimension stats (~25-game half-life)
 	dimStatsMinN     = 20   // minimum games before applying corrections
+	curseCrossoverRate = 0.5 // per-gene probability of taking from parent B during crossover
 )
 
 // DimensionStats tracks EMA correlations between evaluator dimension scores
@@ -107,6 +121,99 @@ func (ds *DimensionStats) WeightCorrections() [NumDimensions]float64 {
 	return corr
 }
 
+// CurseAxisStats is the per-axis analogue of DimensionStats: it tracks
+// the EMA correlation between each personality axis value (as it was
+// played in a game) and the resulting placement score, so the genetic
+// algorithm can adapt mutation pressure per-axis. Axes with strong
+// positive correlation get reduced mutation SD (lock in good values);
+// axes with strong negative correlation get boosted SD (encourage
+// escape from a local minimum).
+type CurseAxisStats struct {
+	MeanAxis    [NumCurseAxes]float64 `json:"mean_axis"`
+	MeanSqAxis  [NumCurseAxes]float64 `json:"mean_sq_axis"`
+	CrossAxis   [NumCurseAxes]float64 `json:"cross_axis"`
+	MeanScore   float64               `json:"mean_score"`
+	MeanSqScore float64               `json:"mean_sq_score"`
+	N           int                   `json:"n"`
+}
+
+// RecordGame updates the running EMA with one (axis-vector, outcome) pair.
+func (as *CurseAxisStats) RecordGame(axes [NumCurseAxes]float64, outcome float64) {
+	as.N++
+	if as.N <= 1 {
+		for i := 0; i < NumCurseAxes; i++ {
+			as.MeanAxis[i] = axes[i]
+			as.MeanSqAxis[i] = axes[i] * axes[i]
+			as.CrossAxis[i] = axes[i] * outcome
+		}
+		as.MeanScore = outcome
+		as.MeanSqScore = outcome * outcome
+		return
+	}
+	alpha := dimStatsAlpha
+	for i := 0; i < NumCurseAxes; i++ {
+		as.MeanAxis[i] += alpha * (axes[i] - as.MeanAxis[i])
+		as.MeanSqAxis[i] += alpha * (axes[i]*axes[i] - as.MeanSqAxis[i])
+		as.CrossAxis[i] += alpha * (axes[i]*outcome - as.CrossAxis[i])
+	}
+	as.MeanScore += alpha * (outcome - as.MeanScore)
+	as.MeanSqScore += alpha * (outcome*outcome - as.MeanSqScore)
+}
+
+// Correlation returns Pearson's r for axis i versus outcome.
+func (as *CurseAxisStats) Correlation(i int) float64 {
+	if as.N < dimStatsMinN || i < 0 || i >= NumCurseAxes {
+		return 0
+	}
+	varA := as.MeanSqAxis[i] - as.MeanAxis[i]*as.MeanAxis[i]
+	varO := as.MeanSqScore - as.MeanScore*as.MeanScore
+	if varA < 1e-10 || varO < 1e-10 {
+		return 0
+	}
+	cov := as.CrossAxis[i] - as.MeanAxis[i]*as.MeanScore
+	r := cov / math.Sqrt(varA*varO)
+	if r < -1 {
+		r = -1
+	}
+	if r > 1 {
+		r = 1
+	}
+	return r
+}
+
+// MutationScale returns the per-axis mutation SD multiplier. Strong
+// positive correlation shrinks SD toward 0.5× (lock in winning genes);
+// strong negative correlation widens SD toward 1.5× (escape losing
+// region). Returns 1.0 below the minimum sample threshold.
+func (as *CurseAxisStats) MutationScale(i int) float64 {
+	if as.N < dimStatsMinN {
+		return 1.0
+	}
+	r := as.Correlation(i)
+	// r in [-1, 1]; map to scale in [0.5, 1.5] with negative correlation
+	// widening and positive correlation narrowing.
+	return 1.0 - r*0.5
+}
+
+// axes packs a CurseDNA's evolvable personality axes into a fixed-size
+// vector in the same order as CurseTraitKeys, suitable for CurseAxisStats.
+func (d *CurseDNA) axes() [NumCurseAxes]float64 {
+	return [NumCurseAxes]float64{
+		d.Aggression,
+		d.ComboPat,
+		d.ThreatParanoia,
+		d.ResourceGreed,
+		d.PoliticalMemory,
+		d.DrainAffinity,
+		d.ArtifactAffinity,
+		d.LandGreed,
+		d.EquipmentAffinity,
+		d.GraveyardExploitation,
+		d.CounterplayTiming,
+		d.TokenPressure,
+	}
+}
+
 // CursePool maintains a population of DNA variants for a single deck.
 type CursePool struct {
 	DeckKey    string                      `json:"deck_key"`
@@ -116,6 +223,7 @@ type CursePool struct {
 	Bracket    int                         `json:"bracket"`    // power bracket (1-5) for fitness normalization
 	GenCount   int                         `json:"gen_count"`  // total generations evolved
 	DimStats   DimensionStats              `json:"dim_stats"`  // T3.2 outcome-correlated dimension learning
+	AxisStats  CurseAxisStats              `json:"axis_stats"` // per-axis outcome correlation for adaptive mutation
 
 	// Constraints is the deck owner's curse override map: trait key →
 	// target value in [0,1]. When set, the genetic algorithm clamps the
@@ -128,7 +236,7 @@ type CursePool struct {
 }
 
 // CurseTraitKeys is the set of trait names accepted as constraint keys.
-// Order matches the radar-axis layout in the frontend.
+// Order matches CurseDNA.axes() and the radar-axis layout in the frontend.
 var CurseTraitKeys = []string{
 	"aggression",
 	"combo_patience",
@@ -137,6 +245,11 @@ var CurseTraitKeys = []string{
 	"political_memory",
 	"drain_affinity",
 	"artifact_affinity",
+	"land_greed",
+	"equipment_affinity",
+	"graveyard_exploitation",
+	"counterplay_timing",
+	"token_pressure",
 }
 
 // curseConstraintBand is the half-width of the band around a constraint
@@ -222,6 +335,12 @@ func (pool *CursePool) RecordResult(idx int, score float64) {
 		dna.Fitness = dna.Fitness*(1-alpha) + normalized*alpha
 	}
 
+	// Per-axis outcome-correlation EMA. Records the axis vector as it
+	// was played (i.e. the DNA's current values) against the raw [0,1]
+	// placement score, so axis correlations stay comparable across
+	// brackets even when fitness is bracket-normalized.
+	pool.AxisStats.RecordGame(dna.axes(), score)
+
 	if pool.GameCount >= CurseEvolveAt {
 		pool.evolve()
 	}
@@ -246,11 +365,41 @@ func expectedBracketScore(bracket int) float64 {
 	}
 }
 
+// crossover performs uniform single-axis crossover from parents a and b
+// into a fresh child. Each gene independently is taken from b with
+// probability curseCrossoverRate, otherwise from a. Non-evolvable
+// metadata (DeckKey, Generation tracking) comes from a.
+func (pool *CursePool) crossover(a, b *CurseDNA) CurseDNA {
+	pick := func(va, vb float64) float64 {
+		if pool.rng.Float64() < curseCrossoverRate {
+			return vb
+		}
+		return va
+	}
+	return CurseDNA{
+		DeckKey:               a.DeckKey,
+		Generation:            a.Generation,
+		Aggression:            pick(a.Aggression, b.Aggression),
+		ComboPat:              pick(a.ComboPat, b.ComboPat),
+		ThreatParanoia:        pick(a.ThreatParanoia, b.ThreatParanoia),
+		ResourceGreed:         pick(a.ResourceGreed, b.ResourceGreed),
+		PoliticalMemory:       pick(a.PoliticalMemory, b.PoliticalMemory),
+		DrainAffinity:         pick(a.DrainAffinity, b.DrainAffinity),
+		ArtifactAffinity:      pick(a.ArtifactAffinity, b.ArtifactAffinity),
+		LandGreed:             pick(a.LandGreed, b.LandGreed),
+		EquipmentAffinity:     pick(a.EquipmentAffinity, b.EquipmentAffinity),
+		GraveyardExploitation: pick(a.GraveyardExploitation, b.GraveyardExploitation),
+		CounterplayTiming:     pick(a.CounterplayTiming, b.CounterplayTiming),
+		TokenPressure:         pick(a.TokenPressure, b.TokenPressure),
+	}
+}
+
 // evolve runs one generation of genetic selection on the population.
-// Sort by fitness, kill bottom CurseKillCount, clone top CurseKillCount
-// into those slots, mutate clones, clamp, reset game counter.
-// Every curseImmigrationInterval generations, inject fresh random DNA
-// to prevent convergent collapse.
+// Sort by fitness, kill bottom CurseKillCount, fill those slots with
+// children produced by uniform crossover of two top performers, mutate
+// the children (per-axis SD scaled by AxisStats correlation), clamp,
+// reset game counter. Every curseImmigrationInterval generations,
+// inject fresh random DNA to prevent convergent collapse.
 func (pool *CursePool) evolve() {
 	pool.GenCount++
 
@@ -263,28 +412,47 @@ func (pool *CursePool) evolve() {
 		return pool.Population[indices[a]].Fitness < pool.Population[indices[b]].Fitness
 	})
 
-	// Kill bottom, clone top into those slots.
+	// Per-axis mutation SD multipliers (driven by AxisStats correlations).
+	// Strong positive corr → smaller SD, strong negative → larger SD.
+	scales := [NumCurseAxes]float64{}
+	for i := 0; i < NumCurseAxes; i++ {
+		scales[i] = pool.AxisStats.MutationScale(i)
+	}
+	mutate := func(v float64, axis int) float64 {
+		return clampUnit(v + pool.rng.NormFloat64()*CurseMutationSD*scales[axis])
+	}
+
+	// Kill bottom, fill with crossover children of two top performers.
 	for k := 0; k < CurseKillCount; k++ {
 		loserIdx := indices[k]
-		donorIdx := indices[CursePopSize-1-k]
+		parentAIdx := indices[CursePopSize-1-k]
+		parentBIdx := indices[CursePopSize-1-((k+1)%CurseKillCount)]
+		if parentBIdx == parentAIdx {
+			parentBIdx = indices[CursePopSize-1]
+		}
 
-		clone := pool.Population[donorIdx]
-		clone.GamesPlayed = 0
-		clone.Generation++
+		child := pool.crossover(&pool.Population[parentAIdx], &pool.Population[parentBIdx])
+		child.GamesPlayed = 0
+		child.Fitness = 0.25
+		child.Generation++
 
-		// Mutate each evolvable parameter.
-		clone.Aggression = clampUnit(clone.Aggression + pool.rng.NormFloat64()*CurseMutationSD)
-		clone.ComboPat = clampUnit(clone.ComboPat + pool.rng.NormFloat64()*CurseMutationSD)
-		clone.ThreatParanoia = clampUnit(clone.ThreatParanoia + pool.rng.NormFloat64()*CurseMutationSD)
-		clone.ResourceGreed = clampUnit(clone.ResourceGreed + pool.rng.NormFloat64()*CurseMutationSD)
-		clone.PoliticalMemory = clampUnit(clone.PoliticalMemory + pool.rng.NormFloat64()*CurseMutationSD)
-		clone.DrainAffinity = clampUnit(clone.DrainAffinity + pool.rng.NormFloat64()*CurseMutationSD)
-		clone.ArtifactAffinity = clampUnit(clone.ArtifactAffinity + pool.rng.NormFloat64()*CurseMutationSD)
+		child.Aggression = mutate(child.Aggression, 0)
+		child.ComboPat = mutate(child.ComboPat, 1)
+		child.ThreatParanoia = mutate(child.ThreatParanoia, 2)
+		child.ResourceGreed = mutate(child.ResourceGreed, 3)
+		child.PoliticalMemory = mutate(child.PoliticalMemory, 4)
+		child.DrainAffinity = mutate(child.DrainAffinity, 5)
+		child.ArtifactAffinity = mutate(child.ArtifactAffinity, 6)
+		child.LandGreed = mutate(child.LandGreed, 7)
+		child.EquipmentAffinity = mutate(child.EquipmentAffinity, 8)
+		child.GraveyardExploitation = mutate(child.GraveyardExploitation, 9)
+		child.CounterplayTiming = mutate(child.CounterplayTiming, 10)
+		child.TokenPressure = mutate(child.TokenPressure, 11)
 
 		// Snap any owner-locked trait back into its constraint band.
-		pool.applyConstraintsToDNA(&clone)
+		pool.applyConstraintsToDNA(&child)
 
-		pool.Population[loserIdx] = clone
+		pool.Population[loserIdx] = child
 	}
 
 	// Immigration: every N generations, replace one mid-tier individual
@@ -292,15 +460,20 @@ func (pool *CursePool) evolve() {
 	if pool.GenCount%curseImmigrationInterval == 0 {
 		immigrantIdx := indices[CurseKillCount] // lowest non-killed slot
 		immigrant := CurseDNA{
-			DeckKey:          pool.DeckKey,
-			Aggression:       pool.rng.Float64(),
-			ComboPat:         pool.rng.Float64(),
-			ThreatParanoia:   pool.rng.Float64(),
-			ResourceGreed:    pool.rng.Float64(),
-			PoliticalMemory:  pool.rng.Float64(),
-			DrainAffinity:    pool.rng.Float64(),
-			ArtifactAffinity: pool.rng.Float64(),
-			Fitness:          0.25,
+			DeckKey:               pool.DeckKey,
+			Aggression:            pool.rng.Float64(),
+			ComboPat:              pool.rng.Float64(),
+			ThreatParanoia:        pool.rng.Float64(),
+			ResourceGreed:         pool.rng.Float64(),
+			PoliticalMemory:       pool.rng.Float64(),
+			DrainAffinity:         pool.rng.Float64(),
+			ArtifactAffinity:      pool.rng.Float64(),
+			LandGreed:             pool.rng.Float64(),
+			EquipmentAffinity:     pool.rng.Float64(),
+			GraveyardExploitation: pool.rng.Float64(),
+			CounterplayTiming:     pool.rng.Float64(),
+			TokenPressure:         pool.rng.Float64(),
+			Fitness:               0.25,
 		}
 		pool.applyConstraintsToDNA(&immigrant)
 		pool.Population[immigrantIdx] = immigrant
@@ -340,15 +513,20 @@ func InitPoolWithConstraints(deckKey string, rng *rand.Rand, constraints map[str
 
 	for i := range pool.Population {
 		pool.Population[i] = CurseDNA{
-			DeckKey:          deckKey,
-			Aggression:       seed("aggression"),
-			ComboPat:         seed("combo_patience"),
-			ThreatParanoia:   seed("threat_paranoia"),
-			ResourceGreed:    seed("resource_greed"),
-			PoliticalMemory:  seed("political_memory"),
-			DrainAffinity:    seed("drain_affinity"),
-			ArtifactAffinity: seed("artifact_affinity"),
-			Fitness:          0.25, // baseline expected winrate in 4-player
+			DeckKey:               deckKey,
+			Aggression:            seed("aggression"),
+			ComboPat:              seed("combo_patience"),
+			ThreatParanoia:        seed("threat_paranoia"),
+			ResourceGreed:         seed("resource_greed"),
+			PoliticalMemory:       seed("political_memory"),
+			DrainAffinity:         seed("drain_affinity"),
+			ArtifactAffinity:      seed("artifact_affinity"),
+			LandGreed:             seed("land_greed"),
+			EquipmentAffinity:     seed("equipment_affinity"),
+			GraveyardExploitation: seed("graveyard_exploitation"),
+			CounterplayTiming:     seed("counterplay_timing"),
+			TokenPressure:         seed("token_pressure"),
+			Fitness:               0.25, // baseline expected winrate in 4-player
 		}
 		pool.applyConstraintsToDNA(&pool.Population[i])
 	}
@@ -416,6 +594,21 @@ func (pool *CursePool) applyConstraintsToDNA(dna *CurseDNA) {
 	}
 	if t, ok := pool.Constraints["artifact_affinity"]; ok {
 		dna.ArtifactAffinity = clampTo(dna.ArtifactAffinity, t)
+	}
+	if t, ok := pool.Constraints["land_greed"]; ok {
+		dna.LandGreed = clampTo(dna.LandGreed, t)
+	}
+	if t, ok := pool.Constraints["equipment_affinity"]; ok {
+		dna.EquipmentAffinity = clampTo(dna.EquipmentAffinity, t)
+	}
+	if t, ok := pool.Constraints["graveyard_exploitation"]; ok {
+		dna.GraveyardExploitation = clampTo(dna.GraveyardExploitation, t)
+	}
+	if t, ok := pool.Constraints["counterplay_timing"]; ok {
+		dna.CounterplayTiming = clampTo(dna.CounterplayTiming, t)
+	}
+	if t, ok := pool.Constraints["token_pressure"]; ok {
+		dna.TokenPressure = clampTo(dna.TokenPressure, t)
 	}
 }
 
