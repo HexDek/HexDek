@@ -1604,6 +1604,23 @@ func registerDefaults() {
 
 	// Auto-generated handlers (cmd/gen-handlers).
 	registerGeneratedHandlers(Global())
+
+	// Era 4 unification — custom handlers that upgrade auto-generated
+	// gen_*.go stubs for STX, MH2, AFR, MID, VOW, and C19-C21 commanders.
+	// Each custom handler runs after the gen stub via the registry's
+	// append-on-register list; the gen stub still emits its partial
+	// breadcrumb so audits can trace coverage history.
+	registerTiamatCustom(Global())
+	registerVeyranVoiceOfDualityCustom(Global())
+	registerGalazethPrismariCustom(Global())
+	registerLierDiscipleOfTheDrownedCustom(Global())
+	registerToxrillTheCorrosiveCustom(Global())
+	registerAcererakTheArchlichCustom(Global())
+	registerAsmoranomardicadaistinaculdacarCustom(Global())
+	registerJadziOracleOfArcaviosCustom(Global())
+	registerKalamaxTheStormsireCustom(Global())
+	registerSilverquillTheDisputantCustom(Global())
+	registerQuandrixTheProofCustom(Global())
 }
 
 func init() {

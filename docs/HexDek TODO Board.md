@@ -108,6 +108,26 @@ kanban-plugin: board
 
 
 
+## Tracking — Effect-Correct, Cost-Unenforced
+
+*Cards where the per-card handler covers the effect but doesn't enforce the activation cost. Batch these for custom handler work.*
+
+### Era 4 unification (STX, MH2, AFR, MID, VOW, C19-C21) — surfaced 2026-05-09
+
+- [ ] **Asmoranomardicadaistinaculdacar** (MH2) — alt-cast cost `{B/R}` "as long as you've discarded a card this turn" not enforced; the cast pipeline doesn't expose the per-card alt-cost gate. #engine #per_card #cost_unenforced #era4
+- [ ] **Acererak the Archlich** (AFC21) — combat-damage reanimation has a "may pay {2}{B}" cost that isn't gated; greedy AI always pays. Dungeon completion is approximated by the simplified linear dungeon track, not the printed Tomb of Annihilation graph. #engine #per_card #cost_unenforced #era4
+- [ ] **Galazeth Prismari** (STX) — `{T}: Add one mana of any color. Spend this mana only to cast an instant or sorcery spell.` — the spend-restriction isn't enforced in the mana system; the tap-add path is generic. #engine #per_card #cost_unenforced #era4
+- [ ] **Lier, Disciple of the Drowned** (MID) — graveyard-cast permission for instants/sorceries and the "would be put into graveyard → exile instead" replacement aren't on the per-card hook path. Uncounterable mark is enforced via `CostMeta` when the stack item is in trigger ctx. #engine #per_card #cost_unenforced #era4
+- [ ] **Veyran, Voice of Duality** (STX/C21) — magecraft +1/+1 fires correctly, but the static "trigger an additional time" rider needs the trigger-multiplier framework (Strionic Resonator-class). #engine #per_card #cost_unenforced #era4
+- [ ] **Jadzi, Oracle of Arcavios** (STX) — magecraft top-of-library reveal + cast-for-`{1}` alt cost not modeled; nonland cards route to hand as a stand-in. The DFC back-face Journey to the Oracle isn't wired. #engine #per_card #cost_unenforced #era4
+- [ ] **Kalamax, the Stormsire** (C20) — "double strike as long as it's tapped" is a conditional static handled by the AST keyword pipeline only; the per-card hook only enforces the first-instant-each-turn copy. #engine #per_card #cost_unenforced #era4
+- [ ] **Quandrix, the Proof** (STX/C21) — from-command-zone detection is a best-effort flag check; if the cast pipeline doesn't stamp `from_command_zone` on the new permanent, the X-counter distribute clause silently skips. #engine #per_card #cost_unenforced #era4
+- [ ] **Silverquill, the Disputant** (STX/C21) — same from-command-zone detection gap; the optional "attach Aura/Equipment to Silverquill" rider is not modeled (Aura/Equipment attach isn't on the per-card hook path). #engine #per_card #cost_unenforced #era4
+- [ ] **Toxrill, the Corrosive** (VOW) — `{U}{B}, Remove a slime counter from a creature: Draw a card.` — mana cost paid through the engine's mana system, but the sorcery-speed gate is approximated by phase-string match. Slime counter removal is enforced. #engine #per_card #cost_unenforced #era4
+- [ ] **Tiamat** (AFR) — ETB tutor is gated on `was_cast` (not "if you cast it" with full cast-chain awareness); cards entering via reanimation paths that flip `was_cast` would fire the tutor. #engine #per_card #cost_unenforced #era4
+
+
+
 ## Low Priority
 
 - [x] **i18n — catalog translated** — 52 UI keys translated into 7 locales (es, de, fr, pt, ja, ko, zh). MTG terminology localized per community convention. Remaining: migrate ~450 hardcoded JSX strings to useT() + Scryfall localized card names. PR #11 merged 2026-05-09. #platform
