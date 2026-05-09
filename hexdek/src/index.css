@@ -2374,3 +2374,117 @@ body {
 @media (max-width: 480px) {
   .gloss-panel { left: auto; right: 0; max-width: 86vw; }
 }
+/* ── RECONNECT BANNER ── */
+/* Pinned above the appbar whenever the global LiveSocket isn't 'live'.
+   Brutalist ruled bar: ledge of 2px borders, monospace stat row, an
+   accent-coloured progress fill that empties from 0 → 100 over the
+   current backoff window. The 'failed' state strips the progress bar
+   and switches the LED to bad-red so the user reads "you must click". */
+.reconnect-banner {
+  background: color-mix(in srgb, var(--warn) 10%, var(--bg));
+  border-bottom: 2px solid var(--warn);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.reconnect-banner--failed {
+  background: color-mix(in srgb, var(--danger) 14%, var(--bg));
+  border-bottom-color: var(--danger);
+}
+.reconnect-banner-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 14px;
+}
+.reconnect-banner-led { display: inline-flex; align-items: center; }
+.reconnect-banner-label { font-weight: 700; letter-spacing: 0.08em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reconnect-banner-spacer { flex: 1; }
+.reconnect-banner-countdown {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+.reconnect-banner-countdown strong { color: var(--ink); font-weight: 800; }
+.reconnect-banner-btn {
+  font: inherit; font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border: 1px solid var(--ink);
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+}
+.reconnect-banner-btn:hover:not(:disabled) { background: var(--ink); color: var(--inv-ink); }
+.reconnect-banner-btn:disabled { opacity: 0.5; cursor: wait; }
+.reconnect-banner-progress {
+  height: 2px;
+  background: color-mix(in srgb, var(--warn) 20%, transparent);
+  overflow: hidden;
+}
+.reconnect-banner--failed .reconnect-banner-progress { display: none; }
+.reconnect-banner-progress-fill {
+  height: 100%;
+  background: var(--warn);
+  transition: width 0.25s linear;
+}
+
+@media (max-width: 480px) {
+  .reconnect-banner-row { padding: 6px 10px; gap: 6px; flex-wrap: wrap; }
+  .reconnect-banner-label { flex: 1 1 100%; }
+  .reconnect-banner-spacer { display: none; }
+  .reconnect-banner-countdown { font-size: 10px; }
+  .reconnect-banner-btn { font-size: 9px; padding: 3px 8px; }
+}
+
+/* ── MAGIC LINK CONSOLE ── */
+/* Full-screen "logging in" feed shown on the original tab once the
+   email-link tab broadcasts a successful auth. Fixed-position so it
+   covers the appbar. Lines stream in newest-at-bottom with a blinking
+   caret on the active line. */
+.magic-console {
+  position: fixed; inset: 0;
+  z-index: 200;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.magic-console::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(255,255,255,0.02) 2px,
+      rgba(255,255,255,0.02) 3px
+    );
+  pointer-events: none;
+}
+.magic-console-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-2);
+}
+.magic-console-body {
+  flex: 1; overflow: auto;
+  padding: 18px 24px;
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", monospace;
+  font-size: 13px; line-height: 1.7;
+  color: var(--ok);
+}
+.magic-console-line {
+  display: block;
+  white-space: pre-wrap;
+}
+.magic-console-line--info { color: var(--ink-2); }
+.magic-console-line--ok { color: var(--ok); }
+.magic-console-line--warn { color: var(--warn); }
+.magic-console-line--accent { color: var(--accent); font-weight: 700; }
+.magic-console-caret::after {
+  content: '_';
+  animation: magic-blink 1s steps(2, end) infinite;
+  color: var(--ok);
+}
+@keyframes magic-blink { 0%, 100% { opacity: 1 } 50% { opacity: 0 } }

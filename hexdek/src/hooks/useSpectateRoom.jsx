@@ -6,7 +6,17 @@ function wsUrl(roomId) {
   return API_BASE.replace(/^http/, 'ws') + `/ws/spectate/${roomId}`
 }
 
-const RECONNECT_DELAY_MS = 2000
+// Exponential backoff matches useLiveSocket so both reconnect banners
+// behave consistently. After MAX_ATTEMPTS the loop halts and waits for
+// a manual reconnectNow() call from the banner.
+const RECONNECT_BASE_MS = 1000
+const RECONNECT_MAX_MS = 30000
+const MAX_ATTEMPTS = 10
+
+function backoffFor(attempt) {
+  const exp = RECONNECT_BASE_MS * Math.pow(2, Math.max(0, attempt - 1))
+  return Math.min(RECONNECT_MAX_MS, exp)
+}
 
 export function useSpectateRoom(roomId) {
   const [game, setGame] = useState(null)
@@ -15,8 +25,13 @@ export function useSpectateRoom(roomId) {
   const [viewers, setViewers] = useState(0)
   const [roomInfo, setRoomInfo] = useState(null)
   const [status, setStatus] = useState('disconnected')
+  const [reconnectAttempt, setReconnectAttempt] = useState(0)
+  const [nextRetryAt, setNextRetryAt] = useState(0)
   const wsRef = useRef(null)
   const reconnectRef = useRef(null)
+  const attemptRef = useRef(0)
+  const cancelledRef = useRef(false)
+  const connectRef = useRef(null)
 
   const sendSpeed = useCallback((multiplier) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -24,25 +39,44 @@ export function useSpectateRoom(roomId) {
     }
   }, [])
 
+  const reconnectNow = useCallback(() => {
+    if (reconnectRef.current) {
+      clearTimeout(reconnectRef.current)
+      reconnectRef.current = null
+    }
+    if (wsRef.current) {
+      try { wsRef.current.close() } catch {}
+      wsRef.current = null
+    }
+    attemptRef.current = 0
+    setReconnectAttempt(0)
+    setNextRetryAt(0)
+    if (connectRef.current) connectRef.current()
+  }, [])
+
   useEffect(() => {
     if (!roomId) return
 
-    let cancelled = false
+    cancelledRef.current = false
 
     function connect() {
-      if (cancelled) return
+      if (cancelledRef.current) return
       if (wsRef.current?.readyState === WebSocket.OPEN) return
+      if (reconnectRef.current) {
+        clearTimeout(reconnectRef.current)
+        reconnectRef.current = null
+      }
 
       setStatus('contacting')
+      setNextRetryAt(0)
       const ws = new WebSocket(wsUrl(roomId))
       wsRef.current = ws
 
       ws.onopen = () => {
         setStatus('live')
-        if (reconnectRef.current) {
-          clearTimeout(reconnectRef.current)
-          reconnectRef.current = null
-        }
+        attemptRef.current = 0
+        setReconnectAttempt(0)
+        setNextRetryAt(0)
       }
 
       ws.onmessage = (evt) => {
@@ -64,15 +98,25 @@ export function useSpectateRoom(roomId) {
       }
 
       ws.onclose = () => {
-        if (cancelled) return
-        setStatus('disconnected')
+        if (cancelledRef.current) return
         wsRef.current = null
-        reconnectRef.current = setTimeout(connect, RECONNECT_DELAY_MS)
+        attemptRef.current += 1
+        setReconnectAttempt(attemptRef.current)
+        if (attemptRef.current > MAX_ATTEMPTS) {
+          setStatus('failed')
+          setNextRetryAt(0)
+          return
+        }
+        setStatus('disconnected')
+        const delay = backoffFor(attemptRef.current)
+        setNextRetryAt(Date.now() + delay)
+        reconnectRef.current = setTimeout(connect, delay)
       }
 
       ws.onerror = () => ws.close()
     }
 
+    connectRef.current = connect
     connect()
 
     const ping = setInterval(() => {
@@ -82,12 +126,17 @@ export function useSpectateRoom(roomId) {
     }, 30000)
 
     return () => {
-      cancelled = true
+      cancelledRef.current = true
       clearInterval(ping)
       if (reconnectRef.current) clearTimeout(reconnectRef.current)
       if (wsRef.current) wsRef.current.close()
+      connectRef.current = null
     }
   }, [roomId])
 
-  return { game, elo, speed, viewers, roomInfo, status, sendSpeed }
+  return {
+    game, elo, speed, viewers, roomInfo, status,
+    reconnectAttempt, nextRetryAt, maxAttempts: MAX_ATTEMPTS,
+    sendSpeed, reconnectNow,
+  }
 }

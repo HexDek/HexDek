@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Crops } from './chrome'
 import SearchBar from './SearchBar'
 import { ToastHost } from './Toast'
+import ReconnectBanner from './ReconnectBanner'
 import { useAuth } from '../context/AuthContext'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { useTranslation } from '../i18n'
@@ -34,16 +35,7 @@ function useTheme() {
 
 export default function AppShell() {
   const { user, loading, logout } = useAuth()
-  const { status: wsStatus, reconnectAttempt, nextRetryAt } = useLiveSocket()
-  const [, setCountdownTick] = useState(0)
-  useEffect(() => {
-    if (wsStatus !== 'disconnected') return
-    const id = setInterval(() => setCountdownTick(t => t + 1), 250)
-    return () => clearInterval(id)
-  }, [wsStatus])
-  const retrySecs = wsStatus === 'disconnected' && nextRetryAt
-    ? Math.max(0, Math.ceil((nextRetryAt - Date.now()) / 1000))
-    : 0
+  const { status: wsStatus, reconnectAttempt, nextRetryAt, maxAttempts, reconnectNow } = useLiveSocket()
   const navigate = useNavigate()
   const location = useLocation()
   const nav = user ? AUTH_NAV : PUBLIC_NAV
@@ -67,6 +59,14 @@ export default function AppShell() {
       <span className="grain" />
       <div className="frame" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <Crops />
+
+        <ReconnectBanner
+          status={wsStatus}
+          attempt={reconnectAttempt}
+          maxAttempts={maxAttempts}
+          nextRetryAt={nextRetryAt}
+          onReconnect={reconnectNow}
+        />
 
         <div className="appbar">
           <div className="flex items-center gap-4">
@@ -117,16 +117,13 @@ export default function AppShell() {
         <div className="statusbar" style={{ flexDirection: 'column', gap: 0, padding: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 14px', borderBottom: '1px solid var(--rule)' }}>
             <span>
-              <span style={{ color: wsStatus === 'live' ? 'var(--ok)' : wsStatus === 'disconnected' ? 'var(--danger)' : 'var(--warn)' }}>●</span>
+              <span style={{ color: wsStatus === 'live' ? 'var(--ok)' : (wsStatus === 'disconnected' || wsStatus === 'failed') ? 'var(--danger)' : 'var(--warn)' }}>●</span>
               {' '}
               {wsStatus === 'live' && '+ + +  HEXDEK CORE READY  + + +'}
               {wsStatus === 'contacting' && 'CONTACTING SERVER...'}
               {wsStatus === 'initializing' && 'INITIALIZING...'}
-              {wsStatus === 'disconnected' && (
-                reconnectAttempt > 0
-                  ? `RECONNECTING (ATTEMPT ${reconnectAttempt}) ... ${retrySecs}s`
-                  : 'DISCONNECTED — RECONNECTING...'
-              )}
+              {wsStatus === 'disconnected' && `RECONNECTING — SEE BANNER (ATTEMPT ${reconnectAttempt || 1} / ${maxAttempts})`}
+              {wsStatus === 'failed' && `OFFLINE — GAVE UP AFTER ${maxAttempts} ATTEMPTS`}
             </span>
             <span>OPEN SOURCE / / DONATIONS-POWERED / / NO ADS</span>
             <span>{user ? `USR.${user.email?.split('@')[0]?.toUpperCase()}` : 'GUEST'}</span>
