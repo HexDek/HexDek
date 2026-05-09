@@ -86,6 +86,10 @@ export const api = {
   }),
   getDeckVersions: (id) => request(`/api/decks/${id}/versions`),
   getDeckCurse: (id) => request(`/api/decks/${id}/curse`),
+  patchDeckCurse: (id, constraints) => authedRequest(`/api/decks/${id}/curse`, {
+    method: 'PATCH',
+    body: JSON.stringify({ constraints }),
+  }),
   getSimilarDecks: (id, limit = 5) => request(`/api/decks/${id}/similar?limit=${limit}`),
   getAchievements: (owner) => request(`/api/achievements/${owner}`),
   setUserCountry: (owner) => request(`/api/user/profile/country`, {

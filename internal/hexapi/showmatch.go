@@ -2526,6 +2526,7 @@ func (sm *Showmatch) RegisterShowmatch(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/gauntlet/{owner}/{id}", sm.handleStartGauntlet)
 	mux.HandleFunc("GET /api/gauntlet/{owner}/{id}", sm.handleGetGauntlet)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/curse", sm.handleDeckCurse)
+	mux.HandleFunc("PATCH /api/decks/{owner}/{id}/curse", sm.handlePatchCurse)
 	mux.HandleFunc("GET /api/achievements/{owner}", sm.handleAchievements)
 	mux.HandleFunc("GET /api/owner/{owner}/stats", sm.handleOwnerStats)
 	mux.HandleFunc("GET /api/owner/{owner}/games", sm.handleOwnerGames)
@@ -2606,6 +2607,11 @@ type CurseResponse struct {
 	// matches DimLabels.
 	DimCorrections []float64 `json:"dim_corrections"`
 	DimLabels      []string  `json:"dim_labels"`
+
+	// Constraints maps trait key → owner-locked target value in [0,1].
+	// Keys not present mean the trait is free to evolve. See
+	// hat.CurseTraitKeys for the canonical key list.
+	Constraints map[string]float64 `json:"constraints,omitempty"`
 }
 
 // CurseMemberDTO is one member of the Curse genetic population.
@@ -2661,6 +2667,12 @@ func (sm *Showmatch) handleDeckCurse(w http.ResponseWriter, r *http.Request) {
 	for i, v := range corr {
 		resp.DimCorrections[i] = v
 	}
+	if len(pool.Constraints) > 0 {
+		resp.Constraints = make(map[string]float64, len(pool.Constraints))
+		for k, v := range pool.Constraints {
+			resp.Constraints[k] = v
+		}
+	}
 	for _, dna := range pool.Population {
 		resp.Population = append(resp.Population, CurseMemberDTO{
 			Generation:       dna.Generation,
@@ -2678,6 +2690,81 @@ func (sm *Showmatch) handleDeckCurse(w http.ResponseWriter, r *http.Request) {
 	sm.curseMu.Unlock()
 
 	writeJSON(w, resp)
+}
+
+// handlePatchCurse updates the deck owner's curse override map. Body is
+// {"constraints": {"aggression": 0.9, ...}} — keys must be valid trait
+// names (see hat.CurseTraitKeys), values must be in [0,1]. The existing
+// pool's constraint map is replaced with the validated payload, the
+// population is re-clamped into the new bands immediately, and the pool
+// is persisted to disk so the override survives restarts.
+func (sm *Showmatch) handlePatchCurse(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	id := r.PathValue("id")
+	if !validatePathComponent(owner) || !validatePathComponent(id) {
+		http.Error(w, "invalid owner or id", http.StatusBadRequest)
+		return
+	}
+	if !checkOwnership(r, owner) {
+		http.Error(w, "forbidden: not deck owner", http.StatusForbidden)
+		return
+	}
+
+	var body struct {
+		Constraints map[string]float64 `json:"constraints"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	clean := make(map[string]float64, len(body.Constraints))
+	for k, v := range body.Constraints {
+		if !hat.IsValidCurseTrait(k) {
+			http.Error(w, "invalid trait key: "+k, http.StatusBadRequest)
+			return
+		}
+		if v < 0 || v > 1 || math.IsNaN(v) {
+			http.Error(w, "constraint value out of range [0,1]: "+k, http.StatusBadRequest)
+			return
+		}
+		clean[k] = v
+	}
+
+	deckKey := owner + "/" + id
+
+	sm.curseMu.Lock()
+	pool := sm.cursePool[deckKey]
+	if pool == nil {
+		sm.curseMu.Unlock()
+		http.Error(w, "no curse pool for deck", http.StatusNotFound)
+		return
+	}
+	if len(clean) == 0 {
+		pool.Constraints = nil
+	} else {
+		pool.Constraints = clean
+	}
+	pool.ApplyConstraintsToAll()
+
+	// Snapshot for response under the same lock to avoid races.
+	respConstraints := make(map[string]float64, len(pool.Constraints))
+	for k, v := range pool.Constraints {
+		respConstraints[k] = v
+	}
+	poolCopy := pool
+	sm.curseMu.Unlock()
+
+	if err := hat.SavePool(sm.curseDir, poolCopy); err != nil {
+		log.Printf("curse: save after PATCH failed: %v", err)
+		http.Error(w, "save failed", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]any{
+		"deck_key":    deckKey,
+		"constraints": respConstraints,
+	})
 }
 
 // recordAchievements maps a completed showmatch game into the

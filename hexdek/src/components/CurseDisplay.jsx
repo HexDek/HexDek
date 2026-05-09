@@ -1,8 +1,11 @@
+import { useState, useEffect } from 'react'
 import { Panel, KV, Tag } from './chrome'
+import { api } from '../services/api'
 
 // 7 personality params, in radar-axis order. Order is the visual angle
 // around the chart, starting at 12 o'clock. Keys match the JSON shape
-// returned by /api/decks/:owner/:id/curse.
+// returned by /api/decks/:owner/:id/curse and the canonical key list in
+// hat.CurseTraitKeys (Go side).
 const TRAITS = [
   { key: 'aggression',         label: 'AGGRESSION' },
   { key: 'combo_patience',     label: 'COMBO PAT.' },
@@ -13,7 +16,7 @@ const TRAITS = [
   { key: 'artifact_affinity',  label: 'ARTIFACT' },
 ]
 
-function RadarChart({ values, size = 220 }) {
+function RadarChart({ values, locked, size = 220 }) {
   const cx = size / 2
   const cy = size / 2
   const r = size * 0.36
@@ -57,11 +60,25 @@ function RadarChart({ values, size = 220 }) {
       />
       {values.map((v, i) => {
         const [px, py] = point(i, v)
-        return <circle key={i} cx={px} cy={py} r="2.5" fill="var(--ok)" />
+        const isLocked = !!(locked && locked[TRAITS[i].key])
+        // Locked traits render as solid filled dots in the warn color so
+        // the radar visually distinguishes evolved vs owner-anchored axes.
+        return (
+          <circle
+            key={i}
+            cx={px}
+            cy={py}
+            r={isLocked ? 3.5 : 2.5}
+            fill={isLocked ? 'var(--warn)' : 'var(--ok)'}
+            stroke={isLocked ? 'var(--warn)' : 'none'}
+            strokeWidth={isLocked ? 1 : 0}
+          />
+        )
       })}
       {TRAITS.map((t, i) => {
         const [lx, ly] = axisPoint(i, 1.18)
         const anchor = Math.abs(lx - cx) < 4 ? 'middle' : lx < cx ? 'end' : 'start'
+        const isLocked = !!(locked && locked[t.key])
         return (
           <text
             key={t.key}
@@ -70,14 +87,93 @@ function RadarChart({ values, size = 220 }) {
             textAnchor={anchor}
             dominantBaseline="middle"
             fontSize="8"
-            fill="var(--ink-2)"
-            style={{ letterSpacing: '0.04em', textTransform: 'uppercase' }}
+            fill={isLocked ? 'var(--warn)' : 'var(--ink-2)'}
+            style={{ letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: isLocked ? 700 : 400 }}
           >
-            {t.label}
+            {isLocked ? '\u{1F512} ' : ''}{t.label}
           </text>
         )
       })}
     </svg>
+    </div>
+  )
+}
+
+// TraitLockGrid renders a per-trait lock toggle + slider for owners.
+// Each row: [label] [lock toggle] [slider when locked / value readout when free].
+// Changes flow through onChange(nextConstraints) so the parent can PATCH
+// once and propagate the new map back through the tree.
+function TraitLockGrid({ values, constraints, onChange, busy }) {
+  const setConstraint = (key, val) => {
+    const next = { ...(constraints || {}) }
+    next[key] = Math.max(0, Math.min(1, val))
+    onChange(next)
+  }
+  const unlock = (key) => {
+    const next = { ...(constraints || {}) }
+    delete next[key]
+    onChange(next)
+  }
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 4 }}>
+      {TRAITS.map((t, i) => {
+        const cur = constraints && Object.prototype.hasOwnProperty.call(constraints, t.key)
+        const target = cur ? constraints[t.key] : (values[i] ?? 0)
+        return (
+          <div
+            key={t.key}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '90px 28px 1fr 42px',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 6px',
+              border: '1px solid var(--rule-2)',
+              background: cur ? 'color-mix(in srgb, var(--warn) 8%, transparent)' : 'transparent',
+            }}
+          >
+            <div className="t-xs" style={{ fontWeight: 700, letterSpacing: '0.04em', color: cur ? 'var(--warn)' : 'var(--ink-2)' }}>
+              {t.label}
+            </div>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => cur ? unlock(t.key) : setConstraint(t.key, values[i] ?? 0.5)}
+              title={cur ? 'Unlock — let evolution explore this trait' : 'Lock — pin this trait around a target value'}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--rule-2)',
+                color: cur ? 'var(--warn)' : 'var(--ink-2)',
+                padding: '2px 4px',
+                cursor: busy ? 'wait' : 'pointer',
+                fontSize: 12,
+                lineHeight: 1,
+              }}
+            >
+              {cur ? '\u{1F512}' : '\u{1F513}'}
+            </button>
+            {cur ? (
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={target}
+                disabled={busy}
+                onChange={e => setConstraint(t.key, parseFloat(e.target.value))}
+                style={{ width: '100%' }}
+              />
+            ) : (
+              <div style={{ height: 3, background: 'var(--rule-2)' }}>
+                <div style={{ width: `${Math.round((values[i] ?? 0) * 100)}%`, height: '100%', background: 'var(--ok)' }} />
+              </div>
+            )}
+            <div className="t-xs" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: cur ? 'var(--warn)' : 'var(--ink-2)' }}>
+              {target.toFixed(2)}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -196,7 +292,16 @@ function DimHeatmap({ corrections, labels, n }) {
   )
 }
 
-export default function CurseDisplay({ curse }) {
+export default function CurseDisplay({ curse, isOwner = false, deckId = null, onConstraintsChange }) {
+  // Hooks must run unconditionally; bail out via render branch below.
+  const remoteConstraints = curse?.constraints || null
+  const [constraints, setConstraints] = useState(remoteConstraints)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  // Keep local state in sync when the parent refetches the curse payload.
+  useEffect(() => { setConstraints(remoteConstraints) }, [remoteConstraints])
+
   if (!curse || !curse.population || curse.population.length === 0) return null
 
   const pop = curse.population
@@ -205,6 +310,25 @@ export default function CurseDisplay({ curse }) {
   const maxGen = pop.reduce((m, d) => Math.max(m, d.generation || 0), 0)
   const bestFitness = top.fitness
   const avgFitness = pop.reduce((s, d) => s + d.fitness, 0) / pop.length
+
+  const submitConstraints = async (next) => {
+    if (!deckId) return
+    setBusy(true)
+    setError(null)
+    const prev = constraints
+    setConstraints(next)
+    try {
+      const resp = await api.patchDeckCurse(deckId, next)
+      const accepted = resp?.constraints || {}
+      setConstraints(accepted)
+      if (onConstraintsChange) onConstraintsChange(accepted)
+    } catch (e) {
+      setError(String(e.message || e))
+      setConstraints(prev)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   // Best fitness per generation, last 20 generations. Each member
   // carries the gen it was created in; group by gen and take the max
@@ -240,7 +364,27 @@ export default function CurseDisplay({ curse }) {
 
       <div className="hr" style={{ margin: '12px 0' }} />
       <div className="t-xs muted" style={{ marginBottom: 4 }}>TOP MEMBER PERSONALITY · 7 PARAMS</div>
-      <RadarChart values={topValues} />
+      <RadarChart values={topValues} locked={constraints} />
+
+      {isOwner && (
+        <>
+          <div className="hr" style={{ margin: '12px 0' }} />
+          <div className="t-xs muted" style={{ marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>
+            <span>TRAIT OVERRIDES · OWNER LOCKS</span>
+            {busy && <span className="t-xs muted-2">SAVING…</span>}
+          </div>
+          <TraitLockGrid
+            values={topValues}
+            constraints={constraints}
+            onChange={submitConstraints}
+            busy={busy}
+          />
+          {error && <div className="t-xs" style={{ color: 'var(--danger)', marginTop: 4 }}>ERROR: {error}</div>}
+          <div className="t-xs muted-2" style={{ marginTop: 4, lineHeight: 1.4 }}>
+            LOCKED TRAITS ARE PINNED WITHIN ±0.10 OF TARGET. EVOLUTION RESPECTS LOCKS ON EVERY MUTATION.
+          </div>
+        </>
+      )}
 
       <div className="hr" style={{ margin: '12px 0' }} />
       <div className="t-xs muted" style={{ marginBottom: 4 }}>FITNESS / GEN · LAST {fitnessByGen.length}</div>

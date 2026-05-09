@@ -1081,7 +1081,7 @@ export default function DeckArchive() {
                 })
                 setGauntlet({ status: 'running', games: 0, target: 500, win_rate: 0 })
               }}>{gauntlet?.status === 'running' ? 'GAUNTLET RUNNING...' : 'RUN GAUNTLET (500)'}</Btn>
-              <Btn solid arrow="👁" onClick={() => {
+              <Btn solid arrow="▶" onClick={() => {
                 if (spawningRoom) return
                 setSpawningRoom(true)
                 trackEvent('spawn_spectate_room', { deck: `${owner}/${id}` })
@@ -1407,7 +1407,14 @@ export default function DeckArchive() {
             </Panel>
           )}
 
-          {curse && <CurseDisplay curse={curse} />}
+          {curse && (
+            <CurseDisplay
+              curse={curse}
+              isOwner={isOwner}
+              deckId={deckKey}
+              onConstraintsChange={(constraints) => setCurse(c => ({ ...(c || {}), constraints }))}
+            />
+          )}
 
           </>}
 

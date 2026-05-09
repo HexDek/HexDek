@@ -1,4 +1,6 @@
+import { useState, useEffect } from 'react'
 import { Panel, KV, Tag } from './chrome'
+import { api } from '../services/api'
 
 const TRAITS = [
   { key: 'aggression',        label: 'AGGRESSION' },
@@ -8,7 +10,7 @@ const TRAITS = [
   { key: 'political_memory',  label: 'POLITICAL MEMORY' },
 ]
 
-function RadarChart({ values, size = 200 }) {
+function RadarChart({ values, locked, size = 200 }) {
   const cx = size / 2
   const cy = size / 2
   const r = size * 0.38
@@ -51,11 +53,23 @@ function RadarChart({ values, size = 200 }) {
       />
       {values.map((v, i) => {
         const [px, py] = point(i, v)
-        return <circle key={i} cx={px} cy={py} r="2.5" fill="var(--ok)" />
+        const isLocked = !!(locked && locked[TRAITS[i].key])
+        return (
+          <circle
+            key={i}
+            cx={px}
+            cy={py}
+            r={isLocked ? 3.5 : 2.5}
+            fill={isLocked ? 'var(--warn)' : 'var(--ok)'}
+            stroke={isLocked ? 'var(--warn)' : 'none'}
+            strokeWidth={isLocked ? 1 : 0}
+          />
+        )
       })}
       {TRAITS.map((t, i) => {
         const [lx, ly] = axisPoint(i, 1.18)
         const anchor = Math.abs(lx - cx) < 4 ? 'middle' : lx < cx ? 'end' : 'start'
+        const isLocked = !!(locked && locked[t.key])
         return (
           <text
             key={t.key}
@@ -64,10 +78,10 @@ function RadarChart({ values, size = 200 }) {
             textAnchor={anchor}
             dominantBaseline="middle"
             fontSize="8"
-            fill="var(--ink-2)"
-            style={{ letterSpacing: '0.04em', textTransform: 'uppercase' }}
+            fill={isLocked ? 'var(--warn)' : 'var(--ink-2)'}
+            style={{ letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: isLocked ? 700 : 400 }}
           >
-            {t.label}
+            {isLocked ? '\u{1F512} ' : ''}{t.label}
           </text>
         )
       })}
@@ -108,7 +122,13 @@ const num = (v, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback
 }
 
-export default function CursePanel({ curse }) {
+export default function CursePanel({ curse, isOwner = false, deckId = null, onConstraintsChange }) {
+  const remoteConstraints = curse?.constraints || null
+  const [constraints, setConstraints] = useState(remoteConstraints)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  useEffect(() => { setConstraints(remoteConstraints) }, [remoteConstraints])
+
   // Filter out null / undefined entries from the population snapshot —
   // a partially-populated pool from the backend would otherwise crash
   // on member.fitness / member.generation reads below.
@@ -145,7 +165,7 @@ export default function CursePanel({ curse }) {
       right={<Tag solid>{pop.length} DNA · GEN {maxGen}</Tag>}
     >
       <div className="t-xs muted" style={{ marginBottom: 4 }}>TOP MEMBER PERSONALITY</div>
-      <RadarChart values={topValues} />
+      <RadarChart values={topValues} locked={constraints} />
 
       <KV rows={[
         ['GENERATIONS', `${maxGen}`],
@@ -169,17 +189,86 @@ export default function CursePanel({ curse }) {
         {TRAITS.map(t => {
           const v = num(top[t.key])
           const pct = Math.max(0, Math.min(100, Math.round(v * 100)))
+          const isLocked = !!(constraints && Object.prototype.hasOwnProperty.call(constraints, t.key))
           return (
-            <div key={t.key} style={{ border: '1px solid var(--rule-2)', padding: '6px 8px' }}>
-              <div className="t-xs muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.label}</div>
-              <div className="t-xl" style={{ fontWeight: 700, marginTop: 2 }}>{v.toFixed(2)}</div>
+            <div key={t.key} style={{
+              border: '1px solid var(--rule-2)',
+              padding: '6px 8px',
+              background: isLocked ? 'color-mix(in srgb, var(--warn) 8%, transparent)' : 'transparent',
+            }}>
+              <div className="t-xs muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {isLocked ? '\u{1F512} ' : ''}{t.label}
+              </div>
+              <div className="t-xl" style={{ fontWeight: 700, marginTop: 2, color: isLocked ? 'var(--warn)' : 'inherit' }}>{v.toFixed(2)}</div>
               <div style={{ height: 3, background: 'var(--rule-2)', marginTop: 4 }}>
-                <div style={{ width: `${pct}%`, height: '100%', background: 'var(--ok)' }} />
+                <div style={{ width: `${pct}%`, height: '100%', background: isLocked ? 'var(--warn)' : 'var(--ok)' }} />
               </div>
             </div>
           )
         })}
       </div>
+
+      {isOwner && (
+        <>
+          <div className="hr" style={{ margin: '12px 0' }} />
+          <div className="t-xs muted" style={{ marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>
+            <span>TRAIT OVERRIDES · OWNER LOCKS</span>
+            {busy && <span className="t-xs muted-2">SAVING…</span>}
+          </div>
+          <div style={{ display: 'grid', gap: 4 }}>
+            {TRAITS.map(t => {
+              const cur = constraints && Object.prototype.hasOwnProperty.call(constraints, t.key)
+              const target = cur ? constraints[t.key] : num(top[t.key])
+              const apply = async (next) => {
+                if (!deckId) return
+                setBusy(true); setError(null)
+                const prev = constraints
+                setConstraints(next)
+                try {
+                  const resp = await api.patchDeckCurse(deckId, next)
+                  const accepted = resp?.constraints || {}
+                  setConstraints(accepted)
+                  if (onConstraintsChange) onConstraintsChange(accepted)
+                } catch (e) {
+                  setError(String(e.message || e)); setConstraints(prev)
+                } finally { setBusy(false) }
+              }
+              const setVal = (v) => apply({ ...(constraints || {}), [t.key]: Math.max(0, Math.min(1, v)) })
+              const unlock = () => { const n = { ...(constraints || {}) }; delete n[t.key]; apply(n) }
+              return (
+                <div key={t.key} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '110px 28px 1fr 42px',
+                  alignItems: 'center', gap: 6, padding: '4px 6px',
+                  border: '1px solid var(--rule-2)',
+                  background: cur ? 'color-mix(in srgb, var(--warn) 8%, transparent)' : 'transparent',
+                }}>
+                  <div className="t-xs" style={{ fontWeight: 700, color: cur ? 'var(--warn)' : 'var(--ink-2)' }}>{t.label}</div>
+                  <button
+                    type="button" disabled={busy}
+                    onClick={() => cur ? unlock() : setVal(num(top[t.key], 0.5))}
+                    title={cur ? 'Unlock' : 'Lock'}
+                    style={{ background: 'transparent', border: '1px solid var(--rule-2)', color: cur ? 'var(--warn)' : 'var(--ink-2)', padding: '2px 4px', cursor: busy ? 'wait' : 'pointer', fontSize: 12, lineHeight: 1 }}
+                  >{cur ? '\u{1F512}' : '\u{1F513}'}</button>
+                  {cur ? (
+                    <input type="range" min="0" max="1" step="0.01" value={target} disabled={busy}
+                      onChange={e => setVal(parseFloat(e.target.value))} style={{ width: '100%' }} />
+                  ) : (
+                    <div style={{ height: 3, background: 'var(--rule-2)' }}>
+                      <div style={{ width: `${Math.round(num(top[t.key]) * 100)}%`, height: '100%', background: 'var(--ok)' }} />
+                    </div>
+                  )}
+                  <div className="t-xs" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: cur ? 'var(--warn)' : 'var(--ink-2)' }}>{target.toFixed(2)}</div>
+                </div>
+              )
+            })}
+          </div>
+          {error && <div className="t-xs" style={{ color: 'var(--danger)', marginTop: 4 }}>ERROR: {error}</div>}
+          <div className="t-xs muted-2" style={{ marginTop: 4, lineHeight: 1.4 }}>
+            LOCKED TRAITS PIN ±0.10 OF TARGET. EVOLUTION RESPECTS LOCKS.
+          </div>
+        </>
+      )}
     </Panel>
   )
 }

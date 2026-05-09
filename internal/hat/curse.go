@@ -116,7 +116,41 @@ type CursePool struct {
 	Bracket    int                         `json:"bracket"`    // power bracket (1-5) for fitness normalization
 	GenCount   int                         `json:"gen_count"`  // total generations evolved
 	DimStats   DimensionStats              `json:"dim_stats"`  // T3.2 outcome-correlated dimension learning
+
+	// Constraints is the deck owner's curse override map: trait key →
+	// target value in [0,1]. When set, the genetic algorithm clamps the
+	// trait to within ±curseConstraintBand of the target after every
+	// mutation/immigration so evolution settles around fixed anchors.
+	// Valid keys are listed in CurseTraitKeys.
+	Constraints map[string]float64 `json:"constraints,omitempty"`
+
 	rng        *rand.Rand // not serialized; caller injects via InitPool or SetRNG
+}
+
+// CurseTraitKeys is the set of trait names accepted as constraint keys.
+// Order matches the radar-axis layout in the frontend.
+var CurseTraitKeys = []string{
+	"aggression",
+	"combo_patience",
+	"threat_paranoia",
+	"resource_greed",
+	"political_memory",
+	"drain_affinity",
+	"artifact_affinity",
+}
+
+// curseConstraintBand is the half-width of the band around a constraint
+// target that mutated trait values are clamped into.
+const curseConstraintBand = 0.1
+
+// IsValidCurseTrait reports whether key is a recognized constraint trait.
+func IsValidCurseTrait(key string) bool {
+	for _, k := range CurseTraitKeys {
+		if k == key {
+			return true
+		}
+	}
+	return false
 }
 
 // SetRNG assigns the random source used for selection and evolution.
@@ -247,6 +281,9 @@ func (pool *CursePool) evolve() {
 		clone.DrainAffinity = clampUnit(clone.DrainAffinity + pool.rng.NormFloat64()*CurseMutationSD)
 		clone.ArtifactAffinity = clampUnit(clone.ArtifactAffinity + pool.rng.NormFloat64()*CurseMutationSD)
 
+		// Snap any owner-locked trait back into its constraint band.
+		pool.applyConstraintsToDNA(&clone)
+
 		pool.Population[loserIdx] = clone
 	}
 
@@ -254,7 +291,7 @@ func (pool *CursePool) evolve() {
 	// with fresh random DNA. Prevents convergent collapse.
 	if pool.GenCount%curseImmigrationInterval == 0 {
 		immigrantIdx := indices[CurseKillCount] // lowest non-killed slot
-		pool.Population[immigrantIdx] = CurseDNA{
+		immigrant := CurseDNA{
 			DeckKey:          pool.DeckKey,
 			Aggression:       pool.rng.Float64(),
 			ComboPat:         pool.rng.Float64(),
@@ -265,26 +302,55 @@ func (pool *CursePool) evolve() {
 			ArtifactAffinity: pool.rng.Float64(),
 			Fitness:          0.25,
 		}
+		pool.applyConstraintsToDNA(&immigrant)
+		pool.Population[immigrantIdx] = immigrant
 	}
 
 	pool.GameCount = 0
 }
 
 // InitPool creates a fresh population with random parameters for a new deck.
+// If pool.Constraints is non-nil at seed time, locked traits are seeded
+// from the constraint value (then clamped into the constraint band) instead
+// of randomized. Use InitPoolWithConstraints for that path.
 func InitPool(deckKey string, rng *rand.Rand) CursePool {
+	return InitPoolWithConstraints(deckKey, rng, nil)
+}
+
+// InitPoolWithConstraints creates a fresh population, seeding any locked
+// traits from the constraint map instead of random. Constraint keys not
+// in CurseTraitKeys are ignored.
+func InitPoolWithConstraints(deckKey string, rng *rand.Rand, constraints map[string]float64) CursePool {
 	pool := CursePool{DeckKey: deckKey, rng: rng}
+	if len(constraints) > 0 {
+		pool.Constraints = make(map[string]float64, len(constraints))
+		for k, v := range constraints {
+			if IsValidCurseTrait(k) {
+				pool.Constraints[k] = clampUnit(v)
+			}
+		}
+	}
+
+	seed := func(key string) float64 {
+		if t, ok := pool.Constraints[key]; ok {
+			return clampUnit(t)
+		}
+		return rng.Float64()
+	}
+
 	for i := range pool.Population {
 		pool.Population[i] = CurseDNA{
 			DeckKey:          deckKey,
-			Aggression:       rng.Float64(),
-			ComboPat:         rng.Float64(),
-			ThreatParanoia:   rng.Float64(),
-			ResourceGreed:    rng.Float64(),
-			PoliticalMemory:  rng.Float64(),
-			DrainAffinity:    rng.Float64(),
-			ArtifactAffinity: rng.Float64(),
+			Aggression:       seed("aggression"),
+			ComboPat:         seed("combo_patience"),
+			ThreatParanoia:   seed("threat_paranoia"),
+			ResourceGreed:    seed("resource_greed"),
+			PoliticalMemory:  seed("political_memory"),
+			DrainAffinity:    seed("drain_affinity"),
+			ArtifactAffinity: seed("artifact_affinity"),
 			Fitness:          0.25, // baseline expected winrate in 4-player
 		}
+		pool.applyConstraintsToDNA(&pool.Population[i])
 	}
 	return pool
 }
@@ -305,6 +371,62 @@ func clampUnit(v float64) float64 {
 		return 1.0
 	}
 	return v
+}
+
+// clampRange constrains v to [lo, hi].
+func clampRange(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+// applyConstraintsToDNA clamps each constrained trait on dna into the
+// band [target-curseConstraintBand, target+curseConstraintBand], itself
+// clipped to [0,1]. Unknown or unconstrained traits are left untouched.
+func (pool *CursePool) applyConstraintsToDNA(dna *CurseDNA) {
+	if len(pool.Constraints) == 0 {
+		return
+	}
+	clampTo := func(v, target float64) float64 {
+		lo := clampUnit(target - curseConstraintBand)
+		hi := clampUnit(target + curseConstraintBand)
+		return clampRange(v, lo, hi)
+	}
+	if t, ok := pool.Constraints["aggression"]; ok {
+		dna.Aggression = clampTo(dna.Aggression, t)
+	}
+	if t, ok := pool.Constraints["combo_patience"]; ok {
+		dna.ComboPat = clampTo(dna.ComboPat, t)
+	}
+	if t, ok := pool.Constraints["threat_paranoia"]; ok {
+		dna.ThreatParanoia = clampTo(dna.ThreatParanoia, t)
+	}
+	if t, ok := pool.Constraints["resource_greed"]; ok {
+		dna.ResourceGreed = clampTo(dna.ResourceGreed, t)
+	}
+	if t, ok := pool.Constraints["political_memory"]; ok {
+		dna.PoliticalMemory = clampTo(dna.PoliticalMemory, t)
+	}
+	if t, ok := pool.Constraints["drain_affinity"]; ok {
+		dna.DrainAffinity = clampTo(dna.DrainAffinity, t)
+	}
+	if t, ok := pool.Constraints["artifact_affinity"]; ok {
+		dna.ArtifactAffinity = clampTo(dna.ArtifactAffinity, t)
+	}
+}
+
+// ApplyConstraintsToAll re-clamps every member of the population to the
+// pool's current Constraints map. Use after mutating Constraints (e.g.
+// from a PATCH handler) so existing population members snap to the new
+// bands without waiting for evolution.
+func (pool *CursePool) ApplyConstraintsToAll() {
+	for i := range pool.Population {
+		pool.applyConstraintsToDNA(&pool.Population[i])
+	}
 }
 
 // sanitizeKey makes a deck key safe for use as a filename.

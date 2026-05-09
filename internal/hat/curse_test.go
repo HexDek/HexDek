@@ -233,6 +233,129 @@ func TestDimensionStats_RecordAndCorrelation(t *testing.T) {
 	}
 }
 
+func TestCurseClampRange(t *testing.T) {
+	if v := clampRange(0.5, 0.2, 0.4); v != 0.4 {
+		t.Errorf("clampRange(0.5, 0.2, 0.4) = %f, want 0.4", v)
+	}
+	if v := clampRange(0.1, 0.2, 0.4); v != 0.2 {
+		t.Errorf("clampRange(0.1, 0.2, 0.4) = %f, want 0.2", v)
+	}
+	if v := clampRange(0.3, 0.2, 0.4); v != 0.3 {
+		t.Errorf("clampRange(0.3, 0.2, 0.4) = %f, want 0.3", v)
+	}
+}
+
+func TestCurseInitPoolWithConstraints_SeedsLockedTraits(t *testing.T) {
+	rng := rand.New(rand.NewSource(42))
+	constraints := map[string]float64{
+		"aggression":       0.9,
+		"artifact_affinity": 0.1,
+	}
+	pool := InitPoolWithConstraints("test/deck", rng, constraints)
+
+	for i, dna := range pool.Population {
+		if dna.Aggression < 0.8 || dna.Aggression > 1.0 {
+			t.Errorf("pop[%d] Aggression = %f, want within [0.8,1.0] (target 0.9 ±0.1)", i, dna.Aggression)
+		}
+		if dna.ArtifactAffinity < 0.0 || dna.ArtifactAffinity > 0.2 {
+			t.Errorf("pop[%d] ArtifactAffinity = %f, want within [0.0,0.2] (target 0.1 ±0.1)", i, dna.ArtifactAffinity)
+		}
+	}
+	if pool.Constraints["aggression"] != 0.9 {
+		t.Errorf("pool.Constraints[aggression] = %f, want 0.9", pool.Constraints["aggression"])
+	}
+}
+
+func TestCurseInitPoolWithConstraints_IgnoresUnknownKeys(t *testing.T) {
+	rng := rand.New(rand.NewSource(42))
+	pool := InitPoolWithConstraints("test", rng, map[string]float64{
+		"bogus_trait": 0.5,
+		"aggression":  0.5,
+	})
+	if _, ok := pool.Constraints["bogus_trait"]; ok {
+		t.Errorf("expected bogus_trait to be filtered out")
+	}
+	if _, ok := pool.Constraints["aggression"]; !ok {
+		t.Errorf("expected aggression to survive")
+	}
+}
+
+func TestCurseEvolution_RespectsConstraints(t *testing.T) {
+	rng := rand.New(rand.NewSource(42))
+	pool := InitPoolWithConstraints("test", rng, map[string]float64{
+		"aggression": 0.85,
+	})
+
+	// Force a fitness gradient and run enough games to trigger several
+	// evolution + immigration cycles.
+	for gen := 0; gen < curseImmigrationInterval+1; gen++ {
+		for i := 0; i < CursePopSize; i++ {
+			pool.Population[i].Fitness = float64(i+1) / float64(CursePopSize)
+		}
+		for i := 0; i < CurseEvolveAt; i++ {
+			score := 0.0
+			if i%2 == 0 {
+				score = 1.0
+			}
+			pool.RecordResult(i%CursePopSize, score)
+		}
+	}
+
+	for i, dna := range pool.Population {
+		if dna.Aggression < 0.75-1e-9 || dna.Aggression > 0.95+1e-9 {
+			t.Errorf("pop[%d] Aggression = %f after evolution, want within [0.75,0.95]", i, dna.Aggression)
+		}
+	}
+}
+
+func TestCurseApplyConstraintsToAll(t *testing.T) {
+	rng := rand.New(rand.NewSource(42))
+	pool := InitPool("test", rng)
+	for i := range pool.Population {
+		pool.Population[i].Aggression = 0.05
+	}
+	pool.Constraints = map[string]float64{"aggression": 0.7}
+	pool.ApplyConstraintsToAll()
+	for i, dna := range pool.Population {
+		if dna.Aggression < 0.6-1e-9 || dna.Aggression > 0.8+1e-9 {
+			t.Errorf("pop[%d] Aggression = %f, want within [0.6,0.8]", i, dna.Aggression)
+		}
+	}
+}
+
+func TestCurseIsValidTrait(t *testing.T) {
+	for _, k := range CurseTraitKeys {
+		if !IsValidCurseTrait(k) {
+			t.Errorf("expected %q to be valid", k)
+		}
+	}
+	if IsValidCurseTrait("not_a_trait") {
+		t.Errorf("expected 'not_a_trait' to be invalid")
+	}
+}
+
+func TestCurseSavePoolPersistsConstraints(t *testing.T) {
+	dir := t.TempDir()
+	rng := rand.New(rand.NewSource(7))
+	pool := InitPoolWithConstraints("owner/deck", rng, map[string]float64{
+		"aggression":     0.9,
+		"combo_patience": 0.2,
+	})
+	if err := SavePool(dir, &pool); err != nil {
+		t.Fatalf("SavePool: %v", err)
+	}
+	loaded, err := LoadPool(dir, "owner/deck", rng)
+	if err != nil {
+		t.Fatalf("LoadPool: %v", err)
+	}
+	if loaded.Constraints["aggression"] != 0.9 {
+		t.Errorf("loaded aggression constraint = %f, want 0.9", loaded.Constraints["aggression"])
+	}
+	if loaded.Constraints["combo_patience"] != 0.2 {
+		t.Errorf("loaded combo_patience constraint = %f, want 0.2", loaded.Constraints["combo_patience"])
+	}
+}
+
 func TestDimensionStats_MinN(t *testing.T) {
 	var ds DimensionStats
 	for i := 0; i < 5; i++ {
