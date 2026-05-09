@@ -16,8 +16,9 @@ kanban-plugin: board
 - [x] **Era 1 unification (FDN/DSK/BLB/OTJ/MKM)** — 12 templated commanders promoted from stub to custom logic: Mabel, Aesi, Bristly Bill, Byrke, Aminatou, Queen Marchesa, Kardur, The Swarmweaver, Rendmaw, Kona, Ezrim, Prime Speaker Zegana. PR #32 merged 2026-05-09. #engine #per_card
 - [x] **Era 2 unification (CMM/LCI/WOE/MOM/ONE)** — 11 commanders promoted: Sliver Gravemother, Yenna, Felothar, Mondrak, Solphim, Drivnod, Zopandrel, Inalla (reprint), Mayael (reprint), Saheeli, plus one more. 18 new tests. PR #31 merged 2026-05-09. #engine #per_card
 - [x] **Era 3 unification (SNC/BRO/DMU/NEO/CLB)** — 12 commanders promoted: Jetmir, Falco Spara, Lord Xander, Hidetsugu, plus 8 more. PR #33 merged 2026-05-09. #engine #per_card
-- [x] **Era 4 unification (STX/MH2/AFR/MID/VOW/C19-C21)** — 11 cost-unenforced stubs replaced with real handlers. PR #34 merged 2026-05-09. #engine #per_card
+- [x] **Era 4 unification (STX/MH2/AFR/MID/VOW/C19-C21)** — 7 templated commanders promoted from stub to custom logic: Galazeth Prismari, Lier (Disciple of the Drowned), Toxrill (Corrosive), Asmoranomardicadaistinaculdacar, Jadzi (Oracle of Arcavios), Silverquill (Disputant), Quandrix (Proof). Tiamat / Veyran / Acererak / Kalamax overlapped with prior batches. PR #34 merged 2026-05-09. #engine #per_card
 - [x] **Era 5 unification (IKO/ZNR/KHM/CMR/C13–C18/pre-Modern)** — 13 templated commanders promoted from stub: Marchesa the Black Rose, Karador, Derevi, Mairsil, Yasharn, Charix, Kalamax, Chainer, Ruric Thar, Selenia, Yurlok, Sakashima, Araumi. PR #35 merged 2026-05-09. #engine #per_card
+- [x] **Drop dead `gen_*` stubs** — 32 generator stubs removed where custom handlers fully supersede them. PR #36 merged 2026-05-09. #engine #per_card #cleanup
 
 ## Tracking — Cost-Unenforced Activated Abilities
 
@@ -162,6 +163,22 @@ kanban-plugin: board
 
 *Ref: `docs/architecture-hat-evolution.md` Levels 6-7 + Skunkworks.*
 *Level 6 (Neural Position Evaluator), Level 7 (Self-Play Loop), Skunkworks (Tesla/Feynman/Lovelace/Ive/Watts) all complete 2026-05-02.*
+
+
+
+## Tracking — Effect-Correct, Cost-Unenforced
+
+*Cards where the per-card handler covers the effect but doesn't enforce the activation cost. Batch these for custom handler work.*
+
+### Era 4 unification (STX, MH2, AFR, MID, VOW, C19-C21) — surfaced 2026-05-09
+
+- [ ] **Asmoranomardicadaistinaculdacar** (MH2) — alt-cast cost `{B/R}` "as long as you've discarded a card this turn" not enforced; the cast pipeline doesn't expose the per-card alt-cost gate. #engine #per_card #cost_unenforced #era4
+- [ ] **Galazeth Prismari** (STX) — `{T}: Add one mana of any color. Spend this mana only to cast an instant or sorcery spell.` — the spend-restriction isn't enforced in the mana system; the tap-add path is generic. #engine #per_card #cost_unenforced #era4
+- [ ] **Lier, Disciple of the Drowned** (MID) — graveyard-cast permission for instants/sorceries and the "would be put into graveyard → exile instead" replacement aren't on the per-card hook path. Uncounterable mark is enforced via `CostMeta` when the stack item is in trigger ctx. #engine #per_card #cost_unenforced #era4
+- [ ] **Jadzi, Oracle of Arcavios** (STX) — magecraft top-of-library reveal + cast-for-`{1}` alt cost not modeled; nonland cards route to hand as a stand-in. The DFC back-face Journey to the Oracle isn't wired. #engine #per_card #cost_unenforced #era4
+- [ ] **Quandrix, the Proof** (STX/C21) — from-command-zone detection is a best-effort flag check; if the cast pipeline doesn't stamp `from_command_zone` on the new permanent, the X-counter distribute clause silently skips. #engine #per_card #cost_unenforced #era4
+- [ ] **Silverquill, the Disputant** (STX/C21) — same from-command-zone detection gap; the optional "attach Aura/Equipment to Silverquill" rider is not modeled (Aura/Equipment attach isn't on the per-card hook path). #engine #per_card #cost_unenforced #era4
+- [ ] **Toxrill, the Corrosive** (VOW) — `{U}{B}, Remove a slime counter from a creature: Draw a card.` — mana cost paid through the engine's mana system, but the sorcery-speed gate is approximated by phase-string match. Slime counter removal is enforced. #engine #per_card #cost_unenforced #era4
 
 
 
