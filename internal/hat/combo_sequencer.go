@@ -59,13 +59,18 @@ func comboName(cp ComboPlan) string {
 }
 
 // buildZonesAccepted creates the zone acceptance map. Most combo
-// pieces need to be either in hand (castable) or on the battlefield
-// (already resolved). Graveyard is accepted as a secondary source
-// for reanimation-style combos. This is a practical 80% default.
+// pieces need to be either in hand (castable), on the battlefield
+// (already resolved), in the graveyard (reanimation), or in the
+// command zone (the commander itself is part of the win line —
+// Kinnan + Basalt Monolith, Najeela combats, Korvold sac, Esika +
+// Bridge cheat). Without "command_zone" the sequencer treats every
+// commander-engine deck as one piece short until the commander has
+// been cast, so it never reports Executable on the assembly turn
+// and the commander's cast never gets the combo-priority signal.
 func buildZonesAccepted(cp ComboPlan) map[string][]string {
 	zones := make(map[string][]string, len(cp.Pieces))
 	for _, piece := range cp.Pieces {
-		zones[piece] = []string{"hand", "battlefield", "graveyard"}
+		zones[piece] = []string{"hand", "battlefield", "graveyard", "command_zone"}
 	}
 	return zones
 }
@@ -166,14 +171,27 @@ type zoneSet struct {
 	hand        bool
 	battlefield bool
 	graveyard   bool
+	commandZone bool
 }
 
-// buildZoneIndex scans a seat's hand, battlefield, and graveyard and
-// returns a map of card name -> which zones that card appears in.
+// buildZoneIndex scans a seat's hand, battlefield, graveyard, and
+// command zone and returns a map of card name -> which zones that
+// card appears in.
+//
+// DFC-aware: each Card is indexed under EVERY name Freya might emit
+// for it — the runtime Card.Name plus, for MDFCs, the synthetic
+// "Front // Back" full DFC string and each individual face name.
+// Without this, an MDFC commander whose back face is a combo piece
+// (Esika → Bridge) was unrecognized after a back-face cast mutated
+// Card.Name to the back-face-only form, even though Freya emits
+// pieces with the full "Front // Back" oracle name.
 func buildZoneIndex(seat *gameengine.Seat) map[string]*zoneSet {
 	idx := make(map[string]*zoneSet)
 
 	ensure := func(name string) *zoneSet {
+		if name == "" {
+			return nil
+		}
 		if z, ok := idx[name]; ok {
 			return z
 		}
@@ -182,25 +200,76 @@ func buildZoneIndex(seat *gameengine.Seat) map[string]*zoneSet {
 		return z
 	}
 
-	for _, c := range seat.Hand {
+	mark := func(c *gameengine.Card, set func(*zoneSet)) {
 		if c == nil {
-			continue
+			return
 		}
-		ensure(c.Name).hand = true
+		for _, alias := range cardAliases(c) {
+			z := ensure(alias)
+			if z != nil {
+				set(z)
+			}
+		}
+	}
+
+	for _, c := range seat.Hand {
+		mark(c, func(z *zoneSet) { z.hand = true })
 	}
 	for _, p := range seat.Battlefield {
-		if p == nil || p.Card == nil {
+		if p == nil {
 			continue
 		}
-		ensure(p.Card.Name).battlefield = true
+		mark(p.Card, func(z *zoneSet) { z.battlefield = true })
 	}
 	for _, c := range seat.Graveyard {
-		if c == nil {
-			continue
-		}
-		ensure(c.Name).graveyard = true
+		mark(c, func(z *zoneSet) { z.graveyard = true })
+	}
+	for _, c := range seat.CommandZone {
+		mark(c, func(z *zoneSet) { z.commandZone = true })
 	}
 	return idx
+}
+
+// cardAliases returns every name Freya might emit for a card. Single-
+// faced cards yield just c.Name. MDFCs yield c.Name + the full
+// "Front // Back" string (synthesized when c.Name is just one face)
+// and both face names individually. Aliasing on every face costs an
+// extra map insert per zone scan but matches Freya's name conventions
+// (which use the full DFC string in win lines and tutor paths).
+func cardAliases(c *gameengine.Card) []string {
+	if c == nil || c.Name == "" {
+		return nil
+	}
+	out := []string{c.Name}
+	back := c.BackFaceName
+	if back == "" || !c.IsMDFC() {
+		return out
+	}
+	if strings.Contains(c.Name, " // ") {
+		// c.Name is the canonical "Front // Back" oracle string. Add
+		// each face individually so a Freya piece keyed off only one
+		// face still matches.
+		parts := strings.SplitN(c.Name, " // ", 2)
+		front := strings.TrimSpace(parts[0])
+		face := strings.TrimSpace(parts[1])
+		if front != "" && front != c.Name {
+			out = append(out, front)
+		}
+		if face != "" && face != c.Name {
+			out = append(out, face)
+		}
+		return out
+	}
+	// c.Name has been swapped to a single face (back-face cast or
+	// transform on a TDFC). The back face is c.Name; we still know
+	// c.BackFaceName. Without a stored FrontFaceName we can't
+	// reconstruct the full "Front // Back" string from this side
+	// alone, but we can still index the back face and any other
+	// known alias.
+	if back != c.Name {
+		out = append(out, back)
+	}
+	return out
 }
 
 // evaluateLine checks a single combo line against the zone index and
@@ -224,42 +293,39 @@ func evaluateLine(line *ComboConstraint, zoneIndex map[string]*zoneSet, seat *ga
 		}
 
 		// Check if the piece is in an acceptable zone for this combo.
+		// Battlefield is the ideal source (no cast required); when a
+		// piece appears in multiple zones, we always prefer battlefield
+		// so we don't double-count its cast cost.
 		accepted := line.ZonesAccepted[piece]
 		inAcceptableZone := false
 		needsCast := false
+		castFromCommandZone := false
 
+		acceptedSet := map[string]bool{}
 		for _, zone := range accepted {
-			switch zone {
-			case "hand":
-				if z.hand {
-					inAcceptableZone = true
-					needsCast = true
-				}
-			case "battlefield":
-				if z.battlefield {
-					inAcceptableZone = true
-					// Already on battlefield — no cast needed.
-					needsCast = false
-					break // battlefield is ideal, stop checking
-				}
-			case "graveyard":
-				if z.graveyard {
-					inAcceptableZone = true
-					// In graveyard — may need recursion, treat as
-					// needing a cast for mana purposes.
-					needsCast = true
-				}
-			}
-			// If on battlefield, that's the best case — break early.
-			if z.battlefield && inAcceptableZone {
-				break
-			}
+			acceptedSet[zone] = true
+		}
+
+		switch {
+		case acceptedSet["battlefield"] && z.battlefield:
+			inAcceptableZone = true
+			// already resolved — no mana required.
+		case acceptedSet["hand"] && z.hand:
+			inAcceptableZone = true
+			needsCast = true
+		case acceptedSet["command_zone"] && z.commandZone:
+			inAcceptableZone = true
+			needsCast = true
+			castFromCommandZone = true
+		case acceptedSet["graveyard"] && z.graveyard:
+			inAcceptableZone = true
+			needsCast = true
 		}
 
 		if inAcceptableZone {
 			ev.found++
 			if needsCast {
-				manaCost += cardManaCost(seat, piece)
+				manaCost += pieceCastCost(seat, piece, castFromCommandZone)
 			}
 		} else {
 			ev.missing++
@@ -272,15 +338,20 @@ func evaluateLine(line *ComboConstraint, zoneIndex map[string]*zoneSet, seat *ga
 	ev.manaOK = availMana >= manaCost
 	ev.executable = ev.missing == 0 && ev.manaOK
 
-	// Determine next action: first piece in sequence order that is in
-	// hand (needs to be cast).
+	// Determine next action: first piece in sequence order that needs
+	// to be cast — either from hand or from the command zone. The
+	// command-zone branch routes through tryCastCommander; the hand
+	// branch is consumed directly by ChooseSpellToCast.
 	if ev.executable {
 		for _, name := range line.SequenceOrder {
 			z, ok := zoneIndex[name]
 			if !ok {
 				continue
 			}
-			if z.hand && !z.battlefield {
+			if z.battlefield {
+				continue
+			}
+			if z.hand || z.commandZone {
 				ev.nextAction = name
 				break
 			}
@@ -299,11 +370,90 @@ func evaluateLine(line *ComboConstraint, zoneIndex map[string]*zoneSet, seat *ga
 // seat's hand. Returns 0 if not found (tokens, free spells).
 func cardManaCost(seat *gameengine.Seat, name string) int {
 	for _, c := range seat.Hand {
-		if c != nil && c.Name == name {
+		if c != nil && cardMatchesAlias(c, name) {
 			return gameengine.ManaCostOf(c)
 		}
 	}
 	return 0
+}
+
+// pieceCastCost returns the mana the seat actually needs to cast
+// `name` from the appropriate source zone. Hand pieces use the
+// printed front-face cost (or back-face cost if the AI has decided
+// to cast the back face — same convention as castableCards). Command-
+// zone pieces add the §903.8 tax. Pieces not located in either zone
+// (e.g. graveyard reanimation) return 0 because the reanimation cost
+// is paid by the recursion spell itself, which is tracked separately.
+func pieceCastCost(seat *gameengine.Seat, name string, fromCommandZone bool) int {
+	if fromCommandZone {
+		for _, c := range seat.CommandZone {
+			if c == nil || !cardMatchesAlias(c, name) {
+				continue
+			}
+			base := gameengine.ManaCostOf(c)
+			// MDFC commanders whose back face is non-creature should be
+			// quoted at the back-face cost — that's the cast tryCastCommander
+			// will actually make. Match the heuristic in tournament/turn.go.
+			if c.IsMDFC() && c.BackFaceCMC > 0 && mdfcBackFaceIsNonCreatureCombo(c) {
+				base = c.BackFaceCMC
+			}
+			tax := 0
+			if seat.CommanderTax != nil {
+				tax = seat.CommanderTax[name]
+				// Tax may be keyed off the canonical full DFC name even
+				// when the piece is one face. Try both lookups.
+				if tax == 0 && c.Name != name {
+					tax = seat.CommanderTax[c.Name]
+				}
+			}
+			return base + 2*tax
+		}
+		return 0
+	}
+	return cardManaCost(seat, name)
+}
+
+// cardMatchesAlias reports whether `name` is one of `c`'s known
+// aliases (runtime Name, full DFC string, either face). Mirrors the
+// indexing in cardAliases so consumers like cardManaCost can find a
+// piece by any name Freya might emit.
+func cardMatchesAlias(c *gameengine.Card, name string) bool {
+	if c == nil || name == "" {
+		return false
+	}
+	for _, a := range cardAliases(c) {
+		if a == name {
+			return true
+		}
+	}
+	return false
+}
+
+// mdfcBackFaceIsNonCreatureCombo mirrors mdfcPreferBackFace from
+// internal/tournament/turn.go: an MDFC whose front face is a creature
+// and back face is not is preferentially cast as the back face. We
+// duplicate the predicate here rather than import-cycling through
+// the tournament package.
+func mdfcBackFaceIsNonCreatureCombo(c *gameengine.Card) bool {
+	if c == nil || !c.IsMDFC() {
+		return false
+	}
+	frontIsCreature := false
+	for _, t := range c.Types {
+		if t == "creature" {
+			frontIsCreature = true
+			break
+		}
+	}
+	if !frontIsCreature {
+		return false
+	}
+	for _, t := range c.BackFaceTypes {
+		if t == "creature" {
+			return false
+		}
+	}
+	return true
 }
 
 // hasTutorInHand checks if the seat has any tutor card in hand.
