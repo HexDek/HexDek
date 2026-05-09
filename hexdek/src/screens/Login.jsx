@@ -1,14 +1,43 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Panel, KV, Btn, Tape } from '../components/chrome'
 import { sendMagicLink } from '../lib/firebase'
+import { listenAuth, AUTH_EVENT } from '../lib/authBroadcast'
+import MagicLinkConsole from '../components/MagicLinkConsole'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [error, setError] = useState(null)
   const [sending, setSending] = useState(false)
+  const [authed, setAuthed] = useState(null)
   const navigate = useNavigate()
+
+  // Listen for the magic-link tab's broadcast. We arm the listener as
+  // soon as the user lands on /login so a slow email-client (or a user
+  // who pasted the link into a new browser entirely) still hands off
+  // cleanly. When auth succeeds, swap to the MagicLinkConsole; when it
+  // fails, surface the failure inline.
+  useEffect(() => {
+    const stop = listenAuth((msg) => {
+      if (msg?.type === AUTH_EVENT.SUCCEEDED) {
+        setAuthed({ email: msg.email })
+      } else if (msg?.type === AUTH_EVENT.FAILED) {
+        setError('LINK FAILED IN OTHER TAB. TRY AGAIN.')
+      }
+    })
+    return stop
+  }, [])
+
+  if (authed) {
+    return (
+      <MagicLinkConsole
+        email={authed.email || email || null}
+        redirectTo="/operator"
+        onComplete={() => navigate('/operator', { replace: true })}
+      />
+    )
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()

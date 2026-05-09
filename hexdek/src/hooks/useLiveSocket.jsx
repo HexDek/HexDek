@@ -28,9 +28,19 @@ function saveCache(patch) {
 
 const LiveCtx = createContext(null)
 
-const RECONNECT_DELAY_MS = 2000
+// Exponential backoff: BASE * 2^(attempt-1), capped at MAX. After
+// MAX_ATTEMPTS the auto-retry stops and only manual reconnectNow()
+// will re-arm the loop.
+const RECONNECT_BASE_MS = 1000
+const RECONNECT_MAX_MS = 30000
+const MAX_ATTEMPTS = 10
 
-// status: 'disconnected' | 'contacting' | 'initializing' | 'live'
+function backoffFor(attempt) {
+  const exp = RECONNECT_BASE_MS * Math.pow(2, Math.max(0, attempt - 1))
+  return Math.min(RECONNECT_MAX_MS, exp)
+}
+
+// status: 'disconnected' | 'contacting' | 'initializing' | 'live' | 'failed'
 export function LiveProvider({ children }) {
   const cached = useRef(loadCached()).current
   const [game, setGame] = useState(null)
@@ -48,8 +58,13 @@ export function LiveProvider({ children }) {
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
+    if (reconnectRef.current) {
+      clearTimeout(reconnectRef.current)
+      reconnectRef.current = null
+    }
 
     setStatus('contacting')
+    setNextRetryAt(0)
     const ws = new WebSocket(WS_URL)
     wsRef.current = ws
 
@@ -58,10 +73,6 @@ export function LiveProvider({ children }) {
       attemptRef.current = 0
       setReconnectAttempt(0)
       setNextRetryAt(0)
-      if (reconnectRef.current) {
-        clearTimeout(reconnectRef.current)
-        reconnectRef.current = null
-      }
     }
 
     ws.onmessage = (evt) => {
@@ -89,19 +100,46 @@ export function LiveProvider({ children }) {
     }
 
     ws.onclose = () => {
-      setStatus('disconnected')
       wsRef.current = null
       gotFirstStats.current = false
       attemptRef.current += 1
       setReconnectAttempt(attemptRef.current)
-      setNextRetryAt(Date.now() + RECONNECT_DELAY_MS)
-      reconnectRef.current = setTimeout(connect, RECONNECT_DELAY_MS)
+      if (attemptRef.current > MAX_ATTEMPTS) {
+        // Give up auto-retry; user must hit "Reconnect Now". Do NOT
+        // schedule another setTimeout — the banner reads `status` to
+        // gate the manual button.
+        setStatus('failed')
+        setNextRetryAt(0)
+        return
+      }
+      setStatus('disconnected')
+      const delay = backoffFor(attemptRef.current)
+      setNextRetryAt(Date.now() + delay)
+      reconnectRef.current = setTimeout(connect, delay)
     }
 
     ws.onerror = () => {
       ws.close()
     }
   }, [])
+
+  // Manual override — clears any pending backoff timer and reconnects
+  // immediately. Resets the attempt counter so the next failure starts
+  // backoff from scratch instead of continuing the prior 30s ceiling.
+  const reconnectNow = useCallback(() => {
+    if (reconnectRef.current) {
+      clearTimeout(reconnectRef.current)
+      reconnectRef.current = null
+    }
+    if (wsRef.current) {
+      try { wsRef.current.close() } catch {}
+      wsRef.current = null
+    }
+    attemptRef.current = 0
+    setReconnectAttempt(0)
+    setNextRetryAt(0)
+    connect()
+  }, [connect])
 
   useEffect(() => {
     connect()
@@ -120,7 +158,11 @@ export function LiveProvider({ children }) {
   }, [connect])
 
   return (
-    <LiveCtx.Provider value={{ game, elo, stats, history, speed, status, reconnectAttempt, nextRetryAt }}>
+    <LiveCtx.Provider value={{
+      game, elo, stats, history, speed, status,
+      reconnectAttempt, nextRetryAt, maxAttempts: MAX_ATTEMPTS,
+      reconnectNow,
+    }}>
       {children}
     </LiveCtx.Provider>
   )
