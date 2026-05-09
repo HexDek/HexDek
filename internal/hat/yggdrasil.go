@@ -579,6 +579,147 @@ func (h *YggdrasilHat) categorizeWithFreya(c *gameengine.Card) CardCategory {
 	return categorizeCard(c)
 }
 
+// -----------------------------------------------------------------------------
+// Game phase model — continuous awareness of where we are in the game.
+//
+// Replaces ad-hoc `gs.Turn > 15` checks. Real Commander games have three
+// distinct phases where optimal play looks different:
+//
+//   PhaseDeploy   (turns 1–4 baseline): ramp up, deploy commander, fix mana.
+//                                       Conservative attacks; expensive threats
+//                                       are mostly dead in hand.
+//   PhaseDevelop  (turns 5–9 baseline): build the board, run value engines,
+//                                       gather card advantage.
+//   PhaseExecute  (turns 10+ baseline): push wins, deploy combo finishers,
+//                                       cast commander even at high tax.
+//
+// Detection is multi-signal: turn number is the spine but board state, mana
+// availability, commander deployment, and hand exhaustion can pull the phase
+// forward (or, rarely, hold it back).
+// -----------------------------------------------------------------------------
+
+// GamePhase classifies the current strategic moment of the game.
+type GamePhase int
+
+const (
+	PhaseDeploy  GamePhase = iota // turns 1-4: ramp, deploy commander, fix mana
+	PhaseDevelop                  // turns 5-9: build board, value engine, card advantage
+	PhaseExecute                  // turns 10+: push win conditions, close the game
+)
+
+// String returns a short label for logging.
+func (p GamePhase) String() string {
+	switch p {
+	case PhaseDeploy:
+		return "Deploy"
+	case PhaseDevelop:
+		return "Develop"
+	case PhaseExecute:
+		return "Execute"
+	}
+	return "?"
+}
+
+// detectPhase blends turn number with board / mana / hand signals so a deck
+// that ramps to 7 mana on turn 3 is treated as past Deploy, and a deck that
+// hits turn 12 with an empty hand is treated as Execute regardless of the
+// turn count being "only" 12.
+//
+// Signals (in order of weight):
+//
+//  1. Turn number (primary). 1-4 → Deploy, 5-9 → Develop, 10+ → Execute.
+//  2. Mana availability. avail >= 9 OR avail >= 7 with a commander on the
+//     battlefield → bump Deploy → Develop. avail >= 12 → Execute.
+//  3. Commander on battlefield. Deploy is "deploy commander"; once it's out,
+//     bump to at least Develop.
+//  4. Board size. 5+ controlled creatures or 8+ permanents = past Deploy.
+//  5. Cards in hand. Hand size <= 1 with avail mana spent = Execute (no fuel
+//     left, only thing to do is push).
+//
+// All bumps are monotonic (never demote past the turn-spine baseline) — a
+// conservative deck that didn't ramp still gets the turn-based phase.
+func (h *YggdrasilHat) detectPhase(gs *gameengine.GameState, seatIdx int) GamePhase {
+	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) || gs.Seats[seatIdx] == nil {
+		return PhaseDeploy
+	}
+	turn := gs.Turn
+	phase := PhaseDeploy
+	switch {
+	case turn >= 10:
+		phase = PhaseExecute
+	case turn >= 5:
+		phase = PhaseDevelop
+	}
+
+	seat := gs.Seats[seatIdx]
+	avail := gameengine.AvailableManaEstimate(gs, seat)
+
+	// Commander on battlefield → past initial Deploy goal.
+	commanderOut := false
+	for _, p := range seat.Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		if gameengine.IsCommanderCard(gs, seatIdx, p.Card) {
+			commanderOut = true
+			break
+		}
+	}
+
+	// Board size — count creatures + total nonland permanents.
+	creatureCount := 0
+	nonlandCount := 0
+	for _, p := range seat.Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		if p.IsCreature() {
+			creatureCount++
+		}
+		if !p.IsLand() {
+			nonlandCount++
+		}
+	}
+
+	bumpToDevelop := func() {
+		if phase < PhaseDevelop {
+			phase = PhaseDevelop
+		}
+	}
+	bumpToExecute := func() {
+		if phase < PhaseExecute {
+			phase = PhaseExecute
+		}
+	}
+
+	// Mana / commander signals → at least Develop.
+	if avail >= 9 {
+		bumpToDevelop()
+	}
+	if avail >= 7 && commanderOut {
+		bumpToDevelop()
+	}
+	if commanderOut {
+		bumpToDevelop()
+	}
+	if creatureCount >= 5 || nonlandCount >= 8 {
+		bumpToDevelop()
+	}
+
+	// Heavy mana / hand exhaustion / huge board → Execute.
+	if avail >= 12 {
+		bumpToExecute()
+	}
+	if len(seat.Hand) <= 1 && turn >= 6 {
+		bumpToExecute()
+	}
+	if creatureCount >= 8 || nonlandCount >= 12 {
+		bumpToExecute()
+	}
+
+	return phase
+}
+
 // isFinisher returns true if the card is a Freya-classified game finisher.
 func (h *YggdrasilHat) isFinisher(c *gameengine.Card) bool {
 	if c == nil {
@@ -1651,6 +1792,63 @@ func (h *YggdrasilHat) cardHeuristic(gs *gameengine.GameState, seatIdx int, c *g
 	}
 
 	cat := h.categorizeWithFreya(c)
+
+	// Phase-of-game shaping. Different cards matter at different stages:
+	//   Deploy  → ramp / mana rocks early; expensive threats are dead weight.
+	//   Develop → value engines, draw, removal — out-resource opponents.
+	//   Execute → finishers, combo pieces, mass removal — close the game.
+	// The shifts are additive on top of the archetype switch below; they
+	// don't override archetype identity, just sharpen the curve.
+	switch h.detectPhase(gs, seatIdx) {
+	case PhaseDeploy:
+		switch cat {
+		case CatRamp:
+			base += 0.20
+		case CatThreat:
+			if cmc >= 5 {
+				base -= 0.10 // top-end is dead in hand on turn 2
+			}
+		}
+		// Mana-rock heuristic: low-CMC artifact = rock-shaped.
+		if typeLineContains(c, "artifact") && cmc <= 2 && cat != CatThreat {
+			base += 0.15
+		}
+		// Commander-color enabler: any sub-3 spell that produces mana.
+		if cmc <= 3 {
+			ot := gameengine.OracleTextLower(c)
+			if strings.Contains(ot, "add {") || strings.Contains(ot, "add one mana") ||
+				strings.Contains(ot, "search your library for a") && strings.Contains(ot, "land") {
+				base += 0.10
+			}
+		}
+	case PhaseDevelop:
+		if h.isValueEngineKey(c) {
+			base += 0.15
+		}
+		switch cat {
+		case CatDraw:
+			base += 0.10
+		case CatRemoval:
+			base += 0.10
+		}
+	case PhaseExecute:
+		if h.isFinisher(c) {
+			base += 0.25
+		}
+		if h.isComboRelevant(c) {
+			base += 0.20
+		}
+		// Mass removal / sweeper detection.
+		ot := gameengine.OracleTextLower(c)
+		if strings.Contains(ot, "destroy all") || strings.Contains(ot, "exile all") ||
+			strings.Contains(ot, "each creature") && strings.Contains(ot, "damage") {
+			base += 0.15
+		}
+		// Late ramp is mostly wasted draws.
+		if cat == CatRamp {
+			base -= 0.10
+		}
+	}
 
 	// DNA ResourceGreed: high → bias toward card draw + ramp (resource
 	// hoarding); low → bias toward CatThreat (board presence). Applied
@@ -3538,6 +3736,19 @@ func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, le
 		stance = "BEHIND→selective"
 	}
 
+	// Phase-of-game shift on attack threshold:
+	//   Deploy  → +0.15 (very conservative; we'd rather develop board)
+	//   Develop → 0.0   (default behavior)
+	//   Execute → -0.10 (more aggressive; lower bar to swing)
+	switch h.detectPhase(gs, seatIdx) {
+	case PhaseDeploy:
+		threshold += 0.15
+		stance += "+DEPLOY"
+	case PhaseExecute:
+		threshold -= 0.10
+		stance += "+EXECUTE"
+	}
+
 	// Game clock awareness: archetype-shaped urgency. Aggro gets desperate
 	// early, control stays patient, combo panics without assembly.
 	urgencyStart := 20
@@ -4967,10 +5178,19 @@ func (h *YggdrasilHat) ShouldCastCommander(gs *gameengine.GameState, seatIdx int
 			manaBuffer = 0
 		}
 	}
-	// Late-game: always recast if affordable — the commander is the deck.
-	if gs.Turn > 15 {
+	// Phase-aware caps. Deploy is "deploy commander" — always cast when
+	// affordable (the commander IS the deploy goal). Execute is the close
+	// — pay any tax we can afford, the commander is too important to leave
+	// in zone. Develop is the default tax-aware path.
+	switch h.detectPhase(gs, seatIdx) {
+	case PhaseDeploy:
+		return true
+	case PhaseExecute:
+		// Existing "always recast if affordable" semantics that the old
+		// `gs.Turn > 15` branch covered.
 		return true
 	}
+
 	// 3rd Eye: If high interaction risk and commander tax is already 2+,
 	// wait until we have enough mana to also hold up protection, or until
 	// the blue player taps out.
