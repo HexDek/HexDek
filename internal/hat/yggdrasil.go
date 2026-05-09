@@ -4066,6 +4066,80 @@ func (h *YggdrasilHat) OrderReplacements(gs *gameengine.GameState, seatIdx int, 
 	return candidates
 }
 
+// hasGraveyardRecursionValue returns true if the card has intrinsic
+// recursion potential from the graveyard — flashback, unearth, escape,
+// disturb, embalm, eternalize, encore, jump-start, aftermath, retrace,
+// or dredge. Such cards are strictly better in the graveyard than
+// hopelessly stuck in hand when forced to discard. Deck-agnostic: any
+// deck running these cards gets the bonus, not just reanimator.
+func (h *YggdrasilHat) hasGraveyardRecursionValue(c *gameengine.Card) bool {
+	if c == nil {
+		return false
+	}
+	ot := gameengine.OracleTextLower(c)
+	if ot == "" {
+		return false
+	}
+	return strings.Contains(ot, "flashback") ||
+		strings.Contains(ot, "unearth") ||
+		strings.Contains(ot, "escape") ||
+		strings.Contains(ot, "disturb") ||
+		strings.Contains(ot, "embalm") ||
+		strings.Contains(ot, "eternalize") ||
+		strings.Contains(ot, "encore") ||
+		strings.Contains(ot, "jump-start") ||
+		strings.Contains(ot, "aftermath") ||
+		strings.Contains(ot, "retrace") ||
+		strings.Contains(ot, "dredge")
+}
+
+// hasGraveyardRecursionEnabler returns true if the seat controls a
+// permanent that returns cards from the graveyard to the battlefield
+// or hand (Muldrotha, Sun Titan, Meren, Karador, Sheoldred, etc.) or
+// has any active zone-cast grant rooted in the graveyard. When this is
+// true, putting cards in the graveyard becomes generally valuable for
+// any deck — not just reanimator archetypes.
+func (h *YggdrasilHat) hasGraveyardRecursionEnabler(gs *gameengine.GameState, seatIdx int) bool {
+	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
+		return false
+	}
+	seat := gs.Seats[seatIdx]
+	if seat == nil {
+		return false
+	}
+	for _, p := range seat.Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		ot := gameengine.OracleTextLower(p.Card)
+		if !strings.Contains(ot, "graveyard") {
+			continue
+		}
+		if !(strings.Contains(ot, "return") || strings.Contains(ot, "put")) {
+			continue
+		}
+		if strings.Contains(ot, "to the battlefield") ||
+			strings.Contains(ot, "to your hand") ||
+			strings.Contains(ot, "to its owner's hand") {
+			return true
+		}
+	}
+	if gs.ZoneCastGrants != nil {
+		for _, perm := range gs.ZoneCastGrants {
+			if perm == nil {
+				continue
+			}
+			if perm.RequireController >= 0 && perm.RequireController != seatIdx {
+				continue
+			}
+			if perm.Zone == "graveyard" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // -- Interface: ChooseDiscard --
 
 func (h *YggdrasilHat) ChooseDiscard(gs *gameengine.GameState, seatIdx int, hand []*gameengine.Card, n int) []*gameengine.Card {
@@ -4088,6 +4162,7 @@ func (h *YggdrasilHat) ChooseDiscard(gs *gameengine.GameState, seatIdx int, hand
 	if h.Strategy != nil {
 		arch = h.Strategy.Archetype
 	}
+	hasEnabler := h.hasGraveyardRecursionEnabler(gs, seatIdx)
 	for _, c := range hand {
 		if c == nil {
 			continue
@@ -4108,9 +4183,16 @@ func (h *YggdrasilHat) ChooseDiscard(gs *gameengine.GameState, seatIdx int, hand
 		if h.isCuttable(c) {
 			v -= 0.5
 		}
-		// Reanimator: high-CMC creatures are BETTER in the graveyard.
-		// Lower their keep-value so they get discarded first.
-		if arch == ArchetypeReanimator && typeLineContains(c, "creature") {
+		// Cards with intrinsic graveyard recursion (flashback, unearth,
+		// escape, disturb, etc.) are better in the graveyard than rotting
+		// in hand. Deck-agnostic — works for any deck running these cards.
+		if h.hasGraveyardRecursionValue(c) {
+			v -= 0.4
+		}
+		// Reanimator archetype OR any deck with a graveyard-recursion
+		// enabler on the battlefield (Muldrotha, Sun Titan, Meren, etc.)
+		// wants high-CMC creatures in the yard.
+		if (arch == ArchetypeReanimator || hasEnabler) && typeLineContains(c, "creature") {
 			cmc := gameengine.ManaCostOf(c)
 			if cmc >= 5 {
 				v -= float64(cmc) * 0.15
@@ -4271,6 +4353,7 @@ func (h *YggdrasilHat) ChooseSurveil(gs *gameengine.GameState, seatIdx int, card
 	if h.Strategy != nil {
 		arch = h.Strategy.Archetype
 	}
+	hasEnabler := h.hasGraveyardRecursionEnabler(gs, seatIdx)
 	for _, c := range cards {
 		if c == nil {
 			graveyard = append(graveyard, c)
@@ -4278,9 +4361,17 @@ func (h *YggdrasilHat) ChooseSurveil(gs *gameengine.GameState, seatIdx int, card
 		}
 		val := h.cardHeuristic(gs, seatIdx, c)
 
-		// Reanimator wants fatties in the graveyard — send high-CMC
-		// creatures to the yard where they can be reanimated.
-		if arch == ArchetypeReanimator && typeLineContains(c, "creature") {
+		// Cards with intrinsic graveyard recursion (flashback, unearth,
+		// escape, disturb, etc.) belong in the yard regardless of deck —
+		// they can be cast or reanimated from there.
+		if h.hasGraveyardRecursionValue(c) {
+			graveyard = append(graveyard, c)
+			continue
+		}
+
+		// Reanimator (or any deck with a graveyard-recursion enabler on
+		// battlefield) wants fatties in the graveyard.
+		if (arch == ArchetypeReanimator || hasEnabler) && typeLineContains(c, "creature") {
 			cmc := gameengine.ManaCostOf(c)
 			if cmc >= 5 {
 				graveyard = append(graveyard, c)

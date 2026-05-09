@@ -167,3 +167,22 @@ Fetch oracle data: `scripts/fetch-oracle.sh`
 - [ ] Tutor inference for modal spells and complex wording
 - [ ] Commander Spellbook integration (external combo DB import)
 - [ ] NLP-grade oracle text parsing (replace substring matching for edge cases)
+
+## Issue Log
+
+> **Rule:** ANY time a test, audit, Goldilocks run, Loki fuzz, or manual investigation surfaces a bug, invariant violation, or unexpected behavior — log it here IMMEDIATELY. No exceptions. Format: date, source, description, status.
+
+### Open
+
+| Date | Source | Issue | Severity | Notes |
+|------|--------|-------|----------|-------|
+| 2026-05-08 | Goldilocks | **Dread — CardIdentity invariant violation**: card appears in both library and graveyard simultaneously after destroy | Medium | Dread's replacement effect shuffles itself into library on death — engine puts it in graveyard first, then shuffles, leaving a stale reference |
+| 2026-05-08 | Goldilocks | **1,900 keyword_dead failures**: keywords are scaffolded but don't produce observable game state changes | Low | Bulk issue — keywords like flying, trample, lifelink, reach, etc. get board setup but Goldilocks can't detect their impact. Needs keyword-specific verification hooks |
+| 2026-05-08 | Corpus Audit | **4,190 unbucketed condition/trigger nodes** across all 4 eras (33.9% of 12,363 total) | Info | Era 1 biggest gap (3,281), Era 3 highest % (76.2%). 19 new scaffold kinds proposed from Era 4 audit |
+| 2026-05-08 | Freya | **Commander-centric hand evaluation gap**: Freya's keepable hand heuristic doesn't account for decks where gameplan IS the commander (e.g. Necron/Szarekh only needs mana + commander) | Medium | Reports 34.4% keepable for Necron which is too low — deck just needs lands to function |
+
+### Resolved
+
+| Date | Source | Issue | Resolution |
+|------|--------|-------|------------|
+| 2026-05-08 | Hat | **Graveyard recursion intelligence gated behind ArchetypeReanimator**: non-reanimator decks with graveyard synergy (Szarekh, surveil, self-mill) got no strategic graveyard play | Added deck-agnostic `hasGraveyardRecursionValue` (flashback/unearth/escape/disturb/embalm/eternalize/encore/jump-start/aftermath/retrace/dredge) and `hasGraveyardRecursionEnabler` (Sun-Titan/Muldrotha-style) helpers; both ChooseDiscard and ChooseSurveil now bias recursion-bearing cards toward the graveyard regardless of archetype |
