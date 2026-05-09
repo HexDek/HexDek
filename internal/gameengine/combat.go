@@ -1311,6 +1311,14 @@ func applyCombatDamageToPlayer(gs *GameState, src *Permanent, amount, seatIdx in
 	if amount <= 0 {
 		return
 	}
+	// CR §704.6c / §903.10a — track commander damage. Damage is "dealt"
+	// at this point (post-prevention, post-protection); both the infect
+	// branch and the standard branch below count toward the 21-threshold
+	// per §702.90c (the damage event still occurs, only its replacement
+	// effect changes — poison counters vs life loss).
+	if src.Card != nil && IsCommanderCard(gs, src.Controller, src.Card) {
+		AccumulateCommanderDamage(gs, seatIdx, src.Controller, src.Card.DisplayName(), amount)
+	}
 	// §702.90 — Infect: damage dealt to players is dealt in the form
 	// of poison counters instead of life loss.
 	if HasInfect(src) {
