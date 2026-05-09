@@ -3815,11 +3815,38 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 			if owner < 0 || owner >= len(gs.Seats) {
 				owner = src.Controller
 			}
-			// Remove from battlefield, add card to owner's library, shuffle.
-			removePermanentFromBattlefield(gs, src)
+			// Determine current zone so triggers fire with the right
+			// from_zone. Dread's "put into graveyard, shuffle it into
+			// owner's library" trigger fires after the card is already
+			// in the graveyard, so we must clean up the graveyard (or
+			// any other non-library zone) before moving it. Without this
+			// the card ends up referenced by both graveyard and library
+			// — see CardIdentity invariant violation, 2026-05-08.
+			fromZone := "battlefield"
+			removed := gs.removePermanent(src)
+			if removed {
+				gs.UnregisterReplacementsForPermanent(src)
+				gs.UnregisterContinuousEffectsForPermanent(src)
+			} else if src.Card != nil {
+				for seatIdx := range gs.Seats {
+					seat := gs.Seats[seatIdx]
+					if removeFromZone(seat, src.Card, "graveyard") {
+						fromZone = "graveyard"
+						break
+					}
+					if removeFromZone(seat, src.Card, "exile") {
+						fromZone = "exile"
+						break
+					}
+					if removeFromZone(seat, src.Card, "hand") {
+						fromZone = "hand"
+						break
+					}
+				}
+			}
 			gs.moveToZone(owner, src.Card, "library_bottom")
 			shuffleLibrary(gs, owner)
-			FireZoneChangeTriggers(gs, src, src.Card, "battlefield", "library")
+			FireZoneChangeTriggers(gs, src, src.Card, fromZone, "library")
 		}
 		gs.LogEvent(Event{
 			Kind:   "shuffle_into_library",
