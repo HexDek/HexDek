@@ -43,9 +43,14 @@ export default function App() {
     <Routes>
       {/* Stream overlay — outside AppShell so the appbar/footer/frame
           don't render. The component forces html/body bg transparent
-          on mount so OBS browser-source captures alpha cleanly. */}
+          on mount so OBS browser-source captures alpha cleanly.
+          /obs/:gameId is an alias of /stream/:gameId for streamers
+          who configured their browser source against the legacy
+          /obs path; both render the same component. */}
       <Route path="stream/:gameId" element={<StreamOverlay />} />
       <Route path="stream" element={<StreamOverlay />} />
+      <Route path="obs/:gameId" element={<StreamOverlay />} />
+      <Route path="obs" element={<StreamOverlay />} />
       <Route element={<AppShell />}>
         <Route index element={<Landing />} />
         <Route path="splash" element={<Splash />} />
