@@ -160,6 +160,19 @@ func main() {
 	}
 	friendTracker.Register(mux)
 
+	// BOINC contributor dispatcher: distributed-compute clients
+	// (cmd/hexdek-contrib) connect over WS, receive signed work
+	// chunks, and earn credits visible on the operator profile.
+	contribDispatcher := hexapi.NewContribDispatcher(database)
+	contribDispatcher.SpotCheckPct = hexapi.ParseSpotCheckPct(os.Getenv("HEXDEK_CONTRIB_SPOTCHECK_PCT"), 0.03)
+	// Spot-check callback re-runs a fraction of returned chunks on the
+	// same engine the client used. Corpus + meta are loaded lazily on
+	// first spot-check so server startup isn't blocked.
+	contribAST := envOr("HEXDEK_CONTRIB_AST", "data/rules/ast_dataset.jsonl")
+	contribOracle := os.Getenv("HEXDEK_CONTRIB_ORACLE")
+	contribDispatcher.SpotCheck = hexapi.NewSpotCheckRunner(contribAST, contribAST, contribOracle).Run
+	contribDispatcher.Register(mux)
+
 	log.Printf("listening on %s", *addr)
 	log.Printf("Ship 1: curl http://%s/game/test/library/top/3", *addr)
 	log.Printf("Ship 2: curl -XPOST http://%s/api/device/register -d '{\"display_name\":\"Hex\"}'", *addr)
@@ -176,6 +189,14 @@ type server struct {
 
 	mu      sync.RWMutex
 	library []*moxfield.Card
+}
+
+// envOr returns os.Getenv(key) when set, else def.
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
 }
 
 // shuffleLibrary builds a fresh expanded library from the deck's mainboard

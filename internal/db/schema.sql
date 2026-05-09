@@ -323,3 +323,56 @@ CREATE TABLE IF NOT EXISTS card_performance (
 
 CREATE INDEX IF NOT EXISTS idx_card_performance_winrate
     ON card_performance(wins_when_included, games_included);
+
+-- ===== BOINC CONTRIBUTOR =====
+-- Distributed-compute (BOINC-style) tables. The hexdek-contrib client
+-- earns credits by running game simulations on behalf of the server.
+--
+-- contributor_credits: one row per contributor (owner slug). Tracks
+-- lifetime credits, chunk counts, validation stats, and anomaly state.
+-- A frozen contributor's submissions are still received but credit
+-- accrual is paused until manual review.
+--
+-- contrib_chunk: append-only log of every chunk that was assigned and
+-- (eventually) returned. Used for spot-check selection, anomaly stats,
+-- and operator-visible recent-activity.
+
+CREATE TABLE IF NOT EXISTS contributor_credits (
+    owner             TEXT PRIMARY KEY,
+    credits_total     INTEGER NOT NULL DEFAULT 0,
+    chunks_completed  INTEGER NOT NULL DEFAULT 0,
+    chunks_rejected   INTEGER NOT NULL DEFAULT 0,
+    games_simulated   INTEGER NOT NULL DEFAULT 0,
+    -- Running stats for the 3-sigma anomaly detector. We track the
+    -- mean and the second moment (M2) using Welford's algorithm so we
+    -- can compute variance online without storing the full sample.
+    elapsed_ms_n      INTEGER NOT NULL DEFAULT 0,
+    elapsed_ms_mean   REAL    NOT NULL DEFAULT 0.0,
+    elapsed_ms_m2     REAL    NOT NULL DEFAULT 0.0,
+    last_z_score      REAL    NOT NULL DEFAULT 0.0,
+    frozen            INTEGER NOT NULL DEFAULT 0,    -- 1 = credits paused
+    frozen_reason     TEXT    NOT NULL DEFAULT '',
+    first_seen_at     INTEGER NOT NULL DEFAULT 0,
+    last_active_at    INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS contrib_chunk (
+    chunk_id          TEXT PRIMARY KEY,
+    owner             TEXT NOT NULL,
+    issued_at         INTEGER NOT NULL,
+    returned_at       INTEGER NOT NULL DEFAULT 0,
+    games_count       INTEGER NOT NULL DEFAULT 0,
+    n_seats           INTEGER NOT NULL DEFAULT 0,
+    elapsed_ms        INTEGER NOT NULL DEFAULT 0,
+    outcome_hash      TEXT    NOT NULL DEFAULT '',
+    accepted          INTEGER NOT NULL DEFAULT 0,    -- 0 = pending, 1 = ok, -1 = rejected
+    spot_checked      INTEGER NOT NULL DEFAULT 0,
+    spot_check_passed INTEGER NOT NULL DEFAULT 0,
+    credits_awarded   INTEGER NOT NULL DEFAULT 0,
+    reason            TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_contrib_chunk_owner
+    ON contrib_chunk(owner, returned_at DESC);
+CREATE INDEX IF NOT EXISTS idx_contrib_chunk_issued
+    ON contrib_chunk(issued_at);
