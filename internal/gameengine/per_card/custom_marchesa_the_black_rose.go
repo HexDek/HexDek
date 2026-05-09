@@ -17,12 +17,65 @@ import (
 //	return that card to the battlefield under your control at the
 //	beginning of the next end step.
 //
-// The dethrone keyword grant is engine territory. We wire the death
-// trigger here: queue a delayed trigger that brings the card back from
-// graveyard at the next end step. The "under your control" clause means
-// Marchesa's controller, not the dying card's owner — we honor that.
+// We wire two pieces here:
+//   - Death trigger: queue a delayed trigger that brings the card back
+//     from graveyard at the next end step. The "under your control"
+//     clause means Marchesa's controller, not the dying card's owner —
+//     we honor that.
+//   - Dethrone grant: register a layer-6 continuous effect that adds the
+//     "dethrone" keyword to OTHER creatures Marchesa's controller
+//     controls. Marchesa herself has dethrone via the AST keyword
+//     pipeline (CR §613.1f layer 6 ability grants stack). The keyword
+//     itself fires automatically via FireDethroneTriggers in
+//     keywords_misc.go.
 func registerMarchesaTheBlackRoseCustom(r *Registry) {
+	r.OnETB("Marchesa, the Black Rose", marchesaGrantDethrone)
 	r.OnTrigger("Marchesa, the Black Rose", "creature_dies", marchesaOnCreatureDies)
+}
+
+func marchesaGrantDethrone(gs *gameengine.GameState, perm *gameengine.Permanent) {
+	if gs == nil || perm == nil {
+		return
+	}
+	source := perm
+	const grant = "dethrone"
+	pred := func(_ *gameengine.GameState, t *gameengine.Permanent) bool {
+		if t == nil || t.Card == nil {
+			return false
+		}
+		if t == source {
+			return false
+		}
+		if t.Controller != source.Controller {
+			return false
+		}
+		return t.IsCreature()
+	}
+	apply := func(_ *gameengine.GameState, _ *gameengine.Permanent, chars *gameengine.Characteristics) {
+		if chars == nil {
+			return
+		}
+		for _, k := range chars.Keywords {
+			if k == grant {
+				return
+			}
+		}
+		chars.Keywords = append(chars.Keywords, grant)
+	}
+	gs.RegisterContinuousEffect(&gameengine.ContinuousEffect{
+		Layer:          gameengine.LayerAbility,
+		Timestamp:      gs.NextTimestamp(),
+		SourcePerm:     source,
+		SourceCardName: "Marchesa, the Black Rose",
+		ControllerSeat: source.Controller,
+		HandlerID:      "marchesa_dethrone_grant_" + perm.Card.DisplayName(),
+		Duration:       gameengine.DurationUntilSourceLeaves,
+		Predicate:      pred,
+		ApplyFn:        apply,
+	})
+	emit(gs, "marchesa_dethrone_grant_registered", perm.Card.DisplayName(), map[string]interface{}{
+		"seat": perm.Controller,
+	})
 }
 
 func marchesaOnCreatureDies(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
