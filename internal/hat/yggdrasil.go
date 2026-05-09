@@ -1034,6 +1034,17 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 		if threat.Life < 20 {
 			score += 3.0 * (1.0 - float64(threat.Life)/20.0)
 		}
+		// 2a. Step focus-fire — finishing-off bonus once a player is in
+		// closing range. The linear ramp keeps pressure scaling smoothly
+		// across the 19→1 range; these step bumps capture the qualitative
+		// shift at the "could die this turn" thresholds (10 = ~one big
+		// swing, 5 = lethal to almost any combat phase).
+		if threat.Life < 10 {
+			score += 2.0
+		}
+		if threat.Life < 5 {
+			score += 4.0
+		}
 
 		// 3. Target the leader (highest eval score).
 		leaderWeight := 2.0
@@ -1046,8 +1057,16 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 		// when the attacker has evasion the defender can't answer
 		// (already detected by isOpenForAttacker — flying without reach,
 		// menace into a single blocker, etc.).
+		// Flying lane: when the attacker has flying and this defender
+		// has no flying or reach blockers, double the bonus to +3.0.
+		// Open sky against a vulnerable seat is the strongest signal
+		// for "swing here" the targeting layer has.
 		if attacker != nil && isOpenForAttacker(gs, attacker, gs.Seats[def]) {
-			score += 1.5
+			openBonus := 1.5
+			if attacker.HasKeyword("flying") && !seatHasReachOrFlyingBlocker(gs.Seats[def]) {
+				openBonus = 3.0
+			}
+			score += openBonus
 		}
 
 		// 4a. Protection lane: even if the defender has untapped creatures,
@@ -1288,13 +1307,27 @@ func anyOpponentHasReachOrFlyingBlocker(gs *gameengine.GameState, seatIdx int) b
 		if i == seatIdx || s == nil || s.Lost || s.LeftGame {
 			continue
 		}
-		for _, b := range s.Battlefield {
-			if b == nil || !b.IsCreature() || b.Tapped {
-				continue
-			}
-			if b.HasKeyword("reach") || b.HasKeyword("flying") {
-				return true
-			}
+		if seatHasReachOrFlyingBlocker(s) {
+			return true
+		}
+	}
+	return false
+}
+
+// seatHasReachOrFlyingBlocker reports whether the seat has at least one
+// untapped creature with reach or flying. Per-seat granularity; used by
+// bestTarget to scale the open-lane bonus when a flying attacker has a
+// truly clear sky against this specific defender.
+func seatHasReachOrFlyingBlocker(seat *gameengine.Seat) bool {
+	if seat == nil {
+		return false
+	}
+	for _, b := range seat.Battlefield {
+		if b == nil || !b.IsCreature() || b.Tapped {
+			continue
+		}
+		if b.HasKeyword("reach") || b.HasKeyword("flying") {
+			return true
 		}
 	}
 	return false

@@ -277,3 +277,167 @@ func TestYggdrasil_ChooseAttackers_KeepsTrampleAndEvasion(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------
+// seatHasReachOrFlyingBlocker — per-defender granularity helper used by
+// the +3.0 open-sky bonus inside bestTarget.
+// ---------------------------------------------------------------------
+
+func TestSeatHasReachOrFlyingBlocker_FlyingDetected(t *testing.T) {
+	gs := newTestGame(t, 2)
+	flyer := newTestPermanent(gs.Seats[1], newTestCardMinimal("Sphinx", []string{"creature"}, 5, nil), 4, 4)
+	addKeyword(flyer, "flying")
+	if !seatHasReachOrFlyingBlocker(gs.Seats[1]) {
+		t.Fatalf("opponent flyer should register as a flyer-blocker on this seat")
+	}
+}
+
+func TestSeatHasReachOrFlyingBlocker_ReachDetected(t *testing.T) {
+	gs := newTestGame(t, 2)
+	spider := newTestPermanent(gs.Seats[1], newTestCardMinimal("Giant Spider", []string{"creature"}, 4, nil), 2, 4)
+	addKeyword(spider, "reach")
+	if !seatHasReachOrFlyingBlocker(gs.Seats[1]) {
+		t.Fatalf("Giant Spider with reach should register as a flyer-blocker")
+	}
+}
+
+func TestSeatHasReachOrFlyingBlocker_TappedIgnored(t *testing.T) {
+	gs := newTestGame(t, 2)
+	flyer := newTestPermanent(gs.Seats[1], newTestCardMinimal("Sphinx", []string{"creature"}, 5, nil), 4, 4)
+	addKeyword(flyer, "flying")
+	flyer.Tapped = true
+	if seatHasReachOrFlyingBlocker(gs.Seats[1]) {
+		t.Fatalf("a tapped flyer shouldn't count as a viable flyer-blocker")
+	}
+}
+
+func TestSeatHasReachOrFlyingBlocker_GroundOnlyReturnsFalse(t *testing.T) {
+	gs := newTestGame(t, 2)
+	newTestPermanent(gs.Seats[1], newTestCardMinimal("Bear", []string{"creature"}, 2, nil), 2, 2)
+	if seatHasReachOrFlyingBlocker(gs.Seats[1]) {
+		t.Fatalf("ground-only board should report no flyer-blocker")
+	}
+}
+
+// ---------------------------------------------------------------------
+// Evasion matching — flyer prefers the opponent without reach/flying
+// blockers; the +3.0 open-sky bonus dominates over equal life totals.
+// ---------------------------------------------------------------------
+
+func TestYggdrasil_ChooseAttackTarget_FlyerOpenSkyOverGuardedSky(t *testing.T) {
+	gs := newTestGame(t, 3)
+	h := NewYggdrasilHat(nil, 0)
+	h.Noise = 0
+
+	// Both opponents have equal life so the linear ramp doesn't tilt.
+	gs.Seats[1].Life = 25
+	gs.Seats[2].Life = 25
+
+	// Seat 1 has a Sphinx in the air — flying lane closed.
+	guard := newTestPermanent(gs.Seats[1], newTestCardMinimal("Sphinx", []string{"creature"}, 5, nil), 4, 4)
+	addKeyword(guard, "flying")
+	// Seat 2 has only ground creatures — flying lane fully open.
+	newTestPermanent(gs.Seats[2], newTestCardMinimal("Ogre", []string{"creature"}, 4, nil), 4, 4)
+
+	atk := newTestPermanent(gs.Seats[0], newTestCardMinimal("Drake", []string{"creature"}, 3, nil), 2, 2)
+	addKeyword(atk, "flying")
+
+	got := h.ChooseAttackTarget(gs, 0, atk, []int{1, 2})
+	if got != 2 {
+		t.Fatalf("flyer should target the opponent with no flying/reach blockers (seat 2); got seat %d", got)
+	}
+}
+
+func TestYggdrasil_ChooseAttackTarget_FlyerVsReachIsNotOpenSky(t *testing.T) {
+	gs := newTestGame(t, 3)
+	h := NewYggdrasilHat(nil, 0)
+	h.Noise = 0
+
+	gs.Seats[1].Life = 25
+	gs.Seats[2].Life = 25
+
+	// Seat 1 has a Giant Spider — reach closes the lane just like flying.
+	spider := newTestPermanent(gs.Seats[1], newTestCardMinimal("Giant Spider", []string{"creature"}, 4, nil), 2, 4)
+	addKeyword(spider, "reach")
+	// Seat 2 has only ground creatures.
+	newTestPermanent(gs.Seats[2], newTestCardMinimal("Ogre", []string{"creature"}, 4, nil), 4, 4)
+
+	atk := newTestPermanent(gs.Seats[0], newTestCardMinimal("Drake", []string{"creature"}, 3, nil), 2, 2)
+	addKeyword(atk, "flying")
+
+	got := h.ChooseAttackTarget(gs, 0, atk, []int{1, 2})
+	if got != 2 {
+		t.Fatalf("reach should block the open-sky bonus; flyer should target seat 2; got seat %d", got)
+	}
+}
+
+// ---------------------------------------------------------------------
+// Life-total focus fire — step bonuses at <10 (+2.0) and <5 (+4.0)
+// drive ChooseAttackTarget toward finishing-range opponents.
+// ---------------------------------------------------------------------
+
+func TestYggdrasil_ChooseAttackTarget_FocusBelowTenLife(t *testing.T) {
+	gs := newTestGame(t, 3)
+	h := NewYggdrasilHat(nil, 0)
+	h.Noise = 0
+
+	// Seat 1: 9 life — past the <10 step.
+	// Seat 2: 30 life — only the linear ramp applies.
+	gs.Seats[1].Life = 9
+	gs.Seats[2].Life = 30
+
+	atk := newTestPermanent(gs.Seats[0], newTestCardMinimal("Bear", []string{"creature"}, 2, nil), 2, 2)
+
+	got := h.ChooseAttackTarget(gs, 0, atk, []int{1, 2})
+	if got != 1 {
+		t.Fatalf("opponent at 9 life should be focus-fired; got seat %d", got)
+	}
+}
+
+func TestYggdrasil_ChooseAttackTarget_FocusBelowFiveLifeBeatsBelowTen(t *testing.T) {
+	gs := newTestGame(t, 3)
+	h := NewYggdrasilHat(nil, 0)
+	h.Noise = 0
+
+	// Seat 1: 9 life (only the <10 bonus).
+	// Seat 2: 4 life (both <10 and <5 bonuses, plus a higher linear ramp).
+	gs.Seats[1].Life = 9
+	gs.Seats[2].Life = 4
+
+	atk := newTestPermanent(gs.Seats[0], newTestCardMinimal("Bear", []string{"creature"}, 2, nil), 2, 2)
+
+	got := h.ChooseAttackTarget(gs, 0, atk, []int{1, 2})
+	if got != 2 {
+		t.Fatalf("opponent at 4 life should outrank opponent at 9 life; got seat %d", got)
+	}
+}
+
+// ---------------------------------------------------------------------
+// Zero-power attacker filter — already enforced by ChooseAttackers'
+// `if pw <= 0 { continue }` guard. Locked in with a regression test
+// so a future refactor can't quietly send 0-power creatures.
+// ---------------------------------------------------------------------
+
+func TestYggdrasil_ChooseAttackers_SkipsZeroPower(t *testing.T) {
+	gs := newTestGame(t, 2)
+	h := NewYggdrasilHat(nil, 0)
+	h.Noise = 0
+
+	zero := newTestPermanent(gs.Seats[0], newTestCardMinimal("Tarmogoyf-stub", []string{"creature"}, 2, nil), 0, 1)
+	got := h.ChooseAttackers(gs, 0, []*gameengine.Permanent{zero})
+	if len(got) != 0 {
+		t.Fatalf("0-power creatures must not be sent to combat; got %d attackers", len(got))
+	}
+}
+
+func TestYggdrasil_ChooseAttackers_SkipsNegativePower(t *testing.T) {
+	gs := newTestGame(t, 2)
+	h := NewYggdrasilHat(nil, 0)
+	h.Noise = 0
+
+	neg := newTestPermanent(gs.Seats[0], newTestCardMinimal("Mistshroud", []string{"creature"}, 2, nil), -1, 2)
+	got := h.ChooseAttackers(gs, 0, []*gameengine.Permanent{neg})
+	if len(got) != 0 {
+		t.Fatalf("negative-power creatures must not be sent to combat; got %d attackers", len(got))
+	}
+}
