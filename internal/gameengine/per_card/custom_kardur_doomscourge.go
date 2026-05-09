@@ -37,11 +37,38 @@ func kardurETBGoadFlag(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	// Set a flag the engine combat layer can branch on. +1 so default
 	// 0 means "off"; controller seat encoded.
 	gs.Flags["kardur_goad_seat"] = perm.Controller + 1
+	// "Until your next turn": queue a delayed trigger to clear the
+	// goad-seat flag at the start of Kardur's controller's next upkeep.
+	// Without this expiry the flag would persist all game.
+	controller := perm.Controller
+	gs.RegisterDelayedTrigger(&gameengine.DelayedTrigger{
+		TriggerAt:      "next_upkeep",
+		ControllerSeat: controller,
+		SourceCardName: perm.Card.DisplayName(),
+		OneShot:        true,
+		EffectFn: func(gs *gameengine.GameState) {
+			if gs == nil || gs.Flags == nil {
+				return
+			}
+			if gs.Flags["kardur_goad_seat"] == controller+1 {
+				delete(gs.Flags, "kardur_goad_seat")
+				gs.LogEvent(gameengine.Event{
+					Kind:   "per_card_handler",
+					Source: "Kardur, Doomscourge",
+					Details: map[string]interface{}{
+						"slug":   "kardur_goad_expires",
+						"reason": "until_your_next_turn_elapsed",
+						"seat":   controller,
+					},
+				})
+			}
+		},
+	})
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat": perm.Controller,
 	})
 	emitPartial(gs, "kardur_goad_until_next_turn", perm.Card.DisplayName(),
-		"opponent attack-mandatory + redirect-to-other-player not yet enforced by combat layer; flag set")
+		"opponent attack-mandatory + redirect-to-other-player not yet enforced by combat layer; flag set with expiry")
 }
 
 func kardurAttackerDeathDrain(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {

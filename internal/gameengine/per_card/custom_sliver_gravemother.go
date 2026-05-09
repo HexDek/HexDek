@@ -36,6 +36,12 @@ func sliverGravemotherEncore(gs *gameengine.GameState, src *gameengine.Permanent
 	if seat == nil {
 		return
 	}
+	// "Activate only as a sorcery." — gate when caller bypasses the
+	// engine's stack-time check.
+	if !isSorcerySpeed(gs, src.Controller) {
+		emitFail(gs, slug, src.Card.DisplayName(), "not_sorcery_speed", nil)
+		return
+	}
 	// Pick the highest-power Sliver creature card in graveyard whose
 	// encore cost we can afford from the current mana pool.
 	var pick *gameengine.Card

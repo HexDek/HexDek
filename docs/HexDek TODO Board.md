@@ -33,29 +33,33 @@ kanban-plugin: board
 - [x] **Araumi of the Dead Tide** — "{T}, Exile cards from your graveyard equal to the number of opponents you have" (the exile-from-GY portion is not in standard cost AST). Handler enforces graveyard-card exile.
 - [x] **Mairsil, the Pretender** — ETB exile-and-tag cost is the resolution effect; activation copies bypass cage-counter validation. Handler tags caged cards for the engine-side hook to verify.
 
-### Open — Era 1 (FDN/DSK/BLB/OTJ/MKM, partially addressed by PR #32)
+### Done — Era 1 + Era 2 cost gates (2026-05-09, dev/cost-unenforced-era1)
 
-- [ ] **Bristly Bill, Spine Sower** — `{3}{G}{G}` double-counters: handler doubles +1/+1 counters on all controlled creatures, mana cost not collected by the handler.
-- [ ] **Ezrim, Agency Chief** — `{1}, Sacrifice an artifact` keyword grant: effect not implemented at per_card layer (AST-deferred); cost path unverified.
-- [ ] **The Jolly Balloon Man** — `{1}, {T}, Activate only as a sorcery` copy-creature token: not implemented at per_card layer.
-- [ ] **Commander Mustard** — `{2}{R}{W}` Soldier-grant attack-damage rider: not implemented at per_card layer.
-- [ ] **Giada, Font of Hope** — `{T}: Add {W}` mana ability with "spend only on Angel" restriction: tap cost engine-enforced, restriction not gated by per_card.
-- [ ] **The Master of Keys** — `{X}{W}{U}{B}` ETB with X-counter / mill-2X rider: not implemented (no X readback at per_card hook).
-- [ ] **Kardur, Doomscourge** — ETB goad-until-your-next-turn duration: goad applied, no delayed-cleanup trigger to expire it.
-- [ ] **Aminatou, Veil Piercer** — enchantments-in-hand miracle grant: not wired into cast path.
+- [x] **Bristly Bill, Spine Sower** — `{3}{G}{G}` activated double now gates on `seat.ManaPool >= 5` via shared `payManaFromPool`.
+- [x] **Ezrim, Agency Chief** — `{1}, Sacrifice an artifact` activated grant implemented; gates on mana + finds an artifact-to-sac before paying. Defaults to lifelink (combat-math winner).
+- [x] **The Jolly Balloon Man** — `{1}, {T}, Activate only as a sorcery` copy-creature implemented with sorcery-speed + tap + mana gates. Refunds mana when no legal target found.
+- [x] **Commander Mustard** — `{2}{R}{W}` activation pays 4 from pool, sets `mustard_soldier_attack_ping` flag, queues end-of-turn cleanup delayed trigger.
+- [x] **The Master of Keys** — ETB now reads X from `gs.Flags["_master_of_keys_x_<seat>"]` (Walking Ballista pattern). Counters + mill no-op when X is absent so non-cost paths can't get free value.
+- [x] **Kardur, Doomscourge** — goad flag now expires via a `next_upkeep` delayed trigger keyed to the controller's seat.
 
-### Open — Era 2 (CMM/LCI/WOE/MOM/ONE, addressed by PR #31)
+### Open — Era 1 (residual gaps not in scope for cost-gate PR)
 
-- [ ] **Sliver Gravemother** — Encore {X} (variable mana + exile-from-graveyard). Handler enforces `seat.ManaPool >= cost` and exiles the chosen Sliver; engine doesn't gate activation on the encore cost.
-- [ ] **Yenna, Redtooth Regent** — `{2}, {T}: copy enchantment`. Mana cost engine-side, tap cost not enforced. Also "doesn't have the same name…" duplicate-name validation not enforced.
-- [ ] **Felothar the Steadfast** — `{3}, {T}, Sacrifice another creature: draw=toughness, discard=power`. Handler defensively decrements `seat.ManaPool -= 3` and sets `src.Tapped = true`; sacrifice availability not enforced before dispatch. (LTC)
-- [ ] **Mondrak, Glory Dominus** — `{2}{W}{W}, Exile two other creatures: 2 indestructible counters`. Handler enforces `seat.ManaPool >= 4` and validates two non-Mondrak creatures exist. (ONE/ONC)
-- [ ] **Solphim, Mayhem Dominus** — `{2}{R}{R}, Exile two other creatures: 2 indestructible counters`. Same shape as Mondrak. (ONE/ONC)
-- [ ] **Drivnod, Carnage Dominus** — `{2}{B}{B}, Exile two other creatures: 2 indestructible counters`. Same shape as Mondrak. (ONE/ONC)
-- [ ] **Zopandrel, Hunger Dominus** — `{2}{G}{G}, Exile two other creatures: 2 indestructible counters`. Same shape as Mondrak. (ONE/ONC)
-- [ ] **Inalla, Archmage Ritualist** — `Tap five untapped Wizards: target player loses 7 life`. Handler enforces ≥5 untapped wizards; engine doesn't gate the activation on the tap cost.
-- [ ] **Mayael the Anima** — `{3}{R}{G}{W}, {T}: look top 5, drop a power-5+ creature`. Mana cost engine-side, tap cost handler-side. (CMM reprint)
-- [ ] **Saheeli, Radiant Creator** — `{E}{E}{E}` combat-copy uses `PayEnergy` defensively (no engine-side energy-cost dispatch yet). (MOM)
+- [ ] **Giada, Font of Hope** — `{T}: Add {W}` mana ability with "spend only on Angel" restriction: tap cost engine-enforced, restriction not gated by per_card. (Mana-system pipeline change.)
+- [ ] **Aminatou, Veil Piercer** — enchantments-in-hand miracle grant: not wired into cast path. (Cast-pipeline change.)
+
+### Done — Era 2 cost gates (2026-05-09, dev/cost-unenforced-era1)
+
+- [x] **Sliver Gravemother** — Encore now adds the missing "Activate only as a sorcery" gate (`isSorcerySpeed`) on top of existing mana + graveyard-cost enforcement.
+- [x] **Yenna, Redtooth Regent** — `{2}, {T}` copy now gates on sorcery-speed + untapped-source + ≥2 mana, paid only after a legal target is found (no cost burn on misclick).
+- [x] **Felothar the Steadfast** — added `!src.Tapped` precondition on top of existing mana gate.
+- [x] **Mondrak / Solphim / Drivnod / Zopandrel** — already gated on `seat.ManaPool >= 4` and two-other-creature availability; verified, no change needed in this PR.
+- [x] **Inalla, Archmage Ritualist** — already gated on ≥5 untapped wizards; verified, no change needed in this PR.
+- [x] **Mayael the Anima** — `{3}{R}{G}{W}, {T}` now gates on `seat.ManaPool >= 6` and `!src.Tapped`, taps Mayael on success.
+- [x] **Saheeli, Radiant Creator** — already gates via `PayEnergy({E}{E}{E})`; verified, no change needed in this PR.
+
+### Notes
+
+> Colored mana enforcement (`{G}{G}` vs `{R}{R}`) is still engine-wide TODO — `seat.ManaPool` is a single integer, so the per-card gates above only verify generic cost sums. This is a defensive layer for non-engine callers (test fixtures, AI evaluator probes, replay rebuilds); the real gate runs through `ActivateAbility` when callers reach the engine path.
 
 ### Open — Other audited gaps
 
