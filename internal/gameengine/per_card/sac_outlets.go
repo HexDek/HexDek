@@ -470,6 +470,10 @@ func chooseSacVictimNotSelf(gs *gameengine.GameState, seat int, src *gameengine.
 // Priorities:
 //   - Tokens are ideal fodder (+3)
 //   - Creatures with death triggers WANT to die (+2)
+//   - Recursion path back to play/hand makes sacrifice nearly free:
+//     persist/undying (+2.5), graveyard zone-cast grants like unearth/
+//     escape/disturb/embalm/eternalize (+1.8), self-return death trigger
+//     (+1.5), recursion engine on controller's battlefield (+0.5 per).
 //   - Summoning-sick creatures can't attack/tap yet (+1)
 //   - Low power = low combat value (scaled +0.5 to -0.5)
 //   - Avoid the sac outlet itself (-10)
@@ -499,6 +503,48 @@ func sacVictimScore(gs *gameengine.GameState, seat int, p, src *gameengine.Perma
 		if strings.Contains(ot, "whenever") && (strings.Contains(ot, "draw") || strings.Contains(ot, "add")) {
 			score -= 2.0
 		}
+
+		// Self-return death trigger: "when ~ dies, return it to your
+		// hand / to the battlefield". Common on cards like Bloodghast,
+		// Reassembling Skeleton, Gravecrawler, Squee, etc. Doesn't
+		// double-count the generic +2.0 above — adds on top because the
+		// recursion is automatic, not just a value trigger.
+		if strings.Contains(ot, "dies") && (strings.Contains(ot, "return it to") ||
+			strings.Contains(ot, "return that card") ||
+			strings.Contains(ot, "return ~ to") ||
+			strings.Contains(ot, "return this card") ||
+			strings.Contains(ot, "return this creature")) {
+			score += 1.5
+		}
+	}
+
+	// Persist / undying come back automatically -- close to free sacrifice.
+	if p.HasKeyword("persist") || p.HasKeyword("undying") {
+		score += 2.5
+	}
+
+	// Graveyard zone-cast grants: the card can be cast / recurred from
+	// the graveyard. Sacrificing it is half the setup.
+	if p.Card != nil {
+		// Card-level keyword grants (parsed from oracle / static keywords).
+		if p.HasKeyword("unearth") || p.HasKeyword("escape") ||
+			p.HasKeyword("disturb") || p.HasKeyword("embalm") ||
+			p.HasKeyword("eternalize") || p.HasKeyword("flashback") ||
+			p.HasKeyword("encore") {
+			score += 1.8
+		} else if gs != nil && gs.ZoneCastGrants != nil {
+			if grant, ok := gs.ZoneCastGrants[p.Card]; ok && grant != nil &&
+				grant.Zone == gameengine.ZoneGraveyard {
+				score += 1.8
+			}
+		}
+	}
+
+	// Recursion engines on the controller's battlefield make any creature
+	// in the graveyard reusable. Heuristic name match -- these are the
+	// canonical reanimation engines that loop creatures back.
+	if gs != nil && seat >= 0 && seat < len(gs.Seats) && gs.Seats[seat] != nil {
+		score += float64(recursionEngineCount(gs.Seats[seat].Battlefield)) * 0.5
 	}
 
 	// Summoning-sick creatures can't attack or tap anyway.
@@ -523,6 +569,35 @@ func sacVictimScore(gs *gameengine.GameState, seat int, p, src *gameengine.Perma
 	}
 
 	return score
+}
+
+// recursionEngineCount counts known graveyard-recursion engines on a
+// battlefield. These cards loop creatures from graveyard back to hand
+// or play, making sacrifice fodder reusable.
+func recursionEngineCount(battlefield []*gameengine.Permanent) int {
+	n := 0
+	for _, p := range battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		switch p.Card.DisplayName() {
+		case "Phyrexian Reclamation",
+			"Volrath's Stronghold",
+			"Oversold Cemetery",
+			"Genesis",
+			"Sun Titan",
+			"Meren of Clan Nel Toth",
+			"The Cauldron of Eternity",
+			"Sheoldred, Whispering One",
+			"Liliana, Death's Majesty",
+			"Whisper, Blood Liturgist",
+			"Athreos, God of Passage",
+			"Karador, Ghost Chieftain",
+			"Muldrotha, the Gravetide":
+			n++
+		}
+	}
+	return n
 }
 
 // pickTargetSeat returns a target seat from context or picks the
