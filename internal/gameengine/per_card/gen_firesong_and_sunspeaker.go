@@ -23,7 +23,7 @@ func firesongAndSunspeakerTrigger(gs *gameengine.GameState, perm *gameengine.Per
 	}
 	gainSeat, _ := ctx["seat"].(int)
 	if gainSeat != perm.Controller { return }
-	gameengine.GainLife(gs, perm.Controller, 1, perm.Card.DisplayName())
+	emitPartial(gs, slug, perm.Card.DisplayName(), "auto-gen: trigger effect not parsed from oracle text")
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat": perm.Controller,
 	})

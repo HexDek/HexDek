@@ -28,7 +28,6 @@ func erebosGodOfTheDeadActivate(gs *gameengine.GameState, src *gameengine.Perman
 		return
 	}
 	drawOne(gs, src.Controller, src.Card.DisplayName())
-	gameengine.GainLife(gs, src.Controller, 1, src.Card.DisplayName())
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
 		"seat": seat,
 	})

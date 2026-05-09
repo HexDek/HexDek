@@ -24,7 +24,6 @@ func theDestinedWhiteMageTrigger(gs *gameengine.GameState, perm *gameengine.Perm
 	}
 	gainSeat, _ := ctx["seat"].(int)
 	if gainSeat != perm.Controller { return }
-	gameengine.GainLife(gs, perm.Controller, 1, perm.Card.DisplayName())
 	perm.AddCounter("+1/+1", 1)
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat": perm.Controller,

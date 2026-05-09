@@ -23,7 +23,6 @@ func minwuWhiteMageTrigger(gs *gameengine.GameState, perm *gameengine.Permanent,
 	}
 	gainSeat, _ := ctx["seat"].(int)
 	if gainSeat != perm.Controller { return }
-	gameengine.GainLife(gs, perm.Controller, 1, perm.Card.DisplayName())
 	for _, p := range gs.Seats[perm.Controller].Battlefield {
 		if p == nil || !p.IsCreature() || p == perm { continue }
 		p.AddCounter("+1/+1", 1)

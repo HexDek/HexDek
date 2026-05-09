@@ -27,7 +27,6 @@ func ezrimAgencyChiefETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		return
 	}
 	drawOne(gs, seat, perm.Card.DisplayName())
-	gameengine.GainLife(gs, seat, 1, perm.Card.DisplayName())
 	token := &gameengine.Card{
 		Name:          "1/1 Creature Token",
 		Owner:         seat,
