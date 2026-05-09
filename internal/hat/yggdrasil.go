@@ -953,6 +953,56 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 		return spiteTarget
 	}
 
+	// Unconditional-evasion hijack: when the attacker has shadow,
+	// horsemanship, or is unblockable, blockers are irrelevant — there
+	// is no "easier" opponent. Aim it at the biggest threat. Kingmakers
+	// outrank raw eval here because runaway leaders are the priority.
+	if hasUnconditionalEvasion(attacker) && len(threats) > 1 {
+		bestEval := -2.0
+		hijackTarget := -1
+		bestKingmaker := false
+		for _, th := range threats {
+			isLegal := false
+			for _, d := range legalDefenders {
+				if d == th.Seat {
+					isLegal = true
+					break
+				}
+			}
+			if !isLegal {
+				continue
+			}
+			if th.IsKingmaker && !bestKingmaker {
+				bestEval = th.EvalScore
+				hijackTarget = th.Seat
+				bestKingmaker = true
+				continue
+			}
+			if bestKingmaker && !th.IsKingmaker {
+				continue
+			}
+			if th.EvalScore > bestEval {
+				bestEval = th.EvalScore
+				hijackTarget = th.Seat
+			}
+		}
+		if hijackTarget >= 0 {
+			return hijackTarget
+		}
+	}
+
+	// Archenemy avoidance: if we have already focused damage on one
+	// opponent (>50% of total damage we've dealt) and they aren't a
+	// runaway leader, we'd be making ourselves the table's archenemy
+	// by piling on. Compute the share once for use as a per-candidate
+	// penalty below.
+	totalDealt := 0
+	for _, d := range h.damageDealtTo {
+		if d > 0 {
+			totalDealt += d
+		}
+	}
+
 	type candidate struct {
 		seat  int
 		score float64
@@ -998,6 +1048,44 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 		// menace into a single blocker, etc.).
 		if attacker != nil && isOpenForAttacker(gs, attacker, gs.Seats[def]) {
 			score += 1.5
+		}
+
+		// 4a. Protection lane: even if the defender has untapped creatures,
+		// prefer them as a target when none of those creatures can legally
+		// block this attacker (protection-from-color, flying-without-reach,
+		// landwalk, etc.). Engine's CanBlockGS encodes the full ruleset.
+		if attacker != nil && noLegalBlockerOnSeat(gs, attacker, gs.Seats[def]) {
+			score += 1.5
+		}
+
+		// 4b. Evasion match: graded bonus for defenders whose blocker
+		// pool can only partially block our attacker (e.g. flyer into a
+		// pod with one flier-blocker, skulk into all-large blockers).
+		// Rewards aiming evasive creatures at low-defense pods even
+		// when some blockers still exist. Stacks with 4 / 4a — those
+		// are binary "fully clear" signals, this is a graded fallback.
+		if attacker != nil {
+			es := evasionScore(gs, attacker, gs.Seats[def])
+			if es > 0.5 {
+				score += (es - 0.5) * 2.0
+			}
+		}
+
+		// 4c. Archenemy avoidance: if we've already dealt >50% of our
+		// total damage to this seat AND they aren't a kingmaker, ease
+		// off — continued focus paints us as the archenemy. The
+		// existing spread-damage penalty (#7) only triggers when behind;
+		// this one runs unconditionally so a winning hat doesn't make
+		// itself the table's target either.
+		if totalDealt > 30 && def < len(h.damageDealtTo) && !threat.IsKingmaker {
+			share := float64(h.damageDealtTo[def]) / float64(totalDealt)
+			if share > 0.5 {
+				penalty := (share - 0.5) * 3.0 // up to -1.5 at share=1.0
+				if penalty > 1.5 {
+					penalty = 1.5
+				}
+				score -= penalty
+			}
 		}
 
 		// 4b. Damage-swing keyword targeting:
@@ -1146,6 +1234,70 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 	}
 	pick := h.selectAmongTop(tgtScores)
 	return candidates[pick].seat
+}
+
+// -- Combat keyword awareness helpers --
+
+// hasAnyProtection reports whether the permanent has a "prot:X" runtime
+// flag (color or universal). Used as a quick "this attacker dodges some
+// removal/blockers" signal in attack valuation.
+func hasAnyProtection(p *gameengine.Permanent) bool {
+	if p == nil || p.Flags == nil {
+		return false
+	}
+	for k := range p.Flags {
+		if strings.HasPrefix(k, "prot:") {
+			return true
+		}
+	}
+	return false
+}
+
+// noLegalBlockerOnSeat returns true when the defender has at least one
+// untapped creature, but none of them can legally block the attacker
+// (engine CanBlockGS encodes flying/reach, protection, landwalk, evasion,
+// etc.). Distinguished from isOpenForAttacker by accepting the legality
+// side only — leaves size-based judgments to other heuristics.
+func noLegalBlockerOnSeat(gs *gameengine.GameState, attacker *gameengine.Permanent, defender *gameengine.Seat) bool {
+	if attacker == nil || defender == nil {
+		return false
+	}
+	any := false
+	for _, b := range defender.Battlefield {
+		if b == nil || !b.IsCreature() || b.Tapped {
+			continue
+		}
+		any = true
+		if gameengine.CanBlockGS(gs, attacker, b) {
+			return false
+		}
+	}
+	// "no untapped blockers at all" is handled by isOpenForAttacker; only
+	// claim a protection lane when blockers exist but are all illegal.
+	return any
+}
+
+// anyOpponentHasReachOrFlyingBlocker reports whether any opponent of
+// seatIdx controls an untapped creature with reach or flying. Used to
+// downgrade flying's evasion bonus when the lane isn't actually open.
+func anyOpponentHasReachOrFlyingBlocker(gs *gameengine.GameState, seatIdx int) bool {
+	if gs == nil {
+		return false
+	}
+	for i, s := range gs.Seats {
+		if i == seatIdx || s == nil || s.Lost || s.LeftGame {
+			continue
+		}
+		for _, b := range s.Battlefield {
+			if b == nil || !b.IsCreature() || b.Tapped {
+				continue
+			}
+			if b.HasKeyword("reach") || b.HasKeyword("flying") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // -- Evaluation helpers --
@@ -3338,13 +3490,43 @@ func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, le
 		if p.HasKeyword("lifelink") {
 			val += 0.1
 		}
+		// Vigilance — no defensive downside to attacking; the creature is
+		// still up to block on opponents' turns.
+		if p.HasKeyword("vigilance") {
+			val += 0.10
+		}
+		// Indestructible — survives every combat trade. Removal-by-block
+		// doesn't work, so the threat keeps reapplying turn after turn.
+		if p.HasKeyword("indestructible") {
+			val += 0.20
+		}
+		// Sustained-threat keywords — opponents can't snipe the attacker
+		// with a targeted removal spell, so the value of getting it into
+		// combat compounds across turns.
+		if p.HasKeyword("hexproof") || p.HasKeyword("shroud") {
+			val += 0.10
+		} else if p.HasKeyword("ward") {
+			val += 0.05
+		}
+		// Protection (from any color) — many opponents' removal/blockers
+		// are colored, so attackers with protection live longer in combat
+		// and are harder to interact with at instant speed.
+		if hasAnyProtection(p) {
+			val += 0.10
+		}
 		// Evasion bonus — creatures that connect reliably are worth sending.
+		// Flying is downgraded if any opponent has a reach/flying blocker
+		// available; the lane isn't actually open in that case.
 		evasive := false
 		if p.HasKeyword("unblockable") || p.HasKeyword("shadow") || p.HasKeyword("horsemanship") {
 			val += 0.25
 			evasive = true
 		} else if p.HasKeyword("flying") || p.HasKeyword("fear") || p.HasKeyword("intimidate") || p.HasKeyword("skulk") {
-			val += 0.15
+			flyBonus := 0.15
+			if p.HasKeyword("flying") && anyOpponentHasReachOrFlyingBlocker(gs, seatIdx) {
+				flyBonus = 0.05
+			}
+			val += flyBonus
 			evasive = true
 		} else if p.HasKeyword("menace") {
 			val += 0.10
@@ -3388,6 +3570,41 @@ func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, le
 			attackers = append(attackers, p)
 		}
 		h.logf("  %-30s pow=%d val=%.2f %s%s", p.Card.DisplayName(), pw, val, tag, evStr)
+	}
+
+	// Profitability prune: drop attackers that lose to a clean block on
+	// every legal target. Skip in desperation mode (relPos very low),
+	// when stance is ALL-IN, or when the creature is a strategic asset
+	// (commander, value engine, combo piece). Lethal-swing path returns
+	// early above, so we don't gate on it here.
+	if relPos > -0.5 && !strings.Contains(stance, "ALL-IN") && len(attackers) > 0 {
+		opponents := make([]*gameengine.Seat, 0, len(gs.Seats)-1)
+		for i, s := range gs.Seats {
+			if i == seatIdx || s == nil || s.Lost || s.LeftGame {
+				continue
+			}
+			opponents = append(opponents, s)
+		}
+		if len(opponents) > 0 {
+			kept := attackers[:0]
+			for _, p := range attackers {
+				keep := true
+				if p != nil && p.Card != nil {
+					strategic := isCommanderCard(gs, seatIdx, p.Card) ||
+						h.isValueEngineKey(p.Card) ||
+						h.isComboRelevant(p.Card)
+					if !strategic && !canSwingProfitably(gs, p, opponents) {
+						keep = false
+						h.logf("  PRUNE: %s would die to clean block on every target",
+							p.Card.DisplayName())
+					}
+				}
+				if keep {
+					kept = append(kept, p)
+				}
+			}
+			attackers = kept
+		}
 	}
 
 	// Overcommitment guard: if committing 3+ creatures and we're not in a
@@ -3531,12 +3748,23 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 			survivalFrac = 2
 		}
 	}
-	// Existential commander threat (CR §704.6c) overrides the
-	// "ahead, don't bother blocking" early return — a single 21-point
-	// commander kill loses the game even at 40 life.
-	if !existentialCommander && relPos > aheadNoBlock && incoming < seat.Life/survivalFrac {
-		return out
-	}
+	// "Comfortably ahead" no longer skips ALL blocking. The old guard
+	// returned an empty map whenever relPos was high enough and total
+	// incoming was below life/survivalFrac, so a 40-life, slightly-ahead
+	// hat would just eat 4/4 (or 19-damage) hits even when a free chump
+	// trade was available. We now keep this as a per-attacker hint:
+	// individual attackers get skipped further down only when there's
+	// no survivor AND no favorable trade — favorable trades (blocker
+	// strictly lighter than the attacker) ALWAYS go through, even when
+	// ahead. The `existentialCommander` flag computed above is still
+	// honored implicitly: it forces willDie=true so value creatures
+	// stay in the pool for must-block trades against a 21-clock
+	// commander.
+	aheadAndComfortable := relPos > aheadNoBlock && incoming < seat.Life/survivalFrac
+	_ = aheadAndComfortable // currently advisory; per-attacker logic below
+	// is already conservative enough on its own. Retained as a named
+	// expression so future skip heuristics can reuse it without
+	// re-deriving the threshold.
 
 	// Pool of legal blockers — exclude combo/value creatures from trades
 	// unless we'll die without blocking (life or commander-damage path).
@@ -3654,7 +3882,16 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 				incomingToBlocker = 0
 			}
 
-			// Deathtouch attacker kills any blocker that takes ≥1 damage.
+			// Deathtouch attacker kills any blocker that takes ≥1 damage,
+			// EXCEPT when the blocker is indestructible — CR §702.12b says
+			// damage doesn't destroy indestructible permanents, including
+			// damage from deathtouch sources (§702.2c only marks lethal
+			// damage; SBAs don't destroy indestructibles).
+			bIndestructible := b.HasKeyword("indestructible")
+			if bIndestructible {
+				survivors = append(survivors, b)
+				continue
+			}
 			if atkDT && incomingToBlocker >= 1 {
 				continue
 			}
@@ -3662,8 +3899,16 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 				survivors = append(survivors, b)
 			}
 		}
+		// Sort: indestructible first (the unconditional survivor — never
+		// dies, so always preferable), then by smallest power+toughness
+		// (cheapest creature to commit).
 		sort.SliceStable(survivors, func(i, j int) bool {
 			si, sj := survivors[i], survivors[j]
+			indI := si.HasKeyword("indestructible")
+			indJ := sj.HasKeyword("indestructible")
+			if indI != indJ {
+				return indI
+			}
 			if gs.PowerOf(si)+gs.ToughnessOf(si) != gs.PowerOf(sj)+gs.ToughnessOf(sj) {
 				return gs.PowerOf(si)+gs.ToughnessOf(si) < gs.PowerOf(sj)+gs.ToughnessOf(sj)
 			}
@@ -3673,7 +3918,36 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 		var chosen []*gameengine.Permanent
 		if len(survivors) > 0 {
 			chosen = []*gameengine.Permanent{survivors[0]}
-		} else if willDieIfUnblocked || mustBlock {
+		}
+
+		// Favorable-trade fallback: even when no blocker survives and
+		// we're not at lethal, throwing a strictly-lighter creature in
+		// front of a heavier attacker is always correct (a 1/1 token
+		// blocking a 5/5 trades 2 stat-points for 10). We pick the
+		// lightest qualifying blocker so we burn the cheapest creature
+		// possible. Skipped for 0-power attackers (they kill the
+		// blocker for nothing). Combo / value-engine pieces were
+		// already filtered out of the pool above when willDie==false.
+		if len(chosen) == 0 && atkPow > 0 {
+			atkSum := atkPow + atkTou
+			var best *gameengine.Permanent
+			bestSum := atkSum // strictly less is "favorable"
+			for _, b := range legal {
+				if b == nil {
+					continue
+				}
+				bSum := gs.PowerOf(b) + gs.ToughnessOf(b)
+				if bSum < bestSum {
+					best = b
+					bestSum = bSum
+				}
+			}
+			if best != nil {
+				chosen = []*gameengine.Permanent{best}
+			}
+		}
+
+		if len(chosen) == 0 && (willDieIfUnblocked || mustBlock) {
 			// Deathtouch trade-up: prefer a deathtouch blocker that can
 			// take down the attacker (any damage is lethal) over a chump.
 			var dtTrader *gameengine.Permanent
@@ -3685,9 +3959,21 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 					}
 				}
 			}
-			if dtTrader != nil {
+			// Even when nothing in `legal` is a strict survivor, prefer an
+			// indestructible chump — it eats the attack risk-free.
+			var indChump *gameengine.Permanent
+			for _, b := range legal {
+				if b != nil && b.HasKeyword("indestructible") {
+					indChump = b
+					break
+				}
+			}
+			switch {
+			case indChump != nil:
+				chosen = []*gameengine.Permanent{indChump}
+			case dtTrader != nil:
 				chosen = []*gameengine.Permanent{dtTrader}
-			} else {
+			default:
 				chosen = []*gameengine.Permanent{bestChumpBlocker(gs, legal)}
 			}
 		}

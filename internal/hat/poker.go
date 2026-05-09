@@ -1939,6 +1939,155 @@ func isOpenForAttacker(gs *gameengine.GameState, attacker *gameengine.Permanent,
 	return true
 }
 
+// evasionScore returns a graded [0..1] estimate of how cleanly `attacker`
+// can land combat damage on `defender`, accounting for evasion.
+//
+//   - 1.0 — attacker is unblockable, has shadow, or has horsemanship
+//     against a defender with no horsemanship blockers. Damage lands
+//     barring summoning issues.
+//   - 0.4..1.0 — attacker has flying / fear / intimidate / skulk: score
+//     scales with the fraction of the defender's untapped creatures
+//     that *can't* block (no flying/reach for fliers, etc.).
+//   - 0.5 default — no evasion: rough estimate of "untapped pool is
+//     small relative to attacker power."
+//
+// Designed to plug into bestTarget as a tiebreaker bonus, not as a hard
+// filter. Callers should still gate on profitability separately.
+func evasionScore(gs *gameengine.GameState, attacker *gameengine.Permanent, defender *gameengine.Seat) float64 {
+	if attacker == nil || defender == nil {
+		return 0.5
+	}
+	if attacker.HasKeyword("unblockable") || attacker.HasKeyword("shadow") {
+		return 1.0
+	}
+	untapped := make([]*gameengine.Permanent, 0)
+	for _, b := range defender.Battlefield {
+		if b != nil && b.IsCreature() && !b.Tapped {
+			untapped = append(untapped, b)
+		}
+	}
+	if len(untapped) == 0 {
+		return 1.0
+	}
+
+	canBlockCount := 0
+	for _, b := range untapped {
+		if gameengine.CanBlock(attacker, b) {
+			canBlockCount++
+		}
+	}
+	if canBlockCount == 0 {
+		return 1.0
+	}
+
+	if attacker.HasKeyword("flying") || attacker.HasKeyword("fear") ||
+		attacker.HasKeyword("intimidate") || attacker.HasKeyword("horsemanship") ||
+		attacker.HasKeyword("skulk") {
+		shareLocked := 1.0 - float64(canBlockCount)/float64(len(untapped))
+		return 0.4 + 0.6*shareLocked
+	}
+
+	ap := gs.PowerOf(attacker)
+	bigger := 0
+	for _, b := range untapped {
+		if gs.PowerOf(b) >= ap {
+			bigger++
+		}
+	}
+	if bigger == 0 {
+		return 0.85
+	}
+	return 0.5 - 0.4*(float64(bigger)/float64(len(untapped)))
+}
+
+// hasUnconditionalEvasion is true for attackers that connect regardless
+// of the defender's pool. These attackers should be aimed at the most
+// dangerous opponent rather than the easiest one — there are no
+// "easier" opponents when blockers don't matter.
+func hasUnconditionalEvasion(p *gameengine.Permanent) bool {
+	if p == nil {
+		return false
+	}
+	return p.HasKeyword("unblockable") || p.HasKeyword("shadow") || p.HasKeyword("horsemanship")
+}
+
+// canSwingProfitably reports whether `attacker` has at least one
+// opponent it can attack without trading itself away for nothing —
+// i.e., somewhere in the legal-target set there is no untapped clean
+// answer. Used to prune unprofitable attackers from the swing list.
+//
+// "Clean answer" = an untapped creature that (a) can legally block
+// per evasion rules, (b) survives the trade (toughness > attacker
+// power, accounting for first/double strike), and (c) deals lethal
+// damage back to the attacker.
+//
+// Attackers with deathtouch, indestructible, or unconditional evasion
+// always swing profitably. Trample creatures always leak damage to the
+// player so the swing isn't wasted. First-strike attackers don't trade
+// down to blockers smaller than their own power.
+func canSwingProfitably(gs *gameengine.GameState, attacker *gameengine.Permanent, opponents []*gameengine.Seat) bool {
+	if attacker == nil {
+		return false
+	}
+	if hasUnconditionalEvasion(attacker) {
+		return true
+	}
+	if attacker.HasKeyword("deathtouch") || attacker.HasKeyword("indestructible") {
+		return true
+	}
+	if attacker.HasKeyword("trample") {
+		return true
+	}
+	ap := gs.PowerOf(attacker)
+	at := gs.ToughnessOf(attacker)
+	if ap <= 0 {
+		return false
+	}
+	doubleStrike := attacker.HasKeyword("double strike") || attacker.HasKeyword("double_strike")
+	firstStrike := attacker.HasKeyword("first strike") || attacker.HasKeyword("first_strike") || doubleStrike
+
+	for _, opp := range opponents {
+		if opp == nil || opp.Lost || opp.LeftGame {
+			continue
+		}
+		untapped := make([]*gameengine.Permanent, 0, len(opp.Battlefield))
+		for _, b := range opp.Battlefield {
+			if b != nil && b.IsCreature() && !b.Tapped {
+				untapped = append(untapped, b)
+			}
+		}
+		if len(untapped) == 0 {
+			return true
+		}
+		deadly := false
+		for _, b := range untapped {
+			if !gameengine.CanBlock(attacker, b) {
+				continue
+			}
+			bp := gs.PowerOf(b)
+			bt := gs.ToughnessOf(b) - b.MarkedDamage
+			if bt <= 0 {
+				continue
+			}
+			if firstStrike && bt <= ap {
+				continue
+			}
+			if bt > ap && bp >= at {
+				deadly = true
+				break
+			}
+			if b.HasKeyword("deathtouch") && bp > 0 {
+				deadly = true
+				break
+			}
+		}
+		if !deadly {
+			return true
+		}
+	}
+	return false
+}
+
 // attackerRank returns a deadliest-first numeric score. The bumps are
 // scaled to interact with raw power (a 3-power vanilla = 3, a 3-power
 // deathtouch = 8, a 3-power lifelink doubles to 6, a 1-power infect tops
