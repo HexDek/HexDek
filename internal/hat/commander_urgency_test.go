@@ -129,7 +129,8 @@ func makeInteractionTable(t *testing.T, h *YggdrasilHat) (*gameengine.GameState,
 
 // TestShouldCastCommander_HighUrgencyIgnoresInteractionRisk — at urgency
 // ≥ 0.6, the interaction-risk gate must NOT block the cast even when
-// tableInteractionRisk would otherwise.
+// tableInteractionRisk would otherwise. Pin gs.Turn into the Develop
+// phase so detectPhase doesn't auto-return on us.
 func TestShouldCastCommander_HighUrgencyIgnoresInteractionRisk(t *testing.T) {
 	sp := &StrategyProfile{
 		Archetype:          ArchetypeMidrange,
@@ -137,6 +138,7 @@ func TestShouldCastCommander_HighUrgencyIgnoresInteractionRisk(t *testing.T) {
 	}
 	h := NewYggdrasilHatWithNoise(sp, 0, 0)
 	gs, seat := makeInteractionTable(t, h)
+	gs.Turn = 5 // PhaseDevelop — past Deploy auto-cast, before Execute auto-cast
 
 	// Sanity-check the risk really is above threshold.
 	if got := h.tableInteractionRisk(gs, seat); got <= 0.5 {
@@ -150,7 +152,8 @@ func TestShouldCastCommander_HighUrgencyIgnoresInteractionRisk(t *testing.T) {
 }
 
 // TestShouldCastCommander_LowUrgencyRespectsInteractionRisk — same
-// table state, low urgency, should refuse to cast.
+// table state, low urgency, should refuse to cast. Pin gs.Turn into
+// the Develop phase so detectPhase doesn't auto-return.
 func TestShouldCastCommander_LowUrgencyRespectsInteractionRisk(t *testing.T) {
 	// Default profile: no IsCommanderCentric, no combo/tribal/value
 	// engines → urgency = 0.4.
@@ -158,9 +161,18 @@ func TestShouldCastCommander_LowUrgencyRespectsInteractionRisk(t *testing.T) {
 	h := NewYggdrasilHatWithNoise(sp, 0, 0)
 	gs, seat := makeInteractionTable(t, h)
 
-	// Make sure we're below the "tax*2+2" comfort threshold.
+	// Make sure we're below the "tax*2+2" comfort threshold AND
+	// below the avail≥9 PhaseDevelop bump.
 	gs.Seats[seat].Mana = nil
 	gs.Seats[seat].ManaPool = 5 // tax=2 needs 6 to satisfy tax*2+2
+	gs.Turn = 5                  // PhaseDevelop
+
+	// Give us a non-trivial hand so the "hand <= 1 && turn >= 6"
+	// Execute bump can never engage even if Turn drifts up later.
+	for j := 0; j < 5; j++ {
+		gs.Seats[seat].Hand = append(gs.Seats[seat].Hand,
+			newTestCardMinimal("Filler", []string{"creature"}, 1, nil))
+	}
 
 	// Re-prime risk-tracking arrays after mana reset.
 	h.ObserveEvent(gs, seat, &gameengine.Event{Kind: "turn_start", Seat: seat})

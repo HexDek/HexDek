@@ -1144,6 +1144,11 @@ func seatPlacement(gs *gameengine.GameState, seatIdx, winner int) int {
 
 // getOrCreateCursePool returns the genetic pool for a deck, creating one lazily.
 // Thread-safe; the returned pool's internal rng is set from the provided rng.
+//
+// New pools are seeded via cross-deck transfer when an evolved pool with
+// a similar archetype/colors/themes exists — the new deck's DNA inherits
+// from the closest match (with wider-than-mutation gaussian noise) so it
+// converges in ~10 games instead of ~100.
 func (sm *Showmatch) getOrCreateCursePool(deckKey string, rng *rand.Rand) *hat.CursePool {
 	sm.curseMu.Lock()
 	defer sm.curseMu.Unlock()
@@ -1151,7 +1156,11 @@ func (sm *Showmatch) getOrCreateCursePool(deckKey string, rng *rand.Rand) *hat.C
 		return pool
 	}
 	poolRng := rand.New(rand.NewSource(rng.Int63()))
-	p := hat.InitPool(deckKey, poolRng)
+	bracket := 0
+	if sp := sm.strategies[deckKey]; sp != nil {
+		bracket = sp.Bracket
+	}
+	p := hat.InitPoolWithTransfer(deckKey, bracket, poolRng, sm.cursePool, sm.strategies)
 	sm.cursePool[deckKey] = &p
 	return &p
 }
