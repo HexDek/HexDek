@@ -384,15 +384,22 @@ func (dm *DistillationManager) InitPoolSeeded(deckKey string, archetype string, 
 	pool := CursePool{DeckKey: deckKey, Bracket: bracket, rng: rng}
 	for i := range pool.Population {
 		pool.Population[i] = CurseDNA{
-			DeckKey:          deckKey,
-			Aggression:       clampUnit(centroid[0] + rng.NormFloat64()*0.1),
-			ComboPat:         clampUnit(centroid[1] + rng.NormFloat64()*0.1),
-			ThreatParanoia:   clampUnit(centroid[2] + rng.NormFloat64()*0.1),
-			ResourceGreed:    clampUnit(centroid[3] + rng.NormFloat64()*0.1),
-			PoliticalMemory:  clampUnit(centroid[4] + rng.NormFloat64()*0.1),
-			DrainAffinity:    clampUnit(centroid[5] + rng.NormFloat64()*0.1),
-			ArtifactAffinity: clampUnit(centroid[6] + rng.NormFloat64()*0.1),
-			Fitness:          0.25,
+			DeckKey:               deckKey,
+			Aggression:            clampUnit(centroid[0] + rng.NormFloat64()*0.1),
+			ComboPat:              clampUnit(centroid[1] + rng.NormFloat64()*0.1),
+			ThreatParanoia:        clampUnit(centroid[2] + rng.NormFloat64()*0.1),
+			ResourceGreed:         clampUnit(centroid[3] + rng.NormFloat64()*0.1),
+			PoliticalMemory:       clampUnit(centroid[4] + rng.NormFloat64()*0.1),
+			DrainAffinity:         clampUnit(centroid[5] + rng.NormFloat64()*0.1),
+			ArtifactAffinity:      clampUnit(centroid[6] + rng.NormFloat64()*0.1),
+			// Centroid is sized for the original 7 axes; randomize the
+			// expansion axes so seeded pools don't ship at axis=0.
+			LandGreed:             rng.Float64(),
+			EquipmentAffinity:     rng.Float64(),
+			GraveyardExploitation: rng.Float64(),
+			CounterplayTiming:     rng.Float64(),
+			TokenPressure:         rng.Float64(),
+			Fitness:               0.25,
 		}
 	}
 	return pool
@@ -528,15 +535,20 @@ func (dm *DistillationManager) reseedUnderperformers(strategyLookup func(string)
 		for k := 0; k < replaceCount; k++ {
 			idx := indices[k]
 			pool.Population[idx] = CurseDNA{
-				DeckKey:          pool.DeckKey,
-				Aggression:       clampUnit(centroid[0] + pool.rng.NormFloat64()*0.08),
-				ComboPat:         clampUnit(centroid[1] + pool.rng.NormFloat64()*0.08),
-				ThreatParanoia:   clampUnit(centroid[2] + pool.rng.NormFloat64()*0.08),
-				ResourceGreed:    clampUnit(centroid[3] + pool.rng.NormFloat64()*0.08),
-				PoliticalMemory:  clampUnit(centroid[4] + pool.rng.NormFloat64()*0.08),
-				DrainAffinity:    clampUnit(centroid[5] + pool.rng.NormFloat64()*0.08),
-				ArtifactAffinity: clampUnit(centroid[6] + pool.rng.NormFloat64()*0.08),
-				Fitness:          0.25,
+				DeckKey:               pool.DeckKey,
+				Aggression:            clampUnit(centroid[0] + pool.rng.NormFloat64()*0.08),
+				ComboPat:              clampUnit(centroid[1] + pool.rng.NormFloat64()*0.08),
+				ThreatParanoia:        clampUnit(centroid[2] + pool.rng.NormFloat64()*0.08),
+				ResourceGreed:         clampUnit(centroid[3] + pool.rng.NormFloat64()*0.08),
+				PoliticalMemory:       clampUnit(centroid[4] + pool.rng.NormFloat64()*0.08),
+				DrainAffinity:         clampUnit(centroid[5] + pool.rng.NormFloat64()*0.08),
+				ArtifactAffinity:      clampUnit(centroid[6] + pool.rng.NormFloat64()*0.08),
+				LandGreed:             pool.rng.Float64(),
+				EquipmentAffinity:     pool.rng.Float64(),
+				GraveyardExploitation: pool.rng.Float64(),
+				CounterplayTiming:     pool.rng.Float64(),
+				TokenPressure:         pool.rng.Float64(),
+				Fitness:               0.25,
 			}
 		}
 
