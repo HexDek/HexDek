@@ -404,3 +404,171 @@ func hasAnyEra2Trigger(name string) bool {
 	}
 	return false
 }
+
+// ---------------------------------------------------------------------
+// Cost-gate coverage: Erebos / Tasigur / Azami
+// ---------------------------------------------------------------------
+
+func TestErebosGodOfTheDead_PaysManaAndLifeForDraw(t *testing.T) {
+	gs := newGame(t, 2)
+	erebos := addPerm(gs, 0, "Erebos, God of the Dead", "creature")
+	gs.Seats[0].ManaPool = 5
+	gs.Seats[0].Life = 40
+	addLibrary(gs, 0, "A", "B")
+
+	erebosGodOfTheDeadActivate(gs, erebos, 0, nil)
+
+	if gs.Seats[0].ManaPool != 3 {
+		t.Errorf("expected mana 5 - 2 = 3 after Erebos; got %d", gs.Seats[0].ManaPool)
+	}
+	if gs.Seats[0].Life != 38 {
+		t.Errorf("expected life 40 - 2 = 38; got %d", gs.Seats[0].Life)
+	}
+	if len(gs.Seats[0].Hand) != 1 {
+		t.Errorf("expected 1 card drawn; hand=%d", len(gs.Seats[0].Hand))
+	}
+}
+
+func TestErebosGodOfTheDead_FailsWithoutMana(t *testing.T) {
+	gs := newGame(t, 2)
+	erebos := addPerm(gs, 0, "Erebos, God of the Dead", "creature")
+	gs.Seats[0].ManaPool = 1 // can't pay {1}{B} (need 2)
+	gs.Seats[0].Life = 40
+	addLibrary(gs, 0, "A")
+
+	erebosGodOfTheDeadActivate(gs, erebos, 0, nil)
+
+	if len(gs.Seats[0].Hand) != 0 {
+		t.Errorf("should NOT draw without mana; hand=%d", len(gs.Seats[0].Hand))
+	}
+	if gs.Seats[0].Life != 40 {
+		t.Errorf("life should be unchanged when mana cost fails; got %d", gs.Seats[0].Life)
+	}
+	if hasEvent(gs, "per_card_failed") < 1 {
+		t.Errorf("expected per_card_failed event")
+	}
+}
+
+func TestErebosGodOfTheDead_FailsWithoutLife(t *testing.T) {
+	gs := newGame(t, 2)
+	erebos := addPerm(gs, 0, "Erebos, God of the Dead", "creature")
+	gs.Seats[0].ManaPool = 5
+	gs.Seats[0].Life = 2 // not strictly more than 2
+	addLibrary(gs, 0, "A")
+
+	erebosGodOfTheDeadActivate(gs, erebos, 0, nil)
+
+	if len(gs.Seats[0].Hand) != 0 {
+		t.Errorf("should NOT draw without enough life; hand=%d", len(gs.Seats[0].Hand))
+	}
+	if gs.Seats[0].ManaPool != 5 {
+		t.Errorf("mana should be unchanged when life cost fails; got %d", gs.Seats[0].ManaPool)
+	}
+}
+
+func TestTasigurTheGoldenFang_PaysManaAndMills(t *testing.T) {
+	gs := newGame(t, 2)
+	tasigur := addPerm(gs, 0, "Tasigur, the Golden Fang", "creature")
+	gs.Seats[0].ManaPool = 6
+	addLibrary(gs, 0, "A", "B", "C")
+
+	tasigurTheGoldenFangActivate(gs, tasigur, 0, nil)
+
+	if gs.Seats[0].ManaPool != 2 {
+		t.Errorf("expected mana 6 - 4 = 2; got %d", gs.Seats[0].ManaPool)
+	}
+	if len(gs.Seats[0].Graveyard) != 2 {
+		t.Errorf("expected 2 milled; graveyard=%d", len(gs.Seats[0].Graveyard))
+	}
+	if len(gs.Seats[0].Library) != 1 {
+		t.Errorf("expected 1 left in library; got %d", len(gs.Seats[0].Library))
+	}
+}
+
+func TestTasigurTheGoldenFang_FailsWithoutMana(t *testing.T) {
+	gs := newGame(t, 2)
+	tasigur := addPerm(gs, 0, "Tasigur, the Golden Fang", "creature")
+	gs.Seats[0].ManaPool = 3 // can't pay {2}{G/U}{G/U} = 4
+	addLibrary(gs, 0, "A", "B", "C")
+
+	tasigurTheGoldenFangActivate(gs, tasigur, 0, nil)
+
+	if len(gs.Seats[0].Graveyard) != 0 {
+		t.Errorf("should NOT mill without mana; graveyard=%d", len(gs.Seats[0].Graveyard))
+	}
+	if gs.Seats[0].ManaPool != 3 {
+		t.Errorf("mana should be unchanged on cost-fail; got %d", gs.Seats[0].ManaPool)
+	}
+	if hasEvent(gs, "per_card_failed") < 1 {
+		t.Errorf("expected per_card_failed event")
+	}
+}
+
+func TestAzamiLadyOfScrolls_TapsWizardForDraw(t *testing.T) {
+	gs := newGame(t, 2)
+	azami := addPerm(gs, 0, "Azami, Lady of Scrolls", "creature", "wizard", "legendary")
+	wizard := addPerm(gs, 0, "Merfolk Looter", "creature", "wizard")
+	addLibrary(gs, 0, "A")
+
+	azamiLadyOfScrollsActivate(gs, azami, 0, nil)
+
+	if !wizard.Tapped {
+		t.Errorf("expected non-Azami Wizard to be tapped first")
+	}
+	if azami.Tapped {
+		t.Errorf("Azami should remain untapped when another Wizard is available")
+	}
+	if len(gs.Seats[0].Hand) != 1 {
+		t.Errorf("expected 1 card drawn; hand=%d", len(gs.Seats[0].Hand))
+	}
+}
+
+func TestAzamiLadyOfScrolls_FallsBackToSelf(t *testing.T) {
+	gs := newGame(t, 2)
+	azami := addPerm(gs, 0, "Azami, Lady of Scrolls", "creature", "wizard", "legendary")
+	addLibrary(gs, 0, "A")
+
+	azamiLadyOfScrollsActivate(gs, azami, 0, nil)
+
+	if !azami.Tapped {
+		t.Errorf("Azami should tap herself when no other Wizard is available")
+	}
+	if len(gs.Seats[0].Hand) != 1 {
+		t.Errorf("expected 1 card drawn; hand=%d", len(gs.Seats[0].Hand))
+	}
+}
+
+func TestAzamiLadyOfScrolls_FailsWithoutAnyUntappedWizard(t *testing.T) {
+	gs := newGame(t, 2)
+	azami := addPerm(gs, 0, "Azami, Lady of Scrolls", "creature", "wizard", "legendary")
+	azami.Tapped = true // can't tap her either
+	tappedWiz := addPerm(gs, 0, "Merfolk Looter", "creature", "wizard")
+	tappedWiz.Tapped = true
+	// A non-Wizard shouldn't satisfy the cost.
+	addPerm(gs, 0, "Grizzly Bears", "creature")
+	addLibrary(gs, 0, "A")
+
+	azamiLadyOfScrollsActivate(gs, azami, 0, nil)
+
+	if len(gs.Seats[0].Hand) != 0 {
+		t.Errorf("should NOT draw with no untapped Wizard; hand=%d", len(gs.Seats[0].Hand))
+	}
+	if hasEvent(gs, "per_card_failed") < 1 {
+		t.Errorf("expected per_card_failed event")
+	}
+}
+
+func TestAzamiLadyOfScrolls_NonWizardCreatureDoesNotPay(t *testing.T) {
+	gs := newGame(t, 2)
+	azami := addPerm(gs, 0, "Azami, Lady of Scrolls", "creature", "wizard", "legendary")
+	azami.Tapped = true
+	// Untapped creature, but not a Wizard — must NOT pay the cost.
+	addPerm(gs, 0, "Grizzly Bears", "creature")
+	addLibrary(gs, 0, "A")
+
+	azamiLadyOfScrollsActivate(gs, azami, 0, nil)
+
+	if len(gs.Seats[0].Hand) != 0 {
+		t.Errorf("non-Wizard creature shouldn't satisfy tap-a-Wizard cost; hand=%d", len(gs.Seats[0].Hand))
+	}
+}
