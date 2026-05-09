@@ -1646,6 +1646,29 @@ body {
   filter: blur(40px) brightness(1.05) saturate(1.15);
   opacity: 0.7;
 }
+/* Crossfade for ArtAmbience: the new layer mounts on top of the
+   previous one and eases its opacity from 0 → 1 over ~1.2s, so the
+   blurred color-identity bleed morphs into the next commander instead
+   of snapping. The previous layer stays beneath at full opacity for
+   the duration of the fade. Keep duration in lockstep with FADE_MS in
+   ArtAmbience.jsx. */
+@keyframes art-ambience-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.art-ambience-fade-in {
+  animation: art-ambience-fade-in 1.2s ease forwards;
+}
+[data-theme="light"] .art-ambience-fade-in {
+  animation-name: art-ambience-fade-in-light;
+}
+@keyframes art-ambience-fade-in-light {
+  from { opacity: 0; }
+  to   { opacity: 0.7; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .art-ambience-fade-in { animation: none; }
+}
 
 .card-page-hero {
   position: relative;

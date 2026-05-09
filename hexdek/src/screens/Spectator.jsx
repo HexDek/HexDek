@@ -8,6 +8,7 @@ import { findGameChangerInText } from '../data/gameChangers'
 import CardLink, { linkifyAction } from '../components/CardLink'
 import { narrate } from '../components/NarratorOverlay'
 import ContextBox from '../components/ContextBox'
+import ArtAmbience from '../components/ArtAmbience'
 
 const SPEED_MARKS = [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2]
 
@@ -464,14 +465,9 @@ export default function Spectator() {
       <div className="spectator-layout">
         {/* Ambient blurred-art background — uses the active (or seat 0)
             commander's art_crop. Blur + brightness handled by .art-ambience.
-            Keyed by name so the <img> swaps cleanly when the active player
-            rotates instead of restyling an in-flight image. */}
-        {(() => {
-          const ambientName = seats[game.active_seat]?.commander || seats[0]?.commander
-          const ambientUrl = ambientName ? cardArtUrl(ambientName) : null
-          if (!ambientUrl) return null
-          return <img key={ambientName} className="art-ambience" src={ambientUrl} alt="" aria-hidden="true" />
-        })()}
+            Crossfades between commanders so the color-identity bleed
+            morphs instead of snapping when the active seat rotates. */}
+        <ArtAmbience name={seats[game.active_seat]?.commander || seats[0]?.commander} />
         {/* All 4 seats — full width, above the fold */}
         <div className="spectator-seats">
           <div className="seat-grid">
