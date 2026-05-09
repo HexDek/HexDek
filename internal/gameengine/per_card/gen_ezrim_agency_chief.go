@@ -15,12 +15,14 @@ import (
 //
 // Implementation:
 //   - ETB creates two Clue tokens (the standard investigate effect).
-//   - The activated grant ({1}, sacrifice an artifact) is left to the
-//     AST engine — it's a cost-bearing ability with no auto-activation
-//     hook on this card. Cost-unenforced flag retained for the
-//     tracking section.
+//   - Activated grant ({1}, sacrifice an artifact): gates on
+//     `seat.ManaPool >= 1` and the existence of a non-Ezrim artifact to
+//     sacrifice. Picks lifelink (the highest-value of the three keyword
+//     options for combat math). Sets `kw:lifelink` on Ezrim and queues
+//     a delayed cleanup at end of turn to enforce the duration.
 func registerEzrimAgencyChief(r *Registry) {
 	r.OnETB("Ezrim, Agency Chief", ezrimETB)
+	r.OnActivated("Ezrim, Agency Chief", ezrimSacGrantKeyword)
 }
 
 func ezrimETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
@@ -43,5 +45,72 @@ func ezrimETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":  seat,
 		"clues": 2,
+	})
+}
+
+func ezrimSacGrantKeyword(gs *gameengine.GameState, src *gameengine.Permanent, abilityIdx int, ctx map[string]interface{}) {
+	const slug = "ezrim_sac_artifact_grant_keyword"
+	if gs == nil || src == nil {
+		return
+	}
+	seatIdx := src.Controller
+	if seatIdx < 0 || seatIdx >= len(gs.Seats) {
+		return
+	}
+	seat := gs.Seats[seatIdx]
+	if seat == nil {
+		return
+	}
+	// Find an artifact to sacrifice (prefer cheapest non-Ezrim, prefer
+	// non-creature so we don't tank board state).
+	var sac *gameengine.Permanent
+	bestCMC := 1<<31 - 1
+	for _, p := range seat.Battlefield {
+		if p == nil || p == src || p.Card == nil {
+			continue
+		}
+		if !p.IsArtifact() {
+			continue
+		}
+		cmc := cardCMC(p.Card)
+		if p.IsCreature() {
+			cmc += 100 // de-prioritize artifact creatures
+		}
+		if cmc < bestCMC {
+			bestCMC = cmc
+			sac = p
+		}
+	}
+	if sac == nil {
+		emitFail(gs, slug, src.Card.DisplayName(), "no_artifact_to_sacrifice", nil)
+		return
+	}
+	if !payManaFromPool(seat, 1) {
+		emitFail(gs, slug, src.Card.DisplayName(), "insufficient_mana", map[string]interface{}{
+			"required":  1,
+			"mana_pool": seat.ManaPool,
+		})
+		return
+	}
+	gameengine.SacrificePermanent(gs, sac, "ezrim_activation_cost")
+	if src.Flags == nil {
+		src.Flags = map[string]int{}
+	}
+	src.Flags["kw:lifelink"] = 1
+	gs.RegisterDelayedTrigger(&gameengine.DelayedTrigger{
+		TriggerAt:      "end_of_turn",
+		ControllerSeat: seatIdx,
+		SourceCardName: src.Card.DisplayName(),
+		OneShot:        true,
+		EffectFn: func(gs *gameengine.GameState) {
+			if src.Flags != nil {
+				delete(src.Flags, "kw:lifelink")
+			}
+		},
+	})
+	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
+		"seat":      seatIdx,
+		"sacrificed": sac.Card.DisplayName(),
+		"granted":   "lifelink",
 	})
 }

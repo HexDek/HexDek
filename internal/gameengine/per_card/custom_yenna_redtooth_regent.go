@@ -32,6 +32,24 @@ func yennaCopyEnchantment(gs *gameengine.GameState, src *gameengine.Permanent, a
 	if seat == nil {
 		return
 	}
+	// Cost-availability gates checked before target selection so we
+	// don't lock the player into an illegal activation: sorcery-speed,
+	// untapped, ≥2 mana. We pay AFTER confirming a legal target.
+	if !isSorcerySpeed(gs, src.Controller) {
+		emitFail(gs, slug, src.Card.DisplayName(), "not_sorcery_speed", nil)
+		return
+	}
+	if src.Tapped {
+		emitFail(gs, slug, src.Card.DisplayName(), "already_tapped", nil)
+		return
+	}
+	if seat.ManaPool < 2 {
+		emitFail(gs, slug, src.Card.DisplayName(), "insufficient_mana", map[string]interface{}{
+			"required":  2,
+			"mana_pool": seat.ManaPool,
+		})
+		return
+	}
 	// Build a multiset of perm names we control to enforce the
 	// "different name from any permanent you control" gate.
 	names := map[string]int{}
@@ -65,6 +83,9 @@ func yennaCopyEnchantment(gs *gameengine.GameState, src *gameengine.Permanent, a
 		emitFail(gs, slug, src.Card.DisplayName(), "no_legal_enchantment_target", nil)
 		return
 	}
+	// Pay the cost now that the target check has passed.
+	seat.ManaPool -= 2
+	src.Tapped = true
 	// Create a token copy. Strip "legendary" by ensuring the type list
 	// excludes it; we add "token" and copy other types.
 	types := append([]string{"token"}, pick.Card.Types...)

@@ -17,6 +17,8 @@ func TestSliverGravemother_EncoreSpawnsTokenPerOpponent(t *testing.T) {
 	gs := newGame(t, 4)
 	mother := addPerm(gs, 0, "Sliver Gravemother", "creature", "sliver", "legendary")
 	gs.Seats[0].ManaPool = 5
+	gs.Active = 0
+	gs.Phase = "precombat_main" // sorcery-speed gate
 
 	// Place a Sliver creature card in graveyard with CMC 3.
 	dead := &gameengine.Card{
@@ -57,6 +59,9 @@ func TestYenna_CopyEnchantmentSpawnsToken(t *testing.T) {
 	gs := newGame(t, 2)
 	yenna := addPerm(gs, 0, "Yenna, Redtooth Regent", "creature")
 	addPerm(gs, 0, "Rhystic Study", "enchantment")
+	gs.Seats[0].ManaPool = 2
+	gs.Active = 0
+	gs.Phase = "precombat_main"
 
 	bfBefore := len(gs.Seats[0].Battlefield)
 	yennaCopyEnchantment(gs, yenna, 0, nil)
@@ -70,9 +75,12 @@ func TestYenna_CopyEnchantmentSpawnsToken(t *testing.T) {
 func TestYenna_AuraTargetUntapsAndScrys(t *testing.T) {
 	gs := newGame(t, 2)
 	yenna := addPerm(gs, 0, "Yenna, Redtooth Regent", "creature")
-	yenna.Tapped = true
+	// Yenna must start untapped — the {T} cost gate rejects pre-tapped sources.
 	addPerm(gs, 0, "Rancor", "enchantment", "aura")
 	addLibrary(gs, 0, "A", "B", "C")
+	gs.Seats[0].ManaPool = 2
+	gs.Active = 0
+	gs.Phase = "precombat_main"
 
 	yennaCopyEnchantment(gs, yenna, 0, nil)
 

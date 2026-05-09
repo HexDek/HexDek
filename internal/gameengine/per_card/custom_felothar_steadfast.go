@@ -38,7 +38,12 @@ func felotharSacDrawDiscard(gs *gameengine.GameState, src *gameengine.Permanent,
 	if seat == nil {
 		return
 	}
-	// {3} mana cost (assume the engine decremented; defensive check).
+	// {3}, {T}, Sacrifice another creature — defensive cost gates for
+	// non-engine callers.
+	if src.Tapped {
+		emitFail(gs, slug, src.Card.DisplayName(), "already_tapped", nil)
+		return
+	}
 	if seat.ManaPool < 3 {
 		emitFail(gs, slug, src.Card.DisplayName(), "insufficient_mana", map[string]interface{}{
 			"mana_pool": seat.ManaPool,

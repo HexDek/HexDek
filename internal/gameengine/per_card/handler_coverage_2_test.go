@@ -261,6 +261,7 @@ func TestMayael_PutsPower5CreatureOnBattlefield(t *testing.T) {
 		{Name: "Forest", Owner: 0, Types: []string{"land"}},
 		{Name: "Elvish Mystic", Owner: 0, Types: []string{"creature"}, BasePower: 1},
 	}
+	gs.Seats[0].ManaPool = 6 // {3}{R}{G}{W}
 	bfBefore := len(gs.Seats[0].Battlefield)
 
 	mayaelLookFive(gs, mayael, 0, nil)
@@ -281,6 +282,7 @@ func TestMayael_NoQualifyingCreatureBottoms(t *testing.T) {
 		{Name: "Mountain", Owner: 0, Types: []string{"land"}},
 		{Name: "Plains", Owner: 0, Types: []string{"land"}},
 	}
+	gs.Seats[0].ManaPool = 6
 	libBefore := len(gs.Seats[0].Library)
 
 	mayaelLookFive(gs, mayael, 0, nil)

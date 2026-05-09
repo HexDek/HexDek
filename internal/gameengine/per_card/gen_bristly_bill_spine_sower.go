@@ -93,6 +93,14 @@ func bristlyBillSpineSowerDouble(gs *gameengine.GameState, src *gameengine.Perma
 	if seat == nil {
 		return
 	}
+	// {3}{G}{G} mana cost — defensive gate for non-engine callers.
+	if !payManaFromPool(seat, 5) {
+		emitFail(gs, slug, src.Card.DisplayName(), "insufficient_mana", map[string]interface{}{
+			"required":  5,
+			"mana_pool": seat.ManaPool,
+		})
+		return
+	}
 	doubled := 0
 	for _, p := range seat.Battlefield {
 		if p == nil || p.Card == nil || !p.IsCreature() {

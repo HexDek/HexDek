@@ -32,6 +32,21 @@ func mayaelLookFive(gs *gameengine.GameState, src *gameengine.Permanent, ability
 		emitFail(gs, slug, src.Card.DisplayName(), "library_empty", nil)
 		return
 	}
+	// Cost gates: {3}{R}{G}{W} = 6 generic from the engine's pool, plus
+	// {T}. Defensive check for callers that bypass the engine activation
+	// dispatcher.
+	if src.Tapped {
+		emitFail(gs, slug, src.Card.DisplayName(), "already_tapped", nil)
+		return
+	}
+	if !payManaFromPool(seat, 6) {
+		emitFail(gs, slug, src.Card.DisplayName(), "insufficient_mana", map[string]interface{}{
+			"required":  6,
+			"mana_pool": seat.ManaPool,
+		})
+		return
+	}
+	src.Tapped = true
 	n := 5
 	if n > len(seat.Library) {
 		n = len(seat.Library)

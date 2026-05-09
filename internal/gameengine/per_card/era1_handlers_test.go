@@ -100,6 +100,7 @@ func TestBristlyBillEra1_ActivatedDoublesCounters(t *testing.T) {
 	uncounter := addPerm(gs, 0, "Llanowar Elves", "creature")
 	uncounter.Card.BasePower = 1
 	uncounter.Card.BaseToughness = 1
+	gs.Seats[0].ManaPool = 5 // {3}{G}{G}
 
 	bristlyBillSpineSowerDouble(gs, bill, 0, nil)
 
