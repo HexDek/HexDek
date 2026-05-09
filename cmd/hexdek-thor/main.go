@@ -51,6 +51,21 @@ type failure struct {
 	AbilityKind string
 }
 
+// thorFeatures collects the Thor 2.0 feature toggles that the testCard
+// pipeline reads. Carrying them as a single value (rather than a
+// growing argument list) keeps testCard / testInteraction signatures
+// stable when more 2.0 features land. Zero value matches the
+// pre-2.0 default behaviour: no traces, opponent-detect off, no
+// scaffolding — see main() for the actual CLI defaults, which keep
+// opponent-detect ON for backwards compatibility with the old
+// always-on enrichment path.
+type thorFeatures struct {
+	Trace             bool // --trace: write per-test action traces
+	TraceFailuresOnly bool // --trace-failures-only: skip pass-only traces
+	OpponentDetect    bool // --opponent-detect: auto-enrich opponent seat
+	Scaffold          bool // --scaffold: prime conditional triggers
+}
+
 func main() {
 	workers := flag.Int("workers", runtime.NumCPU(), "parallel workers")
 	reportPath := flag.String("report", "", "write markdown report to this path")
@@ -95,8 +110,11 @@ func main() {
 
 	comboDemo := flag.Bool("combo-demo", false, "run combo resolution demos")
 
-	traceFlag := flag.Bool("trace", false, "write per-test execution traces to data/thor-traces/ for failing tests")
+	traceFlag := flag.Bool("trace", false, "enable Thor 2.0 action traces (writes per-test execution traces to --trace-dir)")
 	traceDirFlag := flag.String("trace-dir", "data/thor-traces", "directory for --trace output files")
+	traceFailuresOnly := flag.Bool("trace-failures-only", true, "with --trace, only write trace files for failing tests (default true; pass =false to record passes too)")
+	opponentDetect := flag.Bool("opponent-detect", true, "auto-enrich opponent seat from oracle text before each interaction (Thor 2.0; default on)")
+	scaffoldFlag := flag.Bool("scaffold", false, "apply conditional-trigger scaffolding to satisfy intervening-if / kicker / ETB choice conditions before the interaction (Thor 2.0)")
 	failuresCsv := flag.String("failures-csv", "", "write all failures to CSV file (no truncation)")
 	crossrefFlag := flag.Bool("crossref", false, "run Muninn cross-reference after tests (diff Thor failures vs live-game gaps)")
 	crossrefDir := flag.String("crossref-dir", "data/muninn", "directory containing Muninn JSON files")
@@ -104,20 +122,43 @@ func main() {
 
 	flag.Parse()
 
+	// Aggregate the Thor 2.0 feature flags into one value passed down
+	// the test pipeline. Default values match pre-2.0 behaviour:
+	//   trace=off, opponent-detect=on, scaffold=off
+	// so existing invocations behave identically without any flags.
+	feat := thorFeatures{
+		Trace:             *traceFlag,
+		TraceFailuresOnly: *traceFailuresOnly,
+		OpponentDetect:    *opponentDetect,
+		Scaffold:          *scaffoldFlag,
+	}
+
 	if *traceFlag {
 		traceEnabled = true
 		traceDir = *traceDirFlag
 		if err := os.MkdirAll(traceDir, 0o755); err != nil {
 			log.Fatalf("trace: cannot create %s: %v", traceDir, err)
 		}
-		log.Printf("  trace mode: ON (writing to %s)", traceDir)
+		mode := "all tests"
+		if *traceFailuresOnly {
+			mode = "failures only"
+		}
+		log.Printf("  trace mode: ON (writing to %s — %s)", traceDir, mode)
+	}
+	if !*opponentDetect {
+		log.Printf("  opponent-detect: OFF (skipping board enrichment)")
+	}
+	if *scaffoldFlag {
+		log.Printf("  scaffold: ON (applying conditional-trigger scaffolding)")
 	}
 
 	// Structured trace collector — layered on top of basic traces.
-	// Writes per-card .trace files with phase-annotated entries.
+	// Writes per-card .trace files with phase-annotated entries. When
+	// --trace-failures-only=false the collector keeps a record for
+	// passing tests too, useful for diffing against a known-good run.
 	var traceCollector *TraceCollector
 	if *traceFlag {
-		traceCollector = NewTraceCollector(*traceDirFlag, true)
+		traceCollector = NewTraceCollector(*traceDirFlag, *traceFailuresOnly)
 	}
 
 	if *comboDemo {
@@ -288,7 +329,7 @@ func main() {
 			go func() {
 				defer wg.Done()
 				for wi := range work {
-					cardFailures := testCard(wi.card, wi.ast, interactions, *withPhases, traceCollector)
+					cardFailures := testCard(wi.card, wi.ast, interactions, *withPhases, traceCollector, feat)
 					n := int64(len(interactions))
 					if *withPhases {
 						n += 7 // untap, upkeep, draw, main1, combat, main2, end
@@ -558,12 +599,12 @@ func main() {
 	printTopFailures(failures)
 }
 
-func testCard(oc *oracleCard, ast *gameast.CardAST, interactions []interaction, withPhases bool, tc *TraceCollector) []failure {
+func testCard(oc *oracleCard, ast *gameast.CardAST, interactions []interaction, withPhases bool, tc *TraceCollector, feat thorFeatures) []failure {
 	var fails []failure
 
 	// 1. Interaction tests (destroy, exile, bounce, etc.)
 	for _, inter := range interactions {
-		f := testInteraction(oc, ast, inter, tc)
+		f := testInteraction(oc, ast, inter, tc, feat)
 		if f != nil {
 			fails = append(fails, *f)
 		}
@@ -630,7 +671,7 @@ func testCard(oc *oracleCard, ast *gameast.CardAST, interactions []interaction, 
 	return fails
 }
 
-func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction, tc *TraceCollector) (result *failure) {
+func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction, tc *TraceCollector, feat thorFeatures) (result *failure) {
 	tr := NewTracer()
 	rec := tc.Begin(oc.Name, inter.Name)
 	defer func() {
@@ -666,23 +707,60 @@ func testInteraction(oc *oracleCard, ast *gameast.CardAST, inter interaction, tc
 	tr.Record("SETUP", "place opponent=%q seat=1 power=2 toughness=2", "Opponent Bear")
 	rec.Setup("place opponent=\"Opponent Bear\" seat=1 power=2 toughness=2")
 
-	// Adversarial seat auto-detect: if the card references opponents,
-	// stage opponent actions so listening triggers can fire.
-	if oc.ast != nil {
-		needs := detectOpponentNeeds(oc.ast, oc.OracleText)
-		if needs.hasAny() {
-			applyAdversarialSetup(gs, oc, needs, tr)
-			rec.Setup("adversarial action setup applied")
+	// Adversarial seat auto-detect + board-state enrichment: gated on
+	// --opponent-detect (default true). When off, the test runs against
+	// a bare opponent seat — useful for debugging false positives that
+	// only repro with enriched boards. The two layers are kept together
+	// since both are part of the Thor 2.0 opponent-detect feature.
+	if feat.OpponentDetect {
+		if oc.ast != nil {
+			needs := detectOpponentNeeds(oc.ast, oc.OracleText)
+			if needs.hasAny() {
+				applyAdversarialSetup(gs, oc, needs, tr)
+				rec.Setup("adversarial action setup applied")
+			}
+		}
+		if oc.OracleText != "" {
+			req := DetectOpponentRequirements(oc.OracleText)
+			if req.HasAny() {
+				EnrichOpponentSeat(gs, 1, req)
+				rec.Setup("opponent board-state enrichment applied")
+			}
 		}
 	}
 
-	// Board-state enrichment: ensure opponent has the right permanent types
-	// so targeting effects can resolve.
-	if oc.OracleText != "" {
-		req := DetectOpponentRequirements(oc.OracleText)
-		if req.HasAny() {
-			EnrichOpponentSeat(gs, 1, req)
-			rec.Setup("opponent board-state enrichment applied")
+	// Conditional-trigger scaffolding: gated on --scaffold (default
+	// off). When on, prime the game state so any "if X" intervening
+	// condition or trigger precondition the card cares about is
+	// satisfied before the interaction fires. Without this, cards
+	// whose effects gate on city's blessing / kicked / life-gained-
+	// this-turn / control-another-X silently no-op and look like
+	// engine bugs.
+	if feat.Scaffold && oc.ast != nil {
+		info := extractFirstEffect(oc.ast)
+		if info != nil {
+			if info.trigger != nil {
+				primeTriggerCondition(gs, info, perm, tr)
+				rec.ConditionCheck("trigger precondition primed")
+			} else if info.condition != nil {
+				cs := applyConditionScaffolding(gs, info.condition, perm)
+				if cs.kind != condScaffoldNone {
+					desc := cs.description
+					if desc == "" {
+						desc = cs.rawText
+					}
+					rec.ConditionCheck(fmt.Sprintf("scaffold applied: %s", desc))
+				}
+				primeInterveningIf(gs, info, perm, tr)
+			} else {
+				// No typed condition AST — try the conditional_effect
+				// intervening-if priming directly. primeInterveningIf
+				// reads info.condition + the conditional_effect args
+				// text and is a no-op when neither yields a clause.
+				if primeInterveningIf(gs, info, perm, tr) {
+					rec.ConditionCheck("intervening-if primed")
+				}
+			}
 		}
 	}
 
