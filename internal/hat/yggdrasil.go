@@ -4066,6 +4066,27 @@ func (h *YggdrasilHat) ShouldCastCommander(gs *gameengine.GameState, seatIdx int
 	if gs.Turn > 15 {
 		return true
 	}
+	// Combo signal: when the sequencer says casting the commander
+	// completes a win line this turn (NextAction names the commander),
+	// override every cautious gate below. This is the lever that lets
+	// commander-engine combo decks (Kinnan + Basalt Monolith,
+	// Najeela combats, Esika + Bridge cheat, etc.) actually pull the
+	// trigger on the assembly turn instead of stalling because tax
+	// or interaction risk is high. The combo cast is the win, so the
+	// usual "preserve mana for protection" tradeoff doesn't apply.
+	if h.comboSeq != nil {
+		assessment := h.comboSeq.Evaluate(gs, seatIdx)
+		if assessment.Executable && assessment.NextAction != "" &&
+			(assessment.NextAction == commanderName ||
+				strings.Contains(commanderName, " // ") &&
+					(strings.HasPrefix(commanderName, assessment.NextAction+" // ") ||
+						strings.HasSuffix(commanderName, " // "+assessment.NextAction))) {
+			h.logf("%s COMBO-COMMANDER seat=%d cast %q (line: %s)",
+				roundTag(gs, seatIdx), seatIdx, commanderName,
+				assessment.BestLine.Name)
+			return true
+		}
+	}
 	// 3rd Eye: If high interaction risk and commander tax is already 2+,
 	// wait until we have enough mana to also hold up protection, or until
 	// the blue player taps out.
