@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPie, computeColorByCmc } from '../components/chrome'
 import GlossaryTerm from '../components/GlossaryTerm'
+import { ConsiderCuttingRationale, ValueEngineRationale, WinConditionRationale } from '../components/RationalePanels'
 import CardRolesGrid from '../components/CardRolesGrid'
 import CardLink from '../components/CardLink'
 import CurseDisplay from '../components/CurseDisplay'
@@ -490,7 +491,10 @@ export default function DeckArchive() {
   const commanderSynergy = analysis?.commander_synergy ?? null
   const commanderThemes = analysis?.commander_themes || []
   const starCards = analysis?.star_cards || []
-  const cuttableCards = analysis?.cuttable_cards || []
+  // Prefer the structured rationale list when Freya has produced it; fall
+  // back to the flat name list for older strategy.json files on disk.
+  const cuttableCards = analysis?.cuttable_card_rationale || analysis?.cuttable_cards || []
+  const valueChains = analysis?.value_chains || []
   const vulnerableTo = analysis?.vulnerable_to || []
   const finisherCards = analysis?.finisher_cards || []
   const comboNotes = analysis?.combo_notes || []
@@ -1310,6 +1314,9 @@ export default function DeckArchive() {
             )
           })()}
 
+          {/* Win condition rationale — explains detection logic per line */}
+          <WinConditionRationale winLines={winLines} />
+
           {/* Legality violations */}
           {legality && !legality.valid && (
             <Panel code="04.L" title="LEGALITY VIOLATIONS" right={<Tag kind="bad" solid>ILLEGAL</Tag>}>
@@ -1402,6 +1409,9 @@ export default function DeckArchive() {
             </Panel>
           )}
 
+          {/* Value engine rationale — explains why each engine was identified */}
+          <ValueEngineRationale chains={valueChains} />
+
           {/* Game Changer cards */}
           {gameChangerCards.length > 0 && (
             <Panel code="04.GC" title={`GAME CHANGERS / / ${gameChangerCards.length}`} right={<Tag kind="bad" solid>B4+</Tag>}>
@@ -1431,16 +1441,8 @@ export default function DeckArchive() {
             </Panel>
           )}
 
-          {/* Cuttable cards */}
-          {cuttableCards.length > 0 && (
-            <Panel code="04.Q" title="CONSIDER CUTTING">
-              <div className="grid col-5 gap-2">
-                {cuttableCards.slice(0, 10).map((name, i) => (
-                  <CardThumb key={i} name={name} compact />
-                ))}
-              </div>
-            </Panel>
-          )}
+          {/* Cuttable cards rationale (replaces older thumbnail-only panel) */}
+          <ConsiderCuttingRationale cuts={cuttableCards} />
 
           {/* Tutor targets */}
           {analysis?.tutor_targets && (

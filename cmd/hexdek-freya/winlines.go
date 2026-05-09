@@ -12,6 +12,14 @@ type WinLine struct {
 	Type       string // "infinite", "determined", "finisher", "combat", "commander_damage", "alt_wincon"
 	Desc       string
 	TutorPaths []TutorChain
+	Rationale  *WinLineRationale
+}
+
+// WinLineRationale explains how this win line is detected and resolves.
+type WinLineRationale struct {
+	Forms      []string // cards that form the line (with optional role annotation)
+	Conditions []string // setup/state required before the line goes live
+	Resolves   []string // step-by-step description of how the line wins
 }
 
 type TutorChain struct {
@@ -366,8 +374,80 @@ func addComboWinLines(wla *WinLineAnalysis, combos []ComboResult, lineType strin
 			}
 		}
 
+		wl.Rationale = buildComboWinLineRationale(&wl)
 		wla.WinLines = append(wla.WinLines, wl)
 	}
+}
+
+// buildComboWinLineRationale extracts the combo's how-it-works detail from the
+// description string emitted by the combo detector and surfaces tutor coverage.
+func buildComboWinLineRationale(wl *WinLine) *WinLineRationale {
+	r := &WinLineRationale{
+		Forms: append([]string(nil), wl.Pieces...),
+	}
+
+	desc := strings.TrimSpace(wl.Desc)
+	// The combo detector concatenates structured tags after a ' | ' separator
+	// (OUTLETS, MANA SINK, NO OUTLET, etc.). Split them so the resolution and
+	// the conditions render on distinct lines.
+	if desc != "" {
+		parts := strings.Split(desc, " | ")
+		// First sentence is the canonical mechanism; subsequent ' | ' fragments
+		// are conditions or warnings.
+		mech := strings.TrimSpace(parts[0])
+		if mech != "" {
+			r.Resolves = append(r.Resolves, mech)
+		}
+		for _, part := range parts[1:] {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			r.Conditions = append(r.Conditions, part)
+		}
+	}
+
+	switch wl.Type {
+	case "infinite":
+		r.Conditions = append(r.Conditions,
+			fmt.Sprintf("All %d pieces must be present (battlefield/graveyard/hand depending on combo)", len(wl.Pieces)))
+	case "determined":
+		r.Conditions = append(r.Conditions, "Reach a board state where the combo is forced/inevitable")
+	case "finisher":
+		r.Conditions = append(r.Conditions, "Survive until enough mana/setup is available to cast the finisher")
+	}
+
+	if len(wl.TutorPaths) > 0 {
+		// Group tutor coverage by piece for a compact summary.
+		coverage := map[string][]string{}
+		for _, tp := range wl.TutorPaths {
+			coverage[tp.Finds] = append(coverage[tp.Finds], tp.Tutor)
+		}
+		var lines []string
+		for _, piece := range wl.Pieces {
+			if tutors, ok := coverage[piece]; ok {
+				deduped := uniqueStrings(tutors)
+				lines = append(lines, fmt.Sprintf("%s: %d tutor%s (%s)",
+					piece, len(deduped), pluralS(len(deduped)),
+					strings.Join(deduped, ", ")))
+			} else {
+				lines = append(lines, fmt.Sprintf("%s: must draw naturally — no tutor in deck can fetch", piece))
+			}
+		}
+		r.Conditions = append(r.Conditions, "Tutor access:")
+		r.Conditions = append(r.Conditions, lines...)
+	} else if wl.Type == "infinite" || wl.Type == "determined" {
+		r.Conditions = append(r.Conditions, "No tutor support — every piece must be drawn naturally")
+	}
+
+	return r
+}
+
+func pluralS(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 func addNonComboWinLines(wla *WinLineAnalysis, report *FreyaReport, qtyProfiles []CardProfileQty, oracle *oracleDB, profileByName map[string]CardProfile) {
@@ -393,6 +473,11 @@ func addNonComboWinLines(wla *WinLineAnalysis, report *FreyaReport, qtyProfiles 
 				Pieces: []string{p.Name},
 				Type:   "alt_wincon",
 				Desc:   "alternate win condition",
+				Rationale: &WinLineRationale{
+					Forms:      []string{p.Name},
+					Conditions: []string{"Card is in play / castable", "No interaction stops the win-state effect"},
+					Resolves:   []string{altWinconResolves(p.Name, ot)},
+				},
 			})
 		}
 	}
@@ -402,6 +487,11 @@ func addNonComboWinLines(wla *WinLineAnalysis, report *FreyaReport, qtyProfiles 
 			Pieces: []string{report.Commander},
 			Type:   "commander_damage",
 			Desc:   "21 commander damage",
+			Rationale: &WinLineRationale{
+				Forms:      []string{report.Commander},
+				Conditions: []string{"Cast commander from the command zone", "Connect with combat damage repeatedly until target accumulates 21+ commander damage"},
+				Resolves:   []string{"Each opponent loses individually once they reach 21 commander damage from this commander."},
+			},
 		})
 	}
 
@@ -431,8 +521,33 @@ func addNonComboWinLines(wla *WinLineAnalysis, report *FreyaReport, qtyProfiles 
 			Pieces: []string{fmt.Sprintf("%d threats + %d pumps", threatCount, pumpCount)},
 			Type:   "combat",
 			Desc:   "combat damage with creature pressure",
+			Rationale: &WinLineRationale{
+				Forms: []string{
+					fmt.Sprintf("%d creatures CMC 3+ in deck", threatCount),
+					fmt.Sprintf("%d anthem/overrun-style pump effects", pumpCount),
+				},
+				Conditions: []string{
+					"Maintain a board through opposing removal",
+					"Stick at least one pump effect to convert chip damage into lethal",
+				},
+				Resolves: []string{"Develop a wide or tall board, alpha-strike with a pump in play, and split combat damage across opponents until they're knocked out."},
+			},
 		})
 	}
+}
+
+func altWinconResolves(name, ot string) string {
+	low := strings.ToLower(ot)
+	switch {
+	case strings.Contains(low, "wins the game"):
+		return name + " has a static or triggered ability that explicitly says 'wins the game' once a condition is met."
+	case strings.Contains(low, "loses the game"):
+		return name + " has a static or triggered ability that makes opponents lose the game once a condition is met."
+	case strings.Contains(low, "each opponent") &&
+		(strings.Contains(low, "loses life") || strings.Contains(low, "loses ") && strings.Contains(low, " life")):
+		return name + " drains each opponent's life total — chain triggers or copies to push them to 0."
+	}
+	return "Card is tagged as an alternate win condition by oracle text. Resolve its triggered/activated/static win clause."
 }
 
 func alreadyInWinLines(wla *WinLineAnalysis, name string) bool {

@@ -34,6 +34,14 @@ type ValueChain struct {
 	WeakestLink    int
 	Redundancy     string // "HIGH", "MEDIUM", "LOW"
 	RecursionDepth string // "infinite" (has loop-back), "deep" (3+ recursion pieces), "shallow" (1-2), "none"
+	Rationale      *ValueChainRationale
+}
+
+// ValueChainRationale explains why an engine was identified for this deck.
+type ValueChainRationale struct {
+	Trigger    string   // what cards/interactions trigger the engine
+	HowItWorks string   // 1-2 sentence description of engine mechanics
+	KeyPieces  []string // anchor cards (bridges + weakest-link pieces)
 }
 
 // ---------------------------------------------------------------------------
@@ -383,7 +391,7 @@ func matchChainTemplate(tmpl chainTemplate, profiles []CardProfile) *ValueChain 
 		recursionDepth = "shallow"
 	}
 
-	return &ValueChain{
+	chain := &ValueChain{
 		Name:           tmpl.Name,
 		Steps:          steps,
 		BridgeCards:    bridges,
@@ -392,6 +400,94 @@ func matchChainTemplate(tmpl chainTemplate, profiles []CardProfile) *ValueChain 
 		Redundancy:     redundancy,
 		RecursionDepth: recursionDepth,
 	}
+	chain.Rationale = buildValueChainRationale(chain)
+	return chain
+}
+
+// engineRationaleByName describes what triggers each engine and how it produces value.
+// Keys match chainTemplate.Name verbatim.
+var engineRationaleByName = map[string]struct {
+	Trigger    string
+	HowItWorks string
+}{
+	"Landfall Engine": {
+		Trigger:    "lands entering the battlefield from any zone (drops, ramp, recursion)",
+		HowItWorks: "Mill or ramp lands into the graveyard, recur them to the battlefield, and bank the landfall trigger each time. Repeat for compounding value per turn.",
+	},
+	"Aristocrats Engine": {
+		Trigger:    "creatures dying or being sacrificed",
+		HowItWorks: "Generate creature bodies (tokens or recursion), feed them to a sacrifice outlet, and collect death/drain payoffs. The graveyard refills the loop via reanimation.",
+	},
+	"Reanimator Engine": {
+		Trigger:    "fat creatures hitting the graveyard ahead of their natural mana cost",
+		HowItWorks: "Self-mill or discard a high-impact creature, then cheat it into play with reanimation. Pay off the early threat with combat, ETB, or attack triggers.",
+	},
+	"Graveyard Value Engine": {
+		Trigger:    "cards leaving hand or library and landing in the graveyard",
+		HowItWorks: "Use mill/discard/loot to load the graveyard, recur cards back to hand, and recast them. Each rotation generates incremental tempo and card advantage.",
+	},
+	"Spellslinger Engine": {
+		Trigger:    "casting noncreature spells",
+		HowItWorks: "Cantrips refill the hand for cheap; cost reducers and rituals turn surplus mana into more spells. The chain wins through prowess, storm, or magecraft payoffs.",
+	},
+	"Blink Value Engine": {
+		Trigger:    "creatures with ETB triggers entering the battlefield",
+		HowItWorks: "Deploy ETB creatures, then exile-and-return them with blink effects. Each flicker re-fires the ETB, so a few high-value bodies snowball into virtual card advantage.",
+	},
+	"Storm Engine": {
+		Trigger:    "casting many spells in a single turn",
+		HowItWorks: "Cost reducers and rituals make spells effectively free; cantrips chain into more spells; a storm payoff converts the spell count into a lethal trigger.",
+	},
+	"Artifact Engine": {
+		Trigger:    "artifacts entering the battlefield, being sacrificed, or being recurred",
+		HowItWorks: "Cheap artifacts drop, get sacrificed for value (mana, draw, damage), and return from the graveyard. Density of triggers turns each cycle into compounding card advantage.",
+	},
+	"Enchantress Engine": {
+		Trigger:    "enchantments entering the battlefield",
+		HowItWorks: "Each enchantment played triggers a draw from one of several enchantress effects, refilling the hand and powering the next enchantment. The chain self-sustains as long as the engine creature survives.",
+	},
+	"Counters Matter Engine": {
+		Trigger:    "+1/+1 (or other) counters being placed",
+		HowItWorks: "Place counters via spells, ETBs, or proliferate; a payoff card converts counter density into draws, damage, or scaling threats. Proliferate accelerates the loop without spending more cards.",
+	},
+}
+
+func buildValueChainRationale(chain *ValueChain) *ValueChainRationale {
+	r := &ValueChainRationale{}
+	if base, ok := engineRationaleByName[chain.Name]; ok {
+		r.Trigger = base.Trigger
+		r.HowItWorks = base.HowItWorks
+	} else {
+		r.Trigger = "deck-specific resource flow detected"
+		r.HowItWorks = fmt.Sprintf("Multi-step pipeline (%d steps) across deck zones.", chain.Depth)
+	}
+
+	// Key pieces: bridges first (they span multiple steps), then the strongest
+	// step's first card so a reader can see at least one anchor per chain.
+	seen := map[string]bool{}
+	for _, b := range chain.BridgeCards {
+		if !seen[b] {
+			r.KeyPieces = append(r.KeyPieces, b)
+			seen[b] = true
+		}
+	}
+	if len(r.KeyPieces) < 3 {
+		// Add the first card of each step to give callers a representative
+		// example until we hit 3 anchors.
+		for _, step := range chain.Steps {
+			for _, c := range step.Cards {
+				if !seen[c] {
+					r.KeyPieces = append(r.KeyPieces, c)
+					seen[c] = true
+					break
+				}
+			}
+			if len(r.KeyPieces) >= 3 {
+				break
+			}
+		}
+	}
+	return r
 }
 
 func cardMatchesStep(p CardProfile, pat chainStepPattern) bool {
@@ -510,13 +606,20 @@ func renderValueChainsMarkdown(chains []ValueChain) string {
 // ---------------------------------------------------------------------------
 
 type jsonValueChain struct {
-	Name           string               `json:"name"`
-	Steps          []jsonValueChainStep `json:"steps"`
-	BridgeCards    []string             `json:"bridge_cards,omitempty"`
-	Depth          int                  `json:"depth"`
-	WeakestLink    int                  `json:"weakest_link"`
-	Redundancy     string               `json:"redundancy"`
-	RecursionDepth string               `json:"recursion_depth"`
+	Name           string                   `json:"name"`
+	Steps          []jsonValueChainStep     `json:"steps"`
+	BridgeCards    []string                 `json:"bridge_cards,omitempty"`
+	Depth          int                      `json:"depth"`
+	WeakestLink    int                      `json:"weakest_link"`
+	Redundancy     string                   `json:"redundancy"`
+	RecursionDepth string                   `json:"recursion_depth"`
+	Rationale      *jsonValueChainRationale `json:"rationale,omitempty"`
+}
+
+type jsonValueChainRationale struct {
+	Trigger    string   `json:"trigger,omitempty"`
+	HowItWorks string   `json:"how_it_works,omitempty"`
+	KeyPieces  []string `json:"key_pieces,omitempty"`
 }
 
 type jsonValueChainStep struct {
@@ -543,6 +646,14 @@ func buildJSONValueChains(chains []ValueChain) []jsonValueChain {
 				Cards:    s.Cards,
 			}
 		}
+		var rat *jsonValueChainRationale
+		if c.Rationale != nil {
+			rat = &jsonValueChainRationale{
+				Trigger:    c.Rationale.Trigger,
+				HowItWorks: c.Rationale.HowItWorks,
+				KeyPieces:  c.Rationale.KeyPieces,
+			}
+		}
 		out[i] = jsonValueChain{
 			Name:           c.Name,
 			Steps:          steps,
@@ -551,6 +662,7 @@ func buildJSONValueChains(chains []ValueChain) []jsonValueChain {
 			WeakestLink:    c.WeakestLink,
 			Redundancy:     c.Redundancy,
 			RecursionDepth: c.RecursionDepth,
+			Rationale:      rat,
 		}
 	}
 	return out

@@ -1220,9 +1220,13 @@ type jsonMatchup struct {
 }
 
 type jsonCardQuality struct {
-	Name   string `json:"name"`
-	Tier   string `json:"tier"`
-	Reason string `json:"reason"`
+	Name      string   `json:"name"`
+	Tier      string   `json:"tier"`
+	Reason    string   `json:"reason"`
+	Detected  string   `json:"detected,omitempty"`
+	WhyCut    string   `json:"why_cut,omitempty"`
+	Effect    string   `json:"effect,omitempty"`
+	Suggested []string `json:"suggested,omitempty"`
 }
 
 type jsonRoleCount struct {
@@ -1282,10 +1286,17 @@ type jsonWinLines struct {
 }
 
 type jsonWinLine struct {
-	Pieces     []string         `json:"pieces"`
-	Type       string           `json:"type"`
-	Desc       string           `json:"description,omitempty"`
-	TutorPaths []jsonTutorChain `json:"tutor_paths,omitempty"`
+	Pieces     []string              `json:"pieces"`
+	Type       string                `json:"type"`
+	Desc       string                `json:"description,omitempty"`
+	TutorPaths []jsonTutorChain      `json:"tutor_paths,omitempty"`
+	Rationale  *jsonWinLineRationale `json:"rationale,omitempty"`
+}
+
+type jsonWinLineRationale struct {
+	Forms      []string `json:"forms,omitempty"`
+	Conditions []string `json:"conditions,omitempty"`
+	Resolves   []string `json:"resolves,omitempty"`
 }
 
 type jsonTutorChain struct {
@@ -1397,7 +1408,15 @@ func buildJSONDeckProfile(dp *DeckProfile) *jsonDeckProfile {
 		stars = append(stars, jsonCardQuality{Name: c.Name, Tier: c.Tier, Reason: c.Reason})
 	}
 	for _, c := range dp.CuttableCards {
-		cuttable = append(cuttable, jsonCardQuality{Name: c.Name, Tier: c.Tier, Reason: c.Reason})
+		cuttable = append(cuttable, jsonCardQuality{
+			Name:      c.Name,
+			Tier:      c.Tier,
+			Reason:    c.Reason,
+			Detected:  c.Detected,
+			WhyCut:    c.WhyCut,
+			Effect:    c.Effect,
+			Suggested: c.Suggested,
+		})
 	}
 
 	return &jsonDeckProfile{
@@ -1511,11 +1530,20 @@ func buildJSONWinLines(wla *WinLineAnalysis) *jsonWinLines {
 				Delivery: tp.Delivery,
 			})
 		}
+		var rat *jsonWinLineRationale
+		if wl.Rationale != nil {
+			rat = &jsonWinLineRationale{
+				Forms:      wl.Rationale.Forms,
+				Conditions: wl.Rationale.Conditions,
+				Resolves:   wl.Rationale.Resolves,
+			}
+		}
 		lines[i] = jsonWinLine{
 			Pieces:     wl.Pieces,
 			Type:       wl.Type,
 			Desc:       wl.Desc,
 			TutorPaths: paths,
+			Rationale:  rat,
 		}
 	}
 	return &jsonWinLines{
