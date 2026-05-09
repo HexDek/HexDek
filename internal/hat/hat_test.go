@@ -203,3 +203,108 @@ func TestGauntletReadiness(t *testing.T) {
 	_ = gs.Seats[0].Hat.ChooseAttackers(gs, 0, nil)
 	_ = gs.Seats[2].Hat.ChooseAttackers(gs, 2, nil)
 }
+
+// TestYggdrasilBlock_AheadStillTradesUp verifies the bail-out fix:
+// even when the YggdrasilHat is comfortably ahead in board position
+// (relPos > aheadNoBlock=0.3) AND incoming damage is below
+// life/survivalFrac, the hat must still assign a favorable trade —
+// here a 1/1 token throwing itself in front of a 4/4 attacker.
+//
+// Pre-fix: the global guard at the top of AssignBlockers returned an
+// empty map, so the 4/4 ate four free damage every turn.
+// Post-fix: the per-attacker loop runs and the favorable-trade branch
+// picks the lightest legal blocker (1/1 token, P+T=2) against the
+// heavier attacker (P+T=8).
+func TestYggdrasilBlock_AheadStillTradesUp(t *testing.T) {
+	gs := newTestGame(t, 2)
+	gs.Seats[1].Life = 40
+	gs.Seats[0].Life = 40
+
+	// Seat 1 dominates the board with 5 fatties so relPos is well
+	// above the 0.3 default aheadNoBlock threshold. The fatties are
+	// 5/4 (P+T=9) — bigger than the 4/4 attacker but with toughness
+	// equal to attacker power, so they do NOT survive the trade
+	// (`tough > pow` is false), forcing the favorable-trade branch
+	// to fire. The 1/1 token (P+T=2) is the only blocker strictly
+	// lighter than the attacker (P+T=8), so it should be picked.
+	for i := 0; i < 5; i++ {
+		_ = newTestPermanent(gs.Seats[1], newTestCardMinimal("Fatty", []string{"creature"}, 5, nil), 5, 4)
+	}
+	token := newTestPermanent(gs.Seats[1], newTestCardMinimal("Token", []string{"creature", "token"}, 0, nil), 1, 1)
+
+	// Seat-0 attacker: 4/4. Incoming = 4 (well under 20). Together
+	// with relPos > 0.3 this hits the old global bail-out condition.
+	atk := newTestPermanent(gs.Seats[0], newTestCardMinimal("Bruiser", []string{"creature"}, 3, nil), 4, 4)
+
+	h := NewYggdrasilHatWithNoise(nil, 0, 0)
+
+	// Sanity check: confirm the test setup actually triggers the
+	// old bail-out condition. If relPos isn't above 0.3 the test
+	// proves nothing.
+	relPos := h.relativePosition(gs, 1)
+	if relPos <= 0.3 {
+		t.Fatalf("test setup invalid: relPos=%.3f, want > 0.3 to exercise the bail-out fix", relPos)
+	}
+	incoming := gs.PowerOf(atk)
+	if incoming >= gs.Seats[1].Life/2 {
+		t.Fatalf("test setup invalid: incoming=%d, want < life/survivalFrac=%d", incoming, gs.Seats[1].Life/2)
+	}
+
+	out := h.AssignBlockers(gs, 1, []*gameengine.Permanent{atk})
+	if len(out[atk]) != 1 {
+		t.Fatalf("expected 1 blocker on the 4/4 even when ahead; got %d", len(out[atk]))
+	}
+	if out[atk][0] != token {
+		t.Errorf("expected the 1/1 token to be picked as the favorable trade; got %s",
+			out[atk][0].Card.Name)
+	}
+}
+
+// TestYggdrasilBlock_AheadStillTakesSurvivor mirrors the trade-up
+// case but with a survivor available. We want to make sure the
+// removed bail-out doesn't regress the survivor path either.
+func TestYggdrasilBlock_AheadStillTakesSurvivor(t *testing.T) {
+	gs := newTestGame(t, 2)
+	gs.Seats[1].Life = 40
+
+	for i := 0; i < 5; i++ {
+		_ = newTestPermanent(gs.Seats[1], newTestCardMinimal("Fatty", []string{"creature"}, 5, nil), 5, 4)
+	}
+	wall := newTestPermanent(gs.Seats[1], newTestCardMinimal("Wall", []string{"creature"}, 3, nil), 0, 5)
+	atk := newTestPermanent(gs.Seats[0], newTestCardMinimal("Bruiser", []string{"creature"}, 3, nil), 4, 4)
+
+	h := NewYggdrasilHatWithNoise(nil, 0, 0)
+	out := h.AssignBlockers(gs, 1, []*gameengine.Permanent{atk})
+	if len(out[atk]) != 1 || out[atk][0] != wall {
+		t.Fatalf("expected the 0/5 wall to survive-block the 4/4; got %v", out[atk])
+	}
+}
+
+// TestYggdrasilBlock_AheadSkipsWhenNoFavorableTrade — when no
+// blocker is strictly lighter than the attacker (every legal
+// blocker has P+T ≥ attacker P+T) AND no blocker survives, the hat
+// should let the damage through rather than throw a same-or-bigger
+// creature into a coin-flip trade. Confirms the favorable-trade
+// branch is *strict* on stat-sum comparison.
+func TestYggdrasilBlock_AheadSkipsWhenNoFavorableTrade(t *testing.T) {
+	gs := newTestGame(t, 2)
+	gs.Seats[1].Life = 40
+
+	// Seat 1 has only 2/2s. Seat 0 attacker is also a 2/2 (P+T=4).
+	// No blocker is strictly < 4, no blocker survives (toughness 2
+	// not > attacker power 2). Drive relPos high with extra
+	// non-creature... actually we need to be ahead. Use seat-1 life
+	// dominance instead — relPos uses Evaluator.Evaluate which
+	// weights life. Give seat 0 only 2 life so relPos > 0.3.
+	gs.Seats[0].Life = 2
+	for i := 0; i < 3; i++ {
+		_ = newTestPermanent(gs.Seats[1], newTestCardMinimal("Fighter", []string{"creature"}, 2, nil), 2, 2)
+	}
+	atk := newTestPermanent(gs.Seats[0], newTestCardMinimal("Even", []string{"creature"}, 2, nil), 2, 2)
+
+	h := NewYggdrasilHatWithNoise(nil, 0, 0)
+	out := h.AssignBlockers(gs, 1, []*gameengine.Permanent{atk})
+	if len(out[atk]) != 0 {
+		t.Fatalf("expected no block when every blocker is ≥ attacker P+T; got %v", out[atk])
+	}
+}

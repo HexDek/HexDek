@@ -3620,9 +3620,20 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 			survivalFrac = 2
 		}
 	}
-	if relPos > aheadNoBlock && incoming < seat.Life/survivalFrac {
-		return out
-	}
+	// "Comfortably ahead" no longer skips ALL blocking. The old guard
+	// returned an empty map whenever relPos was high enough and total
+	// incoming was below life/survivalFrac, so a 40-life, slightly-ahead
+	// hat would just eat 4/4 (or 19-damage) hits even when a free chump
+	// trade was available. We now keep this as a per-attacker hint:
+	// individual attackers get skipped further down only when there's
+	// no survivor AND no favorable trade — favorable trades (blocker
+	// strictly lighter than the attacker) ALWAYS go through, even when
+	// ahead.
+	aheadAndComfortable := relPos > aheadNoBlock && incoming < seat.Life/survivalFrac
+	_ = aheadAndComfortable // currently advisory; per-attacker logic below
+	// is already conservative enough on its own. Retained as a named
+	// expression so future skip heuristics can reuse it without
+	// re-deriving the threshold.
 
 	// Pool of legal blockers — exclude combo/value creatures from trades
 	// unless we'll die without blocking.
@@ -3759,7 +3770,36 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 		var chosen []*gameengine.Permanent
 		if len(survivors) > 0 {
 			chosen = []*gameengine.Permanent{survivors[0]}
-		} else if willDieIfUnblocked || mustBlock {
+		}
+
+		// Favorable-trade fallback: even when no blocker survives and
+		// we're not at lethal, throwing a strictly-lighter creature in
+		// front of a heavier attacker is always correct (a 1/1 token
+		// blocking a 5/5 trades 2 stat-points for 10). We pick the
+		// lightest qualifying blocker so we burn the cheapest creature
+		// possible. Skipped for 0-power attackers (they kill the
+		// blocker for nothing). Combo / value-engine pieces were
+		// already filtered out of the pool above when willDie==false.
+		if len(chosen) == 0 && atkPow > 0 {
+			atkSum := atkPow + atkTou
+			var best *gameengine.Permanent
+			bestSum := atkSum // strictly less is "favorable"
+			for _, b := range legal {
+				if b == nil {
+					continue
+				}
+				bSum := gs.PowerOf(b) + gs.ToughnessOf(b)
+				if bSum < bestSum {
+					best = b
+					bestSum = bSum
+				}
+			}
+			if best != nil {
+				chosen = []*gameengine.Permanent{best}
+			}
+		}
+
+		if len(chosen) == 0 && (willDieIfUnblocked || mustBlock) {
 			// Deathtouch trade-up: prefer a deathtouch blocker that can
 			// take down the attacker (any damage is lethal) over a chump.
 			var dtTrader *gameengine.Permanent
