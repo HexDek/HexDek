@@ -90,10 +90,7 @@ func kalamaxFirstInstantCopy(gs *gameengine.GameState, perm *gameengine.Permanen
 	// Stack a +1/+1 counter — the "whenever you copy an instant" rider
 	// would normally put this on; we apply it here directly because we
 	// don't have a real copy-event channel.
-	if perm.Counters == nil {
-		perm.Counters = map[string]int{}
-	}
-	perm.Counters["+1/+1"]++
+	perm.AddCounter("+1/+1", 1)
 	spellName, _ := ctx["spell_name"].(string)
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":      perm.Controller,

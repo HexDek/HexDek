@@ -61,10 +61,7 @@ func giadaAngelCounters(gs *gameengine.GameState, perm *gameengine.Permanent, ct
 		})
 		return
 	}
-	if entered.Counters == nil {
-		entered.Counters = map[string]int{}
-	}
-	entered.Counters["+1/+1"] += already
+	entered.AddCounter("+1/+1", already)
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":     perm.Controller,
 		"angel":    entered.Card.DisplayName(),
