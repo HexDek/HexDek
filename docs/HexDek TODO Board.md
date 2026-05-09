@@ -12,6 +12,22 @@ kanban-plugin: board
 ## High Priority — Engine
 
 - [x] **Remaining 276 commander handlers** — generator improved (fuzzy slug resolution, hand-edit preservation, deterministic number extraction). NO_AST 73→0, 195/196 unhandled pool commanders templated. PR #1 merged 2026-05-09. #engine #per_card
+- [x] **Era 1 unification (FDN/DSK/BLB/OTJ/MKM)** — 12 templated commanders promoted from stub to custom logic: Mabel, Aesi, Bristly Bill, Byrke, Aminatou, Queen Marchesa, Kardur, The Swarmweaver, Rendmaw, Kona, Ezrim, Prime Speaker Zegana. (2026-05-09) #engine #per_card
+
+## Tracking — Cost-Unenforced Activated Abilities
+
+> Per_card handlers that implement the *effect* of an activated ability but do not gate on the activation cost (mana, tap, sacrifice, etc.). The engine's general activation path collects cost externally, so these are best-effort but not provably correct under arbitrary AI activation.
+
+- **Bristly Bill, Spine Sower** — `{3}{G}{G}` double-counters: handler doubles +1/+1 counters on all controlled creatures, but mana cost not collected by the handler.
+- **Ezrim, Agency Chief** — `{1}, Sacrifice an artifact` keyword grant: effect not yet implemented at per_card layer (AST-deferred); cost path unverified.
+- **The Jolly Balloon Man** — `{1}, {T}, Activate only as a sorcery` copy-creature token: not implemented at per_card layer.
+- **Commander Mustard** — `{2}{R}{W}` Soldier-grant attack-damage rider: not implemented at per_card layer.
+- **Giada, Font of Hope** — `{T}: Add {W}` mana ability with "spend only on Angel" restriction: tap cost engine-enforced, restriction not gated by per_card.
+- **The Master of Keys** — `{X}{W}{U}{B}` ETB with X-counter / mill-2X rider: not implemented (no X readback at per_card hook).
+- **Kardur, Doomscourge** — ETB goad-until-your-next-turn duration: goad applied, no delayed-cleanup trigger to expire it.
+- **Aminatou, Veil Piercer** — enchantments-in-hand miracle grant: not wired into cast path.
+
+
 
 ### Tracking — cost-unenforced activated abilities
 
