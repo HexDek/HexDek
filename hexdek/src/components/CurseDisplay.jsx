@@ -32,6 +32,7 @@ function RadarChart({ values, size = 220 }) {
   const rings = [0.25, 0.5, 0.75, 1.0]
 
   return (
+    <div style={{ maxWidth: size, margin: '0 auto' }}>
     <svg viewBox={`0 0 ${size} ${size}`} width="100%" style={{ display: 'block', overflow: 'visible' }}>
       {rings.map((f, i) => (
         <polygon
@@ -77,6 +78,7 @@ function RadarChart({ values, size = 220 }) {
         )
       })}
     </svg>
+    </div>
   )
 }
 
@@ -96,11 +98,15 @@ function FitnessSparkline({ values, width = 320, height = 56 }) {
     .join(' ')
   const baselineY = y(1.0)
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" preserveAspectRatio="none" style={{ display: 'block' }}>
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      style={{ display: 'block', width: '100%', height }}
+    >
       <line x1="0" y1={baselineY} x2={width} y2={baselineY} stroke="var(--rule-2)" strokeDasharray="3 3" strokeWidth="1" />
-      <path d={path} fill="none" stroke="var(--ok)" strokeWidth="1.5" />
+      <path d={path} fill="none" stroke="var(--ok)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
       {values.map((v, i) => (
-        <circle key={i} cx={x(i)} cy={y(v)} r="2" fill={v >= 1.0 ? 'var(--ok)' : 'var(--ink-2)'} />
+        <circle key={i} cx={x(i)} cy={y(v)} r="2" fill={v >= 1.0 ? 'var(--ok)' : 'var(--ink-2)'} vectorEffect="non-scaling-stroke" />
       ))}
     </svg>
   )
