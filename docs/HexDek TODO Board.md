@@ -190,6 +190,18 @@ kanban-plugin: board
 - [ ] **Tournament prize pools** — hat-vs-hat bracket tournaments with cash prizes (1st/2nd/3rd/4th splits). Starcraft model: deckbuilding is the skill, hat execution is the layer. Legally sound as skill competition (no entry-fee model safest, donations-funded). Needs: bracket system, payout logic, age verification (18+), tax reporting (>$600). #platform #economy #future
 
 
+## Done — Session 2026-05-09 (QA/Cleanup Pass)
+
+- [x] **Drop 32 dead `gen_*` stubs** — generator stubs removed where custom handlers fully supersede them. Eliminates double-firing from stacked registrations. PR #36 merged 2026-05-09. #engine #per_card #cleanup
+- [x] **TODO board reconciliation** — wave 3 sync aligning board with merged era passes and QA results. PR #37 merged 2026-05-09. #docs
+- [x] **AddCounter normalization** — 6 custom commander handlers migrated from manual `perm.Counters[kind]++` to `perm.AddCounter()` (nil-safe, floors at 0). PR #38 merged 2026-05-09. #engine #refactor
+- [x] **Test backfill: Era 1 + Era 4 handlers** — 36 new tests across era-pass handlers that shipped without test coverage. PR #39 merged 2026-05-09. #engine #tests
+- [x] **Build hygiene cleanup** — 35 staticcheck fixes (unused params, unnecessary type conversions, unreachable code). PR #40 merged 2026-05-09. #engine #cleanup
+- [x] **Handler collision resolution** — 45 gen/custom double-firing conflicts resolved (custom wins, gen_ removed). Fixed **Nicol Bolas double-discard bug** (two ETB handlers causing opponents to discard twice). Wired **Grunn the Lonely King** (handler existed but was never registered). PR #41 merged 2026-05-09. #engine #per_card #bug
+
+*6 PRs (#36-41), ~150 files touched. Key impact: Bolas double-discard was a gameplay-visible bug affecting every pod with Bolas.*
+
+
 ## Done — Session 2026-05-08 (Engine Deep Audit + Structural Systems)
 
 - [x] **Deep sweep: 34 missing FireCardTrigger dispatch points** — dead triggers (targeted, card_exiled, zone_change, scry, proliferate, etc.) across 15 engine files. CI lint test `TestAllRegisteredTriggersAreDispatched` prevents future dead triggers. (2026-05-08) #engine #dispatch
