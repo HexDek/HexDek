@@ -5,6 +5,7 @@ import (
 
 	"github.com/hexdek/hexdek/internal/analytics"
 	"github.com/hexdek/hexdek/internal/muninn"
+	"github.com/hexdek/hexdek/internal/seedcontract"
 	"github.com/hexdek/hexdek/internal/trueskill"
 )
 
@@ -74,6 +75,14 @@ type GameOutcome struct {
 	// ConcessionRecords captures board state at the moment of each
 	// conviction concession in this game.
 	ConcessionRecords []muninn.ConcessionRecord
+
+	// SeedContract is the per-game cryptographic commitment binding
+	// inputs (RNG seed, deck keys, engine version, n seats) to the
+	// outcome (winner, turns, kill method, elimination order, final
+	// life). Sealed and signed in runOneGame when TournamentConfig
+	// supplies a ContractKey; nil otherwise. Phase 1 anti-cheat: the
+	// seed JSONL stream and downstream verifiers consume this field.
+	SeedContract *seedcontract.SeedContract
 }
 
 // SeatStats is a per-seat summary emitted after every game regardless
