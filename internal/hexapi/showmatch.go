@@ -23,6 +23,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/hexdek/hexdek/internal/achievements"
+	"github.com/hexdek/hexdek/internal/anticheat"
 	"github.com/hexdek/hexdek/internal/astload"
 	"github.com/hexdek/hexdek/internal/cardstats"
 	"github.com/hexdek/hexdek/internal/db"
@@ -224,6 +225,11 @@ type Showmatch struct {
 	gauntlets  map[string]*GauntletResult
 
 	rooms *RoomManager
+
+	// auditor is the contributor-level statistical anomaly detector.
+	// Nil when no SQLite DB is wired (tests, ephemeral runs); the
+	// updateELO hook checks for nil before recording.
+	auditor *anticheat.StatisticalAuditor
 }
 
 type spectatorConn struct {
@@ -274,6 +280,11 @@ func NewShowmatch(astPath, oraclePath, decksDir string, database *sql.DB) *Showm
 	if database != nil {
 		if err := db.EnsureCardStatsSchema(context.Background(), database); err != nil {
 			log.Printf("showmatch: card_stats schema: %v", err)
+		}
+		if a, err := anticheat.NewStatisticalAuditor(database); err != nil {
+			log.Printf("showmatch: anticheat auditor init: %v", err)
+		} else {
+			sm.auditor = a
 		}
 		sm.loadPersistedState()
 		go sm.persistWorker()
@@ -840,7 +851,7 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 		sm.mu.Lock()
 		sm.stats.gamesPlayed++
 		sm.stats.totalTurns += gs.Turn
-		sm.updateELO(deckKeys, commanders, pickedDecks, winner)
+		sm.updateELO(deckKeys, commanders, pickedDecks, winner, gs.Turn)
 		sm.mu.Unlock()
 
 		gauntSeed := heimdall.GameSeed{
@@ -1358,7 +1369,7 @@ func (sm *Showmatch) runOneGameFast(rng *rand.Rand) {
 	sm.mu.Lock()
 	sm.stats.gamesPlayed++
 	sm.stats.totalTurns += gs.Turn
-	sm.updateELO(deckKeys, commanders, pickedDecks, winner)
+	sm.updateELO(deckKeys, commanders, pickedDecks, winner, gs.Turn)
 	sm.mu.Unlock()
 
 	bracketSeed := heimdall.GameSeed{
@@ -1644,7 +1655,7 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 	sm.snap = finalSnap
 	sm.stats.gamesPlayed++
 	sm.stats.totalTurns += gs.Turn
-	sm.updateELO(deckKeys, commanders, pickedDecks, winner)
+	sm.updateELO(deckKeys, commanders, pickedDecks, winner, gs.Turn)
 
 	completed := CompletedGame{
 		GameID:     gameNum,
@@ -2187,7 +2198,7 @@ func hexELOStreakBreakBonus(lossStreak int) float64 {
 	return math.Min(float64(lossStreak)*3.0, 30.0)
 }
 
-func (sm *Showmatch) updateELO(deckKeys, commanders []string, decks []*deckparser.TournamentDeck, winner int) {
+func (sm *Showmatch) updateELO(deckKeys, commanders []string, decks []*deckparser.TournamentDeck, winner int, turns int) {
 	const baseK = 32.0
 	n := len(deckKeys)
 	if n < 2 {
@@ -2336,6 +2347,41 @@ func (sm *Showmatch) updateELO(deckKeys, commanders []string, decks []*deckparse
 		won := i == winner
 		if flag := hat.DefaultAnomalyDetector.Record(key, won); flag != nil {
 			hat.LogAnomaly(flag)
+		}
+	}
+
+	// Anti-cheat Phase 2 — same idea at the contributor (owner)
+	// granularity, persisted to SQLite and audited across multiple
+	// dimensions (win rate, average game length, turn variance). Today
+	// the contributor is the deck owner; when BOINC lands the key will
+	// shift to a per-machine identifier without changing the math.
+	// One result per owner per pod: multiple decks from the same owner
+	// would otherwise pin their win/loss ratio to the pod-share they
+	// brought, which is a deck-construction artifact, not a signal.
+	if sm.auditor != nil {
+		seen := map[string]bool{}
+		for i, key := range deckKeys {
+			owner, _ := deckOwnerFromKey(key)
+			if owner == "" || seen[owner] {
+				continue
+			}
+			seen[owner] = true
+			won := i == winner
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			flags, err := sm.auditor.RecordGame(ctx, anticheat.Game{
+				ContributorID: owner,
+				Won:           won,
+				Turns:         turns,
+			})
+			cancel()
+			if err != nil {
+				log.Printf("anticheat: record %s: %v", owner, err)
+				continue
+			}
+			for _, f := range flags {
+				log.Printf("anticheat flag: contributor=%s metric=%s value=%.4f z=%+.2fσ severity=%d (mean=%.4f stddev=%.4f)",
+					f.ContributorID, f.Metric, f.MetricValue, f.ZScore, f.Severity, f.PopMean, f.PopStdDev)
+			}
 		}
 	}
 }
@@ -2535,6 +2581,8 @@ func (sm *Showmatch) RegisterShowmatch(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/spectate/rooms", sm.handleListSpectateRooms)
 	mux.HandleFunc("GET /api/spectate/rooms/{room_id}", sm.handleGetSpectateRoom)
 	mux.HandleFunc("GET /ws/spectate/{room_id}", sm.handleSpectateRoomWS)
+
+	RegisterAdminAnomalies(mux, sm.auditor)
 }
 
 var gauntletSem = make(chan struct{}, 2)
