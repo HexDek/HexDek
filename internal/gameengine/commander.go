@@ -361,9 +361,18 @@ func CastCommanderFromCommandZone(gs *GameState, seatIdx int, commanderName stri
 	// Locate the card in the command zone. §903.3c partner: the lookup
 	// is PER-COMMANDER-NAME, so casting Kraum never touches Tymna's tax
 	// or zone entry.
+	//
+	// DFC-aware match: if a previous cast was as the back face (MDFC
+	// Esika→Bridge), the card's runtime Name was swapped to the back-face
+	// name on resolve. Plain equality on the canonical "Front // Back"
+	// commanderName then misses. DFCCardMatchesName accepts the full
+	// oracle name OR either face, so the recast lookup still resolves.
 	var cmdrIdx = -1
 	for i, c := range seat.CommandZone {
-		if c != nil && c.DisplayName() == commanderName {
+		if c == nil {
+			continue
+		}
+		if c.DisplayName() == commanderName || DFCCardMatchesName(c, commanderName) {
 			cmdrIdx = i
 			break
 		}
@@ -505,16 +514,36 @@ func DFCCardMatchesName(card *Card, declaredName string) bool {
 	if strings.EqualFold(cn, dn) {
 		return true
 	}
+	// Card-name has both faces — match either side against declaredName.
 	var faces []string
-	if strings.Contains(cn, " // ") {
+	switch {
+	case strings.Contains(cn, " // "):
 		faces = strings.Split(cn, " // ")
-	} else if strings.Contains(cn, " / ") {
+	case strings.Contains(cn, " / "):
 		faces = strings.Split(cn, " / ")
-	} else {
-		return false
 	}
 	for _, f := range faces {
 		if strings.EqualFold(strings.TrimSpace(f), dn) {
+			return true
+		}
+	}
+	// Declared-name has both faces but the card's runtime Name has been
+	// mutated to a single face (MDFC back-face cast in stack.go swaps
+	// Card.Name → Card.BackFaceName). Match if either face of the
+	// declared full name equals the runtime Card.Name OR Card.BackFaceName.
+	var declFaces []string
+	switch {
+	case strings.Contains(dn, " // "):
+		declFaces = strings.Split(dn, " // ")
+	case strings.Contains(dn, " / "):
+		declFaces = strings.Split(dn, " / ")
+	}
+	for _, f := range declFaces {
+		face := strings.TrimSpace(f)
+		if strings.EqualFold(face, cn) {
+			return true
+		}
+		if card.BackFaceName != "" && strings.EqualFold(face, card.BackFaceName) {
 			return true
 		}
 	}
