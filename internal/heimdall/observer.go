@@ -55,20 +55,39 @@ func (o *Observer) RecordSeed(seed GameSeed) {
 }
 
 // RecordObservation is called during batch replay or live observation mode.
-// Routes co-triggers to Huginn, parser gaps and dead triggers to Muninn.
+// Routes co-triggers + zone-cast + exile-link events to Huginn, and parser
+// gaps + dead triggers + (optionally) exile-link audit data to Muninn.
 func (o *Observer) RecordObservation(obs Observation) {
-	if o.huginn != nil && len(obs.CoTriggers) > 0 {
-		names := make([]string, len(obs.Seed.DeckKeys))
-		copy(names, obs.Seed.DeckKeys[:])
-		o.huginn.IngestCoTriggers(obs.CoTriggers, names)
+	gameID := fmt.Sprintf("%d", obs.Seed.RNGSeed)
+	names := make([]string, len(obs.Seed.DeckKeys))
+	copy(names, obs.Seed.DeckKeys[:])
+
+	if o.huginn != nil {
+		if len(obs.CoTriggers) > 0 {
+			o.huginn.IngestCoTriggers(obs.CoTriggers, names)
+		}
+		if len(obs.ZoneCastEvents) > 0 {
+			if zc, ok := o.huginn.(HuginnZoneCastSink); ok {
+				zc.IngestZoneCastEvents(obs.ZoneCastEvents, names, gameID)
+			}
+		}
+		if len(obs.ExileLinkEvents) > 0 {
+			if el, ok := o.huginn.(HuginnExileLinkSink); ok {
+				el.IngestExileLinkEvents(obs.ExileLinkEvents, names, gameID)
+			}
+		}
 	}
 	if o.muninn != nil {
-		gameID := fmt.Sprintf("%d", obs.Seed.RNGSeed)
 		if len(obs.ParserGaps) > 0 {
 			o.muninn.RecordParserGaps(obs.ParserGaps, gameID)
 		}
 		if len(obs.DeadTriggers) > 0 {
 			o.muninn.RecordDeadTriggers(obs.DeadTriggers, gameID)
+		}
+		if len(obs.ExileLinkEvents) > 0 {
+			if el, ok := o.muninn.(MuninnExileLinkSink); ok {
+				el.RecordExileLinkEvents(obs.ExileLinkEvents, gameID)
+			}
 		}
 	}
 }

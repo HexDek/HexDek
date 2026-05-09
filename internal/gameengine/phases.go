@@ -878,6 +878,14 @@ func RegisterParadigmExile(gs *GameState, seatIdx int, card *Card) {
 		gs.ParadigmExile = map[int][]*Card{}
 	}
 	gs.ParadigmExile[seatIdx] = append(gs.ParadigmExile[seatIdx], card)
+	gs.LogEvent(Event{
+		Kind:   "paradigm_exile_created",
+		Seat:   seatIdx,
+		Source: card.DisplayName(),
+		Details: map[string]interface{}{
+			"pool_size": len(gs.ParadigmExile[seatIdx]),
+		},
+	})
 }
 
 // Unprepare sets a permanent's Prepared state to false and clears the

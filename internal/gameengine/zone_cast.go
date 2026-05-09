@@ -561,7 +561,30 @@ func RemoveZoneCastGrant(gs *GameState, card *Card) {
 	if gs == nil || card == nil || gs.ZoneCastGrants == nil {
 		return
 	}
-	delete(gs.ZoneCastGrants, card)
+	if p, ok := gs.ZoneCastGrants[card]; ok {
+		emitGrantExpired(gs, card, p, "removed")
+		delete(gs.ZoneCastGrants, card)
+	}
+}
+
+// emitGrantExpired logs a zone_cast_grant_expired event so Heimdall can
+// observe the lifecycle of zone-cast permissions.
+func emitGrantExpired(gs *GameState, card *Card, p *ZoneCastPermission, reason string) {
+	if gs == nil || card == nil || p == nil {
+		return
+	}
+	gs.LogEvent(Event{
+		Kind:   "zone_cast_grant_expired",
+		Seat:   p.RequireController,
+		Source: p.SourceName,
+		Details: map[string]interface{}{
+			"card":     card.DisplayName(),
+			"zone":     p.Zone,
+			"keyword":  p.Keyword,
+			"duration": p.Duration,
+			"reason":   reason,
+		},
+	})
 }
 
 // GetZoneCastGrant returns the zone-cast permission for a card, if any.
@@ -607,6 +630,7 @@ func ExpireZoneCastGrants(gs *GameState) {
 	}
 	for card, p := range gs.ZoneCastGrants {
 		if shouldExpireGrant(gs, p) {
+			emitGrantExpired(gs, card, p, "duration_elapsed")
 			delete(gs.ZoneCastGrants, card)
 		}
 	}
@@ -621,6 +645,7 @@ func ExpireSourceGrants(gs *GameState, sourceTimestamp int) {
 	}
 	for card, p := range gs.ZoneCastGrants {
 		if p.SourceTimestamp == sourceTimestamp {
+			emitGrantExpired(gs, card, p, "source_left_battlefield")
 			delete(gs.ZoneCastGrants, card)
 		}
 	}

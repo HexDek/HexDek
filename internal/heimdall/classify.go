@@ -83,3 +83,53 @@ func ClassifyKillWithMaxTurns(gs *gameengine.GameState, winner, maxTurns int) st
 	}
 	return ClassifyKill(gs, winner)
 }
+
+// SnapshotTurnCounters captures the per-seat TurnCounters into a fixed-size
+// array suitable for embedding in GameSeed. Seats beyond index 3 are ignored
+// (HexDek is 4-player Commander). Nil seats produce a zero snapshot.
+//
+// NOTE: TurnCounters are reset every turn (see Reset() in UntapAll), so this
+// captures only the FINAL turn's totals — not game-wide cumulative values.
+// Callers that want game-wide aggregates must accumulate during play.
+func SnapshotTurnCounters(gs *gameengine.GameState) [4]TurnCounterSnapshot {
+	var out [4]TurnCounterSnapshot
+	if gs == nil {
+		return out
+	}
+	for i, seat := range gs.Seats {
+		if i >= 4 || seat == nil {
+			continue
+		}
+		out[i] = snapshotOne(&seat.Turn)
+	}
+	return out
+}
+
+func snapshotOne(tc *gameengine.TurnCounters) TurnCounterSnapshot {
+	if tc == nil {
+		return TurnCounterSnapshot{}
+	}
+	return TurnCounterSnapshot{
+		LifeGained:          tc.LifeGained,
+		LifeLost:            tc.LifeLost,
+		DamageReceived:      tc.DamageReceived,
+		LifePaid:            tc.LifePaid,
+		CardsDrawn:          tc.CardsDrawn,
+		SpellsCast:          tc.SpellsCast,
+		CreaturesEntered:    tc.CreaturesEntered,
+		ArtifactsEntered:    tc.ArtifactsEntered,
+		EnchantmentsEntered: tc.EnchantmentsEntered,
+		TokensCreated:       tc.TokensCreated,
+		TreasuresCreated:    tc.TreasuresCreated,
+		Sacrificed:          tc.Sacrificed,
+		PermanentsLeft:      tc.PermanentsLeft,
+		Discarded:           tc.Discarded,
+		Milled:              tc.Milled,
+		LandsPlayed:         tc.LandsPlayed,
+		CreaturesDied:       tc.CreaturesDied,
+		ExiledCards:         tc.ExiledCards,
+		CastFromExile:       tc.CastFromExile,
+		Descended:           tc.Descended,
+		Attacked:            tc.Attacked,
+	}
+}

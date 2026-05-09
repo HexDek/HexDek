@@ -1132,6 +1132,17 @@ func ExileLinked(gs *GameState, perm *Permanent, card *Card, ownerSeat int, from
 	card.ExiledByTimestamp = perm.Timestamp
 	perm.LinkedExile = append(perm.LinkedExile, card)
 	MoveCard(gs, card, ownerSeat, fromZone, "exile", perm.Card.DisplayName()+"_exile_linked")
+	gs.LogEvent(Event{
+		Kind:   "exile_linked_created",
+		Seat:   ownerSeat,
+		Source: perm.Card.DisplayName(),
+		Details: map[string]interface{}{
+			"card":             card.DisplayName(),
+			"from_zone":        fromZone,
+			"source_timestamp": perm.Timestamp,
+			"rule":             "406.7",
+		},
+	})
 }
 
 // ReturnLinkedExile returns all cards linked to a permanent back to
@@ -1142,13 +1153,26 @@ func ReturnLinkedExile(gs *GameState, perm *Permanent, toZone string) {
 	if gs == nil || perm == nil || len(perm.LinkedExile) == 0 {
 		return
 	}
+	returnedNames := make([]string, 0, len(perm.LinkedExile))
 	for _, card := range perm.LinkedExile {
 		if card == nil {
 			continue
 		}
 		card.ExiledByTimestamp = 0
+		returnedNames = append(returnedNames, card.DisplayName())
 		MoveCard(gs, card, card.Owner, "exile", toZone, perm.Card.DisplayName()+"_ltb_return")
 	}
+	gs.LogEvent(Event{
+		Kind:   "exile_linked_returned",
+		Source: perm.Card.DisplayName(),
+		Amount: len(returnedNames),
+		Details: map[string]interface{}{
+			"to_zone":          toZone,
+			"cards":            returnedNames,
+			"source_timestamp": perm.Timestamp,
+			"rule":             "406.7",
+		},
+	})
 	perm.LinkedExile = nil
 }
 

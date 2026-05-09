@@ -96,13 +96,27 @@ func (m *mockMuninn) RecordCrash(panicMsg string, stackTrace string, deckKeys []
 }
 
 type mockHuginn struct {
-	mu    sync.Mutex
-	pairs []CoTriggerPair
+	mu          sync.Mutex
+	pairs       []CoTriggerPair
+	zoneCasts   []ZoneCastEvent
+	exileLinks  []ExileLinkEvent
 }
 
 func (m *mockHuginn) IngestCoTriggers(pairs []CoTriggerPair, deckNames []string) {
 	m.mu.Lock()
 	m.pairs = append(m.pairs, pairs...)
+	m.mu.Unlock()
+}
+
+func (m *mockHuginn) IngestZoneCastEvents(events []ZoneCastEvent, deckNames []string, gameID string) {
+	m.mu.Lock()
+	m.zoneCasts = append(m.zoneCasts, events...)
+	m.mu.Unlock()
+}
+
+func (m *mockHuginn) IngestExileLinkEvents(events []ExileLinkEvent, deckNames []string, gameID string) {
+	m.mu.Lock()
+	m.exileLinks = append(m.exileLinks, events...)
 	m.mu.Unlock()
 }
 
@@ -121,6 +135,13 @@ func TestObserver_RecordObservation_RoutesSinks(t *testing.T) {
 		CoTriggers: []CoTriggerPair{
 			{CardA: "Sol Ring", CardB: "Mana Crypt", ImpactScore: 0.8},
 		},
+		ZoneCastEvents: []ZoneCastEvent{
+			{Kind: "zone_cast_grant_registered", Card: "Lightning Bolt", Zone: "graveyard", Keyword: "flashback", Seat: 0},
+			{Kind: "adventure_exiled", Card: "Brazen Borrower", Seat: 1},
+		},
+		ExileLinkEvents: []ExileLinkEvent{
+			{Kind: "exile_linked_created", Source: "Oblivion Ring", Card: "Krenko", FromZone: "battlefield", Seat: 2},
+		},
 	})
 
 	if len(mun.gaps) != 2 {
@@ -135,7 +156,41 @@ func TestObserver_RecordObservation_RoutesSinks(t *testing.T) {
 	if hug.pairs[0].CardA != "Sol Ring" {
 		t.Errorf("expected Sol Ring, got %s", hug.pairs[0].CardA)
 	}
+	if len(hug.zoneCasts) != 2 {
+		t.Errorf("expected 2 zone-cast events, got %d", len(hug.zoneCasts))
+	}
+	if len(hug.exileLinks) != 1 {
+		t.Errorf("expected 1 exile-link event, got %d", len(hug.exileLinks))
+	}
+}
 
+func TestObserver_RecordObservation_OptionalSinkSkipped(t *testing.T) {
+	// Verify a HuginnSink that does NOT implement the optional zone-cast/
+	// exile-link sub-interfaces is left alone — no panic, just silent skip.
+	dir := t.TempDir()
+	hug := &basicHuginn{}
+	obs := New(dir, hug, nil, nil)
+
+	obs.RecordObservation(Observation{
+		Seed: GameSeed{RNGSeed: 1},
+		CoTriggers: []CoTriggerPair{
+			{CardA: "A", CardB: "B"},
+		},
+		ZoneCastEvents:  []ZoneCastEvent{{Kind: "adventure_exiled", Card: "X"}},
+		ExileLinkEvents: []ExileLinkEvent{{Kind: "exile_linked_created", Source: "O-Ring"}},
+	})
+
+	if len(hug.pairs) != 1 {
+		t.Errorf("expected co-trigger to still route; got %d pairs", len(hug.pairs))
+	}
+}
+
+type basicHuginn struct {
+	pairs []CoTriggerPair
+}
+
+func (m *basicHuginn) IngestCoTriggers(pairs []CoTriggerPair, deckNames []string) {
+	m.pairs = append(m.pairs, pairs...)
 }
 
 func TestObserver_RecordCrash(t *testing.T) {
@@ -254,5 +309,38 @@ func TestObserver_ConcurrentRecordSeed(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	if len(lines) != 100 {
 		t.Fatalf("expected 100 seeds from concurrent writes, got %d", len(lines))
+	}
+}
+
+func TestSnapshotTurnCounters(t *testing.T) {
+	gs := &gameengine.GameState{
+		Seats: []*gameengine.Seat{
+			{Turn: gameengine.TurnCounters{LifeGained: 5, SpellsCast: 3, Attacked: true}},
+			{Turn: gameengine.TurnCounters{Milled: 7, CastFromExile: 2}},
+			nil, // exercises nil-seat skip
+			{Turn: gameengine.TurnCounters{LandsPlayed: 1, Descended: true}},
+		},
+	}
+	snap := SnapshotTurnCounters(gs)
+	if snap[0].LifeGained != 5 || snap[0].SpellsCast != 3 || !snap[0].Attacked {
+		t.Errorf("seat 0 snapshot mismatch: %+v", snap[0])
+	}
+	if snap[1].Milled != 7 || snap[1].CastFromExile != 2 {
+		t.Errorf("seat 1 snapshot mismatch: %+v", snap[1])
+	}
+	if snap[2] != (TurnCounterSnapshot{}) {
+		t.Errorf("nil seat 2 should produce zero snapshot, got %+v", snap[2])
+	}
+	if snap[3].LandsPlayed != 1 || !snap[3].Descended {
+		t.Errorf("seat 3 snapshot mismatch: %+v", snap[3])
+	}
+}
+
+func TestSnapshotTurnCounters_NilGameState(t *testing.T) {
+	snap := SnapshotTurnCounters(nil)
+	for i, s := range snap {
+		if s != (TurnCounterSnapshot{}) {
+			t.Errorf("snap[%d] should be zero for nil gs, got %+v", i, s)
+		}
 	}
 }

@@ -1304,6 +1304,16 @@ func CastAdventure(gs *GameState, seatIdx int, card *Card, adventureCost int) er
 			"rule": "702.133",
 		},
 	})
+	gs.LogEvent(Event{
+		Kind:   "adventure_exiled",
+		Seat:   seatIdx,
+		Source: card.DisplayName(),
+		Details: map[string]interface{}{
+			"adventure_cost":  adventureCost,
+			"creature_cost":   manaCostOf(card),
+			"rule":            "715.4",
+		},
+	})
 	return nil
 }
 
