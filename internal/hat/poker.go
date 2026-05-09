@@ -1959,9 +1959,15 @@ func attackerRank(gs *gameengine.GameState, a *gameengine.Permanent) int {
 		score += 5
 	}
 	// Double strike: doubled damage hurts more, and trade math gets
-	// uglier for blockers.
+	// uglier for blockers. Double strike implies first strike, so we
+	// only add the higher of the two bumps (not both).
 	if a.HasKeyword("double strike") || a.HasKeyword("double_strike") {
 		score += 3
+	} else if a.HasKeyword("first strike") || a.HasKeyword("first_strike") {
+		// First strike: kills blockers before they swing back, making
+		// it a safer attacker. Bump less than double strike (+3) but
+		// more than trample (+1).
+		score += 2
 	}
 	// Lifelink: every point of damage is a 2-point life swing relative
 	// to the opponent — block these first when life is in question.
