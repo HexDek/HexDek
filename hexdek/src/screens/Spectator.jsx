@@ -431,7 +431,7 @@ export default function Spectator() {
   }
 
   return (
-    <>
+    <div className="spectator-page">
       {heatmapTip && (
         <div className="heatmap-tooltip" style={{ left: heatmapTip.x + 12, top: heatmapTip.y - 8 }}>
           {heatmapTip.label}: {heatmapTip.value}
@@ -893,6 +893,6 @@ export default function Spectator() {
         </div>
       </div>
       {/* narrator fused into action log — no separate overlay */}
-    </>
+    </div>
   )
 }

@@ -1408,12 +1408,14 @@ export default function DeckArchive() {
           )}
 
           {curse && (
-            <CurseDisplay
-              curse={curse}
-              isOwner={isOwner}
-              deckId={deckKey}
-              onConstraintsChange={(constraints) => setCurse(c => ({ ...(c || {}), constraints }))}
-            />
+            <div className="archive-curse-section">
+              <CurseDisplay
+                curse={curse}
+                isOwner={isOwner}
+                deckId={deckKey}
+                onConstraintsChange={(constraints) => setCurse(c => ({ ...(c || {}), constraints }))}
+              />
+            </div>
           )}
 
           </>}
