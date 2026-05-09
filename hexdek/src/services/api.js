@@ -114,8 +114,20 @@ export const api = {
     return request(`/api/profiles?owners=${encodeURIComponent(list)}`)
   },
   getImports: (owner, limit = 10) => request(`/api/imports/${encodeURIComponent(owner)}?limit=${limit}`),
-  startGauntlet: (id, games = 500) => request(`/api/gauntlet/${id}?games=${games}`, { method: 'POST' }),
+  // Gauntlet is now credit-gated when the caller is signed in. Send
+  // the X-HexDek-Owner header so the server knows who to charge /
+  // bill against the daily free-tier quota.
+  startGauntlet: (id, games = 500) => authedRequest(`/api/gauntlet/${id}?games=${games}`, { method: 'POST' }),
   getGauntlet: (id) => request(`/api/gauntlet/${id}`),
+
+  // Credit economy. All four require X-HexDek-Owner.
+  getCreditBalance: () => authedRequest('/api/credits'),
+  getCreditHistory: (limit = 50) => authedRequest(`/api/credits/history?limit=${limit}`),
+  getCreditQuota: () => authedRequest('/api/credits/quota'),
+  spendCredits: (amount, reason, reference) => authedRequest('/api/credits/spend', {
+    method: 'POST',
+    body: JSON.stringify({ amount, reason, reference }),
+  }),
   getDonationsSummary: () => request('/api/donations/summary'),
   search: (q, limit = 6) => request(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`),
   listFriends: (asSlug) => request(`/api/friends?as=${encodeURIComponent(asSlug)}`),

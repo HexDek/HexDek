@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPie, computeColorByCmc } from '../components/chrome'
+import CreditsPanel from '../components/CreditsPanel'
 import GlossaryTerm from '../components/GlossaryTerm'
 import { ConsiderCuttingRationale, ValueEngineRationale, WinConditionRationale } from '../components/RationalePanels'
 import CardRolesGrid from '../components/CardRolesGrid'
@@ -255,6 +256,7 @@ export default function DeckArchive() {
   const [savingName, setSavingName] = useState(false)
   const [winLinesExpanded, setWinLinesExpanded] = useState(false)
   const [cloning, setCloning] = useState(false)
+  const [creditsRefreshKey, setCreditsRefreshKey] = useState(0)
   const [confirmClone, setConfirmClone] = useState(false)
   const [spawningRoom, setSpawningRoom] = useState(false)
   const [isFriend, setIsFriend] = useState(false)
@@ -1104,6 +1106,14 @@ export default function DeckArchive() {
             )}
           </Panel>
 
+          {/* Credits posture — shown above the run button so the user
+              sees free-tier remaining + balance before clicking. Only
+              renders for signed-in users; the panel itself silently
+              degrades on 401. */}
+          {owner && id && user && (
+            <CreditsPanel compact refreshKey={creditsRefreshKey} />
+          )}
+
           {/* Gauntlet button — prominent, right under Freya */}
           {owner && id && (
             <div>
@@ -1116,7 +1126,13 @@ export default function DeckArchive() {
               <Btn solid arrow="▶" onClick={() => {
                 if (gauntlet?.status === 'running') return
                 trackEvent('start_gauntlet', { deck: `${owner}/${id}`, games: 500 })
-                api.startGauntlet(`${owner}/${id}`, 500).then(() => {
+                api.startGauntlet(`${owner}/${id}`, 500).then((res) => {
+                  // Surface "credits charged" feedback so the user knows
+                  // a paid run actually debited their balance.
+                  if (res?.credits_charged) {
+                    toast.info(`PAID RUN — ${res.credits_charged} CR DEDUCTED`)
+                    setCreditsRefreshKey(k => k + 1)
+                  }
                   const poll = () => {
                     api.getGauntlet(`${owner}/${id}`).then(r => {
                       setGauntlet(r)
@@ -1124,8 +1140,29 @@ export default function DeckArchive() {
                     })
                   }
                   setTimeout(poll, 2000)
+                  setGauntlet({ status: 'running', games: 0, target: 500, win_rate: 0 })
+                }).catch(err => {
+                  // 402 from the server when the user is out of free
+                  // runs and has no credits, or when the spend itself
+                  // would overdraft. The body is JSON with an error
+                  // code + the current quota state.
+                  if (err?.status === 402) {
+                    let parsed = null
+                    try { parsed = JSON.parse(err.body) } catch {}
+                    if (parsed?.error === 'free_quota_exhausted') {
+                      toast.error('OUT OF FREE GAUNTLETS — EARN CREDITS OR WAIT FOR RESET')
+                    } else {
+                      toast.error(`INSUFFICIENT CREDITS — NEED ${parsed?.needed ?? '?'} CR (HAVE ${parsed?.balance ?? 0})`)
+                    }
+                    setCreditsRefreshKey(k => k + 1)
+                  } else if (err?.status === 401) {
+                    toast.error('SIGN IN TO RUN A GAUNTLET')
+                  } else if (err?.status === 429) {
+                    toast.error('SERVER BUSY — TRY AGAIN SOON')
+                  } else {
+                    toast.error('GAUNTLET FAILED TO START')
+                  }
                 })
-                setGauntlet({ status: 'running', games: 0, target: 500, win_rate: 0 })
               }}>{gauntlet?.status === 'running' ? 'GAUNTLET RUNNING...' : 'RUN GAUNTLET (500)'}</Btn>
               <Btn solid arrow="▶" onClick={() => {
                 if (spawningRoom) return

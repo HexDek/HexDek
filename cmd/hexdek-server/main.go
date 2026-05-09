@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/hexdek/hexdek/internal/ai"
+	"github.com/hexdek/hexdek/internal/credits"
 	"github.com/hexdek/hexdek/internal/db"
 	"github.com/hexdek/hexdek/internal/hexapi"
 	"github.com/hexdek/hexdek/internal/hub"
@@ -115,6 +116,17 @@ func main() {
 	if err := hexapi.EnsureDeckMetaSchema(context.Background(), database); err != nil {
 		log.Fatalf("deck_meta schema: %v", err)
 	}
+
+	// Credit economy: tracks per-owner balance + ledger; gates
+	// gauntlet runs past the free-tier daily quota. Wired into the
+	// Showmatch gauntlet handler so a paid run automatically debits
+	// the caller's balance and logs to the audit trail.
+	if err := credits.EnsureSchema(context.Background(), database); err != nil {
+		log.Fatalf("credits schema: %v", err)
+	}
+	creditStore := credits.New(database)
+	creditStore.Register(mux)
+	sm.SetCreditStore(creditStore)
 	hexAPI.LoadCardDB("data/rules/oracle-cards.json")
 	hexAPI.LoadOwnerAliases("data/owner-aliases.json")
 	hexAPI.Register(mux)
