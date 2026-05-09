@@ -284,7 +284,7 @@ export default function Forge() {
                 </>
               )}
 
-              <ContextBox>
+              <ContextBox id="forge.run-actions">
                 <strong>RUN GAUNTLET</strong> simulates the selected number of AI-vs-AI games on the server and reports win rate, ELO delta, and matchup breakdown.
                 {' '}<strong>EXPORT .TXT</strong> downloads the decklist as a plain-text file you can paste anywhere.
               </ContextBox>

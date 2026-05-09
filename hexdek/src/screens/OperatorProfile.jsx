@@ -6,6 +6,7 @@ import { api } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useLiveSocket } from '../hooks/useLiveSocket'
 import { countryFlagEmoji } from '../lib/flag'
+import ContextBox from '../components/ContextBox'
 
 // OperatorProfile — first-person profile page at /operator (alias /me),
 // only reachable when authenticated. Mirrors PublicProfile's structure
@@ -241,6 +242,9 @@ export default function OperatorProfile() {
       />
 
       <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <ContextBox id="operator.intro">
+          Your operator profile — display name, country, decks, recent matches, friends, and achievements. Click a deck to open its archive; click a match row to open the game report (replay, turn-by-turn log).
+        </ContextBox>
 
         {/* ID card */}
         <Panel

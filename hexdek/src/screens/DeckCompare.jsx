@@ -273,7 +273,7 @@ export default function DeckCompare() {
           </Panel>
         </div>
 
-        <ContextBox style={{ maxWidth: 720, margin: '0 auto' }}>
+        <ContextBox id="deck.compare.footer" style={{ maxWidth: 720, margin: '0 auto' }}>
           Returns to either deck's full archive page (analysis, gauntlet, decklist). Use <strong>SWAP DECK ↺</strong> on a hero card above to replace one side without leaving this page.
         </ContextBox>
         <div className="cmp-footer">
