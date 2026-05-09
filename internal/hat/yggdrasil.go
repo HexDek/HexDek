@@ -3712,9 +3712,12 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 	// (10 poison kills, 20 life kills). Annihilator forces sacrifices
 	// that aren't life damage but ARE catastrophic; we surface that as
 	// a "must-block" flag rather than mixing it into the life math.
+	// Commander damage (CR §704.6c — 21 from a single commander = loss)
+	// gets the same must-block treatment per attacker.
 	incoming := 0
 	myPoison := seat.PoisonCounters
 	addedPoison := 0
+	existentialCommander := false
 	for _, a := range attackers {
 		if a == nil {
 			continue
@@ -3739,6 +3742,16 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 			incoming += dmg * 2
 		default:
 			incoming += dmg
+		}
+		// Commander-damage clock — would this swing reach 21?
+		if a.Card != nil && gameengine.IsCommanderCard(gs, a.Controller, a.Card) {
+			clock := 0
+			if byDealer, ok := seat.CommanderDamage[a.Controller]; ok {
+				clock = byDealer[a.Card.DisplayName()]
+			}
+			if clock+dmg >= 21 {
+				existentialCommander = true
+			}
 		}
 	}
 	// Treat being one poison hit from death the same as being lethaled.
@@ -3776,7 +3789,10 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 	// individual attackers get skipped further down only when there's
 	// no survivor AND no favorable trade — favorable trades (blocker
 	// strictly lighter than the attacker) ALWAYS go through, even when
-	// ahead.
+	// ahead. The `existentialCommander` flag computed above is still
+	// honored implicitly: it forces willDie=true so value creatures
+	// stay in the pool for must-block trades against a 21-clock
+	// commander.
 	aheadAndComfortable := relPos > aheadNoBlock && incoming < seat.Life/survivalFrac
 	_ = aheadAndComfortable // currently advisory; per-attacker logic below
 	// is already conservative enough on its own. Retained as a named
@@ -3784,8 +3800,8 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 	// re-deriving the threshold.
 
 	// Pool of legal blockers — exclude combo/value creatures from trades
-	// unless we'll die without blocking.
-	willDie := seat.Life-incoming <= 0
+	// unless we'll die without blocking (life or commander-damage path).
+	willDie := seat.Life-incoming <= 0 || existentialCommander
 	pool := make([]*gameengine.Permanent, 0, len(seat.Battlefield))
 	for _, p := range seat.Battlefield {
 		if p == nil || !p.IsCreature() || p.Tapped {
@@ -3844,6 +3860,23 @@ func (h *YggdrasilHat) AssignBlockers(gs *gameengine.GameState, seatIdx int, att
 		}
 		if atkInfect {
 			mustBlock = true
+		}
+		// Commander-damage check (CR §704.6c). If THIS attacker is a
+		// commander whose clock + this swing's damage hits 21, treat as
+		// lethal regardless of remaining life. Uses the post-double-strike
+		// damage projection to match how the engine accumulates damage.
+		if atk.Card != nil && gameengine.IsCommanderCard(gs, atk.Controller, atk.Card) {
+			clock := 0
+			if byDealer, ok := seat.CommanderDamage[atk.Controller]; ok {
+				clock = byDealer[atk.Card.DisplayName()]
+			}
+			swing := atkPow
+			if atkDS {
+				swing = atkPow * 2
+			}
+			if clock+swing >= 21 {
+				mustBlock = true
+			}
 		}
 
 		// Find survivors (blockers that outlive the attacker after the

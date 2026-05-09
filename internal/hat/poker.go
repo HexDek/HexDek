@@ -2130,6 +2130,15 @@ func attackerRank(gs *gameengine.GameState, a *gameengine.Permanent) int {
 	if a.HasKeyword("trample") {
 		score += 1
 	}
+	// Commander bonus — commanders carry the 21-damage clock (CR §704.6c)
+	// so even a vanilla 2/2 commander deserves more attention than a
+	// random 2/2. The defender-specific clock-scaling lives in
+	// YggdrasilHat.AssignBlockers (mustBlock when clock + power >= 21);
+	// this baseline +10 reflects the inherent commander threat
+	// regardless of accumulated damage.
+	if a.Card != nil && gameengine.IsCommanderCard(gs, a.Controller, a.Card) {
+		score += 10
+	}
 	return score
 }
 
