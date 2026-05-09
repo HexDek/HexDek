@@ -413,6 +413,111 @@ func (h *YggdrasilHat) graveyardExploitationMult() float64 {
 	return 1.0 + (h.DNA.GraveyardExploitation-0.5)*0.8
 }
 
+// commanderOnBattlefield reports whether any of seat's commander names
+// is currently on its battlefield, returning the matched permanent so
+// callers can read its types for tribal / theme matching. Match is
+// case-insensitive and DFC-aware via DisplayName.
+func commanderOnBattlefield(seat *gameengine.Seat) (bool, *gameengine.Permanent) {
+	if seat == nil {
+		return false, nil
+	}
+	for _, p := range seat.Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		name := p.Card.DisplayName()
+		for _, cn := range seat.CommanderNames {
+			if strings.EqualFold(cn, name) {
+				return true, p
+			}
+		}
+	}
+	return false, nil
+}
+
+// commanderInCommandZone reports whether any of seat's commanders is
+// currently sitting in the command zone (i.e., uncast or returned).
+func commanderInCommandZone(seat *gameengine.Seat) bool {
+	if seat == nil {
+		return false
+	}
+	for _, c := range seat.CommandZone {
+		if c == nil {
+			continue
+		}
+		name := c.DisplayName()
+		for _, cn := range seat.CommanderNames {
+			if strings.EqualFold(cn, name) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// sharesCreatureSubtype returns true when commander and other share at
+// least one creature subtype (case-insensitive), using Types as the
+// canonical subtype container per this engine's convention. The base
+// "creature" type itself is excluded so two random creatures don't
+// match each other tribally.
+func sharesCreatureSubtype(commander, other *gameengine.Card) bool {
+	if commander == nil || other == nil {
+		return false
+	}
+	skip := map[string]bool{
+		"creature": true, "legendary": true, "token": true,
+		"artifact": true, "enchantment": true, "land": true,
+		"instant": true, "sorcery": true, "planeswalker": true, "tribal": true,
+	}
+	cmdrSubs := make(map[string]bool, len(commander.Types))
+	for _, t := range commander.Types {
+		lt := strings.ToLower(strings.TrimSpace(t))
+		if lt == "" || skip[lt] || strings.HasPrefix(lt, "cost:") {
+			continue
+		}
+		cmdrSubs[lt] = true
+	}
+	for _, t := range other.Types {
+		lt := strings.ToLower(strings.TrimSpace(t))
+		if lt == "" || skip[lt] || strings.HasPrefix(lt, "cost:") {
+			continue
+		}
+		if cmdrSubs[lt] {
+			return true
+		}
+	}
+	return false
+}
+
+// isCommanderProtectionCard returns true when c plausibly protects the
+// commander on cast or while attacking — counterspells, hexproof /
+// indestructible / shroud / ward grants, and "your commander" /
+// "target creature you control" protection effects. Heuristic only;
+// good enough for a +0.15 nudge.
+func isCommanderProtectionCard(c *gameengine.Card) bool {
+	if c == nil {
+		return false
+	}
+	if gameengine.CardHasCounterSpell(c) {
+		return true
+	}
+	ot := gameengine.OracleTextLower(c)
+	if ot == "" {
+		return false
+	}
+	// Oracle-text fallback for counterspells whose AST shape isn't
+	// reachable via CardHasCounterSpell (e.g. test fixtures or
+	// partially-modeled cards) — and for built-in protection grants
+	// the engine doesn't surface as activated abilities.
+	if strings.Contains(ot, "counter target") ||
+		strings.Contains(ot, "hexproof") || strings.Contains(ot, "indestructible") ||
+		strings.Contains(ot, "shroud") || strings.Contains(ot, "ward ") ||
+		strings.Contains(ot, "protection from") {
+		return true
+	}
+	return false
+}
+
 // curseAxis returns the value of a DNA axis, or fallback if no DNA is
 // attached. Use the [0,1] axis directly with this helper, or for a
 // neutral-centered shift use the result minus 0.5. Keeps decision-site
@@ -1741,6 +1846,61 @@ func (h *YggdrasilHat) cardHeuristic(gs *gameengine.GameState, seatIdx int, c *g
 				if strings.Contains(ot, lt) || strings.Contains(tl, lt) {
 					base += 0.12
 					break
+				}
+			}
+		}
+	}
+
+	// Commander Synergy Amplifier — the Lovelace boost above is
+	// commander-AGNOSTIC (it fires whether the commander is in play or
+	// not). This block shifts scoring based on WHERE the commander is
+	// right now: if it's on the battlefield, cards that feed its engine
+	// or finish its win line are concretely better; if it's still in
+	// the command zone, we want to deploy the commander first and pick
+	// protection over generic value while we wait. Skipped when no
+	// strategy profile or commander metadata is available.
+	if gs != nil && h.Strategy != nil && seatIdx >= 0 && seatIdx < len(gs.Seats) {
+		seat := gs.Seats[seatIdx]
+		if seat != nil && len(seat.CommanderNames) > 0 {
+			cName := c.DisplayName()
+			cmdrOnField, cmdrOnFieldPerm := commanderOnBattlefield(seat)
+			cmdrInCommandZone := commanderInCommandZone(seat)
+
+			if cmdrOnField {
+				if h.valueEngineSet[cName] {
+					base += 0.25
+				}
+				if h.comboPieceSet[cName] {
+					base += 0.30
+				}
+				if len(h.Strategy.CommanderThemes) > 0 {
+					ot := gameengine.OracleTextLower(c)
+					for _, theme := range h.Strategy.CommanderThemes {
+						lt := strings.ToLower(strings.TrimSpace(theme))
+						if lt == "" {
+							continue
+						}
+						if strings.Contains(ot, lt) {
+							base += 0.15
+							break
+						}
+					}
+				}
+				if cmdrOnFieldPerm != nil && cmdrOnFieldPerm.Card != nil &&
+					typeLineContains(c, "creature") &&
+					sharesCreatureSubtype(cmdrOnFieldPerm.Card, c) {
+					base += 0.10
+				}
+			} else if cmdrInCommandZone {
+				// Bias toward deploying the commander first: small
+				// across-the-board penalty on non-ramp / non-land cards
+				// so ramp and lands keep their priority while generic
+				// value gets nudged behind the commander.
+				if !typeLineContains(c, "land") && cat != CatRamp {
+					base -= 0.05
+				}
+				if isCommanderProtectionCard(c) {
+					base += 0.15
 				}
 			}
 		}
@@ -4965,6 +5125,18 @@ func (h *YggdrasilHat) ShouldCastCommander(gs *gameengine.GameState, seatIdx int
 		default:
 			maxTax = 8
 			manaBuffer = 0
+		}
+		// Strategy-enabler commander: when the deck has ≥3 ValueEngineKeys,
+		// the commander is the load-bearing piece for those engines, so
+		// paying through tax matters more than holding mana for protection.
+		// Lower buffer (we'll spend our mana on the commander), raise the
+		// max tax we'll pay (we keep recasting even when expensive).
+		if len(h.Strategy.ValueEngineKeys) >= 3 {
+			manaBuffer--
+			maxTax += 2
+			if manaBuffer < 0 {
+				manaBuffer = 0
+			}
 		}
 	}
 	// Late-game: always recast if affordable — the commander is the deck.
