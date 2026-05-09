@@ -67,6 +67,17 @@ type DeckProfile struct {
 	KeepableHandPct  float64 // % of hands with 2-5 lands + action
 	AvgTurnToFourMana float64
 
+	// Commander-centric hand evaluation: for decks where the gameplan IS the
+	// commander (Voltron, high commander-synergy engines), the standard
+	// keepable heuristic over-penalizes hands that lack standalone threats.
+	// KeepableHandPctAdjusted relaxes the action requirement when the
+	// commander itself supplies the engine.
+	IsCommanderCentric       bool
+	CommanderCentricReason   string
+	KeepableHandPctAdjusted  float64
+	AvgTurnToCommander       float64
+	CommanderCMC             int
+
 	// Synergy clusters
 	SynergyClusters []SynergyCluster
 
@@ -172,7 +183,7 @@ func BuildDeckProfile(report *FreyaReport, oracle *oracleDB) *DeckProfile {
 	computeProtectionDensity(dp, report, oracle)
 	computeManaBaseGrade(dp, report, oracle)
 	computeThreatAssessment(dp, report)
-	computeOpeningHandSim(dp, report)
+	computeOpeningHandSim(dp, report, oracle)
 	computeSynergyClusters(dp, report, oracle)
 	computeMetaPositioning(dp)
 	computeCardQualityTiers(dp, report, oracle)

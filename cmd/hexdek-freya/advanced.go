@@ -237,68 +237,125 @@ func computeThreatAssessment(dp *DeckProfile, report *FreyaReport) {
 // 3. Opening hand simulation — Monte Carlo mulligan analysis.
 // ---------------------------------------------------------------------------
 
-func computeOpeningHandSim(dp *DeckProfile, report *FreyaReport) {
+func computeOpeningHandSim(dp *DeckProfile, report *FreyaReport, oracle *oracleDB) {
 	if report.TotalCards < 40 {
 		return
 	}
 
+	detectCommanderCentric(dp, report, oracle)
+
 	rng := rand.New(rand.NewSource(42))
 	trials := 10000
 	keepable := 0
+	keepableAdjusted := 0
 	totalTurnsToFour := 0.0
+	totalTurnsToCmdr := 0.0
 	validTrials := 0
+	validCmdrTrials := 0
 
-	landIndices := []int{}
-	rampIndices := []int{}
-	for i, p := range report.Profiles {
+	const (
+		flagLand    = 1 << 0
+		flagRamp    = 1 << 1
+		flagSynergy = 1 << 2
+		flagAction  = 1 << 3
+	)
+
+	// Build a flag deck with one entry per real card slot (so basic lands
+	// count toward lands-in-hand). report.Profiles only carries unique
+	// nonbasic cards, so we infer the basic-land slots from the gap
+	// between report.LandCount and the nonbasic land count in Profiles.
+	synergySet := buildSynergyNameSet(dp, report, oracle)
+	actionSet := buildActionNameSet(report)
+	nonbasicLandSlots := 0
+	deckFlags := make([]uint8, 0, report.TotalCards)
+	for _, p := range report.Profiles {
+		f := uint8(0)
 		if p.IsLand {
-			landIndices = append(landIndices, i)
+			f |= flagLand
+			nonbasicLandSlots++
 		} else {
 			for _, r := range p.Produces {
 				if r == ResMana {
-					rampIndices = append(rampIndices, i)
+					f |= flagRamp
 					break
 				}
 			}
+			lname := strings.ToLower(p.Name)
+			if synergySet[lname] {
+				f |= flagSynergy
+			}
+			if actionSet[lname] {
+				f |= flagAction
+			}
 		}
+		deckFlags = append(deckFlags, f)
+	}
+	// Pad with basic land slots so total slot count equals deck size.
+	basicLandSlots := report.LandCount - nonbasicLandSlots
+	if basicLandSlots < 0 {
+		basicLandSlots = 0
+	}
+	for i := 0; i < basicLandSlots; i++ {
+		deckFlags = append(deckFlags, flagLand)
+	}
+	// Pad any remaining gap with neutral non-action slots (unresolved cards).
+	for len(deckFlags) < report.TotalCards {
+		deckFlags = append(deckFlags, 0)
 	}
 
-	deck := make([]int, report.TotalCards)
-	for i := range deck {
-		deck[i] = i
+	cmdrCMC := dp.CommanderCMC
+	if cmdrCMC <= 0 {
+		cmdrCMC = 4
 	}
 
 	for t := 0; t < trials; t++ {
-		// Shuffle
-		for i := len(deck) - 1; i > 0; i-- {
+		// Shuffle the flag deck in place.
+		for i := len(deckFlags) - 1; i > 0; i-- {
 			j := rng.Intn(i + 1)
-			deck[i], deck[j] = deck[j], deck[i]
+			deckFlags[i], deckFlags[j] = deckFlags[j], deckFlags[i]
 		}
 
-		hand := deck[:7]
 		landsInHand := 0
 		rampInHand := 0
-		for _, idx := range hand {
-			for _, li := range landIndices {
-				if idx == li {
-					landsInHand++
-					break
-				}
+		synergyInHand := 0
+		actionInHand := 0
+		for i := 0; i < 7; i++ {
+			f := deckFlags[i]
+			if f&flagLand != 0 {
+				landsInHand++
 			}
-			for _, ri := range rampIndices {
-				if idx == ri {
-					rampInHand++
-					break
-				}
+			if f&flagRamp != 0 {
+				rampInHand++
+			}
+			if f&flagSynergy != 0 {
+				synergyInHand++
+			}
+			if f&flagAction != 0 {
+				actionInHand++
 			}
 		}
 
-		// Keepable: 2-5 lands with at least 1 non-land action card
-		if landsInHand >= 2 && landsInHand <= 5 && (7-landsInHand) >= 1 {
+		// Standard keepable: 2-5 lands AND at least one threat / interaction /
+		// draw / combo piece — the classic "do something with this turn 2-3"
+		// criterion.
+		landsOK := landsInHand >= 2 && landsInHand <= 5
+		if landsOK && actionInHand >= 1 {
 			keepable++
 		}
 
-		// Estimate turns to 4 mana: land drops + ramp
+		// Commander-adjusted keepable: when the commander itself is the
+		// engine, an opener is keepable as long as it can deploy or feed the
+		// commander. Accept 2-5 lands plus EITHER an action card, a ramp
+		// piece, a commander-synergy enabler, or enough lands to hit
+		// commander CMC purely by land drops.
+		if landsOK {
+			naturalReach := landsInHand >= cmdrCMC
+			if actionInHand >= 1 || rampInHand >= 1 || synergyInHand >= 1 || naturalReach {
+				keepableAdjusted++
+			}
+		}
+
+		// Estimate turns to 4 mana and turns to commander CMC.
 		if landsInHand >= 2 {
 			validTrials++
 			mana := 0
@@ -306,24 +363,19 @@ func computeOpeningHandSim(dp *DeckProfile, report *FreyaReport) {
 			landDropsLeft := landsInHand
 			rampLeft := rampInHand
 			drawIdx := 7
+			turnToFour := 0
+			turnToCmdr := 0
 
-			for mana < 4 && turn < 10 {
+			for (turnToFour == 0 || turnToCmdr == 0) && turn < 12 {
 				turn++
-				if turn > 1 && drawIdx < len(deck) {
-					// Draw a card — check if land or ramp
-					drawn := deck[drawIdx]
+				if turn > 1 && drawIdx < len(deckFlags) {
+					f := deckFlags[drawIdx]
 					drawIdx++
-					for _, li := range landIndices {
-						if drawn == li {
-							landDropsLeft++
-							break
-						}
+					if f&flagLand != 0 {
+						landDropsLeft++
 					}
-					for _, ri := range rampIndices {
-						if drawn == ri {
-							rampLeft++
-							break
-						}
+					if f&flagRamp != 0 {
+						rampLeft++
 					}
 				}
 
@@ -331,20 +383,160 @@ func computeOpeningHandSim(dp *DeckProfile, report *FreyaReport) {
 					mana++
 					landDropsLeft--
 				}
-				// Play ramp if we have mana for it (assume CMC 2 ramp)
+				// Play ramp if we have mana for it (assume CMC 2 ramp).
 				if rampLeft > 0 && mana >= 2 {
 					mana++
 					rampLeft--
 				}
+
+				if turnToFour == 0 && mana >= 4 {
+					turnToFour = turn
+				}
+				if turnToCmdr == 0 && mana >= cmdrCMC {
+					turnToCmdr = turn
+				}
 			}
-			totalTurnsToFour += float64(turn)
+			if turnToFour == 0 {
+				turnToFour = turn
+			}
+			totalTurnsToFour += float64(turnToFour)
+			if turnToCmdr > 0 {
+				totalTurnsToCmdr += float64(turnToCmdr)
+				validCmdrTrials++
+			}
 		}
 	}
 
 	dp.KeepableHandPct = float64(keepable) / float64(trials) * 100
+	dp.KeepableHandPctAdjusted = float64(keepableAdjusted) / float64(trials) * 100
 	if validTrials > 0 {
 		dp.AvgTurnToFourMana = totalTurnsToFour / float64(validTrials)
 	}
+	if validCmdrTrials > 0 {
+		dp.AvgTurnToCommander = totalTurnsToCmdr / float64(validCmdrTrials)
+	}
+}
+
+// detectCommanderCentric flags decks whose primary gameplan is the commander
+// itself, so the keepable-hand heuristic can be relaxed accordingly.
+func detectCommanderCentric(dp *DeckProfile, report *FreyaReport, oracle *oracleDB) {
+	if oracle == nil || report.Commander == "" {
+		return
+	}
+	cmdr := oracle.lookup(report.Commander)
+	if cmdr == nil {
+		return
+	}
+	dp.CommanderCMC = int(cmdr.CMC)
+
+	var reasons []string
+
+	if dp.PrimaryArchetype == "Voltron" {
+		reasons = append(reasons, "Voltron archetype")
+	}
+	if dp.CommanderSynergy >= 0.45 {
+		reasons = append(reasons, fmt.Sprintf("%.0f%% commander synergy", dp.CommanderSynergy*100))
+	}
+
+	cmdrOT := strings.ToLower(cmdr.OracleText)
+	if cmdrOT == "" && len(cmdr.CardFaces) > 0 {
+		cmdrOT = strings.ToLower(cmdr.CardFaces[0].OracleText)
+	}
+	enginePhrases := []string{
+		"draw a card", "draw cards", "draw two", "draw three",
+		"create a token", "create two", "create x",
+		"return target", "return it to the battlefield", "from your graveyard to the battlefield",
+		"deals damage to any target", "deals damage equal",
+		"add {", "add one mana", "add two mana",
+		"search your library",
+	}
+	engineHits := 0
+	for _, phrase := range enginePhrases {
+		if strings.Contains(cmdrOT, phrase) {
+			engineHits++
+		}
+	}
+	if engineHits >= 2 {
+		reasons = append(reasons, "commander supplies core engine")
+	}
+
+	if len(reasons) > 0 {
+		dp.IsCommanderCentric = true
+		dp.CommanderCentricReason = strings.Join(reasons, "; ")
+	}
+}
+
+// buildActionNameSet returns the set of card names (lowercased) that
+// count as "do something this turn" pieces — threats, removal,
+// counterspells, board wipes, draw, combo pieces, and tutors.
+func buildActionNameSet(report *FreyaReport) map[string]bool {
+	out := map[string]bool{}
+	if report.Roles == nil {
+		return out
+	}
+	actionRoles := map[RoleTag]bool{
+		RoleThreat:       true,
+		RoleRemoval:      true,
+		RoleBoardWipe:    true,
+		RoleCounterspell: true,
+		RoleDraw:         true,
+		RoleCombo:        true,
+		RoleTutor:        true,
+	}
+	for _, a := range report.Roles.Assignments {
+		for _, r := range a.Roles {
+			if actionRoles[r] {
+				out[strings.ToLower(a.Name)] = true
+				break
+			}
+		}
+	}
+	return out
+}
+
+// buildSynergyNameSet returns the set of card names (lowercased) that
+// synergize with the commander's themes — used to count "commander
+// enablers" in opening hands.
+func buildSynergyNameSet(dp *DeckProfile, report *FreyaReport, oracle *oracleDB) map[string]bool {
+	out := map[string]bool{}
+	if oracle == nil || len(dp.CommanderThemes) == 0 {
+		return out
+	}
+	themeSet := map[string]bool{}
+	for _, t := range dp.CommanderThemes {
+		themeSet[t] = true
+	}
+	for _, p := range report.Profiles {
+		if p.IsLand || p.Name == report.Commander {
+			continue
+		}
+		entry := oracle.lookup(p.Name)
+		if entry == nil {
+			continue
+		}
+		ot := strings.ToLower(entry.OracleText)
+		if ot == "" && len(entry.CardFaces) > 0 {
+			ot = strings.ToLower(entry.CardFaces[0].OracleText)
+		}
+		tl := strings.ToLower(p.TypeLine)
+		for _, tp := range commanderThemePatterns {
+			if !themeSet[tp.Theme] {
+				continue
+			}
+			matched := false
+			for _, pat := range tp.Patterns {
+				if strings.Contains(ot, pat) || strings.Contains(tl, pat) {
+					matched = true
+					break
+				}
+			}
+			if matched {
+				out[strings.ToLower(p.Name)] = true
+				break
+			}
+		}
+	}
+	return out
 }
 
 // ---------------------------------------------------------------------------

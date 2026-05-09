@@ -641,6 +641,14 @@ func printDeckProfileText(w io.Writer, r *FreyaReport) {
 
 	if dp.KeepableHandPct > 0 {
 		fmt.Fprintf(w, "  Opening Hands: %.0f%% keepable, avg turn to 4 mana: %.1f\n", dp.KeepableHandPct, dp.AvgTurnToFourMana)
+		if dp.IsCommanderCentric && dp.KeepableHandPctAdjusted > 0 {
+			extra := ""
+			if dp.AvgTurnToCommander > 0 {
+				extra = fmt.Sprintf(", avg turn to commander (CMC %d): %.1f", dp.CommanderCMC, dp.AvgTurnToCommander)
+			}
+			fmt.Fprintf(w, "    Commander-adjusted: %.0f%% keepable%s\n", dp.KeepableHandPctAdjusted, extra)
+			fmt.Fprintf(w, "    (commander-centric: %s)\n", dp.CommanderCentricReason)
+		}
 	}
 
 	if dp.PowerPercentile > 0 {
@@ -1179,8 +1187,13 @@ type jsonDeckProfile struct {
 	FetchCount         int               `json:"fetch_count,omitempty"`
 	UtilityLandCount   int               `json:"utility_land_count,omitempty"`
 	VulnerableTo       []string          `json:"vulnerable_to,omitempty"`
-	KeepableHandPct    float64           `json:"keepable_hand_pct,omitempty"`
-	AvgTurnToFourMana  float64           `json:"avg_turn_to_four_mana,omitempty"`
+	KeepableHandPct         float64       `json:"keepable_hand_pct,omitempty"`
+	AvgTurnToFourMana       float64       `json:"avg_turn_to_four_mana,omitempty"`
+	KeepableHandPctAdjusted float64       `json:"keepable_hand_pct_adjusted,omitempty"`
+	AvgTurnToCommander      float64       `json:"avg_turn_to_commander,omitempty"`
+	IsCommanderCentric      bool          `json:"is_commander_centric,omitempty"`
+	CommanderCentricReason  string        `json:"commander_centric_reason,omitempty"`
+	CommanderCMC            int           `json:"commander_cmc,omitempty"`
 	SynergyClusters    []jsonCluster     `json:"synergy_clusters,omitempty"`
 	MetaMatchups       []jsonMatchup     `json:"meta_matchups,omitempty"`
 	StarCards          []jsonCardQuality `json:"star_cards,omitempty"`
@@ -1420,8 +1433,13 @@ func buildJSONDeckProfile(dp *DeckProfile) *jsonDeckProfile {
 		FetchCount:         dp.FetchCount,
 		UtilityLandCount:   dp.UtilityLandCount,
 		VulnerableTo:       dp.VulnerableTo,
-		KeepableHandPct:    dp.KeepableHandPct,
-		AvgTurnToFourMana:  dp.AvgTurnToFourMana,
+		KeepableHandPct:         dp.KeepableHandPct,
+		AvgTurnToFourMana:       dp.AvgTurnToFourMana,
+		KeepableHandPctAdjusted: dp.KeepableHandPctAdjusted,
+		AvgTurnToCommander:      dp.AvgTurnToCommander,
+		IsCommanderCentric:      dp.IsCommanderCentric,
+		CommanderCentricReason:  dp.CommanderCentricReason,
+		CommanderCMC:            dp.CommanderCMC,
 		SynergyClusters:    clusters,
 		MetaMatchups:       matchups,
 		StarCards:           stars,
