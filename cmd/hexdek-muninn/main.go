@@ -1,23 +1,32 @@
 // hexdek-muninn — Read and report on persistent Muninn memory files.
 //
 // Reads parser gaps, crash logs, and dead triggers accumulated across
-// tournament runs and prints a human-readable summary.
+// tournament runs and prints a human-readable summary. Also supports
+// archiving dead-trigger entries for cards whose handlers have been
+// upgraded since the records were captured.
 //
 // Usage:
 //
 //	hexdek-muninn [--gaps] [--crashes] [--triggers] [--all] [--top N] [--dir path]
+//	hexdek-muninn --reconcile-fixed [--reconcile-cause "PR #35"] [--reconcile-from path]
 //
 // Flags:
 //
-//	--gaps       Show parser gaps only
-//	--crashes    Show crash logs only
-//	--triggers   Show dead triggers only
-//	--all        Show all sections (default if no section flag specified)
-//	--top N      Limit output to top N entries per section (default 20)
-//	--dir path   Muninn data directory (default data/muninn)
+//	--gaps              Show parser gaps only
+//	--crashes           Show crash logs only
+//	--triggers          Show dead triggers only
+//	--all               Show all sections (default if no section flag specified)
+//	--top N             Limit output to top N entries per section (default 20)
+//	--dir path          Muninn data directory (default data/muninn)
+//	--reconcile-fixed   Archive dead-trigger entries for cards in the
+//	                    EraPassFixedCards manifest (or --reconcile-from file).
+//	--reconcile-cause   Cause string written into the archive (default "era unification 2026-05-09")
+//	--reconcile-from    File of card names (one per line) to use instead of
+//	                    the embedded EraPassFixedCards list.
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -35,8 +44,19 @@ func main() {
 		showAll         = flag.Bool("all", false, "show all sections (default)")
 		topN            = flag.Int("top", 20, "limit output per section")
 		dir             = flag.String("dir", "data/muninn", "muninn data directory")
+		reconcileFixed  = flag.Bool("reconcile-fixed", false, "archive dead-trigger entries for fixed handlers")
+		reconcileCause  = flag.String("reconcile-cause", "era unification 2026-05-09", "cause string written into the archive")
+		reconcileFrom   = flag.String("reconcile-from", "", "file with card names (one per line) overriding the embedded list")
 	)
 	flag.Parse()
+
+	if *reconcileFixed {
+		if err := runReconcile(*dir, *reconcileFrom, *reconcileCause); err != nil {
+			fmt.Fprintf(os.Stderr, "reconcile: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	// Default to --all if no section flag specified.
 	if !*showGaps && !*showCrashes && !*showTriggers && !*showConcessions {
@@ -241,4 +261,62 @@ func shortDate(rfc3339 string) string {
 		return rfc3339[:10]
 	}
 	return rfc3339
+}
+
+func runReconcile(dir, fromFile, cause string) error {
+	cards := muninn.EraPassFixedCards
+	if fromFile != "" {
+		loaded, err := loadCardList(fromFile)
+		if err != nil {
+			return fmt.Errorf("load %s: %w", fromFile, err)
+		}
+		cards = loaded
+	}
+
+	fmt.Println("=== MUNINN RECONCILE (dead triggers) ===")
+	fmt.Printf("dir:    %s\n", dir)
+	fmt.Printf("cards:  %d\n", len(cards))
+	fmt.Printf("cause:  %q\n", cause)
+	fmt.Println()
+
+	res, err := muninn.ArchiveFixedCards(dir, cards, cause)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("dead_triggers.json before: %d\n", res.DeadTriggersBefore)
+	fmt.Printf("dead_triggers.json after:  %d\n", res.DeadTriggersAfter)
+	fmt.Printf("archived:                  %d\n", res.DeadTriggersArchived)
+	if len(res.UnmatchedCards) > 0 {
+		fmt.Printf("\nNo live records for %d cards (already-clean handlers — expected):\n", len(res.UnmatchedCards))
+		for _, n := range res.UnmatchedCards {
+			fmt.Printf("  - %s\n", n)
+		}
+	}
+	if res.DeadTriggersArchived == 0 && res.DeadTriggersBefore == 0 {
+		fmt.Println("\nNo dead_triggers.json present — nothing to do.")
+	}
+	return nil
+}
+
+func loadCardList(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var names []string
+	scan := bufio.NewScanner(f)
+	for scan.Scan() {
+		line := strings.TrimSpace(scan.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		names = append(names, line)
+	}
+	if err := scan.Err(); err != nil {
+		return nil, err
+	}
+	return names, nil
 }
