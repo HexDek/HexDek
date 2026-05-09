@@ -546,6 +546,19 @@ func scoreEffect(e gameast.Effect, gs *gameengine.GameState, seatIdx int, perm *
 // scoreEquipTarget scores the best creature target for an equipment.
 // If candidate is non-nil, scores only that creature; otherwise scans the
 // battlefield for the highest-value target. Returns 0 if no valid target.
+//
+// Equipment intelligence layers:
+//  1. Base body value (P/T) and commander preference (Voltron payoff).
+//  2. Stacking concentration: prefer adding to a creature that already
+//     carries equipment over spreading across the board. Multiplied for
+//     commander stacking — Voltron decks want every sword on one body.
+//  3. Connect-payoff routing: Sword cycle / damage-trigger equipment goes
+//     on the most evasive (or unblockable) creature.
+//  4. Recurrence engines: Skullclamp-style death-trigger value engines
+//     prefer disposable, low-toughness, summoning-sick targets so the
+//     equip→die→re-equip loop can grind out cards or tokens.
+//  5. Equipment-creature synergy: trample/lifelink/+X anvils prefer
+//     high-power bodies; protection/hexproof riders prefer the commander.
 func scoreEquipTarget(gs *gameengine.GameState, seatIdx int, equipment *gameengine.Permanent, candidate *gameengine.Permanent) int {
 	if seatIdx < 0 || seatIdx >= len(gs.Seats) {
 		return 0
@@ -563,6 +576,15 @@ func scoreEquipTarget(gs *gameengine.GameState, seatIdx int, equipment *gameengi
 		strings.Contains(equipOT, "whenever equipped creature dies")
 	hasConnectTrigger := strings.Contains(equipOT, "deals combat damage")
 	hasIndestructible := strings.Contains(equipOT, "indestructible")
+	hasProtectionRider := strings.Contains(equipOT, "hexproof") ||
+		strings.Contains(equipOT, "shroud") ||
+		strings.Contains(equipOT, "ward") ||
+		strings.Contains(equipOT, "protection from")
+	equipCost := equipCostFromText(equipOT)
+	// A "recurrence engine" is cheap-to-equip + has a death trigger that
+	// rewards us for the equipped creature dying. Skullclamp is the
+	// canonical example: equip {1}, draw 2 on death.
+	isRecurrenceEngine := hasDeathTrigger && equipCost >= 0 && equipCost <= 2
 
 	scorePerm := func(p *gameengine.Permanent) int {
 		if p == nil || !p.IsCreature() || p.Controller != seatIdx {
@@ -583,6 +605,9 @@ func scoreEquipTarget(gs *gameengine.GameState, seatIdx int, equipment *gameengi
 			if hasIndestructible {
 				score += 10
 			}
+			if hasProtectionRider {
+				score += 8
+			}
 		}
 
 		hasEvasion := p.HasKeyword("flying") || p.HasKeyword("trample") ||
@@ -598,7 +623,13 @@ func scoreEquipTarget(gs *gameengine.GameState, seatIdx int, equipment *gameengi
 		if hasEvasion {
 			score += 8
 			if hasConnectTrigger {
+				// Connect-payoff equipment on an evasive carrier is a
+				// recurrence engine in its own right — repeated triggers
+				// every combat. Sword cycle, Mask of Memory, etc.
 				score += 12
+				if equipCost >= 0 && equipCost <= 2 {
+					score += 4
+				}
 			}
 		}
 
@@ -608,6 +639,41 @@ func scoreEquipTarget(gs *gameengine.GameState, seatIdx int, equipment *gameengi
 			score += 5
 		}
 
+		// Recurrence-engine routing (Skullclamp pattern): prefer
+		// disposable, low-toughness creatures and tokens. The death
+		// trigger pays out per kill, so a 1-toughness token is ideal
+		// because a 2-power equipment kills it the moment it enters
+		// the red zone.
+		if isRecurrenceEngine && !isCommander {
+			if p.IsToken() {
+				score += 12
+			}
+			if tgh <= 1 {
+				score += 14
+			} else if tgh == 2 {
+				score += 4
+			}
+			// Summoning-sick fodder is fine for Skullclamp — it can't
+			// attack anyway, so feeding it to the engine is upside.
+			if p.SummoningSick {
+				score += 3
+			}
+		}
+
+		// Equipment-creature synergy: pump-style anvils scale with the
+		// existing body. Trample/lifelink want a real swing.
+		hasTrampleRider := strings.Contains(equipOT, "trample")
+		hasLifelinkRider := strings.Contains(equipOT, "lifelink")
+		hasDoubleStrikeRider := strings.Contains(equipOT, "double strike")
+		if (hasTrampleRider || hasLifelinkRider || hasDoubleStrikeRider) && pow >= 3 {
+			score += 6
+		}
+
+		// Stacking concentration. Each existing equipment is a sunk
+		// commitment — adding to the pile concentrates the threat and
+		// makes single-target removal less efficient for opponents.
+		// Voltron commanders get extra credit because the stacking
+		// pattern IS the gameplan.
 		attachedCount := 0
 		for _, bp := range seat.Battlefield {
 			if bp != nil && bp.IsEquipment() && bp.AttachedTo == p && bp != equipment {
@@ -615,7 +681,20 @@ func scoreEquipTarget(gs *gameengine.GameState, seatIdx int, equipment *gameengi
 			}
 		}
 		if attachedCount > 0 {
-			score += attachedCount * 4
+			perStack := 4
+			if isCommander {
+				perStack = 8
+			}
+			score += attachedCount * perStack
+			// Concentration kicker: 2+ equipment already committed
+			// signals a "build target" — favor staying on this body
+			// over spreading.
+			if attachedCount >= 2 {
+				score += 6
+				if isCommander {
+					score += 6
+				}
+			}
 		}
 
 		if !p.SummoningSick {
@@ -637,6 +716,81 @@ func scoreEquipTarget(gs *gameengine.GameState, seatIdx int, equipment *gameengi
 		}
 	}
 	return best
+}
+
+// equipCostFromText extracts the generic mana value of an "equip {N}"
+// activation cost from oracle text. Returns -1 if not found. Recognizes
+// common shorthand forms: "equip {1}", "equip {2}{w}", "equip 3" (older
+// templating), and "equip—" cost variants by falling back to the digit
+// inside the first {N} after "equip".
+func equipCostFromText(ot string) int {
+	idx := strings.Index(ot, "equip")
+	if idx < 0 {
+		return -1
+	}
+	tail := ot[idx+len("equip"):]
+	// Look for the first {...} group within the next ~40 chars.
+	// Anything beyond that is almost certainly a different ability.
+	if len(tail) > 40 {
+		tail = tail[:40]
+	}
+	open := strings.Index(tail, "{")
+	if open < 0 {
+		// "equip 3" form — peek the first non-space digit.
+		for i := 0; i < len(tail); i++ {
+			c := tail[i]
+			if c == ' ' || c == '\t' {
+				continue
+			}
+			if c >= '0' && c <= '9' {
+				return int(c - '0')
+			}
+			break
+		}
+		return -1
+	}
+	close := strings.Index(tail[open:], "}")
+	if close < 0 {
+		return -1
+	}
+	inside := tail[open+1 : open+close]
+	// Sum generic + colored pips. {2}{W} = 3.
+	total := 0
+	hadDigit := false
+	for i := 0; i < len(inside); i++ {
+		c := inside[i]
+		if c >= '0' && c <= '9' {
+			total = total*10 + int(c-'0')
+			hadDigit = true
+		}
+	}
+	// Walk subsequent {...} groups attached to the same equip cost.
+	rest := tail[open+close+1:]
+	for strings.HasPrefix(rest, "{") {
+		end := strings.Index(rest, "}")
+		if end < 0 {
+			break
+		}
+		seg := rest[1:end]
+		// Each colored pip counts as 1.
+		if len(seg) == 1 && (seg[0] < '0' || seg[0] > '9') {
+			total++
+			hadDigit = true
+		} else {
+			for i := 0; i < len(seg); i++ {
+				c := seg[i]
+				if c >= '0' && c <= '9' {
+					total = total*10 + int(c-'0')
+					hadDigit = true
+				}
+			}
+		}
+		rest = rest[end+1:]
+	}
+	if !hadDigit {
+		return -1
+	}
+	return total
 }
 
 // ---------------------------------------------------------------------

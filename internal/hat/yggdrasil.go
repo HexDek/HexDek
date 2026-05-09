@@ -2984,7 +2984,11 @@ func (h *YggdrasilHat) activationHeuristic(gs *gameengine.GameState, seatIdx int
 		}
 	}
 
-	// Equipment equip: score based on best available target quality.
+	// Equipment equip: score based on best available target quality plus
+	// recurrence-engine and connect-payoff signals. Cheap equip costs on
+	// death-trigger equipment (Skullclamp pattern) and connect-trigger
+	// equipment with evasive carriers (Sword cycle pattern) are loops we
+	// want to activate every turn.
 	ot2 := gameengine.OracleTextLower(c)
 	if strings.Contains(ot2, "equip") && opt.Permanent != nil && opt.Permanent.IsEquipment() {
 		equipScore := scoreEquipTarget(gs, seatIdx, opt.Permanent, nil)
@@ -2996,6 +3000,19 @@ func (h *YggdrasilHat) activationHeuristic(gs *gameengine.GameState, seatIdx int
 			strings.Contains(ot2, "whenever equipped creature dies")
 		if hasConnect || hasDeath {
 			base += 0.20
+		}
+		equipCost := equipCostFromText(ot2)
+		// Skullclamp-style recurrence engine: cheap to equip + death
+		// trigger = grindable loop. Bias us toward activating it
+		// whenever there's a disposable target available.
+		if hasDeath && equipCost >= 0 && equipCost <= 2 {
+			base += 0.15
+		}
+		// Connect-payoff with cheap equip cost is a Sword-cycle loop;
+		// we'd happily move the sword each turn to whichever attacker
+		// connects.
+		if hasConnect && equipCost >= 0 && equipCost <= 2 {
+			base += 0.10
 		}
 	}
 
@@ -3835,7 +3852,36 @@ func (h *YggdrasilHat) ChooseTarget(gs *gameengine.GameState, seatIdx int, filte
 	}
 
 	// Equipment equip target selection: score friendly creatures for equip.
+	// Try to recover the source equipment from the resolving stack item so
+	// scoreEquipTarget can apply equipment-specific signals (recurrence,
+	// connect-payoff, indestructible/protection riders). If we can't find
+	// it, fall back to body-only scoring.
 	if filter.Base == "creature" && filter.YouControl {
+		var sourceEquip *gameengine.Permanent
+		if n := len(gs.Stack); n > 0 {
+			top := gs.Stack[n-1]
+			if top != nil && top.Source != nil && top.Source.IsEquipment() &&
+				top.Source.Controller == seatIdx {
+				sourceEquip = top.Source
+			}
+		}
+		// Heuristic fallback: if there's exactly one of our equipment on
+		// the battlefield with an "equip" cost, assume it's the source.
+		if sourceEquip == nil && seatIdx >= 0 && seatIdx < len(gs.Seats) {
+			seat := gs.Seats[seatIdx]
+			var equips []*gameengine.Permanent
+			for _, p := range seat.Battlefield {
+				if p == nil || !p.IsEquipment() || p.Card == nil {
+					continue
+				}
+				if strings.Contains(gameengine.OracleTextLower(p.Card), "equip") {
+					equips = append(equips, p)
+				}
+			}
+			if len(equips) == 1 {
+				sourceEquip = equips[0]
+			}
+		}
 		type equipCandidate struct {
 			target gameengine.Target
 			score  int
@@ -3848,7 +3894,7 @@ func (h *YggdrasilHat) ChooseTarget(gs *gameengine.GameState, seatIdx int, filte
 			if t.Permanent.Controller != seatIdx {
 				continue
 			}
-			sc := scoreEquipTarget(gs, seatIdx, nil, t.Permanent)
+			sc := scoreEquipTarget(gs, seatIdx, sourceEquip, t.Permanent)
 			if sc > 0 {
 				equipCandidates = append(equipCandidates, equipCandidate{t, sc})
 			}
