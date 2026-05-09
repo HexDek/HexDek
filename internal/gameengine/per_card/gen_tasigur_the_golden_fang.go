@@ -21,17 +21,34 @@ func tasigurTheGoldenFangActivate(gs *gameengine.GameState, src *gameengine.Perm
 	if gs == nil || src == nil {
 		return
 	}
-	seat := src.Controller
-	if seat < 0 || seat >= len(gs.Seats) {
+	seatIdx := src.Controller
+	if seatIdx < 0 || seatIdx >= len(gs.Seats) {
 		return
 	}
-	s := gs.Seats[src.Controller]
+	s := gs.Seats[seatIdx]
+	if s == nil || s.Lost {
+		return
+	}
+	// Cost gate: {2}{G/U}{G/U}. Hybrid pips can be paid with either G or
+	// U; we ask the typed mana pool to spend any-color and fall through
+	// to the generic pool for the full 4 cost.
+	const manaCost = 4
+	if !gameengine.PayGenericCost(gs, s, manaCost, "activated", "tasigur_activate", src.Card.DisplayName()) {
+		emitFail(gs, slug, src.Card.DisplayName(), "insufficient_mana", map[string]interface{}{
+			"mana_pool": s.ManaPool,
+			"mana_cost": manaCost,
+		})
+		return
+	}
 	for i := 0; i < 2; i++ {
-		if len(s.Library) == 0 { break }
+		if len(s.Library) == 0 {
+			break
+		}
 		card := s.Library[0]
-		gameengine.MoveCard(gs, card, src.Controller, "library", "graveyard", "mill")
+		gameengine.MoveCard(gs, card, seatIdx, "library", "graveyard", "mill")
 	}
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
-		"seat": seat,
+		"seat":      seatIdx,
+		"mana_paid": manaCost,
 	})
 }

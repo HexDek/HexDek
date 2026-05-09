@@ -23,12 +23,41 @@ func erebosGodOfTheDeadActivate(gs *gameengine.GameState, src *gameengine.Perman
 	if gs == nil || src == nil {
 		return
 	}
-	seat := src.Controller
-	if seat < 0 || seat >= len(gs.Seats) {
+	seatIdx := src.Controller
+	if seatIdx < 0 || seatIdx >= len(gs.Seats) {
 		return
 	}
-	drawOne(gs, src.Controller, src.Card.DisplayName())
+	seat := gs.Seats[seatIdx]
+	if seat == nil || seat.Lost {
+		return
+	}
+	// Cost gate: {1}{B}, Pay 2 life. Verify the seat can pay both the
+	// mana and life portions before debiting either, so a half-paid
+	// activation can never give a free draw.
+	const manaCost = 2 // {1}{B} → 2 generic-equivalent
+	const lifeCost = 2
+	if seat.Life <= lifeCost {
+		// Must have STRICTLY more life than the cost so the seat doesn't
+		// kill itself paying — CR §119.4 (cost can't reduce life below 0
+		// and an activation only resolves if all costs are paid in full).
+		emitFail(gs, slug, src.Card.DisplayName(), "insufficient_life", map[string]interface{}{
+			"life":      seat.Life,
+			"life_cost": lifeCost,
+		})
+		return
+	}
+	if !gameengine.PayGenericCost(gs, seat, manaCost, "activated", "erebos_activate", src.Card.DisplayName()) {
+		emitFail(gs, slug, src.Card.DisplayName(), "insufficient_mana", map[string]interface{}{
+			"mana_pool": seat.ManaPool,
+			"mana_cost": manaCost,
+		})
+		return
+	}
+	gameengine.LoseLife(gs, seatIdx, lifeCost, src.Card.DisplayName())
+	drawOne(gs, seatIdx, src.Card.DisplayName())
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
-		"seat": seat,
+		"seat":     seatIdx,
+		"mana_paid": manaCost,
+		"life_paid": lifeCost,
 	})
 }
