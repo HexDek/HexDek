@@ -882,7 +882,8 @@ var (
 		`(?:another\s+([a-z]+)\s+(?:creature\s+)?(?:enters?|is\s+put\s+onto)(?:[^\.]*?under your control|[^\.]*?you control)|` +
 			`(?:a|an)\s+([a-z]+)\s+(?:creature\s+)?you\s+control\s+(?:enters?))`)
 	// "if N or more mana was spent to cast" / "N mana was spent" / "X or more mana"
-	manaSpentNumRe = regexp.MustCompile(`(\d+)\s+or\s+more\s+(?:[a-z]+\s+)?mana\s+(?:was\s+)?(?:spent|paid)`)
+	// Tolerates the curly-brace mana-symbol form ("{5} or more mana").
+	manaSpentNumRe = regexp.MustCompile(`\{?(\d+)\}?\s+or\s+more\s+(?:[a-z]+\s+)?mana\s+(?:was\s+)?(?:spent|paid)`)
 	// "mana value of ~ is N or greater"
 	manaValueGtRe = regexp.MustCompile(`mana\s+value\s+of\s+\S+\s+is\s+(\d+)\s+or\s+(?:greater|more)`)
 )

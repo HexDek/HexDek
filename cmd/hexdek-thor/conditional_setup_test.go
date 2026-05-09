@@ -1567,6 +1567,268 @@ func TestApplyConditionScaffolding_PairedSoulbond_WithSrcPerm(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Tier 2A scaffold tests — TurnedFaceUp, BeginningOfOrdinalStep,
+// TribeYouControlETB, ManaSpentThreshold. Each test verifies detection
+// (scaffold kind + payload) and application (engine state change).
+// ---------------------------------------------------------------------------
+
+func TestDetectConditionScaffold_Tier2A(t *testing.T) {
+	cases := []struct {
+		name     string
+		kind     string
+		text     string
+		wantKind conditionScaffoldKind
+		wantSub  string
+		wantCnt  int
+	}{
+		{
+			name:     "TurnedFaceUp — morph trigger",
+			kind:     "intervening_if",
+			text:     "when ~ is turned face up",
+			wantKind: condScaffoldTurnedFaceUp,
+		},
+		{
+			name:     "TurnedFaceUp — megamorph",
+			kind:     "raw",
+			text:     "when ~ is turned face up while it has a +1/+1 counter on it",
+			wantKind: condScaffoldTurnedFaceUp,
+		},
+		{
+			name:     "BeginningOfOrdinalStep — combat",
+			kind:     "intervening_if",
+			text:     "at the beginning of combat on your turn",
+			wantKind: condScaffoldBeginningOfOrdinalStep,
+			wantSub:  "combat",
+		},
+		{
+			name:     "BeginningOfOrdinalStep — end step",
+			kind:     "intervening_if",
+			text:     "at the beginning of each end step",
+			wantKind: condScaffoldBeginningOfOrdinalStep,
+			wantSub:  "end_step",
+		},
+		{
+			name:     "BeginningOfOrdinalStep — postcombat main",
+			kind:     "intervening_if",
+			text:     "at the beginning of your postcombat main phase",
+			wantKind: condScaffoldBeginningOfOrdinalStep,
+			wantSub:  "postcombat_main",
+		},
+		{
+			name:     "BeginningOfOrdinalStep — draw step",
+			kind:     "intervening_if",
+			text:     "at the beginning of your draw step",
+			wantKind: condScaffoldBeginningOfOrdinalStep,
+			wantSub:  "draw",
+		},
+		{
+			name:     "TribeYouControlETB — another goblin enters",
+			kind:     "intervening_if",
+			text:     "whenever another goblin enters the battlefield under your control",
+			wantKind: condScaffoldTribeYouControlETB,
+			wantSub:  "goblin",
+		},
+		{
+			name:     "TribeYouControlETB — a wizard you control enters",
+			kind:     "intervening_if",
+			text:     "whenever a wizard you control enters",
+			wantKind: condScaffoldTribeYouControlETB,
+			wantSub:  "wizard",
+		},
+		{
+			name:     "ManaSpentThreshold — N or more mana",
+			kind:     "intervening_if",
+			text:     "if {5} or more mana was spent to cast that spell",
+			wantKind: condScaffoldManaSpentThreshold,
+			wantCnt:  5,
+		},
+		{
+			name:     "ManaSpentThreshold — amount of mana spent",
+			kind:     "raw",
+			text:     "equal to the amount of mana spent to cast it",
+			wantKind: condScaffoldManaSpentThreshold,
+			wantCnt:  4,
+		},
+		{
+			name:     "ManaSpentThreshold — structured mana_spent kind",
+			kind:     "mana_spent",
+			text:     "",
+			wantKind: condScaffoldManaSpentThreshold,
+			wantCnt:  4,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := []interface{}{tc.text}
+			if tc.kind == "mana_spent" {
+				// Structured form — Args = [color, count].
+				args = []interface{}{"any", tc.wantCnt}
+			}
+			cond := &gameast.Condition{Kind: tc.kind, Args: args}
+			got := detectConditionScaffold(cond)
+			if got.kind != tc.wantKind {
+				t.Fatalf("kind: want %v, got %v", tc.wantKind, got.kind)
+			}
+			if tc.wantSub != "" && got.subtype != tc.wantSub {
+				t.Errorf("subtype: want %q, got %q", tc.wantSub, got.subtype)
+			}
+			if tc.wantCnt != 0 && got.count != tc.wantCnt {
+				t.Errorf("count: want %d, got %d", tc.wantCnt, got.count)
+			}
+		})
+	}
+}
+
+func TestApplyScaffoldTurnedFaceUp(t *testing.T) {
+	gs := newTestGameState(2)
+	src := &gameengine.Permanent{
+		Card: &gameengine.Card{
+			Name:     "Morph Source",
+			Owner:    0,
+			Types:    []string{"creature"},
+			FaceDown: false,
+		},
+		Controller: 0,
+		Owner:      0,
+		Flags:      map[string]int{},
+		Timestamp:  100,
+	}
+	gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, src)
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"when ~ is turned face up"}}
+	cs := applyConditionScaffolding(gs, cond, src)
+	if cs.kind != condScaffoldTurnedFaceUp {
+		t.Fatalf("expected TurnedFaceUp, got %v", cs.kind)
+	}
+	// After TurnFaceUp the card should be face-up again.
+	if src.Card.FaceDown {
+		t.Errorf("expected source face-up after scaffold, got FaceDown=true")
+	}
+	// The engine should have logged a turn_face_up event.
+	found := false
+	for _, ev := range gs.EventLog {
+		if ev.Kind == "turn_face_up" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected turn_face_up event in log; got events=%v", gs.EventLog)
+	}
+}
+
+func TestApplyScaffoldBeginningOfOrdinalStep_Combat(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{
+		Kind: "intervening_if",
+		Args: []interface{}{"at the beginning of combat on your turn"},
+	}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldBeginningOfOrdinalStep {
+		t.Fatalf("expected BeginningOfOrdinalStep, got %v", cs.kind)
+	}
+	if gs.Phase != "combat" {
+		t.Errorf("expected Phase=combat, got %q", gs.Phase)
+	}
+	if gs.Step != "begin_of_combat" {
+		t.Errorf("expected Step=begin_of_combat, got %q", gs.Step)
+	}
+}
+
+func TestApplyScaffoldBeginningOfOrdinalStep_EndStep(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{
+		Kind: "intervening_if",
+		Args: []interface{}{"at the beginning of each end step"},
+	}
+	applyConditionScaffolding(gs, cond, nil)
+	if gs.Phase != "ending" || gs.Step != "end_step" {
+		t.Errorf("expected ending/end_step, got %s/%s", gs.Phase, gs.Step)
+	}
+}
+
+func TestApplyScaffoldTribeYouControlETB(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{
+		Kind: "intervening_if",
+		Args: []interface{}{"whenever another goblin enters the battlefield under your control"},
+	}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldTribeYouControlETB {
+		t.Fatalf("expected TribeYouControlETB, got %v", cs.kind)
+	}
+	if cs.subtype != "goblin" {
+		t.Errorf("subtype want goblin, got %q", cs.subtype)
+	}
+	hasGoblin := false
+	for _, p := range gs.Seats[0].Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		for _, ty := range p.Card.Types {
+			if ty == "goblin" {
+				hasGoblin = true
+			}
+		}
+	}
+	if !hasGoblin {
+		t.Errorf("expected a goblin creature on seat 0 battlefield")
+	}
+}
+
+func TestApplyScaffoldManaSpentThreshold(t *testing.T) {
+	gs := newTestGameState(2)
+	src := &gameengine.Permanent{
+		Card: &gameengine.Card{
+			Name:  "Costly Caster",
+			Owner: 0,
+			Types: []string{"creature"},
+			CMC:   1,
+		},
+		Controller: 0,
+		Owner:      0,
+		Flags:      map[string]int{},
+	}
+	gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, src)
+	cond := &gameast.Condition{
+		Kind: "intervening_if",
+		Args: []interface{}{"if {5} or more mana was spent to cast that spell"},
+	}
+	cs := applyConditionScaffolding(gs, cond, src)
+	if cs.kind != condScaffoldManaSpentThreshold {
+		t.Fatalf("expected ManaSpentThreshold, got %v", cs.kind)
+	}
+	if cs.count != 5 {
+		t.Errorf("threshold parse: want 5, got %d", cs.count)
+	}
+	if got := src.Flags["mana_spent"]; got < 5 {
+		t.Errorf("Flags[mana_spent] should be >=5, got %d", got)
+	}
+	if src.Card.CMC < 5 {
+		t.Errorf("Card.CMC should have been bumped to >=5, got %d", src.Card.CMC)
+	}
+	// CastRecord should have a sufficient ManaValue for downstream queries.
+	if got := gs.Seats[0].Turn.MaxManaValue(); got < 5 {
+		t.Errorf("MaxManaValue should be >=5, got %d", got)
+	}
+}
+
+func TestApplyScaffoldManaSpentThreshold_Structured(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "mana_spent", Args: []interface{}{"any", 7}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldManaSpentThreshold {
+		t.Fatalf("expected ManaSpentThreshold, got %v", cs.kind)
+	}
+	if cs.count != 7 {
+		t.Errorf("structured count: want 7, got %d", cs.count)
+	}
+	if got := gs.Seats[0].Turn.MaxManaValue(); got < 7 {
+		t.Errorf("MaxManaValue should be >=7, got %d", got)
+	}
+}
+
 func newTestGameState(seats int) *gameengine.GameState {
 	gs := &gameengine.GameState{
 		Turn:         1,
