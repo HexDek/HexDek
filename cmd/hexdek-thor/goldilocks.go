@@ -3437,6 +3437,12 @@ func makeKeywordGameState() *gameengine.GameState {
 		Phase:  "precombat_main",
 		Step:   "",
 		Flags:  map[string]int{},
+		// RetainEvents must be true — verifyKeyword's event-log probe is the
+		// fallback signal for keywords whose only observable effect is a
+		// LogEvent call (default branch + escape). Without retention, those
+		// events are dropped to gs.lastEvent and the test misreports them
+		// as keyword_dead.
+		RetainEvents: true,
 	}
 	for i := 0; i < 4; i++ {
 		seat := &gameengine.Seat{
@@ -3808,6 +3814,60 @@ func setupForKeyword(gs *gameengine.GameState, oc *oracleCard, kw *gameast.Keywo
 		gs.Seats[0].ManaPool = 10
 		return nil
 
+	case "flying", "trample", "deathtouch", "lifelink", "first strike",
+		"double strike", "vigilance", "haste", "menace", "reach",
+		"defender", "protection", "infect", "toxic", "fear", "intimidate",
+		"shroud", "hexproof", "indestructible", "ward",
+		"horsemanship", "flanking", "skulk",
+		"swampwalk", "islandwalk", "mountainwalk", "forestwalk", "plainswalk",
+		"snow swampwalk", "snow islandwalk", "snow mountainwalk",
+		"snow forestwalk", "snow plainswalk", "landwalk":
+		// Combat scaffold: source attacks seat 1, opponent has a 2/2 blocker.
+		// Running DealCombatDamageStep produces marked damage on both sides
+		// (and life loss if attacker is unblocked or has trample), which is
+		// observable via the snapshot regardless of which combat keyword is
+		// being tested.
+		if !containsType(card.Types, "creature") {
+			// Combat-flavored keyword on a non-creature (rare). Fall back to
+			// default-style placement so the event-log signal still fires.
+			perm := &gameengine.Permanent{
+				Card:       card,
+				Controller: 0,
+				Owner:      0,
+				Flags:      map[string]int{},
+				Counters:   map[string]int{},
+			}
+			gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, perm)
+			gs.Seats[0].ManaPool = 20
+			fillLibrary(gs, 0, 5)
+			return perm
+		}
+		perm := &gameengine.Permanent{
+			Card:       card,
+			Controller: 0,
+			Owner:      0,
+			Flags:      map[string]int{"attacking": 1, "defender_seat_p1": 2},
+			Counters:   map[string]int{},
+		}
+		gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, perm)
+		blocker := &gameengine.Permanent{
+			Card: &gameengine.Card{
+				Name:          "Combat Blocker",
+				Owner:         1,
+				Types:         []string{"creature"},
+				BasePower:     2,
+				BaseToughness: 2,
+			},
+			Controller: 1,
+			Owner:      1,
+			Flags:      map[string]int{"blocking": 1},
+			Counters:   map[string]int{},
+		}
+		gs.Seats[1].Battlefield = append(gs.Seats[1].Battlefield, blocker)
+		gs.Seats[0].ManaPool = 5
+		fillLibrary(gs, 0, 5)
+		return perm
+
 	default:
 		// Default: place the source card on battlefield, give mana.
 		perm := &gameengine.Permanent{
@@ -4080,6 +4140,62 @@ func executeKeyword(gs *gameengine.GameState, perm *gameengine.Permanent, oc *or
 			Details: map[string]interface{}{
 				"keyword": "escape",
 			},
+		})
+
+	case "flying", "trample", "deathtouch", "lifelink", "first strike",
+		"double strike", "vigilance", "haste", "menace", "reach",
+		"defender", "protection", "infect", "toxic", "fear", "intimidate",
+		"shroud", "hexproof", "indestructible", "ward",
+		"horsemanship", "flanking", "skulk",
+		"swampwalk", "islandwalk", "mountainwalk", "forestwalk", "plainswalk",
+		"snow swampwalk", "snow islandwalk", "snow mountainwalk",
+		"snow forestwalk", "snow plainswalk", "landwalk":
+		if perm == nil || !perm.IsCreature() {
+			gs.LogEvent(gameengine.Event{
+				Kind:   "keyword_test",
+				Seat:   0,
+				Source: oc.Name,
+				Details: map[string]interface{}{"keyword": kwName},
+			})
+			break
+		}
+		var blockers []*gameengine.Permanent
+		if len(gs.Seats) > 1 && gs.Seats[1] != nil {
+			for _, b := range gs.Seats[1].Battlefield {
+				if b != nil && b.IsCreature() {
+					blockers = append(blockers, b)
+				}
+			}
+		}
+		attackers := []*gameengine.Permanent{perm}
+		blockerMap := map[*gameengine.Permanent][]*gameengine.Permanent{}
+		if len(blockers) > 0 {
+			blockerMap[perm] = blockers
+		}
+		gs.Phase = "combat"
+		gs.Step = "combat_damage"
+		// Run both damage steps so first-strike/double-strike permanents
+		// also produce observable state change.
+		gameengine.DealCombatDamageStep(gs, attackers, blockerMap, true)
+		gameengine.DealCombatDamageStep(gs, attackers, blockerMap, false)
+		// Reset phase and clear combat flags before invariants run — the
+		// scaffolded attacker may have defender, summoning sickness, or
+		// other state that CombatLegality would (correctly) reject if we
+		// stayed in the combat phase.
+		gs.Phase = "precombat_main"
+		gs.Step = ""
+		delete(perm.Flags, "attacking")
+		delete(perm.Flags, "defender_seat_p1")
+		for _, b := range blockers {
+			if b != nil && b.Flags != nil {
+				delete(b.Flags, "blocking")
+			}
+		}
+		gs.LogEvent(gameengine.Event{
+			Kind:   "combat_keyword_test",
+			Seat:   0,
+			Source: oc.Name,
+			Details: map[string]interface{}{"keyword": kwName},
 		})
 
 	default:
