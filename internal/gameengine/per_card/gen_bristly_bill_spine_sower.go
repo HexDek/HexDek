@@ -6,30 +6,110 @@ import (
 
 // registerBristlyBillSpineSower wires Bristly Bill, Spine Sower.
 //
-// Oracle text:
+// Oracle text (OTJ, {1}{G}, 2/2):
 //
-//   Landfall — Whenever a land you control enters, put a +1/+1 counter on target creature.
-//   {3}{G}{G}: Double the number of +1/+1 counters on each creature you control.
+//	Landfall — Whenever a land you control enters, put a +1/+1 counter
+//	on target creature.
+//	{3}{G}{G}: Double the number of +1/+1 counters on each creature
+//	you control.
 //
-// Auto-generated activated ability handler.
+// Implementation:
+//   - "permanent_etb" trigger fires the landfall counter when a land
+//     controlled by Bristly Bill's controller enters. Target picked
+//     greedily: prefer Bristly Bill himself if he has counters
+//     (snowballs), else any controlled creature with at least one
+//     +1/+1 counter, else the highest-power creature.
+//   - Activated ability {3}{G}{G} doubles every controlled creature's
+//     +1/+1 counters. The mana cost is not enforced by this handler
+//     (the engine's activation path collects cost externally; flagged
+//     in cost-unenforced tracking).
 func registerBristlyBillSpineSower(r *Registry) {
-	r.OnActivated("Bristly Bill, Spine Sower", bristlyBillSpineSowerActivate)
+	r.OnTrigger("Bristly Bill, Spine Sower", "permanent_etb", bristlyBillLandfall)
+	r.OnActivated("Bristly Bill, Spine Sower", bristlyBillSpineSowerDouble)
 }
 
-func bristlyBillSpineSowerActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilityIdx int, ctx map[string]interface{}) {
-	const slug = "bristly_bill_spine_sower_activate"
+func bristlyBillLandfall(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	const slug = "bristly_bill_landfall_counter"
+	if gs == nil || perm == nil || ctx == nil {
+		return
+	}
+	entering, _ := ctx["perm"].(*gameengine.Permanent)
+	if entering == nil || !entering.IsLand() {
+		return
+	}
+	enteringSeat, _ := ctx["controller_seat"].(int)
+	if enteringSeat != perm.Controller {
+		return
+	}
+	target := pickBristlyBillTarget(gs, perm)
+	if target == nil {
+		return
+	}
+	target.AddCounter("+1/+1", 1)
+	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
+		"seat":   perm.Controller,
+		"land":   entering.Card.DisplayName(),
+		"target": target.Card.DisplayName(),
+	})
+}
+
+func pickBristlyBillTarget(gs *gameengine.GameState, perm *gameengine.Permanent) *gameengine.Permanent {
+	seat := gs.Seats[perm.Controller]
+	if seat == nil {
+		return nil
+	}
+	if perm.Counters != nil && perm.Counters["+1/+1"] > 0 {
+		return perm
+	}
+	var fallback *gameengine.Permanent
+	bestPower := -1 << 30
+	for _, p := range seat.Battlefield {
+		if p == nil || p.Card == nil || !p.IsCreature() {
+			continue
+		}
+		if p.Counters != nil && p.Counters["+1/+1"] > 0 {
+			return p
+		}
+		if p.Power() > bestPower {
+			bestPower = p.Power()
+			fallback = p
+		}
+	}
+	if fallback != nil {
+		return fallback
+	}
+	if perm.IsCreature() {
+		return perm
+	}
+	return nil
+}
+
+func bristlyBillSpineSowerDouble(gs *gameengine.GameState, src *gameengine.Permanent, abilityIdx int, ctx map[string]interface{}) {
+	const slug = "bristly_bill_double_counters"
 	if gs == nil || src == nil {
 		return
 	}
-	seat := src.Controller
-	if seat < 0 || seat >= len(gs.Seats) {
+	seat := gs.Seats[src.Controller]
+	if seat == nil {
 		return
 	}
-	for _, p := range gs.Seats[src.Controller].Battlefield {
-		if p == nil || !p.IsCreature() || p == src { continue }
-		p.AddCounter("+1/+1", 1)
+	doubled := 0
+	for _, p := range seat.Battlefield {
+		if p == nil || p.Card == nil || !p.IsCreature() {
+			continue
+		}
+		if p.Counters == nil {
+			continue
+		}
+		n := p.Counters["+1/+1"]
+		if n <= 0 {
+			continue
+		}
+		p.AddCounter("+1/+1", n)
+		doubled++
 	}
 	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
-		"seat": seat,
+		"seat":             src.Controller,
+		"creatures_doubled": doubled,
 	})
 }
