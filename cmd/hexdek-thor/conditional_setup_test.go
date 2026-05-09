@@ -772,6 +772,158 @@ func TestApplyConditionScaffolding_UpkeepPhase(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Detection + apply tests for ability-word condScaffold kinds.
+// ---------------------------------------------------------------------------
+
+func TestDetectConditionScaffold_AbilityWords(t *testing.T) {
+	cases := []struct {
+		name     string
+		kind     string
+		text     string
+		wantKind conditionScaffoldKind
+	}{
+		{"hellbent ability word", "intervening_if", "hellbent — destroy target creature", condScaffoldHellbent},
+		{"hellbent english", "intervening_if", "if you have no cards in hand, draw two", condScaffoldHellbent},
+		{"monarch", "intervening_if", "if you're the monarch, draw a card", condScaffoldMonarch},
+		{"monarch english", "raw", "you are the monarch", condScaffoldMonarch},
+		{"initiative", "intervening_if", "if you have the initiative, scry 1", condScaffoldInitiative},
+		{"delirium ability word", "intervening_if", "delirium — sacrifice a creature", condScaffoldDelirium},
+		{"delirium english", "raw", "if there are four or more card types in your graveyard", condScaffoldDelirium},
+		{"spell mastery ability word", "intervening_if", "spell mastery — counter target spell", condScaffoldSpellMastery},
+		{"spell mastery english", "raw", "if there are two or more instant cards in your graveyard", condScaffoldSpellMastery},
+		{"revolt ability word", "intervening_if", "revolt — draw a card", condScaffoldRevolt},
+		{"revolt english", "raw", "if a permanent you controlled left the battlefield this turn", condScaffoldRevolt},
+		{"metalcraft ability word", "intervening_if", "metalcraft — +2/+2", condScaffoldMetalcraft},
+		{"metalcraft english", "raw", "if you control three or more artifacts, draw a card", condScaffoldMetalcraft},
+		{"ferocious ability word", "intervening_if", "ferocious — deal 2 damage", condScaffoldFerocious},
+		{"ferocious english", "raw", "if you control a creature with power 4 or greater", condScaffoldFerocious},
+		{"formidable ability word", "intervening_if", "formidable — creatures fight", condScaffoldFormidable},
+		{"formidable english", "raw", "if creatures you control have total power 8 or greater", condScaffoldFormidable},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cond := &gameast.Condition{Kind: tc.kind, Args: []interface{}{tc.text}}
+			got := detectConditionScaffold(cond)
+			if got.kind != tc.wantKind {
+				t.Errorf("kind: want %v, got %v", tc.wantKind, got.kind)
+			}
+		})
+	}
+}
+
+func TestApplyConditionScaffolding_Hellbent(t *testing.T) {
+	gs := newTestGameState(2)
+	gs.Seats[0].Hand = []*gameengine.Card{{Name: "X"}, {Name: "Y"}}
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"hellbent — destroy target creature"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldHellbent {
+		t.Fatalf("expected Hellbent, got %v", cs.kind)
+	}
+	if len(gs.Seats[0].Hand) != 0 {
+		t.Errorf("expected seat 0 hand empty, got %d cards", len(gs.Seats[0].Hand))
+	}
+	if gs.Seats[0].Flags["hellbent"] != 1 {
+		t.Errorf("hellbent flag not set")
+	}
+}
+
+func TestApplyConditionScaffolding_Monarch(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"if you're the monarch, draw a card"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldMonarch {
+		t.Fatalf("expected Monarch, got %v", cs.kind)
+	}
+	if !gameengine.IsMonarch(gs, 0) {
+		t.Errorf("seat 0 should be monarch")
+	}
+}
+
+func TestApplyConditionScaffolding_Initiative(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"if you have the initiative, scry 1"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldInitiative {
+		t.Fatalf("expected Initiative, got %v", cs.kind)
+	}
+	if !gameengine.HasInitiative(gs, 0) {
+		t.Errorf("seat 0 should have the initiative")
+	}
+}
+
+func TestApplyConditionScaffolding_Delirium(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"delirium — sacrifice a creature"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldDelirium {
+		t.Fatalf("expected Delirium, got %v", cs.kind)
+	}
+	if !gameengine.CheckDelirium(gs, 0) {
+		t.Errorf("CheckDelirium should be active after priming; graveyard=%d", len(gs.Seats[0].Graveyard))
+	}
+}
+
+func TestApplyConditionScaffolding_SpellMastery(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"spell mastery — counter target spell"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldSpellMastery {
+		t.Fatalf("expected SpellMastery, got %v", cs.kind)
+	}
+	if !gameengine.CheckSpellMastery(gs, 0) {
+		t.Errorf("CheckSpellMastery should be active after priming")
+	}
+}
+
+func TestApplyConditionScaffolding_Revolt(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"revolt — draw a card"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldRevolt {
+		t.Fatalf("expected Revolt, got %v", cs.kind)
+	}
+	if !gameengine.CheckRevolt(gs, 0) {
+		t.Errorf("CheckRevolt should be active after priming")
+	}
+}
+
+func TestApplyConditionScaffolding_Metalcraft(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"metalcraft — +2/+2"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldMetalcraft {
+		t.Fatalf("expected Metalcraft, got %v", cs.kind)
+	}
+	if !gameengine.CheckMetalcraft(gs, 0) {
+		t.Errorf("CheckMetalcraft should be active after priming")
+	}
+}
+
+func TestApplyConditionScaffolding_Ferocious(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"ferocious — deal 2 damage"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldFerocious {
+		t.Fatalf("expected Ferocious, got %v", cs.kind)
+	}
+	if !gameengine.CheckFerocious(gs, 0) {
+		t.Errorf("CheckFerocious should be active after priming")
+	}
+}
+
+func TestApplyConditionScaffolding_Formidable(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"formidable — creatures fight"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldFormidable {
+		t.Fatalf("expected Formidable, got %v", cs.kind)
+	}
+	if !gameengine.CheckFormidable(gs, 0) {
+		t.Errorf("CheckFormidable should be active after priming")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Verify classifyTrigger returns expected slugs for all known trigger events.
 // ---------------------------------------------------------------------------
 

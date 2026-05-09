@@ -777,6 +777,21 @@ const (
 	condScaffoldLifeAboveThreshold
 	condScaffoldLifeBelowThreshold
 	condScaffoldUpkeepPhase
+
+	// Ability-word / status scaffold kinds — each mirrors a Check<Word>
+	// helper in the engine. Detection accepts both the ability-word slug
+	// ("hellbent", "delirium") and the verbatim English description that
+	// the AST sometimes surfaces ("if you have no cards in hand", "four or
+	// more card types in your graveyard").
+	condScaffoldHellbent
+	condScaffoldMonarch
+	condScaffoldInitiative
+	condScaffoldDelirium
+	condScaffoldSpellMastery
+	condScaffoldRevolt
+	condScaffoldMetalcraft
+	condScaffoldFerocious
+	condScaffoldFormidable
 )
 
 type conditionScaffold struct {
@@ -797,6 +812,14 @@ var (
 	lifeAboveRe   = regexp.MustCompile(`(?:you have|your life total is)\s+(\d+)\s+or\s+more\s+life`)
 	lifeBelowRe   = regexp.MustCompile(`(?:you have|your life total is)\s+(\d+)\s+or\s+(?:less|fewer)\s+life`)
 	lifeBelowAltRe = regexp.MustCompile(`life total is\s+(\d+)\s+or\s+less`)
+	// Ability-word fingerprints. Each accepts either the ability word
+	// itself or the canonical English description so we catch both AST
+	// forms.
+	deliriumRe       = regexp.MustCompile(`four\s+or\s+more\s+card\s+types`)
+	spellMasteryRe   = regexp.MustCompile(`(?:two|2)\s+or\s+more\s+(?:instant|sorcery)`)
+	metalcraftRe     = regexp.MustCompile(`(?:three|3)\s+or\s+more\s+artifacts?`)
+	ferociousRe      = regexp.MustCompile(`creature\s+with\s+power\s+(?:four|4)\s+or\s+(?:more|greater)`)
+	formidableRe     = regexp.MustCompile(`total\s+power\s+(?:eight|8)\s+or\s+(?:more|greater)`)
 )
 
 func conditionRawText(cond *gameast.Condition) string {
@@ -837,6 +860,22 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 	// "if/as long as a creature died this turn"
 	if strings.Contains(txt, "died this turn") {
 		cs.kind = condScaffoldCreatureDiedThisTurn
+		return cs
+	}
+
+	// Delirium — 4+ distinct card types in your graveyard. Must come
+	// before the generic graveyard matchers below so the more permissive
+	// CardInGraveyard case doesn't swallow it.
+	if strings.Contains(txt, "delirium") || deliriumRe.MatchString(txt) {
+		cs.kind = condScaffoldDelirium
+		return cs
+	}
+
+	// Spell Mastery — 2+ instant/sorcery in your graveyard. Same
+	// ordering rationale as Delirium.
+	if strings.Contains(txt, "spell mastery") ||
+		(spellMasteryRe.MatchString(txt) && strings.Contains(txt, "graveyard")) {
+		cs.kind = condScaffoldSpellMastery
 		return cs
 	}
 
@@ -975,6 +1014,56 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 	// Upkeep phase condition. "during your upkeep" / "it's your upkeep"
 	if strings.Contains(txt, "upkeep") {
 		cs.kind = condScaffoldUpkeepPhase
+		return cs
+	}
+
+	// Hellbent — "if you have no cards in hand" / ability word.
+	if strings.Contains(txt, "hellbent") ||
+		(strings.Contains(txt, "no cards in") && strings.Contains(txt, "hand")) {
+		cs.kind = condScaffoldHellbent
+		return cs
+	}
+
+	// Monarch — "if you're the monarch" / "you are the monarch".
+	if strings.Contains(txt, "the monarch") ||
+		strings.Contains(txt, "you're the monarch") ||
+		strings.Contains(txt, "you are the monarch") {
+		cs.kind = condScaffoldMonarch
+		return cs
+	}
+
+	// Initiative — "if you have the initiative".
+	if strings.Contains(txt, "the initiative") ||
+		strings.Contains(txt, "have initiative") {
+		cs.kind = condScaffoldInitiative
+		return cs
+	}
+
+	// Revolt — "a permanent you controlled left the battlefield this turn".
+	if strings.Contains(txt, "revolt") ||
+		(strings.Contains(txt, "permanent") &&
+			strings.Contains(txt, "left the battlefield") &&
+			strings.Contains(txt, "this turn")) {
+		cs.kind = condScaffoldRevolt
+		return cs
+	}
+
+	// Metalcraft — "if you control three or more artifacts".
+	if strings.Contains(txt, "metalcraft") ||
+		(metalcraftRe.MatchString(txt) && strings.Contains(txt, "you control")) {
+		cs.kind = condScaffoldMetalcraft
+		return cs
+	}
+
+	// Ferocious — "if you control a creature with power 4 or greater".
+	if strings.Contains(txt, "ferocious") || ferociousRe.MatchString(txt) {
+		cs.kind = condScaffoldFerocious
+		return cs
+	}
+
+	// Formidable — "creatures you control have total power 8 or greater".
+	if strings.Contains(txt, "formidable") || formidableRe.MatchString(txt) {
+		cs.kind = condScaffoldFormidable
 		return cs
 	}
 
@@ -1250,6 +1339,77 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 		gs.Phase = "beginning"
 		gs.Step = "upkeep"
 		cs.description = "set game phase to upkeep"
+
+	case condScaffoldHellbent:
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Hand = nil
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["hellbent"] = 1
+		}
+		cs.description = "emptied seat 0 hand (hellbent active)"
+
+	case condScaffoldMonarch:
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["has_monarch"] = 1
+		gs.Flags["monarch_seat"] = 0
+		cs.description = "made seat 0 the monarch"
+
+	case condScaffoldInitiative:
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["initiative_holder"] = 0
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["has_initiative"] = 1
+		}
+		cs.description = "gave seat 0 the initiative"
+
+	case condScaffoldDelirium:
+		seedDeliriumGraveyard(gs, 0)
+		cs.description = "seeded seat 0 graveyard with 4 distinct card types"
+
+	case condScaffoldSpellMastery:
+		seedSpellMasteryGraveyard(gs, 0)
+		cs.description = "seeded seat 0 graveyard with 2 instant/sorcery cards"
+
+	case condScaffoldRevolt:
+		// Revolt reads gs.EventLog for a destroy/sacrifice/exile/bounce
+		// event by seat 0 this turn. Append a synthesised sacrifice event
+		// rather than mutating actual zones — the engine's CheckRevolt only
+		// consults the log.
+		gs.EventLog = append(gs.EventLog, gameengine.Event{
+			Kind:   "sacrifice",
+			Seat:   0,
+			Target: -1,
+			Source: "thor_priming",
+		})
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["revolt_active"] = 1
+		cs.description = "logged sacrifice event for seat 0 (revolt active)"
+
+	case condScaffoldMetalcraft:
+		seedSeatArtifacts(gs, 0, 3)
+		cs.description = "placed 3 artifacts on seat 0 (metalcraft active)"
+
+	case condScaffoldFerocious:
+		placePoweredCreature(gs, 0, "Ferocious Setup", 4, 4)
+		cs.description = "placed 4/4 creature on seat 0 (ferocious active)"
+
+	case condScaffoldFormidable:
+		// Two 4/4s are enough to clear the 8-power threshold in a single
+		// helper call without crowding the battlefield with more setup.
+		placePoweredCreature(gs, 0, "Formidable Setup A", 4, 4)
+		placePoweredCreature(gs, 0, "Formidable Setup B", 4, 4)
+		cs.description = "placed creatures totaling 8 power on seat 0 (formidable active)"
 	}
 	return cs
 }
@@ -1308,6 +1468,24 @@ func traceConditionScaffolding(cond *gameast.Condition, tr *Tracer) {
 		desc = fmt.Sprintf("set seat 0 life to %d (below threshold)", cs.threshold)
 	case condScaffoldUpkeepPhase:
 		desc = "set game phase to upkeep"
+	case condScaffoldHellbent:
+		desc = "emptied seat 0 hand (hellbent active)"
+	case condScaffoldMonarch:
+		desc = "made seat 0 the monarch"
+	case condScaffoldInitiative:
+		desc = "gave seat 0 the initiative"
+	case condScaffoldDelirium:
+		desc = "seeded seat 0 graveyard with 4 distinct card types"
+	case condScaffoldSpellMastery:
+		desc = "seeded seat 0 graveyard with 2 instant/sorcery cards"
+	case condScaffoldRevolt:
+		desc = "logged sacrifice event for seat 0 (revolt active)"
+	case condScaffoldMetalcraft:
+		desc = "placed 3 artifacts on seat 0 (metalcraft active)"
+	case condScaffoldFerocious:
+		desc = "placed 4/4 creature on seat 0 (ferocious active)"
+	case condScaffoldFormidable:
+		desc = "placed creatures totaling 8 power on seat 0 (formidable active)"
 	}
 	tr.Record("CONDITION_SETUP", "%q → %s", cs.rawText, desc)
 }
@@ -1403,4 +1581,125 @@ func topUpGraveyardCreatures(gs *gameengine.GameState, seat, n int) {
 			BaseToughness: 2,
 		})
 	}
+}
+
+// seedDeliriumGraveyard tops up `seat`'s graveyard so CheckDelirium passes:
+// 4 cards covering 4 distinct delirium-counted types. Existing graveyard
+// contents are kept; only missing types are appended.
+func seedDeliriumGraveyard(gs *gameengine.GameState, seat int) {
+	if seat >= len(gs.Seats) || gs.Seats[seat] == nil {
+		return
+	}
+	have := map[string]bool{}
+	for _, c := range gs.Seats[seat].Graveyard {
+		if c == nil {
+			continue
+		}
+		for _, t := range c.Types {
+			have[strings.ToLower(t)] = true
+		}
+	}
+	// Cover the four most universal types — they don't overlap in a way
+	// that would let CheckDelirium double-count.
+	for _, ty := range []string{"creature", "instant", "sorcery", "artifact"} {
+		if have[ty] {
+			continue
+		}
+		gs.Seats[seat].Graveyard = append(gs.Seats[seat].Graveyard, &gameengine.Card{
+			Name:  fmt.Sprintf("Delirium Setup %s", ty),
+			Owner: seat,
+			Types: []string{ty},
+		})
+	}
+}
+
+// seedSpellMasteryGraveyard tops up `seat`'s graveyard with 2 instant or
+// sorcery cards so CheckSpellMastery passes. Counts existing entries so
+// repeated calls don't pile up duplicates.
+func seedSpellMasteryGraveyard(gs *gameengine.GameState, seat int) {
+	if seat >= len(gs.Seats) || gs.Seats[seat] == nil {
+		return
+	}
+	have := 0
+	for _, c := range gs.Seats[seat].Graveyard {
+		if c == nil {
+			continue
+		}
+		for _, t := range c.Types {
+			lower := strings.ToLower(t)
+			if lower == "instant" || lower == "sorcery" {
+				have++
+				break
+			}
+		}
+	}
+	for i := have; i < 2; i++ {
+		ty := "instant"
+		if i%2 == 1 {
+			ty = "sorcery"
+		}
+		gs.Seats[seat].Graveyard = append(gs.Seats[seat].Graveyard, &gameengine.Card{
+			Name:  fmt.Sprintf("SpellMastery Setup %d", i),
+			Owner: seat,
+			Types: []string{ty},
+		})
+	}
+}
+
+// seedSeatArtifacts tops up `seat`'s battlefield so it controls at least
+// `count` artifacts. Existing artifacts are kept; only the deficit is
+// appended. Used for metalcraft priming.
+func seedSeatArtifacts(gs *gameengine.GameState, seat, count int) {
+	if seat >= len(gs.Seats) || gs.Seats[seat] == nil {
+		return
+	}
+	have := 0
+	for _, p := range gs.Seats[seat].Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		for _, t := range p.Card.Types {
+			if t == "artifact" {
+				have++
+				break
+			}
+		}
+	}
+	for i := have; i < count; i++ {
+		gs.Seats[seat].Battlefield = append(gs.Seats[seat].Battlefield, &gameengine.Permanent{
+			Card: &gameengine.Card{
+				Name:  fmt.Sprintf("Metalcraft Setup %d", i),
+				Owner: seat,
+				Types: []string{"artifact"},
+			},
+			Controller: seat,
+			Owner:      seat,
+			Flags:      map[string]int{},
+			Counters:   map[string]int{},
+		})
+	}
+}
+
+// placePoweredCreature appends a creature with the given P/T to `seat`'s
+// battlefield. Used by ferocious / formidable priming where the threshold
+// check depends on a specific power level.
+func placePoweredCreature(gs *gameengine.GameState, seat int, name string, power, toughness int) *gameengine.Permanent {
+	if seat >= len(gs.Seats) || gs.Seats[seat] == nil {
+		return nil
+	}
+	perm := &gameengine.Permanent{
+		Card: &gameengine.Card{
+			Name:          name,
+			Owner:         seat,
+			Types:         []string{"creature"},
+			BasePower:     power,
+			BaseToughness: toughness,
+		},
+		Controller: seat,
+		Owner:      seat,
+		Flags:      map[string]int{},
+		Counters:   map[string]int{},
+	}
+	gs.Seats[seat].Battlefield = append(gs.Seats[seat].Battlefield, perm)
+	return perm
 }
