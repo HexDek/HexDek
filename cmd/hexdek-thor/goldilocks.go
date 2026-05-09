@@ -1237,7 +1237,12 @@ func setupForEffect(gs *gameengine.GameState, oc *oracleCard, info *effectInfo) 
 		if gs.Flags == nil {
 			gs.Flags = map[string]int{}
 		}
-		gs.Flags["creature_died_this_turn"] = 1 // morbid
+		gs.Flags["creature_died_this_turn"] = 1 // morbid (legacy flag)
+		gs.Seats[0].Turn.CreaturesDied = 1      // morbid (TurnCounters)
+		gs.Seats[0].Turn.PermanentsLeft = 1     // disappear / void
+		gs.Flags["permanent_left_bf"] = 1       // disappear / void (legacy)
+		gs.Flags["permanent_left_bf_0"] = 1     // disappear / void (per-seat)
+		gs.Seats[0].Turn.Attacked = true        // pack tactics
 		gs.Seats[0].Flags["attacked_this_turn"] = 1
 		// Place attacking creatures for ability words that check attacking.
 		for seat := 1; seat < len(gs.Seats); seat++ {

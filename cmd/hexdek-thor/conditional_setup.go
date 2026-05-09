@@ -792,6 +792,16 @@ const (
 	condScaffoldMetalcraft
 	condScaffoldFerocious
 	condScaffoldFormidable
+
+	// New engine structure scaffold kinds — bridge the gap between
+	// the TurnCounters migration and the scaffold priming system.
+	condScaffoldPermanentLeftBF     // disappear / void — Turn.PermanentsLeft
+	condScaffoldSecondSpellThisTurn // CastRecord nth-spell — Turn.Casts
+	condScaffoldDescendedThisTurn   // descended — Turn.Descended
+	condScaffoldLifeLostThisTurn    // opponent/self lost life — Turn.LifeLost
+	condScaffoldTokensCreatedCount  // X = tokens created — Turn.TokensCreated
+	condScaffoldCastFromExile       // cast from exile — Turn.CastFromExile
+	condScaffoldExileLinkedReturn   // exile-until-leaves — ExileLinked/ReturnLinkedExile
 )
 
 type conditionScaffold struct {
@@ -812,6 +822,8 @@ var (
 	lifeAboveRe   = regexp.MustCompile(`(?:you have|your life total is)\s+(\d+)\s+or\s+more\s+life`)
 	lifeBelowRe   = regexp.MustCompile(`(?:you have|your life total is)\s+(\d+)\s+or\s+(?:less|fewer)\s+life`)
 	lifeBelowAltRe = regexp.MustCompile(`life total is\s+(\d+)\s+or\s+less`)
+	// CastRecord nth-spell pattern — "second spell", "third creature", etc.
+	secondSpellRe = regexp.MustCompile(`(?:second|third)\s+(?:spell|creature|noncreature|instant|sorcery|artifact|enchantment)`)
 	// Ability-word fingerprints. Each accepts either the ability word
 	// itself or the canonical English description so we catch both AST
 	// forms.
@@ -1067,6 +1079,55 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 		return cs
 	}
 
+	// Permanent left the battlefield. Disappear / Void ability words and
+	// revolt-like conditions that don't use the "revolt" keyword.
+	if (strings.Contains(txt, "permanent left") || strings.Contains(txt, "permanent left the battlefield")) &&
+		!strings.Contains(txt, "revolt") {
+		cs.kind = condScaffoldPermanentLeftBF
+		return cs
+	}
+
+	// Second/third spell this turn. CastRecord-dependent conditions.
+	if secondSpellRe.MatchString(txt) {
+		cs.kind = condScaffoldSecondSpellThisTurn
+		return cs
+	}
+
+	// Descended this turn. Ixalan keyword.
+	if strings.Contains(txt, "descended") || strings.Contains(txt, "descend") {
+		cs.kind = condScaffoldDescendedThisTurn
+		return cs
+	}
+
+	// Life lost this turn (self or opponent).
+	if (strings.Contains(txt, "lost life") || strings.Contains(txt, "lose life")) &&
+		strings.Contains(txt, "this turn") &&
+		!strings.Contains(txt, "opponent") {
+		cs.kind = condScaffoldLifeLostThisTurn
+		return cs
+	}
+
+	// Tokens created count. Thalisse / Vazi / Ellyn Harbreeze.
+	if strings.Contains(txt, "tokens") &&
+		(strings.Contains(txt, "created this turn") || strings.Contains(txt, "you created this turn")) {
+		cs.kind = condScaffoldTokensCreatedCount
+		return cs
+	}
+
+	// Cast from exile. Impulse draw and flashback conditions.
+	if strings.Contains(txt, "cast") && strings.Contains(txt, "from exile") &&
+		!strings.Contains(txt, "you may cast") {
+		cs.kind = condScaffoldCastFromExile
+		return cs
+	}
+
+	// Exile-linked return. O-Ring / Fiend Hunter patterns.
+	if strings.Contains(txt, "exiled with") &&
+		(strings.Contains(txt, "return") || strings.Contains(txt, "leaves")) {
+		cs.kind = condScaffoldExileLinkedReturn
+		return cs
+	}
+
 	// Tribal: "if you control another <subtype>" / "if you control a <subtype>".
 	// Run last because it's the most permissive matcher.
 	if strings.Contains(txt, "you control") {
@@ -1137,14 +1198,16 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 		cs.description = fmt.Sprintf("placed %s creature on seat 0", cs.subtype)
 
 	case condScaffoldCreatureDiedThisTurn:
-		// Engine reads gs.Flags["creature_died_this_turn"] for morbid-style
-		// checks. Also place a creature card in the graveyard so any
-		// graveyard scan sees a death event from this turn.
+		// Engine reads seat.Turn.CreaturesDied for morbid checks (since
+		// TurnCounters migration). Also set legacy flag + place creature
+		// card in graveyard so graveyard scans see a death event.
 		if gs.Flags == nil {
 			gs.Flags = map[string]int{}
 		}
 		gs.Flags["creature_died_this_turn"] = 1
 		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.CreaturesDied++
+			gs.Seats[0].Turn.PermanentsLeft++
 			gs.Seats[0].Graveyard = append(gs.Seats[0].Graveyard, &gameengine.Card{
 				Name:          "Died Setup",
 				Owner:         0,
@@ -1153,7 +1216,7 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 				BaseToughness: 1,
 			})
 		}
-		cs.description = "set creature_died_this_turn flag + added creature to graveyard"
+		cs.description = "set Turn.CreaturesDied + legacy flag + added creature to graveyard"
 
 	case condScaffoldCreatureCardsInGraveyard:
 		topUpGraveyardCreatures(gs, 0, cs.count)
@@ -1179,34 +1242,44 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 	case condScaffoldCastSpellThisTurn:
 		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
 			gs.Seats[0].SpellsCastThisTurn++
+			gs.Seats[0].Turn.SpellsCast++
+			gs.Seats[0].Turn.Casts = append(gs.Seats[0].Turn.Casts, gameengine.CastRecord{
+				CardName:  "Scaffold Spell",
+				Types:     []string{"instant"},
+				ManaValue: 2,
+			})
 			if gs.Seats[0].Flags == nil {
 				gs.Seats[0].Flags = map[string]int{}
 			}
 			gs.Seats[0].Flags["cast_spell_this_turn"] = 1
+			gs.Seats[0].Flags["spells_cast_this_turn"] = gs.Seats[0].Turn.SpellsCast
 		}
 		gs.SpellsCastThisTurn++
-		cs.description = "incremented spell cast counters for seat 0"
+		cs.description = "incremented Turn.SpellsCast + legacy cast counters for seat 0"
 
 	case condScaffoldCreatureETBThisTurn:
 		placeNamedFriendlyCreature(gs, "ETB Witness")
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.CreaturesEntered++
+		}
 		if gs.Flags == nil {
 			gs.Flags = map[string]int{}
 		}
 		gs.Flags["creature_etb_this_turn"] = 1
-		cs.description = "placed ETB Witness creature and set creature_etb_this_turn flag"
+		cs.description = "set Turn.CreaturesEntered + legacy flag + placed ETB Witness"
 
 	case condScaffoldDrawnCardThisTurn:
 		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.CardsDrawn++
 			if gs.Seats[0].Flags == nil {
 				gs.Seats[0].Flags = map[string]int{}
 			}
 			gs.Seats[0].Flags["drawn_card_this_turn"] = 1
-			// Ensure there's a library to draw from in case the effect also draws.
 			if len(gs.Seats[0].Library) < 5 {
 				fillLibrary(gs, 0, 5)
 			}
 		}
-		cs.description = "set drawn_card_this_turn flag + filled library"
+		cs.description = "set Turn.CardsDrawn + legacy flag + filled library"
 
 	case condScaffoldAttackedThisTurn:
 		if gs.Flags == nil {
@@ -1214,12 +1287,13 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 		}
 		gs.Flags["attacked_this_turn"] = 1
 		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.Attacked = true
 			if gs.Seats[0].Flags == nil {
 				gs.Seats[0].Flags = map[string]int{}
 			}
 			gs.Seats[0].Flags["attacked_this_turn"] = 1
 		}
-		cs.description = "set attacked_this_turn flag on seat 0 and game"
+		cs.description = "set Turn.Attacked + legacy flag on seat 0 and game"
 
 	case condScaffoldSacrificedThisTurn:
 		if gs.Flags == nil {
@@ -1227,11 +1301,12 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 		}
 		gs.Flags["sacrificed_this_turn"] = 1
 		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.Sacrificed++
+			gs.Seats[0].Turn.PermanentsLeft++
 			if gs.Seats[0].Flags == nil {
 				gs.Seats[0].Flags = map[string]int{}
 			}
 			gs.Seats[0].Flags["sacrificed_this_turn"] = 1
-			// Place a creature card in graveyard to simulate the sacrifice.
 			gs.Seats[0].Graveyard = append(gs.Seats[0].Graveyard, &gameengine.Card{
 				Name:          "Sac Victim Setup",
 				Owner:         0,
@@ -1240,7 +1315,7 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 				BaseToughness: 1,
 			})
 		}
-		cs.description = "set sacrificed_this_turn flag + placed creature in graveyard"
+		cs.description = "set Turn.Sacrificed + legacy flag + placed creature in graveyard"
 
 	case condScaffoldCombatDamageDealt:
 		if gs.Flags == nil {
@@ -1261,6 +1336,7 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 		}
 		gs.Flags["landfall_this_turn"] = 1
 		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.LandsPlayed++
 			if gs.Seats[0].Flags == nil {
 				gs.Seats[0].Flags = map[string]int{}
 			}
@@ -1286,18 +1362,17 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 				gs.Seats[0].Flags = map[string]int{}
 			}
 			gs.Seats[0].Flags["discarded_this_turn"] = 1
-			// Place a card in graveyard to represent the discard.
+			gs.Seats[0].Turn.Discarded++
 			gs.Seats[0].Graveyard = append(gs.Seats[0].Graveyard, &gameengine.Card{
 				Name:  "Discarded Setup",
 				Owner: 0,
 				Types: []string{"instant"},
 			})
-			// Ensure hand has cards in case the effect also discards.
 			if len(gs.Seats[0].Hand) < 3 {
 				fillHand(gs, 0, 3-len(gs.Seats[0].Hand))
 			}
 		}
-		cs.description = "set discarded_this_turn flag + placed card in graveyard"
+		cs.description = "set Turn.Discarded + legacy flag + placed card in graveyard"
 
 	case condScaffoldEnchantedCreature:
 		// For aura conditions that reference "enchanted creature", we need
@@ -1405,11 +1480,91 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 		cs.description = "placed 4/4 creature on seat 0 (ferocious active)"
 
 	case condScaffoldFormidable:
-		// Two 4/4s are enough to clear the 8-power threshold in a single
-		// helper call without crowding the battlefield with more setup.
 		placePoweredCreature(gs, 0, "Formidable Setup A", 4, 4)
 		placePoweredCreature(gs, 0, "Formidable Setup B", 4, 4)
 		cs.description = "placed creatures totaling 8 power on seat 0 (formidable active)"
+
+	case condScaffoldPermanentLeftBF:
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["permanent_left_bf"] = 1
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.PermanentsLeft++
+			gs.Flags["permanent_left_bf_0"] = 1
+		}
+		gs.EventLog = append(gs.EventLog, gameengine.Event{
+			Kind:   "sacrifice",
+			Seat:   0,
+			Target: -1,
+			Source: "thor_priming",
+		})
+		cs.description = "set Turn.PermanentsLeft + permanent_left_bf flag (disappear/void)"
+
+	case condScaffoldSecondSpellThisTurn:
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.SpellsCast = 2
+			gs.Seats[0].SpellsCastThisTurn = 2
+			gs.Seats[0].Turn.Casts = append(gs.Seats[0].Turn.Casts,
+				gameengine.CastRecord{CardName: "Scaffold Spell 1", Types: []string{"instant"}, ManaValue: 1},
+				gameengine.CastRecord{CardName: "Scaffold Spell 2", Types: []string{"sorcery"}, ManaValue: 2},
+			)
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["spells_cast_this_turn"] = 2
+			gs.Seats[0].Flags["cast_spell_this_turn"] = 1
+		}
+		gs.SpellsCastThisTurn = 2
+		cs.description = "set Turn.SpellsCast=2 + 2 CastRecords (second spell scaffold)"
+
+	case condScaffoldDescendedThisTurn:
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.Descended = true
+			gs.Seats[0].DescendedThisTurn = true
+			gs.Seats[0].Graveyard = append(gs.Seats[0].Graveyard, &gameengine.Card{
+				Name:  "Descended Setup",
+				Owner: 0,
+				Types: []string{"creature"},
+			})
+		}
+		cs.description = "set Turn.Descended + legacy DescendedThisTurn + creature in GY"
+
+	case condScaffoldLifeLostThisTurn:
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.LifeLost += 3
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["life_lost_this_turn"] = 3
+			gs.Seats[0].Flags["lost_life_this_turn"] = 3
+		}
+		cs.description = "set Turn.LifeLost=3 + legacy flags (life lost this turn)"
+
+	case condScaffoldTokensCreatedCount:
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.TokensCreated = 3
+			gs.Seats[0].Turn.TreasuresCreated = 2
+		}
+		cs.description = "set Turn.TokensCreated=3, TreasuresCreated=2"
+
+	case condScaffoldCastFromExile:
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.CastFromExile++
+		}
+		cs.description = "incremented Turn.CastFromExile"
+
+	case condScaffoldExileLinkedReturn:
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil && srcPerm != nil {
+			exiledCard := &gameengine.Card{
+				Name:  "Exile-Linked Target",
+				Owner: 1,
+				Types: []string{"creature"},
+			}
+			srcPerm.LinkedExile = append(srcPerm.LinkedExile, exiledCard)
+			gs.Seats[1].Exile = append(gs.Seats[1].Exile, exiledCard)
+		}
+		cs.description = "attached exile-linked card to source permanent (O-Ring scaffold)"
 	}
 	return cs
 }
