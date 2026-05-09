@@ -453,9 +453,10 @@ func TestPrimeSpeakerZeganaEra1_CountersAndDrawsFromBiggestOther(t *testing.T) {
 	if zegana.Counters["+1/+1"] != 5 {
 		t.Errorf("expected 5 +1/+1 counters from 5-power buddy; got %d", zegana.Counters["+1/+1"])
 	}
-	// Power = 1 base + 5 counters = 6 cards drawn.
-	if len(gs.Seats[0].Hand) != 6 {
-		t.Errorf("expected 6 cards drawn (zegana power); hand=%d", len(gs.Seats[0].Hand))
+	// Oracle: "draw X cards" where X = greatest power among other
+	// creatures (5), not Zegana's post-counter power.
+	if len(gs.Seats[0].Hand) != 5 {
+		t.Errorf("expected 5 cards drawn (X=other power); hand=%d", len(gs.Seats[0].Hand))
 	}
 }
 
@@ -471,8 +472,8 @@ func TestPrimeSpeakerZeganaEra1_NoOtherCreaturesNoCounters(t *testing.T) {
 	if zegana.Counters["+1/+1"] != 0 {
 		t.Errorf("no other creatures → no counters; got %d", zegana.Counters["+1/+1"])
 	}
-	// Power = 1 → 1 card drawn.
-	if len(gs.Seats[0].Hand) != 1 {
-		t.Errorf("expected 1 card drawn (base power); hand=%d", len(gs.Seats[0].Hand))
+	// Oracle gates the draw on "if X is 1 or more"; X=0 → no draw.
+	if len(gs.Seats[0].Hand) != 0 {
+		t.Errorf("expected 0 cards drawn when X=0 (no other creatures); hand=%d", len(gs.Seats[0].Hand))
 	}
 }
