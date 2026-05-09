@@ -115,4 +115,7 @@ export const api = {
   spawnSpectateRoom: (deckId) => request('/api/spectate/spawn', { method: 'POST', body: JSON.stringify({ deck_id: deckId }) }),
   getSpectateRoom: (roomId) => request(`/api/spectate/rooms/${encodeURIComponent(roomId)}`),
   listSpectateRooms: () => request('/api/spectate/rooms'),
+  // BOINC distributed-compute credits — see internal/hexapi/contrib.go.
+  // Returns 0/null fields for owners who haven't contributed yet.
+  getContribCredits: (owner) => request(`/api/contrib/credits/${encodeURIComponent(owner)}`),
 }

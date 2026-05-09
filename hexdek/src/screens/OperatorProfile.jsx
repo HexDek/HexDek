@@ -121,6 +121,7 @@ export default function OperatorProfile() {
   const [games, setGames] = useState([])
   const [gamesLoading, setGamesLoading] = useState(true)
   const [friends, setFriends] = useState([])
+  const [contribCredits, setContribCredits] = useState(null)
 
   useEffect(() => {
     if (!owner) return
@@ -160,6 +161,16 @@ export default function OperatorProfile() {
     api.listFriends(owner)
       .then(r => setFriends(Array.isArray(r) ? r : (r?.friends || [])))
       .catch(() => setFriends([]))
+  }, [owner])
+
+  // BOINC contributor credits — silent fail when no row yet (the
+  // server returns zeros for any owner that hasn't run the
+  // hexdek-contrib client). Panel renders inline below decks.
+  useEffect(() => {
+    if (!owner) { setContribCredits(null); return }
+    api.getContribCredits(owner)
+      .then(setContribCredits)
+      .catch(() => setContribCredits(null))
   }, [owner])
 
   const ownerElo = useMemo(
@@ -416,6 +427,31 @@ export default function OperatorProfile() {
               </div>
             )}
           </Panel>
+
+          {/* BOINC contributor credits — only renders when the owner
+              has actually contributed (credits or chunks > 0). Silent
+              for everyone else so we don't clutter the profile with
+              a "you've contributed nothing" message. */}
+          {contribCredits && (contribCredits.credits_total > 0 || contribCredits.chunks_completed > 0) && (
+            <Panel
+              code="OP.5"
+              title="DISTRIBUTED COMPUTE"
+              right={contribCredits.frozen
+                ? <Tag solid kind="warn">FROZEN</Tag>
+                : <Tag solid kind="ok">{contribCredits.credits_total.toLocaleString()} CREDITS</Tag>}
+            >
+              <KV rows={[
+                ['CREDITS', contribCredits.credits_total.toLocaleString()],
+                ['CHUNKS COMPLETED', contribCredits.chunks_completed.toLocaleString()],
+                ['CHUNKS REJECTED', contribCredits.chunks_rejected.toLocaleString()],
+                ['GAMES SIMULATED', contribCredits.games_simulated.toLocaleString()],
+                ...(contribCredits.frozen ? [['FROZEN', contribCredits.frozen_reason || 'manual']] : []),
+              ]} />
+              <div className="t-xs muted" style={{ marginTop: 8, lineHeight: 1.5 }}>
+                &gt; CONTRIBUTING VIA <span style={{ color: 'var(--ink)' }}>HEXDEK-CONTRIB</span> — game simulations run on your machine, validated server-side.
+              </div>
+            </Panel>
+          )}
         </div>
 
         {/* Achievement showcase */}
