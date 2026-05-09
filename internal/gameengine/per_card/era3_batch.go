@@ -793,7 +793,9 @@ func willScionEra3Activate(gs *gameengine.GameState, src *gameengine.Permanent, 
 // ---------------------------------------------------------------------------
 
 func registerFelotharEra3(r *Registry) {
-	r.OnActivated("Felothar the Steadfast", felotharEra3Activate)
+	// OnActivated is owned by custom_felothar_steadfast.go (custom wins
+	// over era3 stub per QA cleanup). This handler keeps the static
+	// "ignore defender / damage as toughness" marker layer.
 	r.OnETB("Felothar the Steadfast", felotharEra3MarkDefenders)
 	r.OnTrigger("Felothar the Steadfast", "permanent_etb", felotharEra3MarkDefendersTrigger)
 }
@@ -826,52 +828,3 @@ func felotharEra3Apply(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	}
 }
 
-func felotharEra3Activate(gs *gameengine.GameState, src *gameengine.Permanent, abilityIdx int, ctx map[string]interface{}) {
-	const slug = "felothar_steadfast_sac_loot"
-	if gs == nil || src == nil || src.Card == nil {
-		return
-	}
-	seat := gs.Seats[src.Controller]
-	if seat == nil {
-		return
-	}
-	var victim *gameengine.Permanent
-	if v, ok := ctx["sac_perm"].(*gameengine.Permanent); ok {
-		victim = v
-	}
-	if victim == nil {
-		// Lowest toughness/power creature other than Felothar.
-		for _, p := range seat.Battlefield {
-			if p == nil || p == src || !p.IsCreature() {
-				continue
-			}
-			if victim == nil || p.Toughness() < victim.Toughness() {
-				victim = p
-			}
-		}
-	}
-	if victim == nil || victim.Card == nil {
-		emitFail(gs, slug, src.Card.DisplayName(), "no_creature_to_sacrifice", nil)
-		return
-	}
-	tough := victim.Toughness()
-	power := victim.Power()
-	removePermanent(gs, victim)
-	gameengine.MoveCard(gs, victim.Card, src.Controller, "battlefield", "graveyard", "felothar_sac")
-	for i := 0; i < tough; i++ {
-		drawOne(gs, src.Controller, src.Card.DisplayName())
-	}
-	discarded := 0
-	for i := 0; i < power && len(seat.Hand) > 0; i++ {
-		gameengine.DiscardCard(gs, seat.Hand[len(seat.Hand)-1], src.Controller)
-		discarded++
-	}
-	emit(gs, slug, src.Card.DisplayName(), map[string]interface{}{
-		"seat":      src.Controller,
-		"sacked":    victim.Card.DisplayName(),
-		"toughness": tough,
-		"power":     power,
-		"drawn":     tough,
-		"discarded": discarded,
-	})
-}

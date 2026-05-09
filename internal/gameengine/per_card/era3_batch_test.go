@@ -349,30 +349,11 @@ func TestWillScionEra3_StampsDiscountFromLifeGained(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Felothar the Steadfast
+// Felothar the Steadfast: activated handler is owned by
+// custom_felothar_steadfast.go (custom wins over era3 stub per QA cleanup).
+// The era3 batch retains only the static "ignore defender / damage as
+// toughness" markers, exercised by TestEra3Batch_AllRegistered below.
 // ---------------------------------------------------------------------------
-
-func TestFelotharEra3_ActivatedSacDrawsToughDiscardsPower(t *testing.T) {
-	gs := newGame(t, 2)
-	felo := addPerm(gs, 0, "Felothar the Steadfast", "creature")
-	victim := addPerm(gs, 0, "Wall of Omens", "creature")
-	victim.Card.BasePower = 0
-	victim.Card.BaseToughness = 4
-	addLibrary(gs, 0, "L1", "L2", "L3", "L4", "L5", "L6")
-
-	felotharEra3Activate(gs, felo, 0, map[string]interface{}{"sac_perm": victim})
-
-	// Toughness 4 → draw 4. Power 0 → discard 0.
-	if len(gs.Seats[0].Hand) != 4 {
-		t.Fatalf("expected 4 drawn (toughness); hand=%d", len(gs.Seats[0].Hand))
-	}
-	// Victim should be off battlefield.
-	for _, p := range gs.Seats[0].Battlefield {
-		if p == victim {
-			t.Fatalf("victim should have been sacrificed")
-		}
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Registry smoke check
