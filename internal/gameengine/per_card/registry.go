@@ -1650,6 +1650,13 @@ func registerDefaults() {
 	registerJadziOracleOfArcaviosCustom(Global())
 	registerSilverquillTheDisputantCustom(Global())
 	registerQuandrixTheProofCustom(Global())
+
+	// dev/etb-stub-handlers — fill ETB stubs that gen_*.go left as
+	// no-ops. Mabel and Rendmaw already have hand-edited era1 handlers
+	// in their gen_*.go (preserved); only Zegana's stub and Karumonix's
+	// stub were genuine no-ops.
+	registerPrimeSpeakerZeganaCustom(Global())
+	registerKarumonixTheRatKingCustom(Global())
 }
 
 func init() {
