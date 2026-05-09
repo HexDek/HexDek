@@ -168,6 +168,28 @@ type YggdrasilHat struct {
 	// tierCounts tracks per-game decision routing. Indexed by DecisionTier.
 	// Reset by ResetMjolnirStats() and exposed via MjolnirStats().
 	tierCounts [numDecisionTiers]int
+
+	// -- Zone-cast grant tracking (flashback / escape / impulse / etc.) --
+
+	// myZoneCastGrants counts how many active zone-cast permissions the
+	// engine has registered for *our* seat, keyed by keyword
+	// ("flashback", "escape", "free_exile_cast", ...). Decremented when
+	// the engine emits zone_cast_grant_expired. The authoritative source
+	// remains gs.ZoneCastGrants — this is a fast inbound-event signal.
+	myZoneCastGrants map[string]int
+
+	// -- Linked-exile awareness (CR §406.7 — O-Ring style effects) --
+
+	// linkedExilesByMe is the count of cards we have currently exiled with
+	// a permanent we control. Higher = more value tied up in fragile
+	// permanents that need protection.
+	linkedExilesByMe int
+
+	// linkedExilesByOpponent[seat] is the count of cards each opponent has
+	// currently exiled via linked permanents. High values flag good
+	// targets for our removal: killing the source returns the exiled
+	// cards (often our own creatures or a key threat).
+	linkedExilesByOpponent []int
 }
 
 const (
@@ -4284,6 +4306,8 @@ func (h *YggdrasilHat) ObserveEvent(gs *gameengine.GameState, seatIdx int, event
 		h.opponentHeldMana = make([]int, h.seatCount)
 		h.opponentTutored = make([]bool, h.seatCount)
 		h.opponentKnownCards = make([]map[string]bool, h.seatCount)
+		h.linkedExilesByOpponent = make([]int, h.seatCount)
+		h.myZoneCastGrants = make(map[string]int)
 		for i := 0; i < h.seatCount; i++ {
 			h.cardsSeen[i] = make(map[string]int)
 			h.politicalGraph[i] = make([]int, h.seatCount)
@@ -4324,6 +4348,17 @@ func (h *YggdrasilHat) ObserveEvent(gs *gameengine.GameState, seatIdx int, event
 			}
 			if i < len(h.opponentKnownCards) {
 				h.opponentKnownCards[i] = make(map[string]bool)
+			}
+			if i < len(h.linkedExilesByOpponent) {
+				h.linkedExilesByOpponent[i] = 0
+			}
+		}
+		h.linkedExilesByMe = 0
+		if h.myZoneCastGrants == nil {
+			h.myZoneCastGrants = make(map[string]int)
+		} else {
+			for k := range h.myZoneCastGrants {
+				delete(h.myZoneCastGrants, k)
 			}
 		}
 		return
@@ -4438,6 +4473,94 @@ func (h *YggdrasilHat) ObserveEvent(gs *gameengine.GameState, seatIdx int, event
 		}
 		if event.Seat < len(h.opponentHeldMana) {
 			h.opponentHeldMana[event.Seat] = 0
+		}
+	}
+
+	// -- Zone-cast grant lifecycle --
+	//
+	// The engine emits zone_cast_grant_registered when a card gains a
+	// permission to be cast from a non-hand zone (flashback, escape,
+	// impulse-draw exile-cast, Misthollow Griffin, Bolas's Citadel).
+	// We track our own grants by keyword for fast counts; the
+	// authoritative store is gs.ZoneCastGrants and is read directly by
+	// AvailableZoneCastGrants() during decision-making.
+	switch event.Kind {
+	case "zone_cast_grant_registered":
+		if event.Seat == seatIdx {
+			keyword := ""
+			if event.Details != nil {
+				if k, ok := event.Details["keyword"].(string); ok {
+					keyword = k
+				}
+			}
+			if h.myZoneCastGrants == nil {
+				h.myZoneCastGrants = make(map[string]int)
+			}
+			h.myZoneCastGrants[keyword]++
+		}
+	case "zone_cast_grant_expired":
+		if event.Seat == seatIdx && h.myZoneCastGrants != nil {
+			keyword := ""
+			if event.Details != nil {
+				if k, ok := event.Details["keyword"].(string); ok {
+					keyword = k
+				}
+			}
+			if h.myZoneCastGrants[keyword] > 0 {
+				h.myZoneCastGrants[keyword]--
+				if h.myZoneCastGrants[keyword] == 0 {
+					delete(h.myZoneCastGrants, keyword)
+				}
+			}
+		}
+	case "exile_linked_created":
+		// Track who exiled cards via a linked permanent. For us: this
+		// represents value tied up in a fragile permanent we should
+		// protect. For opponents: high counts flag good removal targets
+		// since killing the source returns the exiled card.
+		if event.Seat == seatIdx {
+			h.linkedExilesByMe++
+		} else if event.Seat >= 0 && event.Seat < len(h.linkedExilesByOpponent) {
+			h.linkedExilesByOpponent[event.Seat]++
+		}
+	case "exile_linked_returned":
+		// Source permanent left the battlefield and returned its linked
+		// cards. event.Seat is unset on this event; instead use Source
+		// to identify whose perm returned. Best-effort: subtract Amount
+		// from whichever bucket has any outstanding count for that
+		// permanent. We don't track per-source granularly, so amortise
+		// across all seats by clearing proportionally.
+		amount := event.Amount
+		if amount <= 0 {
+			amount = 1
+		}
+		// Find the most-likely source seat: the one with the largest
+		// outstanding count. Falls back gracefully if everything is 0.
+		bestSeat := -1
+		bestCount := 0
+		if h.linkedExilesByMe > bestCount {
+			bestSeat = seatIdx
+			bestCount = h.linkedExilesByMe
+		}
+		for i, n := range h.linkedExilesByOpponent {
+			if i == seatIdx {
+				continue
+			}
+			if n > bestCount {
+				bestSeat = i
+				bestCount = n
+			}
+		}
+		if bestSeat == seatIdx {
+			h.linkedExilesByMe -= amount
+			if h.linkedExilesByMe < 0 {
+				h.linkedExilesByMe = 0
+			}
+		} else if bestSeat >= 0 && bestSeat < len(h.linkedExilesByOpponent) {
+			h.linkedExilesByOpponent[bestSeat] -= amount
+			if h.linkedExilesByOpponent[bestSeat] < 0 {
+				h.linkedExilesByOpponent[bestSeat] = 0
+			}
 		}
 	}
 
@@ -4569,6 +4692,60 @@ func (h *YggdrasilHat) knownCardsInHand(oppSeat int) map[string]bool {
 		return nil
 	}
 	return h.opponentKnownCards[oppSeat]
+}
+
+// ZoneCastGrantSummary describes a single zone-cast permission the hat
+// can use right now. Returned by AvailableZoneCastGrants for use in
+// hand evaluation, mulligan decisions, and tutor selection.
+type ZoneCastGrantSummary struct {
+	Card     *gameengine.Card // the card the permission attaches to
+	CardName string           // pre-resolved name for hashing/logging
+	Zone     string           // "graveyard", "exile", "library"
+	Keyword  string           // "flashback", "escape", "free_exile_cast", ...
+	ManaCost int              // -1 means use the card's normal cost
+	Source   string           // permanent that granted the permission
+	Duration string           // "until_end_of_turn" / "" / etc.
+	Expiring bool             // grant is "until_end_of_turn" and turn is current
+}
+
+// AvailableZoneCastGrants reads gs.ZoneCastGrants and returns every
+// active permission whose RequireController matches seatIdx (or is -1).
+// The hat consults this when deciding whether casting a card from a
+// non-hand zone is currently legal, how much it costs, and whether the
+// permission will expire at end of turn (so it should be used now).
+func (h *YggdrasilHat) AvailableZoneCastGrants(gs *gameengine.GameState, seatIdx int) []ZoneCastGrantSummary {
+	if gs == nil || gs.ZoneCastGrants == nil || len(gs.ZoneCastGrants) == 0 {
+		return nil
+	}
+	out := make([]ZoneCastGrantSummary, 0, len(gs.ZoneCastGrants))
+	for card, perm := range gs.ZoneCastGrants {
+		if card == nil || perm == nil {
+			continue
+		}
+		if perm.RequireController >= 0 && perm.RequireController != seatIdx {
+			continue
+		}
+		out = append(out, ZoneCastGrantSummary{
+			Card:     card,
+			CardName: card.DisplayName(),
+			Zone:     perm.Zone,
+			Keyword:  perm.Keyword,
+			ManaCost: perm.ManaCost,
+			Source:   perm.SourceName,
+			Duration: perm.Duration,
+			Expiring: perm.Duration == "until_end_of_turn" && perm.GrantTurn == gs.Turn,
+		})
+	}
+	return out
+}
+
+// linkedExilesAgainstUs returns the count of cards each opponent has
+// currently exiled with a linked permanent (CR §406.7). High values
+// flag good removal targets — destroying that permanent returns the
+// exiled card. Returns nil if not yet initialized.
+func (h *YggdrasilHat) linkedExilesAgainstUs(seatIdx int) []int {
+	_ = seatIdx
+	return h.linkedExilesByOpponent
 }
 
 // opponentHasInteraction estimates whether an opponent seat is likely

@@ -155,8 +155,84 @@ func (e *GameStateEvaluator) EvaluateDetailed(gs *gameengine.GameState, seatIdx 
 		}
 	}
 
+	// Per-turn tempo bonus: read TurnCounters so storm/lifegain/go-wide
+	// archetypes get rewarded for chaining cheap spells, stacking life
+	// gains, or flooding the board within a single turn.
+	raw += e.scoreTurnTempo(gs, seatIdx)
+
 	r.Score = math.Tanh(raw / 5.0)
 	return r
+}
+
+// scoreTurnTempo reads the engine's per-seat TurnCounters
+// (Seat.Turn.SpellsCast / LifeGained / CreaturesEntered) and returns an
+// archetype-aware bonus. Storm/Combo decks get bonus per spell chained,
+// Lifegain decks get bonus per life-gain trigger this turn, Aggro and
+// "go-wide" tokens decks get bonus per creature that entered this turn.
+//
+// All bonuses are small and additive into the pre-tanh raw score so they
+// nudge the evaluator without overriding the dimension-weighted base.
+func (e *GameStateEvaluator) scoreTurnTempo(gs *gameengine.GameState, seatIdx int) float64 {
+	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
+		return 0
+	}
+	seat := gs.Seats[seatIdx]
+	if seat == nil {
+		return 0
+	}
+	tc := seat.Turn
+
+	// Default per-counter weights — tuned to match the archetype-agnostic
+	// "good thing happened this turn" intuition without dominating.
+	spellW := 0.05    // ~1/20th of a dimension per spell cast this turn
+	lifeW := 0.01     // 0.01 per life gained
+	creatureW := 0.05 // 0.05 per creature entered
+
+	// Archetype amplifier: when we know what the deck wants to do, push
+	// the matching counter harder so the hat sees positional momentum.
+	if e.Strategy != nil {
+		switch strings.ToLower(e.Strategy.Archetype) {
+		case "combo", "storm":
+			spellW = 0.12
+		case "aggro":
+			creatureW = 0.10
+		case "tokens", "go-wide", "gowide":
+			creatureW = 0.15
+		case "lifegain":
+			lifeW = 0.04
+		}
+
+		// CommanderThemes give a softer secondary signal — a deck that
+		// isn't archetype:Combo but reads as "spellslinger" still benefits
+		// from chaining spells.
+		for _, theme := range e.Strategy.CommanderThemes {
+			switch strings.ToLower(theme) {
+			case "spellslinger", "storm":
+				if spellW < 0.10 {
+					spellW = 0.10
+				}
+			case "tokens", "go-wide":
+				if creatureW < 0.10 {
+					creatureW = 0.10
+				}
+			case "lifegain":
+				if lifeW < 0.03 {
+					lifeW = 0.03
+				}
+			}
+		}
+	}
+
+	bonus := float64(tc.SpellsCast)*spellW +
+		float64(tc.LifeGained)*lifeW +
+		float64(tc.CreaturesEntered)*creatureW
+
+	// Cap the per-turn bonus so a runaway storm count can't dominate
+	// the entire eval (~one full dimension's weight worth).
+	if bonus > 1.5 {
+		bonus = 1.5
+	}
+	return bonus
 }
 
 // -----------------------------------------------------------------------
