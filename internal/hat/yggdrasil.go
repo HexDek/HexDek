@@ -190,6 +190,13 @@ type YggdrasilHat struct {
 	// targets for our removal: killing the source returns the exiled
 	// cards (often our own creatures or a key threat).
 	linkedExilesByOpponent []int
+
+	// opponentProfiles[seat] is the rolling, per-opponent classification
+	// (aggro / combo / control / midrange / unknown) plus per-event
+	// tallies. Updated by recordOpponentPlay during ObserveEvent and
+	// read by classifyOpponent from decision functions. See
+	// opponent_profile.go for shape and rules.
+	opponentProfiles []*OpponentProfile
 }
 
 const (
@@ -1294,6 +1301,23 @@ func (h *YggdrasilHat) bestTarget(gs *gameengine.GameState, seatIdx int, attacke
 		// override kill-shots or kingmaker priority).
 		if threat.InteractionProb > 0.4 && !focusFire {
 			score -= threat.InteractionProb * 0.5
+		}
+
+		// 12b. Opponent-archetype targeting bias — small bumps tied to
+		// the rolling OpponentProfile classifier. Combo seats get
+		// pressured (disrupt their setup); control seats get a small
+		// avoidance penalty (they have removal aimed at attackers).
+		// Aggro seats default to neutral here because the existing
+		// momentum / kingmaker scoring already covers them. Bias is
+		// proportional to confidence so an early-game guess doesn't
+		// override the politics math.
+		if prof := h.classifyOpponent(gs, def); prof != nil && prof.Confidence > 0.4 {
+			switch prof.Archetype {
+			case "combo":
+				score += prof.Confidence * 1.5
+			case "control":
+				score -= prof.Confidence * 0.6
+			}
 		}
 
 		// 13. Meta matchup: prioritize opponents we're unfavored against —
@@ -3538,6 +3562,37 @@ func (h *YggdrasilHat) ChooseAttackers(gs *gameengine.GameState, seatIdx int, le
 		stance = "BEHIND→selective"
 	}
 
+	// Opponent-archetype clock bias: race confident aggro pods (lower
+	// the swing threshold so we keep pace) and stay cautious into
+	// confident control pods (raise it so we don't dump value into
+	// removal). Effect is bounded: 0.05 per point of confidence above
+	// 0.5, applied once per archetype found anywhere at the table.
+	racingAggro := false
+	dodgingControl := false
+	for i := range gs.Seats {
+		if i == seatIdx {
+			continue
+		}
+		prof := h.classifyOpponent(gs, i)
+		if prof == nil || prof.Confidence < 0.55 {
+			continue
+		}
+		switch prof.Archetype {
+		case "aggro":
+			racingAggro = true
+		case "control":
+			dodgingControl = true
+		}
+	}
+	if racingAggro {
+		threshold -= 0.05
+		stance += "/race-aggro"
+	}
+	if dodgingControl {
+		threshold += 0.05
+		stance += "/dodge-control"
+	}
+
 	// Game clock awareness: archetype-shaped urgency. Aggro gets desperate
 	// early, control stays patient, combo panics without assembly.
 	urgencyStart := 20
@@ -4487,6 +4542,14 @@ func (h *YggdrasilHat) ChooseResponse(gs *gameengine.GameState, seatIdx int, top
 				mustCounter = true
 			}
 		}
+		// Opponent-archetype bias: a confident-combo caster's
+		// non-trivial spell is far more likely to be a key piece than
+		// random midrange chaff. Lower minScore for them so we burn
+		// counters earlier rather than save for a later wrath.
+		if prof := h.classifyOpponent(gs, top.Controller); prof != nil &&
+			prof.Archetype == "combo" && prof.Confidence > 0.55 && score >= 1 {
+			mustCounter = true
+		}
 		// 3rd Eye: Counter cards we've seen wreck the board before.
 		cardName := top.Card.DisplayName()
 		if top.Controller >= 0 && top.Controller < len(h.cardsSeen) {
@@ -4695,6 +4758,33 @@ func (h *YggdrasilHat) ChooseTarget(gs *gameengine.GameState, seatIdx int, filte
 				}
 				if h.valueEngineSet[cardName] {
 					sc += 1.5
+				}
+				// Opponent-archetype targeting bias.
+				// Confident-combo opponent: every permanent they
+				// control is suspect — bump combo pieces extra and
+				// add a flat bias for any artifact/enchantment that
+				// might be a combo enabler.
+				// Confident-aggro opponent: prefer lord/anthem
+				// removal (anything granting +1/+1 or "creatures you
+				// control") over picking off lone creatures, since
+				// the lord lifts their entire board.
+				if prof := h.classifyOpponent(gs, p.Controller); prof != nil && prof.Confidence > 0.5 {
+					switch prof.Archetype {
+					case "combo":
+						if h.comboPieceSet[cardName] {
+							sc += 1.5 * prof.Confidence
+						}
+						if typeLineContains(p.Card, "artifact") || typeLineContains(p.Card, "enchantment") {
+							sc += 0.6 * prof.Confidence
+						}
+					case "aggro":
+						lowOT := gameengine.OracleTextLower(p.Card)
+						if strings.Contains(lowOT, "creatures you control") ||
+							strings.Contains(lowOT, "other creatures get +") ||
+							strings.Contains(lowOT, "+1/+1") {
+							sc += 1.5 * prof.Confidence
+						}
+					}
 				}
 			}
 			threats := h.assessAllThreats(gs, seatIdx)
@@ -5673,12 +5763,14 @@ func (h *YggdrasilHat) ObserveEvent(gs *gameengine.GameState, seatIdx int, event
 		h.opponentKnownCards = make([]map[string]bool, h.seatCount)
 		h.linkedExilesByOpponent = make([]int, h.seatCount)
 		h.myZoneCastGrants = make(map[string]int)
+		h.opponentProfiles = make([]*OpponentProfile, h.seatCount)
 		for i := 0; i < h.seatCount; i++ {
 			h.cardsSeen[i] = make(map[string]int)
 			h.politicalGraph[i] = make([]int, h.seatCount)
 			h.opponentColors[i] = make(map[string]bool)
 			h.opponentHandEntropy[i] = 1.0 // start fully unknown
 			h.opponentKnownCards[i] = make(map[string]bool)
+			h.opponentProfiles[i] = &OpponentProfile{Archetype: "unknown"}
 		}
 	}
 
@@ -5716,6 +5808,9 @@ func (h *YggdrasilHat) ObserveEvent(gs *gameengine.GameState, seatIdx int, event
 			}
 			if i < len(h.linkedExilesByOpponent) {
 				h.linkedExilesByOpponent[i] = 0
+			}
+			if i < len(h.opponentProfiles) {
+				h.opponentProfiles[i] = &OpponentProfile{Archetype: "unknown"}
 			}
 		}
 		h.linkedExilesByMe = 0
@@ -5768,6 +5863,22 @@ func (h *YggdrasilHat) ObserveEvent(gs *gameengine.GameState, seatIdx int, event
 		// Infer color identity from cast events.
 		if event.Seat != seatIdx && event.Source != "" {
 			h.inferColorsFromCard(gs, event.Seat, event.Source)
+			// Update the rolling per-opponent profile (creature
+			// counts, removal/counter/tutor classification, combo
+			// piece detection).
+			card := findCardByName(gs, event.Seat, event.Source)
+			h.recordOpponentPlay("cast", event.Source, event.Seat, card)
+		}
+	}
+
+	// Track land plays + ETBs for opponent profiles.
+	if event.Seat >= 0 && event.Seat < h.seatCount && event.Seat != seatIdx {
+		switch event.Kind {
+		case "play_land":
+			h.recordOpponentPlay("play_land", event.Source, event.Seat, nil)
+		case "permanent_etb", "creature_etb":
+			card := findCardByName(gs, event.Seat, event.Source)
+			h.recordOpponentPlay(event.Kind, event.Source, event.Seat, card)
 		}
 	}
 
@@ -5789,6 +5900,7 @@ func (h *YggdrasilHat) ObserveEvent(gs *gameengine.GameState, seatIdx int, event
 		if event.Seat < len(h.opponentTutored) {
 			h.opponentTutored[event.Seat] = true
 		}
+		h.recordOpponentPlay(event.Kind, event.Source, event.Seat, nil)
 		// Reduce entropy: they now hold a known-purpose card.
 		if event.Seat < len(h.opponentHandEntropy) {
 			h.opponentHandEntropy[event.Seat] *= 0.6
