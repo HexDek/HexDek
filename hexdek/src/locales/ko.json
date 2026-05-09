@@ -1,1 +1,73 @@
-{}
+{
+  "app": {
+    "brand": "HEXDEK//",
+    "build_label": "SYS.BUILD 25.04.28 · HEXDEK V0.10D",
+    "core_ready": "+ + +  HEXDEK 코어 준비 완료  + + +",
+    "tagline": "오픈소스 / / 후원으로 운영 / / 광고 없음",
+    "guest": "게스트"
+  },
+  "nav": {
+    "decks": "덱",
+    "leaderboard": "순위",
+    "meta": "메타",
+    "spectate": "관전",
+    "my_decks": "내 덱",
+    "operator": "오퍼레이터",
+    "friends": "친구",
+    "about": "정보",
+    "feedback": "버그 / 제안",
+    "donate": "후원 ♥",
+    "discord": "Discord",
+    "login": "로그인 ↗",
+    "logout": "로그아웃"
+  },
+  "theme": {
+    "dark": "☽ 다크",
+    "light": "☀ 라이트"
+  },
+  "common": {
+    "save": "저장",
+    "cancel": "취소",
+    "delete": "삭제",
+    "confirm": "확인",
+    "edit": "편집",
+    "export": "내보내기",
+    "share": "공유",
+    "copied": "복사 완료!",
+    "loading": "불러오는 중",
+    "saving": "저장 중...",
+    "analyzing": "분석 중..."
+  },
+  "deck": {
+    "owner": "소유자",
+    "cards": "카드",
+    "bracket": "등급",
+    "archetype": "아키타입",
+    "win_rate": "승률",
+    "games": "게임",
+    "record": "전적",
+    "no_analysis": "프레이아 분석 없음"
+  },
+  "achievements": {
+    "title": "업적",
+    "stats": {
+      "games": "게임",
+      "wins": "승리",
+      "streak": "연승",
+      "opponents": "상대"
+    },
+    "rarity": {
+      "common": "커먼",
+      "uncommon": "언커먼",
+      "rare": "레어",
+      "mythic": "미식 레어",
+      "secret": "시크릿"
+    },
+    "secret_hidden": "숨겨진 업적입니다.",
+    "secret_tooltip": "숨겨진 업적 — 계속 플레이하세요."
+  },
+  "status": {
+    "no_game": "진행 중인 게임 없음",
+    "in_progress": "진행 중"
+  }
+}

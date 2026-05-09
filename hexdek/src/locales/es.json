@@ -9,8 +9,11 @@
   "nav": {
     "decks": "MAZOS",
     "leaderboard": "CLASIFICACIÓN",
+    "meta": "META",
     "spectate": "OBSERVAR",
     "my_decks": "MIS MAZOS",
+    "operator": "OPERADOR",
+    "friends": "AMIGOS",
     "about": "ACERCA DE",
     "feedback": "ERROR / SUGERENCIA",
     "donate": "DONAR ♥",
