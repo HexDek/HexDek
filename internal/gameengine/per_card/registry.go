@@ -1621,16 +1621,33 @@ func registerDefaults() {
 	registerWillScionEra3(Global())
 	registerFelotharEra3(Global())
 
+	// Era 5 unification — replace gen_*.go static stubs with real
+	// implementations for IKO/ZNR/KHM/CMR/C13-C18/pre-Modern commanders.
+	// (Aesi already wired by Era 1's modified gen_*.go; Kardur already
+	// wired by Era 2's zz_era2_register.go init().)
+	registerMarchesaTheBlackRoseCustom(Global())
+	registerKaradorGhostChieftainCustom(Global())
+	registerDereviEmpyrialTacticianCustom(Global())
+	registerYasharnImplacableEarthCustom(Global())
+	registerCharixTheRagingIsleCustom(Global())
+	registerKalamaxTheStormsireCustom(Global())
+	registerChainerDementiaMasterCustom(Global())
+	registerRuricTharTheUnbowedCustom(Global())
+	registerSeleniaDarkAngelCustom(Global())
+	registerYurlokOfScorchThrashCustom(Global())
+	registerSakashimaOfAThousandFacesCustom(Global())
+	registerAraumiOfTheDeadTideCustom(Global())
+	registerMairsilThePretenderCustom(Global())
+
 	// Era 4 unification — STX, MH2, AFR, MID, VOW, C19-C21 commanders.
-	// Tiamat, Veyran, and Acererak are covered by handler-coverage-2 /
-	// Era 3 batches (zz_handler_coverage_2_register.go,
-	// era3_batch.go) so they are intentionally not re-registered here.
+	// Tiamat, Veyran, Acererak, and Kalamax are owned by other batches
+	// (handler-coverage-2 / Era 3 / Era 5) so are intentionally not
+	// re-registered here.
 	registerGalazethPrismariCustom(Global())
 	registerLierDiscipleOfTheDrownedCustom(Global())
 	registerToxrillTheCorrosiveCustom(Global())
 	registerAsmoranomardicadaistinaculdacarCustom(Global())
 	registerJadziOracleOfArcaviosCustom(Global())
-	registerKalamaxTheStormsireCustom(Global())
 	registerSilverquillTheDisputantCustom(Global())
 	registerQuandrixTheProofCustom(Global())
 }

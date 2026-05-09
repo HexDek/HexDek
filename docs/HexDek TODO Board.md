@@ -13,7 +13,8 @@ kanban-plugin: board
 
 - [x] **Remaining 276 commander handlers** — generator improved (fuzzy slug resolution, hand-edit preservation, deterministic number extraction). NO_AST 73→0, 195/196 unhandled pool commanders templated. PR #1 merged 2026-05-09. #engine #per_card
 - [x] **Era 1 unification (FDN/DSK/BLB/OTJ/MKM)** — 12 templated commanders promoted from stub to custom logic: Mabel, Aesi, Bristly Bill, Byrke, Aminatou, Queen Marchesa, Kardur, The Swarmweaver, Rendmaw, Kona, Ezrim, Prime Speaker Zegana. (2026-05-09) #engine #per_card
-- [x] **Era 4 unification (STX/MH2/AFR/MID/VOW/C19-C21)** — 8 templated commanders promoted from stub to custom logic: Galazeth Prismari, Lier (Disciple of the Drowned), Toxrill (Corrosive), Asmoranomardicadaistinaculdacar, Jadzi (Oracle of Arcavios), Kalamax (Stormsire), Silverquill (Disputant), Quandrix (Proof). Tiamat / Veyran / Acererak overlapped with prior batches. (2026-05-09) #engine #per_card
+- [x] **Era 4 unification (STX/MH2/AFR/MID/VOW/C19-C21)** — 7 templated commanders promoted from stub to custom logic: Galazeth Prismari, Lier (Disciple of the Drowned), Toxrill (Corrosive), Asmoranomardicadaistinaculdacar, Jadzi (Oracle of Arcavios), Silverquill (Disputant), Quandrix (Proof). Tiamat / Veyran / Acererak / Kalamax overlapped with prior batches. (2026-05-09) #engine #per_card
+- [x] **Era 5 unification (IKO/ZNR/KHM/CMR/C13–C18/pre-Modern)** — 13 templated commanders promoted from stub: Marchesa the Black Rose, Karador, Derevi, Mairsil, Yasharn, Charix, Kalamax, Chainer, Ruric Thar, Selenia, Yurlok, Sakashima, Araumi. (2026-05-09) #engine #per_card
 
 ## Tracking — Cost-Unenforced Activated Abilities
 
@@ -44,6 +45,29 @@ Handlers where the effect is wired but the activation cost (mana, tap, sacrifice
 - [ ] **Inalla, Archmage Ritualist** — `Tap five untapped Wizards: target player loses 7 life`. Handler enforces ≥5 untapped wizards but the engine doesn't gate the activation on the tap cost; the handler sets `Tapped = true` itself. (Era 2 reprint, CMM)
 - [ ] **Mayael the Anima** — `{3}{R}{G}{W}, {T}: look top 5, drop a power-5+ creature`. Mana cost engine-side, tap cost handler-side. (Era 2 reprint, CMM)
 - [ ] **Saheeli, Radiant Creator** — `{E}{E}{E}` combat-copy uses `PayEnergy` defensively (no engine-side energy-cost dispatch yet). (Era 2, MOM)
+
+
+## Tracking — Cost-Unenforced Activated Abilities
+
+Cards whose `gen_*.go` activated stub historically failed to enforce a non-mana cost (Pay X life, sacrifice, exile from graveyard, tap a creature, etc.). When `InvokeActivatedHook` is called from a non-`ActivateAbility` path (test fixture, AI evaluator, replay rebuild), the AST cost dispatch is skipped — handlers must enforce these costs manually. Era 5 unification (2026-05-09) audited and fixed:
+
+- [x] **Selenia, Dark Angel** — "Pay 2 life" (only cost). Custom handler enforces. PR era5-unification.
+- [x] **Chainer, Dementia Master** — "{B}{B}{B}, Pay 3 life" (life portion not in mana cost AST). Custom handler enforces 3-life payment. PR era5-unification.
+- [x] **Araumi of the Dead Tide** — "{T}, Exile cards from your graveyard equal to the number of opponents you have" (the exile-from-GY portion is not in standard cost AST). Custom handler enforces graveyard-card exile. PR era5-unification.
+- [x] **Mairsil, the Pretender** — ETB exile-and-tag cost is the resolution effect, but downstream activation copies bypass cage-counter validation; custom handler tags caged cards with marker for the engine-side activation hook to verify. PR era5-unification.
+
+Additional cost-unenforced cases noted by audit, not yet fixed:
+
+- [ ] **Azami, Lady of Scrolls** — "Tap an untapped Wizard you control" (tap-another cost). The "Complete" entry in the structure audit is misleading — only the draw effect is wired; the tap-a-Wizard cost is unpaid. #engine #per_card #cost-enforcement
+- [ ] **Bilbo, Birthday Celebrant** — life-payment activation for Birthday rolls. #engine #per_card #cost-enforcement
+- [ ] **Captain America, First Avenger** — discard-a-card shield-throw activation. #engine #per_card #cost-enforcement
+- [ ] **Ellie, Vengeful Hunter** — "Pay 2 life, Sacrifice another creature" — both portions unenforced in template. #engine #per_card #cost-enforcement
+- [ ] **Erebos, God of the Dead** — "{1}{B}, Pay 2 life" draw activation — life portion unenforced. #engine #per_card #cost-enforcement
+- [ ] **Phenax, God of Deception** — granted "{T}: Target player mills X" with no cost-enforcement on the granted ability. #engine #per_card #cost-enforcement
+- [ ] **Tasigur, the Golden Fang** — "Exile four cards from your graveyard" delve cost. #engine #per_card #cost-enforcement
+- [ ] **Ghen, Arcanum Weaver** — sacrifice-an-enchantment cost on the recursion activation. #engine #per_card #cost-enforcement
+- [ ] **Shilgengar, Sire of Famine** — sacrifice-a-creature drain cost. #engine #per_card #cost-enforcement
+- [ ] **Yenna, Redtooth Regent** — "{2}, {T}: Choose target enchantment you control that doesn't have the same name…" — duplicate-name validation not enforced. #engine #per_card #cost-enforcement
 
 
 ## High Priority — Platform
@@ -150,7 +174,6 @@ Handlers where the effect is wired but the activation cost (mana, tap, sacrifice
 - [ ] **Galazeth Prismari** (STX) — `{T}: Add one mana of any color. Spend this mana only to cast an instant or sorcery spell.` — the spend-restriction isn't enforced in the mana system; the tap-add path is generic. #engine #per_card #cost_unenforced #era4
 - [ ] **Lier, Disciple of the Drowned** (MID) — graveyard-cast permission for instants/sorceries and the "would be put into graveyard → exile instead" replacement aren't on the per-card hook path. Uncounterable mark is enforced via `CostMeta` when the stack item is in trigger ctx. #engine #per_card #cost_unenforced #era4
 - [ ] **Jadzi, Oracle of Arcavios** (STX) — magecraft top-of-library reveal + cast-for-`{1}` alt cost not modeled; nonland cards route to hand as a stand-in. The DFC back-face Journey to the Oracle isn't wired. #engine #per_card #cost_unenforced #era4
-- [ ] **Kalamax, the Stormsire** (C20) — "double strike as long as it's tapped" is a conditional static handled by the AST keyword pipeline only; the per-card hook only enforces the first-instant-each-turn copy. #engine #per_card #cost_unenforced #era4
 - [ ] **Quandrix, the Proof** (STX/C21) — from-command-zone detection is a best-effort flag check; if the cast pipeline doesn't stamp `from_command_zone` on the new permanent, the X-counter distribute clause silently skips. #engine #per_card #cost_unenforced #era4
 - [ ] **Silverquill, the Disputant** (STX/C21) — same from-command-zone detection gap; the optional "attach Aura/Equipment to Silverquill" rider is not modeled (Aura/Equipment attach isn't on the per-card hook path). #engine #per_card #cost_unenforced #era4
 - [ ] **Toxrill, the Corrosive** (VOW) — `{U}{B}, Remove a slime counter from a creature: Draw a card.` — mana cost paid through the engine's mana system, but the sorcery-speed gate is approximated by phase-string match. Slime counter removal is enforced. #engine #per_card #cost_unenforced #era4

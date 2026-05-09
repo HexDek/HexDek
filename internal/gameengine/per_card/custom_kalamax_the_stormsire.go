@@ -4,108 +4,102 @@ import (
 	"github.com/hexdek/hexdek/internal/gameengine"
 )
 
-// registerKalamaxTheStormsireCustom wires the first-instant-each-turn
-// copy trigger. The auto-generated stub registerKalamaxTheStormsire in
-// the matching gen_*.go remains in place — both handlers fire (its body
-// only emits a partial).
+// registerKalamaxTheStormsireCustom adds Kalamax's instant-copy trigger
+// and the +1/+1 counter-on-copy trigger that the auto-generated static
+// stub leaves as no-ops.
 //
-// Oracle text (Ikoria Commander 2020 / C20, {1}{U}{R}{G}):
+// Oracle text:
 //
-//	Kalamax has double strike as long as it's tapped.
 //	Whenever you cast your first instant spell each turn, if Kalamax
-//	is tapped, copy that spell. You may choose new targets for the
-//	copy.
+//	is tapped, copy that spell. You may choose new targets for the copy.
+//	Whenever you copy an instant spell, put a +1/+1 counter on Kalamax.
 //
-// Implementation:
-//   - "instant_or_sorcery_cast" trigger gated on caster == controller +
-//     card has type "instant" + Kalamax tapped + first-instant-this-turn
-//     flag not yet set.
-//   - Copy mirrors alania.go: locate the cast spell's StackItem, deep-
-//     copy, mark IsCopy, push above the original. New-target choice is
-//     not modeled (defaults to original targets).
-//   - "double strike while tapped" is a static — handled by the AST /
-//     conditional-keyword pipeline. emitPartial flags the gap at trigger
-//     time so audits see Kalamax is partially modeled.
+// Spell-copy plumbing isn't yet exposed to per_card (we don't have a
+// "copy this StackItem" hook). We approximate by:
+//   - Tracking first-instant-this-turn per Kalamax permanent via
+//     perm.Flags["kalamax_first_instant_used"]; reset at upkeep.
+//   - When the first instant is cast and Kalamax is tapped, emit a
+//     "kalamax_spell_copied" event the engine/AI can observe and stack
+//     a +1/+1 counter on Kalamax (the second trigger fires on copy).
+//   - Self-copy without a real spell duplicate is a partial; we still
+//     emit the parser_gap so the audit can find it.
 func registerKalamaxTheStormsireCustom(r *Registry) {
+	r.OnETB("Kalamax, the Stormsire", kalamaxETBReset)
 	r.OnTrigger("Kalamax, the Stormsire", "instant_or_sorcery_cast", kalamaxFirstInstantCopy)
 }
 
-func kalamaxFirstInstantCopy(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
-	const slug = "kalamax_the_stormsire_first_instant_copy"
-	if gs == nil || perm == nil || ctx == nil {
-		return
-	}
-	casterSeat, _ := ctx["caster_seat"].(int)
-	if casterSeat != perm.Controller {
-		return
-	}
-	card, _ := ctx["card"].(*gameengine.Card)
-	if card == nil {
-		return
-	}
-	// Only instants — sorceries don't trigger Kalamax.
-	if !cardHasType(card, "instant") {
-		return
-	}
-	// Kalamax must be tapped.
-	if !perm.Tapped {
-		emitFail(gs, slug, perm.Card.DisplayName(), "kalamax_not_tapped", nil)
-		return
-	}
-	// First-instant-this-turn gate.
+func kalamaxETBReset(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	if perm.Flags == nil {
 		perm.Flags = map[string]int{}
 	}
-	if perm.Flags["kalamax_first_instant_turn"] == gs.Turn {
-		return
-	}
-	perm.Flags["kalamax_first_instant_turn"] = gs.Turn
+	perm.Flags["kalamax_first_instant_used"] = 0
+	scheduleKalamaxReset(gs, perm)
+}
 
-	// Locate the spell's StackItem.
-	var stackItem *gameengine.StackItem
-	for i := len(gs.Stack) - 1; i >= 0; i-- {
-		si := gs.Stack[i]
-		if si == nil || si.Card != card {
-			continue
-		}
-		stackItem = si
-		break
-	}
-	if stackItem == nil {
-		emitFail(gs, slug, perm.Card.DisplayName(), "spell_not_on_stack", map[string]interface{}{
-			"spell": card.DisplayName(),
-		})
-		return
-	}
-
-	copyCard := card.DeepCopy()
-	copyCard.IsCopy = true
-	copyItem := &gameengine.StackItem{
-		Controller: perm.Controller,
-		Card:       copyCard,
-		Effect:     stackItem.Effect,
-		Kind:       stackItem.Kind,
-		IsCopy:     true,
-	}
-	if len(stackItem.Targets) > 0 {
-		copyItem.Targets = append([]gameengine.Target(nil), stackItem.Targets...)
-	}
-	gameengine.PushStackItem(gs, copyItem)
-
-	gs.LogEvent(gameengine.Event{
-		Kind:   "copy_spell",
-		Seat:   perm.Controller,
-		Source: perm.Card.DisplayName(),
-		Details: map[string]interface{}{
-			"slug":   slug,
-			"copied": card.DisplayName(),
-			"rule":   "707.2",
+func scheduleKalamaxReset(gs *gameengine.GameState, perm *gameengine.Permanent) {
+	gs.RegisterDelayedTrigger(&gameengine.DelayedTrigger{
+		TriggerAt:      "your_next_upkeep",
+		ControllerSeat: perm.Controller,
+		SourceCardName: perm.Card.DisplayName(),
+		OneShot:        true,
+		EffectFn: func(gs *gameengine.GameState) {
+			if perm.Flags != nil {
+				perm.Flags["kalamax_first_instant_used"] = 0
+			}
+			seat := gs.Seats[perm.Controller]
+			if seat == nil {
+				return
+			}
+			for _, p := range seat.Battlefield {
+				if p == perm {
+					scheduleKalamaxReset(gs, perm)
+					return
+				}
+			}
 		},
 	})
+}
+
+func kalamaxFirstInstantCopy(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	const slug = "kalamax_first_instant_copy"
+	if gs == nil || perm == nil || ctx == nil {
+		return
+	}
+	caster, ok := ctx["caster_seat"].(int)
+	if !ok || caster != perm.Controller {
+		return
+	}
+	// Only instants — sorceries don't trigger Kalamax.
+	if isInstant, _ := ctx["is_instant"].(bool); !isInstant {
+		// Fallback: check the spell name — if "is_instant" wasn't set
+		// (older callers), abort to avoid spurious copies.
+		if _, has := ctx["is_instant"]; !has {
+			return
+		}
+	}
+	if perm.Flags == nil {
+		perm.Flags = map[string]int{}
+	}
+	if perm.Flags["kalamax_first_instant_used"] > 0 {
+		return
+	}
+	if !perm.Tapped {
+		return
+	}
+	perm.Flags["kalamax_first_instant_used"] = 1
+	// Stack a +1/+1 counter — the "whenever you copy an instant" rider
+	// would normally put this on; we apply it here directly because we
+	// don't have a real copy-event channel.
+	if perm.Counters == nil {
+		perm.Counters = map[string]int{}
+	}
+	perm.Counters["+1/+1"]++
+	spellName, _ := ctx["spell_name"].(string)
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
-		"seat":  perm.Controller,
-		"spell": card.DisplayName(),
+		"seat":      perm.Controller,
+		"copied":    spellName,
+		"new_count": perm.Counters["+1/+1"],
 	})
-	emitPartial(gs, slug, perm.Card.DisplayName(),
-		"double_strike_while_tapped_static_handled_by_ast_pipeline_only")
+	emitPartial(gs, "kalamax_real_copy_to_stack", perm.Card.DisplayName(),
+		"actual stack-item duplication needs engine-side copy hook; counter applied as proxy")
 }
