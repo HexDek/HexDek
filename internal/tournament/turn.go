@@ -1217,23 +1217,60 @@ func tryPlayLand(gs *gameengine.GameState, seatIdx int) {
 
 // tryCastCommander asks the Hat if it wants to cast the commander at
 // current mana, and if yes invokes CastCommanderFromCommandZone.
+//
+// For MDFC commanders whose back face is a non-creature spell (Esika /
+// The Prismatic Bridge, Jadzi / Journey to the Oracle), prefer the back
+// face when affordable — those decks are built around the back face,
+// and the front-face creature is the budget option. Without this, the
+// AI always cast the front face and Bridge never deployed, dropping
+// Esika win rate to ~9%.
+//
+// Iteration is keyed off seat.CommanderNames (the canonical full-DFC
+// oracle name set by SetupCommanderGame) rather than card.DisplayName(),
+// because a back-face cast mutates Card.Name in place. After the cast
+// resolves and the commander dies, the Card returns to the command
+// zone with its name still set to the back face — looking up by
+// DisplayName() would then miss the original commander.
 func tryCastCommander(gs *gameengine.GameState, seatIdx int) {
 	seat := gs.Seats[seatIdx]
 	if len(seat.CommandZone) == 0 {
 		return
 	}
-	// Snapshot since CommandZone may be mutated by the cast.
-	commanders := append([]*gameengine.Card(nil), seat.CommandZone...)
-	for _, cmdr := range commanders {
+	// Snapshot CommanderNames + CommandZone since the cast can mutate both.
+	cmdrNames := append([]string(nil), seat.CommanderNames...)
+	for _, name := range cmdrNames {
+		var cmdr *gameengine.Card
+		for _, c := range seat.CommandZone {
+			if c == nil {
+				continue
+			}
+			if c.DisplayName() == name || gameengine.DFCCardMatchesName(c, name) {
+				cmdr = c
+				break
+			}
+		}
 		if cmdr == nil {
 			continue
 		}
-		name := cmdr.DisplayName()
-		baseCMC := gameengine.ManaCostOf(cmdr)
+		// Front-face cost is the default. Determine whether the back face
+		// would be the strategically better cast — and only flip if it's
+		// also affordable, so we don't refuse to cast Esika just because
+		// Bridge's 6-mana cost isn't met yet.
+		frontCMC := gameengine.ManaCostOf(cmdr)
 		tax := seat.CommanderTax[name]
-		totalCost := baseCMC + 2*tax
 		gameengine.EnsureTypedPool(seat)
 		cmdrAvailMana := seat.Mana.Total()
+
+		castBackFace := false
+		baseCMC := frontCMC
+		if cmdr.IsMDFC() && cmdr.BackFaceCMC > 0 && mdfcPreferBackFace(cmdr) {
+			backTotal := cmdr.BackFaceCMC + 2*tax
+			if backTotal <= cmdrAvailMana {
+				castBackFace = true
+				baseCMC = cmdr.BackFaceCMC
+			}
+		}
+		totalCost := baseCMC + 2*tax
 		if totalCost > cmdrAvailMana {
 			continue
 		}
@@ -1243,7 +1280,13 @@ func tryCastCommander(gs *gameengine.GameState, seatIdx int) {
 		if !seat.Hat.ShouldCastCommander(gs, seatIdx, name, tax) {
 			continue
 		}
+		// Stamp the transient back-face flag the resolve path reads in
+		// stack.go (resolvePermanentSpellETB) — it swaps Name/Types/CMC
+		// to the back face there. Cleared in either branch on failure
+		// so a stale flip can't leak.
+		cmdr.CastingBackFace = castBackFace
 		if err := gameengine.CastCommanderFromCommandZone(gs, seatIdx, name, baseCMC); err != nil {
+			cmdr.CastingBackFace = false
 			continue
 		}
 		gameengine.StateBasedActions(gs)
