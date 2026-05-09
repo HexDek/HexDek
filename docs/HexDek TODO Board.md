@@ -13,6 +13,21 @@ kanban-plugin: board
 
 - [x] **Remaining 276 commander handlers** — generator improved (fuzzy slug resolution, hand-edit preservation, deterministic number extraction). NO_AST 73→0, 195/196 unhandled pool commanders templated. PR #1 merged 2026-05-09. #engine #per_card
 
+### Tracking — cost-unenforced activated abilities
+
+Handlers where the effect is wired but the activation cost (mana, tap, sacrifice, exile, life payment, etc.) is enforced only defensively in-handler rather than by the engine's ability-dispatch layer. The audit caveat in `docs/structure-audit-report.md` flags this as a generic gap; this section enumerates concrete cards. Once the engine learns a unified activated-cost gate, every entry below gets a follow-up to drop the in-handler `seat.ManaPool < N` checks.
+
+- [ ] **Sliver Gravemother** — Encore {X} (variable mana + exile-from-graveyard). Handler enforces `seat.ManaPool >= cost` and exiles the chosen Sliver, but the engine doesn't gate activation on the encore cost. (Era 2, CMM)
+- [ ] **Yenna, Redtooth Regent** — `{2}, {T}: copy enchantment`. Handler runs unconditionally; mana cost is engine-side, tap cost not enforced. (Era 2, WOE)
+- [ ] **Felothar the Steadfast** — `{3}, {T}, Sacrifice another creature: draw=toughness, discard=power`. Handler defensively decrements `seat.ManaPool -= 3` and sets `src.Tapped = true`; sacrifice picks the best creature but the engine doesn't enforce that a creature is available before dispatch. (Era 2-adjacent, LTC)
+- [ ] **Mondrak, Glory Dominus** — `{2}{W}{W}, Exile two other creatures: 2 indestructible counters`. Handler enforces `seat.ManaPool >= 4` and validates two non-Mondrak creatures exist. (Era 2, ONE/ONC)
+- [ ] **Solphim, Mayhem Dominus** — `{2}{R}{R}, Exile two other creatures: 2 indestructible counters`. Same shape as Mondrak. (Era 2, ONE/ONC)
+- [ ] **Drivnod, Carnage Dominus** — `{2}{B}{B}, Exile two other creatures: 2 indestructible counters`. Same shape as Mondrak. (Era 2, ONE/ONC)
+- [ ] **Zopandrel, Hunger Dominus** — `{2}{G}{G}, Exile two other creatures: 2 indestructible counters`. Same shape as Mondrak. (Era 2, ONE/ONC)
+- [ ] **Inalla, Archmage Ritualist** — `Tap five untapped Wizards: target player loses 7 life`. Handler enforces ≥5 untapped wizards but the engine doesn't gate the activation on the tap cost; the handler sets `Tapped = true` itself. (Era 2 reprint, CMM)
+- [ ] **Mayael the Anima** — `{3}{R}{G}{W}, {T}: look top 5, drop a power-5+ creature`. Mana cost engine-side, tap cost handler-side. (Era 2 reprint, CMM)
+- [ ] **Saheeli, Radiant Creator** — `{E}{E}{E}` combat-copy uses `PayEnergy` defensively (no engine-side energy-cost dispatch yet). (Era 2, MOM)
+
 
 ## High Priority — Platform
 
