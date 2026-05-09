@@ -811,6 +811,30 @@ const (
 	condScaffoldForEach          // Cond.Kind="for_each" / "for each X"
 	condScaffoldETBAs            // Cond.Kind="etb_as"/"enters_with" / "enters with N counters"
 	condScaffoldDidPriorAction   // Cond.Kind="did_prior_action" — generic prior-turn action
+
+	// Tier 2B audit additions — five medium-priority scaffolds bridging
+	// existing engine subsystems. Cycling fires via fireCyclingTriggers,
+	// mutate uses Permanent.Flags["mutated"], doors/rooms use
+	// Permanent.Flags["unlocked"], werewolf transform reads
+	// Seat.SpellsCastLastTurn, and soulbond pairs via PairSoulbond.
+	condScaffoldCycled              // "when you cycle" / cycle event
+	condScaffoldMutates             // "whenever this creature mutates"
+	condScaffoldUnlockDoor          // "unlock the door" / Duskmourn rooms
+	condScaffoldPriorTurnSpellCount // "no spells were cast last turn" (Werewolf)
+	condScaffoldPairedSoulbond      // "as long as ~ is paired" / soulbond
+
+	// Tier 2A audit additions — four medium-priority scaffolds derived from
+	// the Era 2 corpus audit. None require new engine fields:
+	//   - TurnedFaceUp uses gameengine.TurnFaceUp + Card.FaceDown.
+	//   - BeginningOfOrdinalStep uses gs.Phase / gs.Step.
+	//   - TribeYouControlETB uses placeNamedFriendlyCreatureWithSubtype.
+	//   - ManaSpentThreshold uses Permanent.Flags["mana_spent"] + Card.CMC
+	//     (the engine's resolve.go currently default-trues mana_spent; the
+	//     flag stamp is the durable signal once the predicate is tightened).
+	condScaffoldTurnedFaceUp           // morph/megamorph/manifest/disguise turn-face-up trigger
+	condScaffoldBeginningOfOrdinalStep // beginning of combat/draw/end/main step
+	condScaffoldTribeYouControlETB     // "another <type> enters under your control"
+	condScaffoldManaSpentThreshold     // "if N or more mana was spent to cast"
 )
 
 type conditionScaffold struct {
@@ -849,6 +873,18 @@ var (
 	entersAsRe       = regexp.MustCompile(`(?:as\s+~|as\s+\w[\w\s]*?)\s+enters(?:\s+the\s+battlefield)?,\s*(?:choose|you may choose)`)
 	// did_prior_action verb scanner — order matters: most specific first.
 	priorActionVerbRe = regexp.MustCompile(`(attacked|cast (?:a |an )?(?:noncreature |creature )?spell|cast a spell|sacrificed|(?:a )?creature died|gained life|drew (?:a )?card|discarded|played (?:a )?land|dealt damage)`)
+
+	// Tier 2A patterns.
+	// "another <type> enters the battlefield under your control"
+	// "another <type> you control enters"
+	// "a <type> you control enters the battlefield"
+	tribeETBRe = regexp.MustCompile(
+		`(?:another\s+([a-z]+)\s+(?:creature\s+)?(?:enters?|is\s+put\s+onto)(?:[^\.]*?under your control|[^\.]*?you control)|` +
+			`(?:a|an)\s+([a-z]+)\s+(?:creature\s+)?you\s+control\s+(?:enters?))`)
+	// "if N or more mana was spent to cast" / "N mana was spent" / "X or more mana"
+	manaSpentNumRe = regexp.MustCompile(`(\d+)\s+or\s+more\s+(?:[a-z]+\s+)?mana\s+(?:was\s+)?(?:spent|paid)`)
+	// "mana value of ~ is N or greater"
+	manaValueGtRe = regexp.MustCompile(`mana\s+value\s+of\s+\S+\s+is\s+(\d+)\s+or\s+(?:greater|more)`)
 )
 
 func conditionRawText(cond *gameast.Condition) string {
@@ -881,6 +917,16 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 		return detectETBAs(cond)
 	case "did_prior_action":
 		return detectDidPriorAction(cond)
+	case "mana_spent":
+		// Structured mana-spent condition emitted by conditional_parser
+		// ("at least N <color> mana was spent"). Args = [color, count].
+		out := conditionScaffold{kind: condScaffoldManaSpentThreshold, count: 4}
+		for _, a := range cond.Args {
+			if n, ok := a.(int); ok && n > 0 {
+				out.count = n
+			}
+		}
+		return out
 	}
 
 	switch kind {
@@ -1176,6 +1222,152 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 	if strings.Contains(txt, "exiled with") &&
 		(strings.Contains(txt, "return") || strings.Contains(txt, "leaves")) {
 		cs.kind = condScaffoldExileLinkedReturn
+		return cs
+	}
+
+	// Tier 2B — Cycled. "when you cycle" / "whenever you cycle" / explicit
+	// "cycling" trigger. Engine fires via fireCyclingTriggers; we just need
+	// the controller to be visible as having cycled a card.
+	if (strings.Contains(txt, "cycle") || strings.Contains(txt, "cycling")) &&
+		!strings.Contains(txt, "cycled this way") {
+		cs.kind = condScaffoldCycled
+		return cs
+	}
+
+	// Tier 2B — Mutates. Mutate-trigger events on the source creature itself.
+	if strings.Contains(txt, "mutate") {
+		cs.kind = condScaffoldMutates
+		return cs
+	}
+
+	// Tier 2B — Unlock door. Duskmourn enchantment-room "when you unlock".
+	// Excludes generic "lock" usage that isn't door-related.
+	if (strings.Contains(txt, "unlock") || strings.Contains(txt, "unlocked")) &&
+		(strings.Contains(txt, "door") || strings.Contains(txt, "this room") ||
+			strings.Contains(txt, "this enchantment")) {
+		cs.kind = condScaffoldUnlockDoor
+		return cs
+	}
+
+	// Tier 2B — Prior-turn spell count. Werewolf transform conditions and
+	// other "if/as long as ... last turn" spell-count predicates.
+	if strings.Contains(txt, "last turn") &&
+		(strings.Contains(txt, "no spells were cast") ||
+			strings.Contains(txt, "no spell was cast") ||
+			strings.Contains(txt, "cast two or more spells") ||
+			(strings.Contains(txt, "cast") && strings.Contains(txt, "spells") &&
+				(strings.Contains(txt, "two or more") || strings.Contains(txt, "or more")))) {
+		cs.kind = condScaffoldPriorTurnSpellCount
+		// Encode the variant in count: 0 = no spells, 2 = 2+ spells.
+		if strings.Contains(txt, "no spell") {
+			cs.count = 0
+		} else {
+			cs.count = 2
+		}
+		return cs
+	}
+
+	// Tier 2B — Soulbond / paired check. "as long as ~ is paired" /
+	// "when ~ is paired" / "soulbond" ability word in a conditional clause.
+	if strings.Contains(txt, "soulbond") ||
+		(strings.Contains(txt, "paired") &&
+			(strings.Contains(txt, "is paired") || strings.Contains(txt, "are paired") ||
+				strings.Contains(txt, "creature is paired"))) {
+		cs.kind = condScaffoldPairedSoulbond
+		return cs
+	}
+
+	// Tier 2A — Turned face up. Morph / megamorph / manifest / disguise
+	// triggers all surface as "when[ever] ~ is turned face up". The phrase
+	// "turned face up" is the canonical fingerprint; we also catch the bare
+	// "manifest" and "disguise" cost-payment phrasing when paired with a
+	// trigger word so we don't false-match noun-form occurrences.
+	if strings.Contains(txt, "turned face up") ||
+		(strings.Contains(txt, "manifest") &&
+			(strings.Contains(txt, "is turned") || strings.Contains(txt, "becomes turned"))) ||
+		(strings.Contains(txt, "disguise") &&
+			(strings.Contains(txt, "is turned") || strings.Contains(txt, "becomes turned"))) ||
+		(strings.Contains(txt, "megamorph") && strings.Contains(txt, "face up")) {
+		cs.kind = condScaffoldTurnedFaceUp
+		return cs
+	}
+
+	// Tier 2A — Beginning-of <step> trigger condition for steps the
+	// existing UpkeepPhase scaffold doesn't cover: combat, draw, end,
+	// pre/postcombat main. We park the resolved step name in cs.subtype.
+	if strings.Contains(txt, "beginning of") && !strings.Contains(txt, "beginning of upkeep") {
+		switch {
+		case strings.Contains(txt, "beginning of combat") ||
+			strings.Contains(txt, "beginning of each combat"):
+			cs.kind = condScaffoldBeginningOfOrdinalStep
+			cs.subtype = "combat"
+			return cs
+		case strings.Contains(txt, "beginning of") && strings.Contains(txt, "draw step"):
+			cs.kind = condScaffoldBeginningOfOrdinalStep
+			cs.subtype = "draw"
+			return cs
+		case strings.Contains(txt, "beginning of") && strings.Contains(txt, "end step"):
+			cs.kind = condScaffoldBeginningOfOrdinalStep
+			cs.subtype = "end_step"
+			return cs
+		case strings.Contains(txt, "beginning of your second main phase") ||
+			strings.Contains(txt, "beginning of your postcombat main") ||
+			strings.Contains(txt, "beginning of the postcombat main"):
+			cs.kind = condScaffoldBeginningOfOrdinalStep
+			cs.subtype = "postcombat_main"
+			return cs
+		case strings.Contains(txt, "beginning of your precombat main") ||
+			strings.Contains(txt, "beginning of the precombat main") ||
+			strings.Contains(txt, "beginning of your first main phase"):
+			cs.kind = condScaffoldBeginningOfOrdinalStep
+			cs.subtype = "precombat_main"
+			return cs
+		case strings.Contains(txt, "beginning of") && strings.Contains(txt, "untap step"):
+			cs.kind = condScaffoldBeginningOfOrdinalStep
+			cs.subtype = "untap"
+			return cs
+		}
+	}
+
+	// Tier 2A — Tribe-ETB ("whenever another <type> enters under your
+	// control" / "whenever a <type> you control enters"). Must come BEFORE
+	// the catch-all YouControlSubtype tribal matcher so that ETB-keyed
+	// scaffolding is preferred over the static "you control" form.
+	if (strings.Contains(txt, "enters") || strings.Contains(txt, "is put onto")) &&
+		(strings.Contains(txt, "under your control") || strings.Contains(txt, "you control")) {
+		if m := tribeETBRe.FindStringSubmatch(txt); m != nil {
+			subtype := m[1]
+			if subtype == "" {
+				subtype = m[2]
+			}
+			if subtype != "" && !isGenericWord(subtype) {
+				cs.kind = condScaffoldTribeYouControlETB
+				cs.subtype = subtype
+				return cs
+			}
+		}
+	}
+
+	// Tier 2A — Mana-spent / mana-value threshold. Maelstrom Archangel
+	// ("if {5} or more mana was spent to cast"), Boros Reckoner ("amount
+	// of mana spent"), Phyrexian Dreadnought-style "mana value greater".
+	if (strings.Contains(txt, "mana was spent") ||
+		strings.Contains(txt, "mana was paid") ||
+		strings.Contains(txt, "amount of mana spent") ||
+		strings.Contains(txt, "amount of mana paid")) ||
+		manaValueGtRe.MatchString(txt) {
+		cs.kind = condScaffoldManaSpentThreshold
+		// Default count, overridden by parsed numerics below.
+		cs.count = 4
+		if m := manaSpentNumRe.FindStringSubmatch(txt); len(m) > 1 {
+			if n, err := strconv.Atoi(m[1]); err == nil && n > 0 {
+				cs.count = n
+			}
+		} else if m := manaValueGtRe.FindStringSubmatch(txt); len(m) > 1 {
+			if n, err := strconv.Atoi(m[1]); err == nil && n > 0 {
+				cs.count = n
+			}
+		}
 		return cs
 	}
 
@@ -1955,6 +2147,228 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 				cs.description = "did_prior_action with unrecognized verb — no-op prime"
 			}
 		}
+
+	case condScaffoldCycled:
+		// Engine fires "when you cycle" via fireCyclingTriggers. The
+		// trigger plumbing lives on permanents, but Goldilocks only
+		// cares that the controller's cycle counter / event log show a
+		// recent cycle. We log a cycle event for seat 0 and bump a
+		// per-seat flag. The actual trigger fires in fireTriggerEvent.
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			seat := gs.Seats[0]
+			if seat.Flags == nil {
+				seat.Flags = map[string]int{}
+			}
+			seat.Flags["cycled_this_turn"] = 1
+			// Place a placeholder card in the graveyard to represent the
+			// discarded-via-cycling card so any "the cycled card" lookups
+			// have something to find.
+			seat.Graveyard = append(seat.Graveyard, &gameengine.Card{
+				Name:  "Cycled Card Setup",
+				Owner: 0,
+				Types: []string{"creature"},
+			})
+		}
+		gs.LogEvent(gameengine.Event{
+			Kind:   "cycle",
+			Seat:   0,
+			Source: "Cycled Card Setup",
+			Details: map[string]interface{}{
+				"reason": "scaffold_prime",
+				"rule":   "702.29",
+			},
+		})
+		cs.description = "logged cycle event + set cycled_this_turn on seat 0"
+
+	case condScaffoldMutates:
+		// Engine marks mutated permanents with Flags["mutated"] = 1
+		// (see ApplyMutate in keywords_batch6.go). For scaffolding,
+		// stamping the source as already mutated lets "whenever this
+		// creature mutates" / "as long as ~ has mutated" reads succeed.
+		if srcPerm != nil {
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["mutated"] = 1
+			cs.description = "set srcPerm.Flags[mutated]=1"
+		} else {
+			cs.description = "mutate detected but srcPerm nil — flag-only"
+		}
+		gs.LogEvent(gameengine.Event{
+			Kind: "mutate",
+			Seat: 0,
+			Details: map[string]interface{}{
+				"stub": true,
+				"rule": "702.140",
+			},
+		})
+
+	case condScaffoldUnlockDoor:
+		// Duskmourn rooms / "when you unlock this door" triggers. No
+		// dedicated room-state struct in the engine; mark the source
+		// permanent's Flags["unlocked"] and emit an unlock_door event
+		// so log readers see the priming.
+		if srcPerm != nil {
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["unlocked"] = 1
+			cs.description = "set srcPerm.Flags[unlocked]=1"
+		} else {
+			cs.description = "unlock_door detected but srcPerm nil — flag-only"
+		}
+		gs.LogEvent(gameengine.Event{
+			Kind: "unlock_door",
+			Seat: 0,
+			Details: map[string]interface{}{
+				"reason": "scaffold_prime",
+			},
+		})
+
+	case condScaffoldPriorTurnSpellCount:
+		// Werewolf transform conditions read prior-turn cast counts. The
+		// engine snapshots SpellsCastThisTurn into SpellsCastLastTurn at
+		// untap. Set the value directly on every seat: cs.count==0 means
+		// "no spells last turn" (silver werewolf transform); 2 means
+		// "two or more spells" (gold werewolf transform).
+		want := cs.count
+		for _, seat := range gs.Seats {
+			if seat == nil {
+				continue
+			}
+			seat.SpellsCastLastTurn = want
+		}
+		cs.description = fmt.Sprintf("set SpellsCastLastTurn=%d on all seats", want)
+
+	case condScaffoldPairedSoulbond:
+		// Soulbond pairs two unpaired creatures under the same
+		// controller. Place a partner creature on seat 0 and pair it
+		// with srcPerm via PairSoulbond so IsPaired(srcPerm) → true.
+		// Falls back to placing two creatures and pairing them when
+		// srcPerm is nil (audit context where the source isn't on the
+		// battlefield yet).
+		if srcPerm == nil || srcPerm.Controller != 0 {
+			// Audit/standalone path — place both halves of the pair.
+			a := placeNamedFriendlyCreature(gs, "Soulbond A")
+			b := placeNamedFriendlyCreature(gs, "Soulbond B")
+			if a != nil && b != nil {
+				// Stamp timestamps so PairSoulbond's GetPairedPartner
+				// lookup succeeds (it walks battlefield by Timestamp).
+				if a.Timestamp == 0 {
+					a.Timestamp = 1001
+				}
+				if b.Timestamp == 0 {
+					b.Timestamp = 1002
+				}
+				gameengine.PairSoulbond(gs, a, b)
+				cs.description = "placed two creatures + paired via soulbond"
+			} else {
+				cs.description = "soulbond detected but seat 0 missing — no-op"
+			}
+		} else {
+			partner := placeNamedFriendlyCreature(gs, "Soulbond Partner")
+			if partner == nil {
+				cs.description = "soulbond detected but partner placement failed"
+			} else {
+				if partner.Timestamp == 0 {
+					partner.Timestamp = srcPerm.Timestamp + 1
+					if partner.Timestamp == 0 {
+						partner.Timestamp = 1001
+					}
+				}
+				if srcPerm.Timestamp == 0 {
+					srcPerm.Timestamp = partner.Timestamp - 1
+				}
+				gameengine.PairSoulbond(gs, srcPerm, partner)
+				cs.description = "placed Soulbond Partner + paired with srcPerm"
+			}
+		}
+
+	case condScaffoldTurnedFaceUp:
+		// Place srcPerm (or a stand-in) on the battlefield face-down, then
+		// flip it face-up via the canonical engine path so a `turn_face_up`
+		// event lands in the log and the listener side of the trigger sees
+		// the state transition.
+		target := srcPerm
+		if target == nil {
+			target = placeNamedFriendlyCreature(gs, "Morph Subject")
+		}
+		if target != nil && target.Card != nil {
+			target.Card.FaceDown = true
+			if target.Flags == nil {
+				target.Flags = map[string]int{}
+			}
+			target.Flags["face_down"] = 1
+			gameengine.TurnFaceUp(gs, target, "scaffold_turned_face_up")
+			cs.description = "set source face-down then TurnFaceUp (turn_face_up event emitted)"
+		} else {
+			cs.description = "turned-face-up detected but no source available"
+		}
+
+	case condScaffoldBeginningOfOrdinalStep:
+		// Move the game clock to the matched step on the active seat.
+		// `Phase` is the wider phase; `Step` is the granular step name.
+		switch cs.subtype {
+		case "combat":
+			gs.Phase, gs.Step = "combat", "begin_of_combat"
+		case "draw":
+			gs.Phase, gs.Step = "beginning", "draw"
+		case "end_step":
+			gs.Phase, gs.Step = "ending", "end_step"
+		case "postcombat_main":
+			gs.Phase, gs.Step = "postcombat_main", "postcombat_main"
+		case "precombat_main":
+			gs.Phase, gs.Step = "precombat_main", "precombat_main"
+		case "untap":
+			gs.Phase, gs.Step = "beginning", "untap"
+		default:
+			gs.Phase, gs.Step = "beginning", cs.subtype
+		}
+		cs.description = fmt.Sprintf("set Phase=%s Step=%s", gs.Phase, gs.Step)
+
+	case condScaffoldTribeYouControlETB:
+		subtype := cs.subtype
+		if subtype == "" {
+			subtype = "creature"
+		}
+		// Already-on-battlefield witness so the trigger sees a friendly
+		// permanent of the matching subtype. The ETB itself is fired by
+		// the trigger machinery once a fresh permanent enters; if the
+		// caller needs a *new* ETB event after this priming runs, it can
+		// place an additional creature itself.
+		placeNamedFriendlyCreatureWithSubtype(gs, "Tribe ETB "+subtype, subtype)
+		cs.description = fmt.Sprintf("placed %s creature on seat 0 (tribe-ETB witness)", subtype)
+
+	case condScaffoldManaSpentThreshold:
+		// Stamp srcPerm so the engine's mana_spent / mana-value condition
+		// can resolve true once it is tightened past the current default.
+		// Comfortable margin (+2) above the threshold so equality and
+		// strict-greater predicates both pass.
+		threshold := cs.count
+		if threshold < 1 {
+			threshold = 1
+		}
+		paid := threshold + 2
+		if srcPerm != nil {
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["mana_spent"] = paid
+			srcPerm.Flags["mana_value_spent"] = paid
+			if srcPerm.Card != nil && srcPerm.Card.CMC < threshold {
+				srcPerm.Card.CMC = threshold
+			}
+		}
+		// Also leave a CastRecord so MaxManaValue queries see a spell at
+		// the threshold (or above) for this turn.
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.Casts = append(gs.Seats[0].Turn.Casts, gameengine.CastRecord{
+				CardName:  "Mana Spent Scaffold",
+				Types:     []string{"sorcery"},
+				ManaValue: paid,
+			})
+		}
+		cs.description = fmt.Sprintf("set srcPerm.Flags[mana_spent]=%d (threshold=%d) + CastRecord", paid, threshold)
 	}
 	return cs
 }
@@ -2043,6 +2457,24 @@ func traceConditionScaffolding(cond *gameast.Condition, tr *Tracer) {
 		}
 	case condScaffoldDidPriorAction:
 		desc = fmt.Sprintf("primed Turn counter for did_prior_action verb=%q", cs.subtype)
+	case condScaffoldCycled:
+		desc = "logged cycle event + set cycled_this_turn on seat 0"
+	case condScaffoldMutates:
+		desc = "set srcPerm.Flags[mutated]=1 + logged mutate event"
+	case condScaffoldUnlockDoor:
+		desc = "set srcPerm.Flags[unlocked]=1 + logged unlock_door event"
+	case condScaffoldPriorTurnSpellCount:
+		desc = fmt.Sprintf("set SpellsCastLastTurn=%d on all seats", cs.count)
+	case condScaffoldPairedSoulbond:
+		desc = "placed soulbond partner + paired"
+	case condScaffoldTurnedFaceUp:
+		desc = "set source face-down then TurnFaceUp"
+	case condScaffoldBeginningOfOrdinalStep:
+		desc = fmt.Sprintf("set Phase/Step to %q", cs.subtype)
+	case condScaffoldTribeYouControlETB:
+		desc = fmt.Sprintf("placed %s creature on seat 0 (tribe-ETB)", cs.subtype)
+	case condScaffoldManaSpentThreshold:
+		desc = fmt.Sprintf("stamped srcPerm mana_spent=%d (+CastRecord)", cs.count+2)
 	}
 	tr.Record("CONDITION_SETUP", "%q → %s", cs.rawText, desc)
 }

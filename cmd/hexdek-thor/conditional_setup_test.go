@@ -1348,12 +1348,232 @@ func TestApplyConditionScaffolding_DidPriorAction_GainedLife(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Tier 2B scaffold tests — Cycled, Mutates, UnlockDoor, PriorTurnSpellCount,
+// PairedSoulbond. Each test verifies detection (scaffold kind + payload) and
+// application (engine state change).
+// ---------------------------------------------------------------------------
+
+func TestDetectConditionScaffold_Tier2B(t *testing.T) {
+	cases := []struct {
+		name     string
+		kind     string
+		text     string
+		wantKind conditionScaffoldKind
+		wantCnt  int
+	}{
+		{
+			name:     "Cycled — whenever you cycle a card",
+			kind:     "intervening_if",
+			text:     "whenever you cycle a card",
+			wantKind: condScaffoldCycled,
+		},
+		{
+			name:     "Mutates — whenever this creature mutates",
+			kind:     "intervening_if",
+			text:     "whenever this creature mutates",
+			wantKind: condScaffoldMutates,
+		},
+		{
+			name:     "UnlockDoor — when you unlock this door",
+			kind:     "intervening_if",
+			text:     "when you unlock this door",
+			wantKind: condScaffoldUnlockDoor,
+		},
+		{
+			name:     "UnlockDoor — when this room is fully unlocked",
+			kind:     "intervening_if",
+			text:     "when this room is fully unlocked",
+			wantKind: condScaffoldUnlockDoor,
+		},
+		{
+			name:     "PriorTurnSpellCount — no spells last turn",
+			kind:     "intervening_if",
+			text:     "no spells were cast last turn",
+			wantKind: condScaffoldPriorTurnSpellCount,
+			wantCnt:  0,
+		},
+		{
+			name:     "PriorTurnSpellCount — 2+ spells last turn",
+			kind:     "intervening_if",
+			text:     "a player cast two or more spells last turn",
+			wantKind: condScaffoldPriorTurnSpellCount,
+			wantCnt:  2,
+		},
+		{
+			name:     "PairedSoulbond — as long as paired",
+			kind:     "as_long_as",
+			text:     "as long as this creature is paired",
+			wantKind: condScaffoldPairedSoulbond,
+		},
+		{
+			name:     "PairedSoulbond — soulbond ability word",
+			kind:     "intervening_if",
+			text:     "soulbond",
+			wantKind: condScaffoldPairedSoulbond,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cond := &gameast.Condition{Kind: tc.kind, Args: []interface{}{tc.text}}
+			got := detectConditionScaffold(cond)
+			if got.kind != tc.wantKind {
+				t.Errorf("kind: want %v, got %v", tc.wantKind, got.kind)
+			}
+			if tc.wantKind == condScaffoldPriorTurnSpellCount && got.count != tc.wantCnt {
+				t.Errorf("count: want %d, got %d", tc.wantCnt, got.count)
+			}
+		})
+	}
+}
+
+func TestApplyConditionScaffolding_Cycled(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"whenever you cycle a card"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldCycled {
+		t.Fatalf("expected Cycled, got %v", cs.kind)
+	}
+	if gs.Seats[0].Flags["cycled_this_turn"] != 1 {
+		t.Errorf("cycled_this_turn flag not set")
+	}
+	if len(gs.Seats[0].Graveyard) < 1 {
+		t.Errorf("expected cycled-card placeholder in graveyard, got %d", len(gs.Seats[0].Graveyard))
+	}
+	sawCycle := false
+	for _, e := range gs.EventLog {
+		if e.Kind == "cycle" {
+			sawCycle = true
+			break
+		}
+	}
+	if !sawCycle {
+		t.Errorf("expected cycle event in log")
+	}
+}
+
+func TestApplyConditionScaffolding_Mutates(t *testing.T) {
+	gs := newTestGameState(2)
+	src := &gameengine.Permanent{
+		Card:       &gameengine.Card{Name: "Mutator", Owner: 0, Types: []string{"creature"}},
+		Controller: 0,
+		Owner:      0,
+		Flags:      map[string]int{},
+	}
+	gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, src)
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"whenever this creature mutates"}}
+	cs := applyConditionScaffolding(gs, cond, src)
+	if cs.kind != condScaffoldMutates {
+		t.Fatalf("expected Mutates, got %v", cs.kind)
+	}
+	if src.Flags["mutated"] != 1 {
+		t.Errorf("srcPerm.Flags[mutated] not set: %v", src.Flags)
+	}
+}
+
+func TestApplyConditionScaffolding_UnlockDoor(t *testing.T) {
+	gs := newTestGameState(2)
+	src := &gameengine.Permanent{
+		Card:       &gameengine.Card{Name: "Locked Room", Owner: 0, Types: []string{"enchantment", "room"}},
+		Controller: 0,
+		Owner:      0,
+		Flags:      map[string]int{},
+	}
+	gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, src)
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"when you unlock this door"}}
+	cs := applyConditionScaffolding(gs, cond, src)
+	if cs.kind != condScaffoldUnlockDoor {
+		t.Fatalf("expected UnlockDoor, got %v", cs.kind)
+	}
+	if src.Flags["unlocked"] != 1 {
+		t.Errorf("srcPerm.Flags[unlocked] not set: %v", src.Flags)
+	}
+	sawUnlock := false
+	for _, e := range gs.EventLog {
+		if e.Kind == "unlock_door" {
+			sawUnlock = true
+			break
+		}
+	}
+	if !sawUnlock {
+		t.Errorf("expected unlock_door event in log")
+	}
+}
+
+func TestApplyConditionScaffolding_PriorTurnSpellCount_None(t *testing.T) {
+	gs := newTestGameState(2)
+	// Pre-populate to verify we overwrite, not accumulate.
+	gs.Seats[0].SpellsCastLastTurn = 5
+	gs.Seats[1].SpellsCastLastTurn = 3
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"no spells were cast last turn"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldPriorTurnSpellCount {
+		t.Fatalf("expected PriorTurnSpellCount, got %v", cs.kind)
+	}
+	for i, seat := range gs.Seats {
+		if seat.SpellsCastLastTurn != 0 {
+			t.Errorf("seat %d SpellsCastLastTurn want 0, got %d", i, seat.SpellsCastLastTurn)
+		}
+	}
+}
+
+func TestApplyConditionScaffolding_PriorTurnSpellCount_TwoOrMore(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "intervening_if", Args: []interface{}{"a player cast two or more spells last turn"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldPriorTurnSpellCount {
+		t.Fatalf("expected PriorTurnSpellCount, got %v", cs.kind)
+	}
+	if gs.Seats[0].SpellsCastLastTurn < 2 {
+		t.Errorf("seat 0 SpellsCastLastTurn want >=2, got %d", gs.Seats[0].SpellsCastLastTurn)
+	}
+}
+
+func TestApplyConditionScaffolding_PairedSoulbond(t *testing.T) {
+	gs := newTestGameState(2)
+	cond := &gameast.Condition{Kind: "as_long_as", Args: []interface{}{"as long as this creature is paired"}}
+	cs := applyConditionScaffolding(gs, cond, nil)
+	if cs.kind != condScaffoldPairedSoulbond {
+		t.Fatalf("expected PairedSoulbond, got %v", cs.kind)
+	}
+	if len(gs.Seats[0].Battlefield) < 2 {
+		t.Fatalf("expected >=2 creatures placed, got %d", len(gs.Seats[0].Battlefield))
+	}
+	a := gs.Seats[0].Battlefield[len(gs.Seats[0].Battlefield)-2]
+	b := gs.Seats[0].Battlefield[len(gs.Seats[0].Battlefield)-1]
+	if !gameengine.IsPaired(a) || !gameengine.IsPaired(b) {
+		t.Errorf("expected both creatures paired; a.paired=%v b.paired=%v",
+			gameengine.IsPaired(a), gameengine.IsPaired(b))
+	}
+}
+
+func TestApplyConditionScaffolding_PairedSoulbond_WithSrcPerm(t *testing.T) {
+	gs := newTestGameState(2)
+	src := &gameengine.Permanent{
+		Card:       &gameengine.Card{Name: "Soulbonder", Owner: 0, Types: []string{"creature"}},
+		Controller: 0,
+		Owner:      0,
+		Flags:      map[string]int{},
+		Timestamp:  500,
+	}
+	gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, src)
+	cond := &gameast.Condition{Kind: "as_long_as", Args: []interface{}{"as long as ~ is paired"}}
+	cs := applyConditionScaffolding(gs, cond, src)
+	if cs.kind != condScaffoldPairedSoulbond {
+		t.Fatalf("expected PairedSoulbond, got %v", cs.kind)
+	}
+	if !gameengine.IsPaired(src) {
+		t.Errorf("expected srcPerm to be paired after scaffold")
+	}
+}
+
 func newTestGameState(seats int) *gameengine.GameState {
 	gs := &gameengine.GameState{
-		Turn:   1,
-		Active: 0,
-		Phase:  "precombat_main",
-		Flags:  map[string]int{},
+		Turn:         1,
+		Active:       0,
+		Phase:        "precombat_main",
+		Flags:        map[string]int{},
+		RetainEvents: true,
 	}
 	for i := 0; i < seats; i++ {
 		gs.Seats = append(gs.Seats, &gameengine.Seat{
