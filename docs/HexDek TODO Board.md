@@ -76,7 +76,7 @@ kanban-plugin: board
 - [x] **Corpus audit: draw handler gaps** — verified 2,032/2,032 PASS (was tests-run count, not failures). All draw tests already passing after keyword_dead fix 2026-05-08. #engine #handlers #draw
 - [x] **Corpus audit: lifegain/lifeloss gaps** — verified stale (1,101 gain_life + 511 lose_life = 1,612 was tests-run, not failures). All passing. Re-ran `hexdek-thor --corpus-audit` 2026-05-09: 18,934 tests, 0 fail, 0 panic. #engine #handlers #life
 - [ ] **Corpus audit: damage gaps (1,095)** — may be stale (needs verification). #engine #handlers #damage
-- [ ] **Corpus audit: discard/mill/buff gaps (534)** — may be stale (needs verification). #engine #handlers #misc
+- [x] **Corpus audit: discard/mill/buff gaps** — verified 498 discard / 303 mill / 2,109 buff all 100% pass across every era (2026-05-09). Original 305/148/81 figures were tests-run counts misread as failures, same shape as the draw stale-result. Report in `data/corpus-misc-verification.md`. #engine #handlers #misc
 - [x] **Thor test harness: conditional trigger setup** — 14 new scaffold kinds in conditional_setup.go (gained-life, cast-spell, ETB, drawn-card, attacked, sacrificed, combat-damage, landfall, discarded, enchanted, opponent-lost-life, life-threshold, upkeep). (2026-05-07) #engine #qa #thor
 - [x] **Muninn-Thor mismatch audit** — crossref.go: loads Muninn data + Thor failures, builds TP/FN/FP confusion matrix, computes recall/precision, writes markdown report. (2026-05-07) #engine #qa
 
