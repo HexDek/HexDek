@@ -8,18 +8,68 @@ import (
 //
 // Oracle text:
 //
-//   Vigilance, reach
-//   In You, All Things Are Possible — Whenever one or more artifact creatures you control attack, discover X, where X is the greatest power among them. (Exile cards from the top of your library until you exile a nonland card with that mana value or less. Cast it without paying its mana cost or put it into your hand. Put the rest on the bottom in a random order.)
+//	Vigilance, reach
+//	In You, All Things Are Possible — Whenever one or more artifact
+//	creatures you control attack, discover X, where X is the greatest
+//	power among them.
 //
-// Auto-generated static ability stub (partial — engine handles most statics via AST).
+// Implementation:
+//   - Vigilance + reach: handled by the AST keyword pipeline.
+//   - "creature_attacks" trigger fires once per attack declaration.
+//     Because the printed trigger is "one or more", we collapse
+//     multiple attack-declarations in the same combat into a single
+//     trigger fire via a once-per-turn flag, and compute X as the
+//     greatest power among ALL attacking artifact creatures we
+//     control at the moment the trigger fires.
+//
+// emitPartial: discover X (exile-until-nonland-of-≤cost, cast-or-hand,
+// shuffle rest random to bottom) is not yet wired through per_card.
+// We emit the X value so callers/tests observe the trigger landed.
 func registerAloySaviorOfMeridian(r *Registry) {
-	r.OnETB("Aloy, Savior of Meridian", aloySaviorOfMeridianStaticETB)
+	r.OnTrigger("Aloy, Savior of Meridian", "creature_attacks", aloyAttacks)
 }
 
-func aloySaviorOfMeridianStaticETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
-	const slug = "aloy_savior_of_meridian_static"
-	if gs == nil || perm == nil {
+func aloyAttacks(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	const slug = "aloy_artifact_creatures_attack_discover"
+	if gs == nil || perm == nil || ctx == nil {
 		return
 	}
-	emitPartial(gs, slug, perm.Card.DisplayName(), "static abilities handled by AST engine; per_card stub for registration tracking")
+	atk, _ := ctx["attacker_perm"].(*gameengine.Permanent)
+	if atk == nil || atk.Controller != perm.Controller {
+		return
+	}
+	if !atk.IsCreature() || atk.Card == nil || !cardHasType(atk.Card, "artifact") {
+		return
+	}
+	if perm.Flags == nil {
+		perm.Flags = map[string]int{}
+	}
+	if perm.Flags["aloy_fired_turn"] == gs.Turn {
+		return
+	}
+	seat := gs.Seats[perm.Controller]
+	if seat == nil {
+		return
+	}
+	maxPow := 0
+	count := 0
+	for _, p := range seat.Battlefield {
+		if p == nil || !p.IsCreature() || p.Card == nil || !cardHasType(p.Card, "artifact") {
+			continue
+		}
+		if !p.IsAttacking() {
+			continue
+		}
+		count++
+		if pow := gs.PowerOf(p); pow > maxPow {
+			maxPow = pow
+		}
+	}
+	perm.Flags["aloy_fired_turn"] = gs.Turn
+	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
+		"attacker_count": count,
+		"discover_x":     maxPow,
+	})
+	emitPartial(gs, slug, perm.Card.DisplayName(),
+		"discover_pipeline_not_wired_for_per_card")
 }

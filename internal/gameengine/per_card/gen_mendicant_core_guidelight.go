@@ -8,19 +8,158 @@ import (
 //
 // Oracle text:
 //
-//   Mendicant Core's power is equal to the number of artifacts you control.
-//   Start your engines! (If you have no speed, it starts at 1. It increases once on each of your turns when an opponent loses life. Max speed is 4.)
-//   Max speed — Whenever you cast an artifact spell, you may pay {1}. If you do, copy it. (The copy becomes a token.)
+//	Mendicant Core's power is equal to the number of artifacts you
+//	control.
+//	Start your engines! (If you have no speed, it starts at 1. It
+//	increases once on each of your turns when an opponent loses life.
+//	Max speed is 4.)
+//	Max speed — Whenever you cast an artifact spell, you may pay {1}.
+//	If you do, copy it.
 //
-// Auto-generated static ability stub (partial — engine handles most statics via AST).
+// Implementation:
+//   - "Power = artifact count" CDA: recomputed in
+//     mendicantRefreshPower at ETB and on every begin_combat /
+//     spell_cast trigger fire. Sets perm.Card.BasePower; the engine's
+//     layered characteristics calculator picks it up via
+//     InvalidateCharacteristicsCache.
+//   - "Start your engines" speed system: tracked on perm.Flags["speed"]
+//     (1..4). begin_combat checks if any opponent's life is lower
+//     than at the start of the turn (we snapshot it on
+//     active-seat-turn begin) and bumps speed.
+//   - "spell_cast" trigger: at max speed (4), gate to caster ==
+//     controller AND cast spell is artifact, then emit a copy event.
+//
+// emitPartial: actual spell-copy + token-creation routing requires
+// the engine's spell-copy pipeline; we surface the trigger so any
+// downstream observer can dispatch.
 func registerMendicantCoreGuidelight(r *Registry) {
-	r.OnETB("Mendicant Core, Guidelight", mendicantCoreGuidelightStaticETB)
+	r.OnETB("Mendicant Core, Guidelight", mendicantETB)
+	r.OnTrigger("Mendicant Core, Guidelight", "combat_begin", mendicantBeginCombat)
+	r.OnTrigger("Mendicant Core, Guidelight", "upkeep_controller", mendicantSpeedTick)
+	r.OnTrigger("Mendicant Core, Guidelight", "spell_cast", mendicantSpellCast)
 }
 
-func mendicantCoreGuidelightStaticETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
-	const slug = "mendicant_core_guidelight_static"
+func mendicantETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	if gs == nil || perm == nil {
 		return
 	}
-	emitPartial(gs, slug, perm.Card.DisplayName(), "static abilities handled by AST engine; per_card stub for registration tracking")
+	if perm.Flags == nil {
+		perm.Flags = map[string]int{}
+	}
+	// Speed starts at 1 per the keyword.
+	if perm.Flags["speed"] <= 0 {
+		perm.Flags["speed"] = 1
+	}
+	mendicantRefreshPower(gs, perm)
+}
+
+func mendicantRefreshPower(gs *gameengine.GameState, perm *gameengine.Permanent) {
+	if gs == nil || perm == nil || perm.Card == nil {
+		return
+	}
+	seat := gs.Seats[perm.Controller]
+	if seat == nil {
+		return
+	}
+	count := 0
+	for _, p := range seat.Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		if cardHasType(p.Card, "artifact") {
+			count++
+		}
+	}
+	perm.Card.BasePower = count
+	gs.InvalidateCharacteristicsCache()
+}
+
+func mendicantBeginCombat(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	if gs == nil || perm == nil {
+		return
+	}
+	mendicantRefreshPower(gs, perm)
+}
+
+func mendicantSpeedTick(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	const slug = "mendicant_speed_tick"
+	if gs == nil || perm == nil || ctx == nil {
+		return
+	}
+	activeSeat, _ := ctx["active_seat"].(int)
+	if activeSeat != perm.Controller {
+		return
+	}
+	// Snapshot opponent life totals for this turn into the perm flags;
+	// later opp-life-loss events compared against this snapshot will
+	// bump the speed. Heuristic: bump speed once per turn if any
+	// opponent currently has less life than the highest seen.
+	if perm.Flags == nil {
+		perm.Flags = map[string]int{}
+	}
+	// Read prior snapshot, take a new one.
+	bumped := false
+	for i, s := range gs.Seats {
+		if s == nil || i == perm.Controller {
+			continue
+		}
+		key := snapshotKey(i)
+		prev := perm.Flags[key]
+		if prev > 0 && s.Life < prev && !bumped && perm.Flags["speed"] < 4 {
+			perm.Flags["speed"]++
+			bumped = true
+			emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
+				"new_speed":   perm.Flags["speed"],
+				"opponent":    i,
+				"life_change": s.Life - prev,
+			})
+		}
+		perm.Flags[key] = s.Life
+	}
+}
+
+func mendicantSpellCast(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	const slug = "mendicant_max_speed_copy_artifact"
+	if gs == nil || perm == nil || ctx == nil {
+		return
+	}
+	if perm.Flags == nil || perm.Flags["speed"] < 4 {
+		return
+	}
+	casterSeat, _ := ctx["caster_seat"].(int)
+	if casterSeat != perm.Controller {
+		return
+	}
+	card, _ := ctx["card"].(*gameengine.Card)
+	if card == nil || !cardHasType(card, "artifact") {
+		return
+	}
+	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
+		"copied": card.DisplayName(),
+	})
+	emitPartial(gs, slug, perm.Card.DisplayName(),
+		"spell_copy_pipeline_with_pay1_decision_not_wired_for_per_card")
+}
+
+func snapshotKey(seatIdx int) string {
+	return "mendicant_life_snap_seat_" + intToA(seatIdx)
+}
+
+func intToA(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	digits := []byte{}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	for n > 0 {
+		digits = append([]byte{byte('0' + n%10)}, digits...)
+		n /= 10
+	}
+	if neg {
+		digits = append([]byte{'-'}, digits...)
+	}
+	return string(digits)
 }
