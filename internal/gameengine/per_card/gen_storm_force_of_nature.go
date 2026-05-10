@@ -8,18 +8,61 @@ import (
 //
 // Oracle text:
 //
-//   Flying, vigilance
-//   Ceaseless Tempest — Whenever Storm deals combat damage to a player, the next instant or sorcery spell you cast this turn has storm. (When you cast it, copy it for each spell cast before it this turn. You may choose new targets for the copies.)
+//	Flying, vigilance
+//	Ceaseless Tempest — Whenever Storm deals combat damage to a player,
+//	the next instant or sorcery spell you cast this turn has storm.
 //
-// Auto-generated static ability stub (partial — engine handles most statics via AST).
+// Implementation:
+//   - "combat_damage_to_player" trigger gated on the source being
+//     Storm. Stamps a per-seat "storm_grant_pending" flag the cast
+//     pipeline reads on the next instant/sorcery cast that turn.
+//   - Cleanup: cleared at end of turn via a delayed trigger so an
+//     unused grant doesn't bleed into the next turn.
+//   - The actual "copy for each spell cast before it" mechanic lives
+//     in the cast pipeline; we surface a partial.
 func registerStormForceOfNature(r *Registry) {
-	r.OnETB("Storm, Force of Nature", stormForceOfNatureStaticETB)
+	r.OnTrigger("Storm, Force of Nature", "combat_damage_to_player", stormForceOfNatureCombatDamage)
 }
 
-func stormForceOfNatureStaticETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
-	const slug = "storm_force_of_nature_static"
-	if gs == nil || perm == nil {
+func stormForceOfNatureCombatDamage(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	const slug = "storm_force_of_nature_grant_storm"
+	if gs == nil || perm == nil || ctx == nil {
 		return
 	}
-	emitPartial(gs, slug, perm.Card.DisplayName(), "static abilities handled by AST engine; per_card stub for registration tracking")
+	srcPerm, _ := ctx["source_perm"].(*gameengine.Permanent)
+	if srcPerm == nil {
+		// Fallback: source_seat must match.
+		ss, ok := ctx["source_seat"].(int)
+		if !ok || ss != perm.Controller {
+			return
+		}
+	} else if srcPerm != perm {
+		return
+	}
+	seat := gs.Seats[perm.Controller]
+	if seat == nil {
+		return
+	}
+	if seat.Flags == nil {
+		seat.Flags = map[string]int{}
+	}
+	seat.Flags["storm_grant_pending"] = 1
+	gs.RegisterDelayedTrigger(&gameengine.DelayedTrigger{
+		TriggerAt:      "end_of_turn",
+		ControllerSeat: perm.Controller,
+		SourceCardName: perm.Card.DisplayName(),
+		OneShot:        true,
+		EffectFn: func(gs *gameengine.GameState) {
+			s := gs.Seats[perm.Controller]
+			if s == nil || s.Flags == nil {
+				return
+			}
+			delete(s.Flags, "storm_grant_pending")
+		},
+	})
+	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
+		"seat": perm.Controller,
+	})
+	emitPartial(gs, slug, perm.Card.DisplayName(),
+		"storm_keyword_grant_consumption_handled_by_cast_pipeline_at_resolve")
 }
