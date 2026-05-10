@@ -8,17 +8,37 @@ import (
 //
 // Oracle text:
 //
-//   If a red source you control would deal damage to an opponent or a permanent an opponent controls, it deals that much damage plus 2 instead.
+//	If a red source you control would deal damage to an opponent or a
+//	permanent an opponent controls, it deals that much damage plus 2
+//	instead.
 //
-// Auto-generated static ability stub (partial — engine handles most statics via AST).
+// Implementation: a damage replacement is engine-deep (it has to wrap
+// every DealDamage call from a red source controlled by Torbran's
+// controller). Until that hook lands, set per-seat flags the engine
+// can read and emit the partial breadcrumb so the audit catches the gap.
+// The flag value carries the controller seat (+1 so default 0 = off)
+// AND the damage bonus, so multiple Torbrans stack additively.
 func registerTorbranThaneOfRedFell(r *Registry) {
-	r.OnETB("Torbran, Thane of Red Fell", torbranThaneOfRedFellStaticETB)
+	r.OnETB("Torbran, Thane of Red Fell", torbranETBSetDamageFlag)
 }
 
-func torbranThaneOfRedFellStaticETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
-	const slug = "torbran_thane_of_red_fell_static"
-	if gs == nil || perm == nil {
+func torbranETBSetDamageFlag(gs *gameengine.GameState, perm *gameengine.Permanent) {
+	const slug = "torbran_red_damage_plus_two"
+	if gs == nil || perm == nil || perm.Card == nil {
 		return
 	}
-	emitPartial(gs, slug, perm.Card.DisplayName(), "static abilities handled by AST engine; per_card stub for registration tracking")
+	if gs.Flags == nil {
+		gs.Flags = map[string]int{}
+	}
+	// Encode controller seat (+1 so 0 means inactive) and the damage
+	// bonus stack count. A second Torbran adds another +2 — they stack
+	// per the rules cleanup ruling on multiple replacement effects.
+	gs.Flags["torbran_red_damage_seat"] = perm.Controller + 1
+	gs.Flags["torbran_red_damage_bonus"] += 2
+	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
+		"seat":  perm.Controller,
+		"bonus": gs.Flags["torbran_red_damage_bonus"],
+	})
+	emitPartial(gs, slug, perm.Card.DisplayName(),
+		"red-source-damage replacement needs DealDamage hook to apply +2; flag set for downstream consumers")
 }
