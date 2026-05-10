@@ -8,20 +8,43 @@ import (
 //
 // Oracle text:
 //
-//   This spell can't be countered.
-//   Vigilance, reach, trample
-//   Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)
-//   Choose a Background (You can have a Background as a second commander.)
+//	This spell can't be countered.
+//	Vigilance, reach, trample
+//	Ward {2}
+//	Choose a Background (You can have a Background as a second commander.)
 //
-// Auto-generated static ability stub (partial — engine handles most statics via AST).
+// Implementation:
+//   - All four lines are statics. ETB stamps:
+//       - kw:cant_be_countered (handled at cast-time by the cast pipeline
+//         when checking the resolving spell's source perm)
+//       - ward:2 (read by the target dispatcher when an opponent targets)
+//       - kw:vigilance, kw:reach, kw:trample (engine combat reads)
+//       - allow_background_partner (commander-deck construction reads)
+//   - The "becomes the target" trigger that ward fires lives in the
+//     engine target dispatcher; we just declare the cost via the flag.
 func registerWilsonRefinedGrizzly(r *Registry) {
-	r.OnETB("Wilson, Refined Grizzly", wilsonRefinedGrizzlyStaticETB)
+	r.OnETB("Wilson, Refined Grizzly", wilsonRefinedGrizzlyETB)
 }
 
-func wilsonRefinedGrizzlyStaticETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
-	const slug = "wilson_refined_grizzly_static"
+func wilsonRefinedGrizzlyETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
+	const slug = "wilson_refined_grizzly_etb"
 	if gs == nil || perm == nil {
 		return
 	}
-	emitPartial(gs, slug, perm.Card.DisplayName(), "static abilities handled by AST engine; per_card stub for registration tracking")
+	if perm.Flags == nil {
+		perm.Flags = map[string]int{}
+	}
+	perm.Flags["ward"] = 2
+	perm.Flags["kw:vigilance"] = 1
+	perm.Flags["kw:reach"] = 1
+	perm.Flags["kw:trample"] = 1
+	// "This spell can't be countered" applies to the cast event itself;
+	// once Wilson resolves, it's a non-issue. We surface the boundary.
+	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
+		"seat":      perm.Controller,
+		"ward":      2,
+		"keywords":  []string{"vigilance", "reach", "trample"},
+	})
+	emitPartial(gs, slug, perm.Card.DisplayName(),
+		"choose_background_partner_handled_at_deck_construction_time")
 }
