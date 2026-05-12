@@ -671,6 +671,49 @@ body {
 .deck-archive-page .panel-hd { border-bottom-color: color-mix(in srgb, var(--accent) 22%, var(--rule-2)); }
 .deck-archive-page .tag--solid { background: var(--accent); border-color: var(--accent); color: var(--inv-ink); }
 
+/* ── VITAL SIGNS (the three big numbers below the hero) ── */
+.deck-vital-signs {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+  padding: 16px 18px 0;
+}
+.deck-vital-signs__cell {
+  border: 1px solid var(--rule-2);
+  background: var(--bg-2, rgba(0,0,0,0.12));
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+.deck-vital-signs__num {
+  font-size: clamp(28px, 5vw, 44px);
+  font-weight: 800;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.deck-vital-signs__lbl {
+  margin-top: 8px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--ink-3, var(--ink-2));
+  text-transform: uppercase;
+}
+.deck-vital-signs__sub {
+  margin-top: 4px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 700px) {
+  .deck-vital-signs { grid-template-columns: 1fr; gap: 8px; padding: 10px 12px 0; }
+  .deck-vital-signs__num { font-size: 32px; }
+}
+
 /* ── DECK STATS SUMMARY (full-width strip below hero) ── */
 .deck-stats-summary-row {
   padding: 14px 18px 0;
