@@ -774,6 +774,43 @@ export default function DeckArchive() {
         </div>
       )}
 
+      {/* Vital signs strip — the three big numbers that matter at a glance.
+          HexELO, Power Level (Bracket), Win Rate. Only renders when we
+          have ELO data; pre-gauntlet decks show bracket + sample-pending. */}
+      <div className="deck-vital-signs">
+        <div className="deck-vital-signs__cell">
+          <div className="deck-vital-signs__num">
+            {deckElo?.hex_rating != null ? Math.round(deckElo.hex_rating) : '—'}
+          </div>
+          <div className="deck-vital-signs__lbl">HexELO</div>
+          {deckElo?.games > 0 && (
+            <div className="deck-vital-signs__sub">{deckElo.games.toLocaleString()} GAMES</div>
+          )}
+        </div>
+        <div className="deck-vital-signs__cell">
+          <div className="deck-vital-signs__num">
+            B{wbs}{pls && pls !== wbs ? ` → B${pls}` : ''}
+          </div>
+          <div className="deck-vital-signs__lbl">POWER LEVEL</div>
+          {wbsLabel && (
+            <div className="deck-vital-signs__sub">{wbsLabel.toUpperCase()}</div>
+          )}
+        </div>
+        <div className="deck-vital-signs__cell">
+          <div className="deck-vital-signs__num">
+            {deckElo?.win_rate != null ? `${deckElo.win_rate}%` : '—'}
+          </div>
+          <div className="deck-vital-signs__lbl">WIN RATE</div>
+          {deckElo?.wins != null && deckElo?.losses != null && (
+            <div className="deck-vital-signs__sub">
+              <span style={{ color: 'var(--ok)' }}>{deckElo.wins}W</span>
+              {' · '}
+              <span style={{ color: 'var(--danger)' }}>{deckElo.losses}L</span>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Deck stats summary — always visible between hero and main columns. */}
       <div className="deck-stats-summary-row">
         <DeckStatsSummary cards={cards} />
@@ -782,18 +819,19 @@ export default function DeckArchive() {
       <div className="archive-layout">
         <div className="archive-sidebar">
           <Panel code="04.A" title="DECK SPECS" solid>
+            {/* BRACKET / PLAYS LIKE moved to the vital-signs strip above
+                (rendered as "B{wbs} → B{pls}" inside the POWER LEVEL cell).
+                Kept here only as the archetype/legality/themes detail block. */}
             <KV rows={[
               ['OWNER', <Link to={`/profile/${owner}`} style={{ color: 'var(--ink)', textDecoration: 'none', borderBottom: '1px dotted var(--ink-3)' }}>{owner?.toUpperCase()}</Link>],
               ...(ownerFriendCount != null ? [['FRIENDS', String(ownerFriendCount)]] : []),
               ['CARDS', `${cardCount}`],
-              ['BRACKET', `B${wbs}${wbsLabel ? ' ' + wbsLabel : ''}`, 'bracket'],
-              ['PLAYS LIKE', pls ? `B${pls}${plsLabel ? ' ' + plsLabel : ''}${pls != wbs ? ' ⬆' : ''}` : '—', 'plays_like'],
               ['GAME CHANGERS', gameChangers != null ? `${gameChangers}` : '—', 'game_changers'],
               ['ARCHETYPE', archetype, 'archetype'],
               ...(legality ? [['LEGALITY', <span style={{ color: legality.valid ? 'var(--ok)' : 'var(--danger)', fontWeight: 700 }}>{legality.valid ? 'LEGAL' : 'ILLEGAL'}</span>, 'legality']] : []),
               ...(manaBaseGrade ? [['MANA BASE', manaBaseGrade, 'mana_base_grade']] : []),
               ...(powerPercentile != null ? [['POWER', `TOP ${powerPercentile}%`, 'power_percentile']] : []),
-              ...(commanderSynergy != null ? [['CMDR SYNERGY', `${Math.round(commanderSynergy * 100)}%`, 'cmdr_synergy']] : []),
+              ...(commanderSynergy != null ? [['COMMANDER SYNERGY', `${Math.round(commanderSynergy * 100)}%`, 'cmdr_synergy']] : []),
               ...(keepableHandPct != null ? [['KEEPABLE HANDS', `${Math.round(keepableHandPct)}%`, 'keepable_hands']] : []),
               ...(interactionAvgCmc != null ? [['INTERACTION CMC', `AVG ${Math.round(interactionAvgCmc * 10) / 10}`, 'interaction_avg_cmc']] : []),
               ...(cheapInteraction != null ? [['CHEAP REMOVAL', `${cheapInteraction} AT ≤2 CMC`, 'cheap_interaction']] : []),
@@ -806,27 +844,27 @@ export default function DeckArchive() {
             {deckElo && (
               <>
                 <div className="hr" style={{ margin: '10px 0' }} />
+                {/* HexELO / Record / Win Rate / Games moved to the vital-signs strip
+                    above the layout. This block keeps only the confidence dots and
+                    delta — the per-session ELO movement worth seeing in detail. */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <GlossaryTerm term="confidence" compact>
                     <span className="t-xs muted">CONFIDENCE</span>
                   </GlossaryTerm>
                   <ConfidenceDots games={deckElo.games} showLabel size="lg" />
                 </div>
-                <KV rows={[
-                  ['HexELO', <span className="punch">{Math.round(deckElo.hex_rating || 0)}</span>, 'hexelo'],
-                  ['TS μ', <span className="t-xs muted-2">{Math.round(deckElo.mu || 0)}</span>, 'ts_mu'],
-                  ['RECORD', <span><span style={{ color: 'var(--ok)' }}>{deckElo.wins}W</span> — <span style={{ color: 'var(--danger)' }}>{deckElo.losses}L</span></span>, 'record'],
-                  ['WIN RATE', `${deckElo.win_rate}%`, 'win_rate'],
-                  ['GAMES', `${deckElo.games?.toLocaleString()}`, 'games'],
-                  ['DELTA', <span style={{ color: deckElo.delta >= 0 ? 'var(--ok)' : 'var(--danger)' }}>{deckElo.delta >= 0 ? '+' : ''}{Math.round(deckElo.delta)}</span>, 'delta'],
-                ]} />
+                {deckElo.delta != null && deckElo.delta !== 0 && (
+                  <KV rows={[
+                    ['DELTA', <span style={{ color: deckElo.delta >= 0 ? 'var(--ok)' : 'var(--danger)' }}>{deckElo.delta >= 0 ? '+' : ''}{Math.round(deckElo.delta)}</span>, 'delta'],
+                  ]} />
+                )}
               </>
             )}
             <div className="hr" style={{ margin: '10px 0' }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {owner && id && (
                 <>
-                  <ContextBox id="deck.edit" compact>Opens an editor with the full deck list. Saving re-runs Freya analysis on the new list.</ContextBox>
+                  <ContextBox id="deck.edit" compact>Opens the deck in the Workshop — the builder view where you swap cards and tune the list. Saving re-runs Freya analysis on the new list.</ContextBox>
                   <Btn arrow="↗" onClick={() => {
                     if (editing) return
                     const lines = cards.map(c => {
@@ -837,7 +875,7 @@ export default function DeckArchive() {
                     setEditText(lines.join('\n'))
                     setEditing(true)
                     api.getDeckVersions(`${owner}/${id}`).then(setVersions).catch(() => {})
-                  }}>EDIT DECK</Btn>
+                  }}>WORKSHOP</Btn>
                 </>
               )}
               <ContextBox id="deck.export" compact>Downloads the decklist in your chosen format (Moxfield, Arena, plain text).</ContextBox>
@@ -1027,8 +1065,8 @@ export default function DeckArchive() {
 
           {/* Edit mode — always visible regardless of tab */}
           {editing && (
-            <Panel code="04.X" title="EDIT DECK LIST" right={
-              <span className="t-xs" style={{ color: 'var(--warn)' }}>EDITING</span>
+            <Panel code="04.X" title="WORKSHOP / / DECK LIST" right={
+              <span className="t-xs" style={{ color: 'var(--warn)' }}>IN WORKSHOP</span>
             }>
               <textarea
                 value={editText}
@@ -1082,7 +1120,7 @@ export default function DeckArchive() {
                   {analyzing ? (
                     <>&gt; FREYA ENGINE ANALYZING DECK<span className="blink">_</span><br />&gt; DETECTING COMBOS, SYNERGIES, WIN LINES...<br />&gt; THIS MAY TAKE A FEW SECONDS</>
                   ) : (
-                    <>&gt; NO FREYA ANALYSIS ON FILE<br />&gt; RUN <span style={{ color: 'var(--ink)' }}>HEXDEK-FREYA</span> TO GENERATE STRATEGY REPORT<br />&gt; BRACKET, ARCHETYPE, WIN LINES, EVAL WEIGHTS<span className="blink">_</span></>
+                    <>&gt; NO FREYA ANALYSIS ON FILE<br />&gt; RUN <span style={{ color: 'var(--ink)' }}>HEXDEK-FREYA</span> TO GENERATE STRATEGY REPORT<br />&gt; BRACKET, ARCHETYPE, WIN LINES, STRATEGY FOCUS<span className="blink">_</span></>
                   )}
                 </div>
               </div>
@@ -1093,7 +1131,7 @@ export default function DeckArchive() {
                   <div className="t-2xl" style={{ fontWeight: 700, marginTop: 2 }}>{archetype}</div>
                 </div>
                 <div className="analysis-weights">
-                  <div className="t-xs muted">EVAL WEIGHTS</div>
+                  <div className="t-xs muted">STRATEGY FOCUS</div>
                   {Object.entries(evalWeights).slice(0, 6).map(([k, v], i) => (
                     <div key={i} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 36px', alignItems: 'center', gap: 6, marginTop: 6 }}>
                       <span className="t-xs" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.replace(/_/g, ' ').toUpperCase()}</span>
@@ -1120,7 +1158,7 @@ export default function DeckArchive() {
               <ContextBox id="deck.run-actions">
                 <strong>RUN GAUNTLET (500)</strong> queues 500 AI-vs-AI games against bracket-matched meta decks on the server. Win rate, ELO delta, and best/worst matchups land in the GAUNTLET REPORT panel below; takes a few minutes.
                 {' '}<strong>SPECTATE LIVE</strong> spawns a fresh 4-player room with this deck and opens the live spectator view — you can watch every decision as the AI plays it out.
-                {' '}<strong>TEST VARIANT</strong> opens a scratch editor where you can swap cards and rerun Freya analysis without overwriting the saved deck.
+                {' '}<strong>TEST VERSION</strong> opens a scratch editor where you can swap cards and rerun Freya analysis without overwriting the saved deck.
               </ContextBox>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <Btn solid arrow="▶" onClick={() => {
@@ -1173,7 +1211,7 @@ export default function DeckArchive() {
                   if (r.room_id) navigate(`/spectate/${r.room_id}`)
                 }).catch(() => setSpawningRoom(false))
               }}>{spawningRoom ? 'SPAWNING...' : 'SPECTATE LIVE'}</Btn>
-              <Btn ghost arrow="▶">TEST VARIANT</Btn>
+              <Btn ghost arrow="▶">TEST VERSION</Btn>
               </div>
             </div>
           )}
@@ -1460,9 +1498,9 @@ export default function DeckArchive() {
             </Panel>
           )}
 
-          {/* Emergent synergies */}
+          {/* Card packages (theme-grouped synergy clusters) */}
           {emergentSynergies.length > 0 && (
-            <Panel code="04.H" title={`EMERGENT SYNERGIES / / ${emergentSynergies.length} DISCOVERED`}>
+            <Panel code="04.H" title={`CARD PACKAGES / / ${emergentSynergies.length} DISCOVERED`}>
               {emergentSynergies.slice(0, 12).map((syn, i) => (
                 <div key={i} style={{ padding: '6px 0', borderBottom: i < emergentSynergies.length - 1 ? '1px dashed var(--rule-2)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>

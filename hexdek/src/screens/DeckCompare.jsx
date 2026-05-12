@@ -219,7 +219,7 @@ export default function DeckCompare() {
               })}
 
               <span className="cmp-stat__l"><ColorBars demand={bundleA.analysis?.color_demand} /></span>
-              <span className="cmp-stat__k">COLOR DEMAND</span>
+              <span className="cmp-stat__k">MANA RATIO</span>
               <span className="cmp-stat__r"><ColorBars demand={bundleB.analysis?.color_demand} /></span>
 
               <span className="cmp-stat__l"><ManaCurveMini curve={bundleA.analysis?.mana_curve} /></span>

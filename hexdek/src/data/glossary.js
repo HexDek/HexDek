@@ -203,7 +203,7 @@ export const GLOSSARY = {
     body: 'Per-card star rating within the deck — Star, Solid, Filler, Cuttable. Driven by role overlap, win-line presence, and CMC efficiency.',
   },
   color_demand: {
-    title: 'Color Demand',
+    title: 'Mana Ratio',
     body: 'How much of each color the deck actually needs to cast its spells, weighted by CMC and pip count. Compared against your land base to flag color shortfalls.',
   },
   synergy_clusters: {
