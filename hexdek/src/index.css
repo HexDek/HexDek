@@ -2435,10 +2435,23 @@ body {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
 }
 
-/* On narrow screens anchor the panel to the right edge of the
-   viewport rather than the trigger so it doesn't clip. */
+/* On narrow screens the absolutely-positioned panel can overflow the
+   viewport when the trigger sits near a side edge (the panel anchors to
+   the trigger, not the viewport, so a wide panel + right-side trigger
+   pushed content off the left edge of the screen). Pin the panel to the
+   viewport directly with `position: fixed` near the bottom of the
+   screen so it's always fully visible regardless of trigger location. */
 @media (max-width: 480px) {
-  .gloss-panel { left: auto; right: 0; max-width: 86vw; }
+  .gloss-panel {
+    position: fixed;
+    top: auto;
+    bottom: 16px;
+    left: 12px;
+    right: 12px;
+    max-width: none;
+    width: auto;
+    z-index: 100;
+  }
 }
 /* ── RECONNECT BANNER ── */
 /* Pinned above the appbar whenever the global LiveSocket isn't 'live'.
