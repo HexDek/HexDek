@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPie, computeColorByCmc } from '../components/chrome'
 import CreditsPanel from '../components/CreditsPanel'
@@ -244,6 +244,16 @@ export default function DeckArchive() {
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState('')
   const [saving, setSaving] = useState(false)
+  // Ref for the Workshop edit panel so we can scroll it into view when it
+  // opens. On mobile the sidebar (which holds the WORKSHOP button) renders
+  // ABOVE the main content column, so the panel materializes far below the
+  // viewport and the action looks like a no-op without an auto-scroll.
+  const editPanelRef = useRef(null)
+  useEffect(() => {
+    if (editing && editPanelRef.current) {
+      editPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [editing])
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [comparePickerOpen, setComparePickerOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
@@ -1065,6 +1075,7 @@ export default function DeckArchive() {
 
           {/* Edit mode — always visible regardless of tab */}
           {editing && (
+            <div ref={editPanelRef}>
             <Panel code="04.X" title="WORKSHOP / / DECK LIST" right={
               <span className="t-xs" style={{ color: 'var(--warn)' }}>IN WORKSHOP</span>
             }>
@@ -1109,6 +1120,7 @@ export default function DeckArchive() {
                 </div>
               )}
             </Panel>
+            </div>
           )}
 
           {/* === ANALYSIS TAB === */}
