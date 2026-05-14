@@ -550,6 +550,8 @@ func registerDefaults() {
 	registerExquisiteBlood(Global())
 	registerTormentOfHailfire(Global())
 	registerAggravatedAssault(Global())
+	registerBumiUnleashed(Global())
+	registerPortRazer(Global())
 	registerStrionicResonator(Global())
 	registerMirageMirror(Global())
 	registerReleaseToTheWind(Global())
