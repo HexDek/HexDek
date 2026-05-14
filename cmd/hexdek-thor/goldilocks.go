@@ -2511,7 +2511,7 @@ func verifyEffect(gs *gameengine.GameState, before goldilocksSnapshot, after gol
 		}
 
 	case "extra_combat":
-		if gs.PendingExtraCombats > 0 {
+		if len(gs.PendingExtraCombats) > 0 {
 			return true
 		}
 

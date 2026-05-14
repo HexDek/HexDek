@@ -50,12 +50,16 @@ func aggravatedAssaultActivated(gs *gameengine.GameState, src *gameengine.Perman
 		untapped++
 	}
 
-	// Queue extra combat + extra main phase.
-	gs.PendingExtraCombats++
+	// Queue extra combat + extra main phase. Vanilla entry — no
+	// restriction, no OnBegin hook (Aggravated Assault's own activation
+	// already untapped creatures above; the extra combat just runs).
+	gs.AddExtraCombat(gameengine.PendingExtraCombat{
+		SourceCard: "Aggravated Assault",
+	})
 
 	emit(gs, slug, "Aggravated Assault", map[string]interface{}{
 		"seat":              seat,
 		"creatures_untapped": untapped,
-		"extra_combats":     gs.PendingExtraCombats,
+		"extra_combats":     len(gs.PendingExtraCombats),
 	})
 }

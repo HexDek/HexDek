@@ -134,7 +134,12 @@ func karlachAttacks(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		})
 	}
 
-	gs.PendingExtraCombats++
+	// Karlach's extra combat is vanilla (the untap + first-strike grants
+	// happen above as part of her trigger resolution, not at the start
+	// of the extra combat itself). No restriction, no OnBegin hook.
+	gs.AddExtraCombat(gameengine.PendingExtraCombat{
+		SourceCard: perm.Card.DisplayName(),
+	})
 	gs.LogEvent(gameengine.Event{
 		Kind:   "extra_combat",
 		Seat:   perm.Controller,
@@ -149,7 +154,7 @@ func karlachAttacks(gs *gameengine.GameState, perm *gameengine.Permanent, ctx ma
 		"untapped":         untapped,
 		"first_strike_grants": granted,
 		"combat_idx":       combatIdx,
-		"pending_combats":  gs.PendingExtraCombats,
+		"pending_combats":  len(gs.PendingExtraCombats),
 	})
 }
 

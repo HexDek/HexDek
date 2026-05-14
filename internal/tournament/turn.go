@@ -159,7 +159,8 @@ func takeTurnImpl(gs *gameengine.GameState, hook func(*gameengine.GameState)) {
 		seat.Mana.Clear()
 	}
 	clearPlayedLand(gs, active)
-	gs.PendingExtraCombats = 0
+	gs.PendingExtraCombats = nil
+	gs.CurrentCombatRestriction = ""
 	// §702.136 Raid — clear the attacked_this_turn flag from previous turn.
 	if seat.Flags != nil {
 		delete(seat.Flags, "attacked_this_turn")
@@ -506,10 +507,24 @@ func runCombatWithExtras(gs *gameengine.GameState, active int) {
 	gameengine.FireDelayedTriggers(gs, gs.Phase, gs.Step)
 	// Drain triggered abilities from end-of-combat step.
 	drainStack(gs)
-	// Extra combats loop.
-	for gs.PendingExtraCombats > 0 && !gs.CheckEnd() {
-		gs.PendingExtraCombats--
+	// Extra combats loop. Pop the front of the queue, apply that
+	// combat's restriction + OnBegin hook, then run a normal combat
+	// phase. Entries may be added to the queue MID-LOOP (e.g. Moraug
+	// landfall during the extra combat's main-equivalent steps creates
+	// more entries), and the append-tail / pop-head pattern handles
+	// that naturally — new entries get drained in subsequent iterations.
+	for len(gs.PendingExtraCombats) > 0 && !gs.CheckEnd() {
+		current := gs.PendingExtraCombats[0]
+		gs.PendingExtraCombats = gs.PendingExtraCombats[1:]
+		gs.CurrentCombatRestriction = current.Restriction
 		gs.Phase, gs.Step = "combat", "beginning_of_combat"
+		// Per-combat OnBegin hook (e.g. Moraug's "untap all creatures"
+		// or Bumi Unleashed's "untap all lands") fires here, BEFORE
+		// the beginning_of_combat trigger fires so attackers can be
+		// untapped before declare-attackers reads their tap state.
+		if current.OnBegin != nil {
+			current.OnBegin(gs)
+		}
 		gameengine.FirePhaseTriggers(gs, gs.Phase, gs.Step)
 		runCombatActivations(gs, active)
 		if gs.CheckEnd() {
@@ -520,6 +535,7 @@ func runCombatWithExtras(gs *gameengine.GameState, active int) {
 		gs.Phase, gs.Step = "combat", "end_of_combat"
 		gameengine.FireDelayedTriggers(gs, gs.Phase, gs.Step)
 		drainStack(gs)
+		gs.CurrentCombatRestriction = ""
 	}
 }
 

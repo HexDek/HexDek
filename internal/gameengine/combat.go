@@ -393,10 +393,15 @@ func DeclareAttackers(gs *GameState, attackerSeat int) []*Permanent {
 	}
 
 	// Step 1: build legal attacker pool, then delegate to Hat.
+	// Note: gs.CurrentCombatRestriction may be non-empty if we're inside
+	// an extra combat with an attacker restriction (e.g. Bumi Unleashed's
+	// "only land creatures can attack"). passesCombatRestriction filters
+	// the pool to permanents that satisfy the restriction. Empty string
+	// = no restriction = filter is a no-op.
 	livingOpps := gs.LivingOpponents(attackerSeat)
 	var legal []*Permanent
 	for _, p := range seat.Battlefield {
-		if canAttack(p) {
+		if canAttack(p) && passesCombatRestriction(gs, p) {
 			legal = append(legal, p)
 		}
 	}
@@ -569,6 +574,41 @@ func canAttack(p *Permanent) bool {
 		return false
 	}
 	return true
+}
+
+// passesCombatRestriction checks gs.CurrentCombatRestriction (set by the
+// turn loop when entering a restricted extra combat) against the
+// candidate attacker. Returns true when there's no restriction in
+// effect, or when the candidate satisfies it.
+//
+// Tag values must match the strings produced by per_card handlers /
+// resolveExtraCombat in `PendingExtraCombat.Restriction`. Adding a new
+// tag = add a case here. Currently supported:
+//
+//	""                       — no restriction (vanilla extra combat)
+//	"land_creatures_only"    — only attackers with the Land type
+//	                           (Bumi, Unleashed's "Only land creatures
+//	                           can attack during that combat phase.")
+func passesCombatRestriction(gs *GameState, p *Permanent) bool {
+	if gs == nil || gs.CurrentCombatRestriction == "" {
+		return true
+	}
+	if p == nil || p.Card == nil {
+		return false
+	}
+	switch gs.CurrentCombatRestriction {
+	case "land_creatures_only":
+		// "Land creature" means a permanent that is both a Land and a
+		// Creature (e.g. an earthbent land via Toph's static, a
+		// Dryad Arbor, or a manlands like Mutavault that's been
+		// activated). Check both types.
+		return p.IsCreature() && p.IsLand()
+	default:
+		// Unknown tag — fail closed (don't allow the attacker).
+		// Forces us to add the case explicitly when introducing new
+		// restriction tags, rather than silently passing through.
+		return false
+	}
 }
 
 // fireAttackTriggers fires "attacks" triggers. Two pools:

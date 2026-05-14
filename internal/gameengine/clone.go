@@ -238,7 +238,14 @@ func (gs *GameState) CloneForRollout(rng *rand.Rand) *GameState {
 		EffectTimestamp:             gs.EffectTimestamp,
 		CommanderFormat:             gs.CommanderFormat,
 		PainterColor:               gs.PainterColor,
-		PendingExtraCombats:        gs.PendingExtraCombats,
+		// PendingExtraCombats is a slice of value-type structs (no
+		// pointer fields except OnBegin, which is shared by design —
+		// cloning the function pointer is fine since the function is
+		// pure-effect on the cloned GameState). Append-then-copy yields
+		// an independent slice header so the clone's queue can evolve
+		// separately.
+		PendingExtraCombats:        append([]PendingExtraCombat(nil), gs.PendingExtraCombats...),
+		CurrentCombatRestriction:   gs.CurrentCombatRestriction,
 		SpellsCastThisTurn:         gs.SpellsCastThisTurn,
 		SpellsCastByActiveLastTurn: gs.SpellsCastByActiveLastTurn,
 		DayNight:                   gs.DayNight,

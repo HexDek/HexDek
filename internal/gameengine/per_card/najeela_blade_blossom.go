@@ -171,7 +171,12 @@ func najeelaActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilit
 		})
 	}
 
-	gs.PendingExtraCombats++
+	// Najeela's extra combat is vanilla (the untap + token + buffs happen
+	// above as immediate effects of her activated ability, not at the
+	// start of the extra combat). No restriction, no OnBegin hook.
+	gs.AddExtraCombat(gameengine.PendingExtraCombat{
+		SourceCard: src.Card.DisplayName(),
+	})
 	gs.LogEvent(gameengine.Event{
 		Kind:   "extra_combat",
 		Seat:   src.Controller,
@@ -185,6 +190,6 @@ func najeelaActivate(gs *gameengine.GameState, src *gameengine.Permanent, abilit
 		"seat":           src.Controller,
 		"untapped":       untapped,
 		"buffed":         buffed,
-		"extra_combats":  gs.PendingExtraCombats,
+		"extra_combats":  len(gs.PendingExtraCombats),
 	})
 }

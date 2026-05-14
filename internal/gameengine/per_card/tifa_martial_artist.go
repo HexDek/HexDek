@@ -109,7 +109,11 @@ func tifaCombatDamage(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 
 	extraGranted := false
 	if combatIdx == 1 {
-		gs.PendingExtraCombats++
+		// Tifa's extra combat is vanilla — untap above is part of her
+		// trigger resolution; no per-combat restriction or OnBegin hook.
+		gs.AddExtraCombat(gameengine.PendingExtraCombat{
+			SourceCard: perm.Card.DisplayName(),
+		})
 		extraGranted = true
 	}
 
@@ -118,7 +122,7 @@ func tifaCombatDamage(gs *gameengine.GameState, perm *gameengine.Permanent, ctx 
 		"untapped":        untapped,
 		"combat_idx":      combatIdx,
 		"extra_combat":    extraGranted,
-		"pending_combats": gs.PendingExtraCombats,
+		"pending_combats": len(gs.PendingExtraCombats),
 	})
 }
 
