@@ -680,6 +680,32 @@ func ScanCostModifiers(gs *GameState, card *Card, seatIdx int) []CostModifier {
 		}
 	}
 
+	// Generic Affinity-for-<type> (Riders of the Mark = Affinity for Humans,
+	// any future tribal or subtype affinity prints). Falls through to the
+	// generic detector only when none of the three specific detectors
+	// above caught the card — avoids double-counting.
+	//
+	// Reasoning for the fallback ordering: the three specific detectors
+	// (artifacts / creatures / artifact creatures) have hand-tuned logic
+	// for edge cases (e.g. CountArtifactCreatures's compound predicate);
+	// the generic path is simpler and covers anything not in the legacy
+	// hot-path. When a new "affinity for X" type ships, this branch picks
+	// it up automatically with no code change.
+	if !HasAffinityForArtifacts(card) &&
+		!HasAffinityForCreatures(card) &&
+		!HasAffinityForArtifactCreatures(card) {
+		if has, typeStr := AffinityForType(card); has {
+			n := CountPermanentsByType(gs, seatIdx, typeStr)
+			if n > 0 {
+				mods = append(mods, CostModifier{
+					Kind:   CostModReduction,
+					Amount: n,
+					Source: "affinity for " + typeStr + "s",
+				})
+			}
+		}
+	}
+
 	// §702.51 — Convoke: "Each creature you tap while casting this spell
 	// pays for {1} or one mana of that creature's color." Modeled as a
 	// cost reduction equal to the number of untapped creatures the caster
