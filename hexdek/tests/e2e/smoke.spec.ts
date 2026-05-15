@@ -65,3 +65,18 @@ test('deck page (Toph) renders', async ({ page }) => {
   await page.waitForTimeout(DATA_WAIT_MS)
   await page.screenshot({ path: shot('deck-page-toph'), fullPage: true })
 })
+
+test('import page renders', async ({ page }) => {
+  await page.goto('/import')
+  // Import screen doesn't use an h1; assert on the title text instead.
+  await expect(page.locator('text=/IMPORT|PASTE|MOXFIELD/i').first()).toBeVisible({ timeout: 10_000 })
+  await page.waitForTimeout(1000) // import page is mostly static — short wait
+  await page.screenshot({ path: shot('import'), fullPage: true })
+})
+
+test('owner profile renders', async ({ page }) => {
+  await page.goto('/profile/7174n1c')
+  await expect(page.locator('text=/7174N1C|DECKS|GAMES/i').first()).toBeVisible({ timeout: 10_000 })
+  await page.waitForTimeout(DATA_WAIT_MS)
+  await page.screenshot({ path: shot('profile-7174n1c'), fullPage: true })
+})
