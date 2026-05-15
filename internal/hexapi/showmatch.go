@@ -187,6 +187,13 @@ type GauntletResult struct {
 	FinishedAt time.Time `json:"finished_at,omitempty"`
 	TopBeaten  []string  `json:"top_beaten,omitempty"`
 	TopLostTo  []string  `json:"top_lost_to,omitempty"`
+	// Placements is the per-position finish breakdown for the deck under
+	// test (seat 0) across all gauntlet games. Index 0 = 1st place count,
+	// index 1 = 2nd, index 2 = 3rd, index 3 = 4th. Surfaces the "I'm
+	// surviving to top-2 a lot but not closing" pattern that the binary
+	// W/L view obscures. By definition Wins == Placements[0] and Losses
+	// == Placements[1] + Placements[2] + Placements[3].
+	Placements [4]int    `json:"placements,omitempty"`
 }
 
 type Showmatch struct {
@@ -910,6 +917,15 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 			sm.muninnSink.AutoArchive(gauntSeed.RNGSeed, gauntSeed.DeckKeys, msgs)
 		}
 		sm.muninnSink.EndGame()
+
+		// Per-position finish tracking for the deck under test (seat 0).
+		// seatPlacement returns 1-based finish (1 = won, 2 = runner-up,
+		// 3 = third, 4 = knocked out first). Clamp to [1,4] and write to
+		// Placements[0..3].
+		seat0Place := seatPlacement(gs, 0, winner)
+		if seat0Place >= 1 && seat0Place <= showmatchSeats {
+			result.Placements[seat0Place-1]++
+		}
 
 		if winner == 0 {
 			result.Wins++

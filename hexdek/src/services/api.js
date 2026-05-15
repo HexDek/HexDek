@@ -119,6 +119,12 @@ export const api = {
   // bill against the daily free-tier quota.
   startGauntlet: (id, games = 500) => authedRequest(`/api/gauntlet/${id}?games=${games}`, { method: 'POST' }),
   getGauntlet: (id) => request(`/api/gauntlet/${id}`),
+  // Matchup matrix — per-deck head-to-head records (rich dataset beyond
+  // the gauntlet result's TopBeaten/TopLostTo summary).
+  getDeckMatchups: (id) => request(`/api/decks/${id}/matchups`),
+  // Aggregate card stats keyed by commander — used as the per-deck card-
+  // ranking proxy until true per-deck card performance is exposed.
+  getCardStatsByCommander: (commander) => request(`/api/card-stats/${encodeURIComponent(commander)}`),
 
   // Credit economy. All four require X-HexDek-Owner.
   getCreditBalance: () => authedRequest('/api/credits'),

@@ -265,6 +265,12 @@ export default function DeckArchive() {
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
   const [winLinesExpanded, setWinLinesExpanded] = useState(false)
+  // PR #78 — extended deck data panels.
+  // matchupMatrix: rows from /api/decks/{id}/matchups (head-to-head detail).
+  // commanderCardStats: aggregate per-card win rates across all decks of
+  // this commander — surfaces "is this card pulling weight" signal.
+  const [matchupMatrix, setMatchupMatrix] = useState(null)
+  const [commanderCardStats, setCommanderCardStats] = useState(null)
   const [cloning, setCloning] = useState(false)
   const [creditsRefreshKey, setCreditsRefreshKey] = useState(0)
   const [confirmClone, setConfirmClone] = useState(false)
@@ -449,6 +455,40 @@ export default function DeckArchive() {
       setLoading(false)
     })
   }, [owner, id])
+
+  // PR #78 — matchup matrix fetch. Independent of the main page load so
+  // the deck page renders immediately even if matchups are slow.
+  useEffect(() => {
+    if (!owner || !id) { setMatchupMatrix(null); return }
+    let cancelled = false
+    api.getDeckMatchups(`${owner}/${id}`)
+      .then(res => {
+        if (cancelled) return
+        const rows = Array.isArray(res?.matchups) ? res.matchups : []
+        setMatchupMatrix(rows)
+      })
+      .catch(() => { if (!cancelled) setMatchupMatrix([]) })
+    return () => { cancelled = true }
+  }, [owner, id])
+
+  // PR #78 — commander-aggregate card stats fetch. Surfaces "is this card
+  // pulling weight" across all decks of the same commander. True per-deck
+  // card performance is a future enhancement; the commander aggregate is
+  // a useful proxy in the meantime.
+  useEffect(() => {
+    const cmdr = deck?.commander_card
+    if (!cmdr) { setCommanderCardStats(null); return }
+    let cancelled = false
+    api.getCardStatsByCommander(cmdr)
+      .then(res => {
+        if (cancelled) return
+        // Endpoint may return either an array or {cards: [...]}; normalize.
+        const rows = Array.isArray(res) ? res : (res?.cards || [])
+        setCommanderCardStats(rows)
+      })
+      .catch(() => { if (!cancelled) setCommanderCardStats([]) })
+    return () => { cancelled = true }
+  }, [deck?.commander_card])
 
   // Similar decks — independent fetch so the rest of the page renders
   // immediately. Server scans DecksDir and returns a ranked top-5.
@@ -1275,6 +1315,41 @@ export default function DeckArchive() {
                       </span>],
                     ['ENDING ELO', gauntlet.elo_end != null ? `${Math.round(gauntlet.elo_end)}` : '—'],
                   ]} />
+
+                  {/* Finishing-position breakdown — shows the per-place
+                      distribution that the binary W/L view hides. Backed by
+                      gauntlet.placements [4]int (1st/2nd/3rd/4th). Hidden
+                      when placements is absent (pre-update runs) to stay
+                      backward compatible with cached results. */}
+                  {gauntlet.placements?.length === 4 && gauntlet.games > 0 && (
+                    <>
+                      <div className="hr" style={{ margin: '8px 0' }} />
+                      <div className="t-xs muted" style={{ marginBottom: 4 }}>FINISHING POSITION</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 64px', gap: '4px 8px', fontSize: 11 }}>
+                        {[
+                          { label: '1st (wins)', idx: 0, color: 'var(--ok)' },
+                          { label: '2nd',        idx: 1, color: 'var(--ink)' },
+                          { label: '3rd',        idx: 2, color: 'var(--ink-2)' },
+                          { label: '4th',        idx: 3, color: 'var(--danger)' },
+                        ].map(row => {
+                          const n = gauntlet.placements[row.idx] || 0
+                          const pct = gauntlet.games > 0 ? (n / gauntlet.games * 100) : 0
+                          return (
+                            <div key={row.idx} style={{ display: 'contents' }}>
+                              <span style={{ color: row.color, letterSpacing: '0.05em' }}>{row.label}</span>
+                              <div style={{ height: 12, background: 'var(--bg-2, rgba(0,0,0,0.2))', border: '1px solid var(--rule-2)', position: 'relative' }}>
+                                <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: row.color, opacity: 0.5 }} />
+                              </div>
+                              <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: row.color }}>
+                                {n} · {pct.toFixed(1)}%
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+
                   {gauntlet.top_beaten?.length > 0 && (
                     <>
                       <div className="hr" style={{ margin: '8px 0' }} />
@@ -1547,6 +1622,121 @@ export default function DeckArchive() {
               <KV rows={analysis.tutor_targets.map((t, i) => [`TARGET.${i + 1}`, t])} />
             </Panel>
           )}
+
+          {/* PR #78 — Matchup Matrix panel. Pulls from /api/decks/{id}/matchups.
+              Each row carries opponent commander + W/L counts + WR. Hidden
+              when matchup data is empty (deck hasn't been gauntleted enough
+              to have head-to-head records yet). */}
+          {matchupMatrix && matchupMatrix.length > 0 && (
+            <Panel code="04.MX" title={`MATCHUP MATRIX / / ${matchupMatrix.length} OPPONENTS`}>
+              <div className="t-xs muted" style={{ marginBottom: 6 }}>
+                Head-to-head record against each opponent commander. Color-coded by win rate vs the 25% 4-player baseline.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 80px 1fr', gap: '4px 8px', fontSize: 11 }}>
+                <span className="t-xs muted">OPPONENT</span>
+                <span className="t-xs muted text-right">GAMES</span>
+                <span className="t-xs muted text-right">WIN RATE</span>
+                <span className="t-xs muted">RECORD</span>
+                {matchupMatrix.slice(0, 30).map((m, i) => {
+                  const games = (m.wins || 0) + (m.losses || 0)
+                  if (games === 0) return null
+                  const wr = (m.wins || 0) / games * 100
+                  const color = wr >= 35 ? 'var(--ok)' : wr >= 20 ? 'var(--ink-2)' : 'var(--danger)'
+                  return (
+                    <div key={i} style={{ display: 'contents' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.opponent_commander || m.opponent || '?'}</span>
+                      <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{games}</span>
+                      <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color, fontWeight: 700 }}>{wr.toFixed(1)}%</span>
+                      <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        <span style={{ color: 'var(--ok)' }}>{m.wins || 0}W</span> — <span style={{ color: 'var(--danger)' }}>{m.losses || 0}L</span>
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              {matchupMatrix.length > 30 && (
+                <div className="t-xs muted" style={{ marginTop: 6 }}>
+                  Showing top 30 of {matchupMatrix.length}. Full matrix coming in a future expansion.
+                </div>
+              )}
+            </Panel>
+          )}
+
+          {/* PR #78 — Commander Card Stats panel. Aggregates across all
+              decks of this commander to surface which cards correlate with
+              wins. Top performers + worst performers, with sample sizes
+              so users can sanity-check. Empty state hides the panel until
+              the commander has enough data. */}
+          {commanderCardStats && commanderCardStats.length > 0 && (
+            <Panel code="04.CS" title={`CARD STATS / / ${deck?.commander_card || 'COMMANDER'} ECOSYSTEM`}>
+              <div className="t-xs muted" style={{ marginBottom: 6 }}>
+                Win rate of each card across all decks running {deck?.commander_card || 'this commander'}. Filtered to cards in YOUR list. ≥20 games for sample-size confidence.
+              </div>
+              {(() => {
+                // Filter to cards that are actually in this deck's list, with
+                // enough sample size to be meaningful. Sort by win rate desc.
+                const deckCardNames = new Set(cards.map(c => c.name))
+                const rows = commanderCardStats
+                  .filter(s => deckCardNames.has(s.card_name || s.name))
+                  .filter(s => (s.games_included || s.games || 0) >= 20)
+                  .map(s => {
+                    const games = s.games_included || s.games || 0
+                    const wins = s.wins_when_included || s.wins || 0
+                    return {
+                      name: s.card_name || s.name,
+                      games,
+                      wins,
+                      wr: games > 0 ? wins / games * 100 : 0,
+                    }
+                  })
+                  .sort((a, b) => b.wr - a.wr)
+                if (rows.length === 0) {
+                  return (
+                    <div className="t-xs muted" style={{ padding: '10px 0' }}>
+                      &gt; Not enough card-level data yet for this commander. Run more gauntlets to populate.
+                    </div>
+                  )
+                }
+                const top = rows.slice(0, 8)
+                const bottom = rows.length > 16 ? rows.slice(-8).reverse() : []
+                return (
+                  <>
+                    <div className="t-xs muted" style={{ marginBottom: 4, marginTop: 4 }}>TOP PERFORMERS</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 60px', gap: '2px 8px', fontSize: 10 }}>
+                      {top.map((r, i) => (
+                        <div key={i} style={{ display: 'contents' }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                          <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--ok)', fontWeight: 700 }}>{r.wr.toFixed(1)}%</span>
+                          <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--ink-3)' }}>{r.games}g</span>
+                        </div>
+                      ))}
+                    </div>
+                    {bottom.length > 0 && (
+                      <>
+                        <div className="hr" style={{ margin: '8px 0' }} />
+                        <div className="t-xs muted" style={{ marginBottom: 4 }}>UNDERPERFORMERS</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 60px', gap: '2px 8px', fontSize: 10 }}>
+                          {bottom.map((r, i) => (
+                            <div key={i} style={{ display: 'contents' }}>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                              <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--danger)', fontWeight: 700 }}>{r.wr.toFixed(1)}%</span>
+                              <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--ink-3)' }}>{r.games}g</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )
+              })()}
+            </Panel>
+          )}
+
+          {/* PR #78 — ELO HISTORY placeholder. No historical snapshot table
+              exists in the schema yet (showmatch_elo holds only the current
+              rating). When the snapshot table lands, this panel renders an
+              SVG line chart of rating over time. Hidden entirely until that
+              data source exists; left as a sketch for the schema add. */}
 
           {curse && (
             <div className="archive-curse-section">
