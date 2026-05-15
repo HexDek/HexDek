@@ -273,6 +273,34 @@ function ImportModalInner({ onClose, onImported, navigate, user }) {
     }
   }, [detectedCommander, commander])
 
+  // ─── Name-collision detection ───────────────────────────────────
+  // Watches the (owner, name, commander) trio. When the owner already
+  // has a deck with the same effective name AND commander, surface a
+  // friendly nudge to rename — non-blocking, since the user might want
+  // to overwrite/version-up intentionally. Debounced to avoid hammering
+  // /api/decks on every keystroke.
+  const [collisionDecks, setCollisionDecks] = useState([])
+  useEffect(() => {
+    const o = owner.trim().toLowerCase()
+    if (!o) { setCollisionDecks([]); return }
+    let cancelled = false
+    const t = setTimeout(() => {
+      api.getDecks({ owner: o }).then(res => {
+        if (cancelled) return
+        const list = Array.isArray(res) ? res : (res?.decks || [])
+        const cmdr = (commander || detectedCommander || '').trim().toUpperCase()
+        const effectiveName = (name.trim() || cmdr).toUpperCase()
+        const matches = list.filter(d => {
+          const dCmdr = (d.commander_card || d.commander || '').toUpperCase()
+          const dName = (d.name || '').toUpperCase()
+          return dCmdr === cmdr && dName === effectiveName
+        })
+        setCollisionDecks(matches)
+      }).catch(() => { if (!cancelled) setCollisionDecks([]) })
+    }, 400)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [owner, name, commander, detectedCommander])
+
   // ─── File Upload Handler ──────────────────────────────────────
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0]
@@ -434,7 +462,24 @@ function ImportModalInner({ onClose, onImported, navigate, user }) {
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="TINYBONES, THE PICKPOCKET"
+                  style={collisionDecks.length > 0 ? { borderColor: 'var(--warn)' } : undefined}
                 />
+                {collisionDecks.length > 0 && (
+                  <div style={{
+                    marginTop: 6,
+                    padding: '6px 8px',
+                    border: '1px solid var(--warn)',
+                    borderLeft: '3px solid var(--warn)',
+                    background: 'rgba(255, 200, 0, 0.06)',
+                    fontSize: 10,
+                    lineHeight: 1.4,
+                  }}>
+                    <strong style={{ color: 'var(--warn)' }}>HEY — WE NOTICED</strong>
+                    <div style={{ marginTop: 3, color: 'var(--ink-2)' }}>
+                      You already have {collisionDecks.length === 1 ? 'a deck' : `${collisionDecks.length} decks`} with this exact name + commander. If this is a different build (storm vs. stax, etc.), rename it now to keep them distinct — otherwise it'll show up as a version variant.
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="import-modal__field">
                 <label className="import-modal__label">OWNER</label>
