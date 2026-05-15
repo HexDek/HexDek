@@ -1,6 +1,16 @@
 import { cardArtUrl } from '../services/api'
 import { useArtContrast } from '../hooks/useArtContrast'
 
+// Compact game-count formatter: 30957 → "31K", 1234567 → "1.2M". Used
+// on deck tiles where the raw int blows the row width on mobile.
+function humanizeGames(n) {
+  if (n == null) return '—'
+  if (n < 1000) return `${n} GAMES`
+  if (n < 100_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K GAMES`
+  if (n < 1_000_000) return `${Math.round(n / 1000)}K GAMES`
+  return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M GAMES`
+}
+
 // DeckShelf — grid of commander-art deck tiles. Used by DeckList (with
 // the "ADD YOUR DECK" upload card) and by PublicProfile (without it,
 // since visitors can't upload to someone else's collection). Centralises
@@ -194,9 +204,11 @@ function DeckShelfCard({ deck: d, deckElo, navigate }) {
           <span>
             <span style={{ fontWeight: 700 }}>{Math.round(deckElo.rating)}</span>
             <span className="muted"> · </span>
-            <span style={{ color: 'var(--ok)' }}>{deckElo.wins}W</span>
-            <span className="muted">/</span>
-            <span style={{ color: 'var(--danger)' }}>{deckElo.losses}L</span>
+            <span style={{ color: deckElo.win_rate >= 25 ? 'var(--ok)' : 'var(--danger)', fontWeight: 700 }}>
+              {deckElo.win_rate != null ? `${Math.round(deckElo.win_rate)}%` : '—'}
+            </span>
+            <span className="muted"> · </span>
+            <span className="muted">{humanizeGames(deckElo.games)}</span>
           </span>
         ) : (
           <span className="muted">UNRATED</span>
