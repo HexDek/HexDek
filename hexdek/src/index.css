@@ -714,6 +714,44 @@ body {
   .deck-vital-signs__num { font-size: 32px; }
 }
 
+/* ── MATCHUP MATRIX (per-deck head-to-head table) ──
+   Each row is a flex container — opponent name on line 1, stat group
+   on line 2 on narrow viewports. Above 600px the row stays single-line
+   with the stat group pinned right. */
+.matchup-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.matchup-matrix__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+  padding: 3px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.04);
+}
+.matchup-matrix__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.matchup-matrix__stats {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-shrink: 0;
+}
+@media (max-width: 600px) {
+  .matchup-matrix__row { flex-direction: column; align-items: stretch; gap: 0; }
+  .matchup-matrix__name { white-space: normal; font-weight: 600; }
+  .matchup-matrix__stats { justify-content: flex-start; padding-left: 8px; opacity: 0.85; }
+}
+
 /* ── DECK STATS SUMMARY (full-width strip below hero) ── */
 .deck-stats-summary-row {
   padding: 14px 18px 0;
@@ -1498,7 +1536,9 @@ body {
 
   .led { width: 9px; height: 9px; }
 
-  .kv { grid-template-columns: max-content 1fr minmax(0, 100px); gap: 2px 6px; font-size: 10px; }
+  /* KV at tablet width — give the value column a more generous cap so
+     card names like "Knight Exemplar" don't truncate to "Knight Exempl…". */
+  .kv { grid-template-columns: max-content 1fr minmax(0, 140px); gap: 2px 6px; font-size: 10px; }
 
   .frame { margin: 0; border: none; }
   .crop { display: none; }
@@ -1579,6 +1619,26 @@ body {
   .t-4xl { font-size: 44px; }
   .t-3xl { font-size: 28px; }
   .t-2xl { font-size: 22px; }
+}
+
+/* Extra-narrow phones: drop the dotted-leader column entirely and stack
+   label-over-value so long card names get the full row width to breathe.
+   Loses some retro aesthetic but the legibility win is significant. */
+@media (max-width: 480px) {
+  .kv {
+    grid-template-columns: 1fr;
+    gap: 0;
+    row-gap: 4px;
+  }
+  .kv .k { padding-top: 6px; font-size: 9px; opacity: 0.7; }
+  .kv .dots { display: none; }
+  .kv .v {
+    text-align: left;
+    white-space: normal;
+    padding-left: 10px;
+    overflow: visible;
+    text-overflow: clip;
+  }
 }
 
 @media (max-width: 480px) {

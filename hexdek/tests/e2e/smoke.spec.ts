@@ -80,3 +80,49 @@ test('owner profile renders', async ({ page }) => {
   await page.waitForTimeout(DATA_WAIT_MS)
   await page.screenshot({ path: shot('profile-7174n1c'), fullPage: true })
 })
+
+// Mobile deep-audit — expands every collapsible panel then captures
+// one full-page screenshot. The output is sliced into readable chunks
+// by scripts/slice-deck-audit.py for visual review (Read-tool thumbnails
+// of a 5000px-tall fullPage shot are illegible).
+test('deck page mobile — element captures (Marchesa)', async ({ page }) => {
+  test.skip(test.info().project.name !== 'mobile', 'mobile-only audit test')
+  await page.goto('/decks/7174n1c/god_save_the_queen')
+  await expect(page.locator('h1')).toBeVisible({ timeout: 15_000 })
+  await page.waitForTimeout(8000)
+  // Some deeper sections live inside an overflow-hidden container, so
+  // page.fullPage screenshot truncates them. Scroll each section of
+  // interest into view and capture the element directly. ElementHandle
+  // screenshots are independent of the parent overflow clamp.
+  const sections = [
+    { sel: '.matchup-matrix', name: 'matchup-matrix' },
+    { sel: '[class*="elo-history"], svg.elo-history-chart', name: 'elo-history' },
+  ]
+  for (const s of sections) {
+    const el = page.locator(s.sel).first()
+    if (await el.count() === 0) continue
+    await el.scrollIntoViewIfNeeded()
+    await page.waitForTimeout(300)
+    await el.screenshot({ path: shot(`section-${s.name}`) })
+  }
+  // Also keep a full-page fallback for above-the-fold content.
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await page.waitForTimeout(300)
+  await page.screenshot({ path: shot('marchesa-expanded'), fullPage: true })
+})
+
+test('deck workshop opens on mobile (Marchesa)', async ({ page }) => {
+  test.skip(test.info().project.name !== 'mobile', 'mobile-only workshop test')
+  await page.goto('/decks/7174n1c/god_save_the_queen')
+  await expect(page.locator('h1')).toBeVisible({ timeout: 15_000 })
+  await page.waitForTimeout(DATA_WAIT_MS)
+  // Workshop button is in the sidebar, may be off-screen on mobile until
+  // we scroll. Find it, scroll it into view, click.
+  const ws = page.locator('button:has-text("WORKSHOP")').first()
+  await ws.scrollIntoViewIfNeeded()
+  await ws.click()
+  // Wait for the textarea editor to mount.
+  await page.waitForSelector('textarea', { timeout: 5_000 }).catch(() => {})
+  await page.waitForTimeout(800)
+  await page.screenshot({ path: shot('workshop-mobile-marchesa'), fullPage: true })
+})

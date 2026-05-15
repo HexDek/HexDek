@@ -244,16 +244,22 @@ function CollapsiblePanel({ code, title, right, defaultOpen = false, children })
     <Panel
       code={code}
       title={(
-        <span
+        <button
+          type="button"
+          className="collapsible-panel__toggle"
           onClick={() => setOpen(o => !o)}
-          style={{ cursor: 'pointer', userSelect: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          aria-expanded={open}
+          style={{
+            cursor: 'pointer', userSelect: 'none', display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: 'none', border: 0, padding: 0, font: 'inherit', color: 'inherit',
+          }}
         >
           <span style={{
             fontSize: 10, color: 'var(--ink-2)', width: 12, textAlign: 'center',
             transition: 'transform 0.15s', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block',
           }}>▶</span>
           <span>{title}</span>
-        </span>
+        </button>
       )}
       right={right}
     >
@@ -1698,23 +1704,29 @@ export default function DeckArchive() {
               <div className="t-xs muted" style={{ marginBottom: 6 }}>
                 Head-to-head record against each opponent commander. Color-coded by win rate vs the 25% 4-player baseline.
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 80px 1fr', gap: '4px 8px', fontSize: 11 }}>
-                <span className="t-xs muted">OPPONENT</span>
-                <span className="t-xs muted text-right">GAMES</span>
-                <span className="t-xs muted text-right">WIN RATE</span>
-                <span className="t-xs muted">RECORD</span>
+              {/* Per-row flex layout instead of CSS grid contents — lets the
+                  opponent name take the full row width and pushes the stat
+                  group onto a second line on narrow viewports. Each row is
+                  its own block so wrap is per-opponent, not global. */}
+              <div className="matchup-matrix">
                 {matchupMatrix.slice(0, 30).map((m, i) => {
                   const games = (m.wins || 0) + (m.losses || 0)
                   if (games === 0) return null
                   const wr = (m.wins || 0) / games * 100
                   const color = wr >= 35 ? 'var(--ok)' : wr >= 20 ? 'var(--ink-2)' : 'var(--danger)'
                   return (
-                    <div key={i} style={{ display: 'contents' }}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.opponent_commander || m.opponent || '?'}</span>
-                      <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{games}</span>
-                      <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color, fontWeight: 700 }}>{wr.toFixed(1)}%</span>
-                      <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-                        <span style={{ color: 'var(--ok)' }}>{m.wins || 0}W</span> — <span style={{ color: 'var(--danger)' }}>{m.losses || 0}L</span>
+                    <div key={i} className="matchup-matrix__row">
+                      <span className="matchup-matrix__name" title={m.opponent_commander || m.opponent || '?'}>
+                        {m.opponent_commander || m.opponent || '?'}
+                      </span>
+                      <span className="matchup-matrix__stats">
+                        <span className="t-xs muted">{games}g</span>
+                        <span style={{ color, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{wr.toFixed(0)}%</span>
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          <span style={{ color: 'var(--ok)' }}>{m.wins || 0}W</span>
+                          <span className="muted">—</span>
+                          <span style={{ color: 'var(--danger)' }}>{m.losses || 0}L</span>
+                        </span>
                       </span>
                     </div>
                   )
