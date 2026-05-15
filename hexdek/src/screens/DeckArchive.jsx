@@ -1685,8 +1685,32 @@ export default function DeckArchive() {
             </CollapsiblePanel>
           )}
 
-          {/* Cuttable cards rationale (replaces older thumbnail-only panel) */}
-          <ConsiderCuttingRationale cuts={cuttableCards} />
+          {/* Cuttable cards rationale (replaces older thumbnail-only panel).
+              Owners get a working CUT button that opens the workshop with
+              that card already removed from the textarea — Save Update
+              commits. Non-owners see the CUT label as a passive flag. */}
+          <ConsiderCuttingRationale
+            cuts={cuttableCards}
+            onCut={isOwner ? (cardName) => {
+              const lines = cards.map(c => {
+                const cmdr = deck?.commander_card
+                if (cmdr && c.name === cmdr) return `COMMANDER: ${c.name}`
+                return c.quantity > 1 ? `${c.quantity} ${c.name}` : `1 ${c.name}`
+              }).filter(line => {
+                // Remove the card line (matches either "1 NAME" or "N NAME"
+                // for the target — commander rows are protected).
+                if (line.startsWith('COMMANDER:')) return true
+                const tail = line.replace(/^\d+\s+/, '')
+                return tail !== cardName
+              })
+              setEditText(lines.join('\n'))
+              setEditing(true)
+              api.getDeckVersions(`${owner}/${id}`).then(setVersions).catch(() => {})
+              // Scroll workshop into view on mobile so the user immediately
+              // sees the textarea with the card removed.
+              setTimeout(() => editPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+            } : undefined}
+          />
 
           {/* Tutor targets */}
           {analysis?.tutor_targets && (

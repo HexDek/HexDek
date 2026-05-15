@@ -63,7 +63,12 @@ function Caret({ open }) {
 // CONSIDER CUTTING — explains why each cuttable card was flagged.
 // ---------------------------------------------------------------------------
 
-export function ConsiderCuttingRationale({ cuts }) {
+// `onCut` (optional) — invoked with the card name when a row's CUT
+// action is clicked. When set, the CUT tag becomes a proper button
+// that opens the workshop with the card removed. When unset (e.g.
+// public viewer who can't edit this deck), CUT renders as a passive
+// flag and the click is a no-op.
+export function ConsiderCuttingRationale({ cuts, onCut }) {
   const [openIdx, setOpenIdx] = useState(null)
   const items = (cuts || []).filter(c => c && (c.name || typeof c === 'string'))
   if (items.length === 0) return null
@@ -105,7 +110,29 @@ export function ConsiderCuttingRationale({ cuts }) {
                   </span>
                 )}
               </span>
-              <Tag kind="warn">CUT</Tag>
+              {onCut ? (
+                <button
+                  type="button"
+                  className="cut-action"
+                  onClick={(e) => { e.stopPropagation(); onCut(name) }}
+                  title={`Open Workshop with ${name} removed`}
+                  style={{
+                    cursor: 'pointer',
+                    background: 'transparent',
+                    border: '1px solid var(--warn)',
+                    color: 'var(--warn)',
+                    padding: '2px 8px',
+                    fontSize: 9,
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  CUT ↗
+                </button>
+              ) : (
+                <Tag kind="warn">CUT</Tag>
+              )}
             </div>
             {open && hasDetail && (
               <div style={detailGrid}>
