@@ -234,6 +234,88 @@ const CardThumb = ({ name, cmc, score, compact }) => {
   )
 }
 
+// WorkshopAddCard — typeahead-style card-add input for the Workshop
+// editor. Debounced search against /api/cards/search, dropdown shows
+// up to 6 matches, Enter or click appends. Lets the user add cards
+// without manually typing the card name into the textarea (with all
+// the typo risk that implies).
+function WorkshopAddCard({ onAdd }) {
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState([])
+  const [focused, setFocused] = useState(false)
+  useEffect(() => {
+    if (!q.trim() || q.trim().length < 2) { setResults([]); return }
+    let cancelled = false
+    const t = setTimeout(() => {
+      api.searchCards(q.trim(), 6).then(res => {
+        if (cancelled) return
+        const rows = Array.isArray(res) ? res : (res?.results || res?.cards || [])
+        setResults(rows.slice(0, 6))
+      }).catch(() => { if (!cancelled) setResults([]) })
+    }, 200)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [q])
+  const pick = (name) => {
+    onAdd(name)
+    setQ('')
+    setResults([])
+  }
+  return (
+    <div style={{ position: 'relative', marginBottom: 8 }}>
+      <input
+        type="text"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setTimeout(() => setFocused(false), 150)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && results[0]) {
+            e.preventDefault()
+            pick(results[0].name || results[0])
+          }
+        }}
+        placeholder="+ ADD CARD — type to search..."
+        style={{
+          width: '100%', padding: '8px 10px',
+          background: 'var(--bg-2, rgba(0,0,0,0.3))',
+          border: '1px solid var(--rule-2)',
+          color: 'var(--ink)', fontFamily: 'inherit', fontSize: 11,
+          letterSpacing: '0.04em',
+        }}
+        spellCheck={false}
+      />
+      {focused && results.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+          background: 'var(--panel)', border: '1px solid var(--rule-2)',
+          borderTop: 'none', maxHeight: 240, overflowY: 'auto',
+        }}>
+          {results.map((r, i) => {
+            const name = r.name || r
+            return (
+              <div
+                key={i}
+                onMouseDown={(e) => { e.preventDefault(); pick(name) }}
+                style={{
+                  padding: '6px 10px', cursor: 'pointer', fontSize: 11,
+                  borderBottom: '1px solid var(--rule)',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-2, rgba(255,255,255,0.04))'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                {name}
+                {r.type_line && (
+                  <span className="t-xs muted" style={{ marginLeft: 8 }}>— {r.type_line}</span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // CollapsiblePanel wraps a Panel with a click-to-toggle header. Used to
 // hide lower-tier deep analysis sections by default so the top of the
 // deck page stays scannable. The expand/collapse caret uses the same
@@ -1191,6 +1273,23 @@ export default function DeckArchive() {
             <Panel code="04.X" title="WORKSHOP / / DECK LIST" right={
               <span className="t-xs" style={{ color: 'var(--warn)' }}>IN WORKSHOP</span>
             }>
+              <WorkshopAddCard onAdd={(cardName) => {
+                // Append "1 CardName" to the bottom of editText, deduplicating
+                // against existing lines so a card already in the list bumps
+                // to qty+1 instead of getting a second "1 CardName" entry.
+                const lines = editText.split('\n')
+                const existingIdx = lines.findIndex(l => {
+                  const m = l.match(/^(\d+)\s+(.+)$/)
+                  return m && m[2].trim() === cardName
+                })
+                if (existingIdx >= 0) {
+                  const m = lines[existingIdx].match(/^(\d+)\s+(.+)$/)
+                  if (m) lines[existingIdx] = `${parseInt(m[1], 10) + 1} ${m[2]}`
+                } else {
+                  lines.push(`1 ${cardName}`)
+                }
+                setEditText(lines.filter(l => l !== '' || lines.indexOf(l) === lines.length - 1).join('\n'))
+              }} />
               <textarea
                 value={editText}
                 onChange={e => setEditText(e.target.value)}
