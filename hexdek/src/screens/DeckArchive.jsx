@@ -234,6 +234,34 @@ const CardThumb = ({ name, cmc, score, compact }) => {
   )
 }
 
+// CollapsiblePanel wraps a Panel with a click-to-toggle header. Used to
+// hide lower-tier deep analysis sections by default so the top of the
+// deck page stays scannable. The expand/collapse caret uses the same
+// rotating triangle pattern as RationalePanels.jsx's per-row Caret.
+function CollapsiblePanel({ code, title, right, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <Panel
+      code={code}
+      title={(
+        <span
+          onClick={() => setOpen(o => !o)}
+          style={{ cursor: 'pointer', userSelect: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+        >
+          <span style={{
+            fontSize: 10, color: 'var(--ink-2)', width: 12, textAlign: 'center',
+            transition: 'transform 0.15s', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block',
+          }}>▶</span>
+          <span>{title}</span>
+        </span>
+      )}
+      right={right}
+    >
+      {open && children}
+    </Panel>
+  )
+}
+
 export default function DeckArchive() {
   const { owner, id } = useParams()
   const navigate = useNavigate()
@@ -271,6 +299,10 @@ export default function DeckArchive() {
   // this commander — surfaces "is this card pulling weight" signal.
   const [matchupMatrix, setMatchupMatrix] = useState(null)
   const [commanderCardStats, setCommanderCardStats] = useState(null)
+  // PR #79 — ELO history runs (oldest-first). Each entry is one completed
+  // gauntlet, captures elo_start / elo_end / win_rate / placements. Drives
+  // the rating-over-time chart on the deck page.
+  const [eloHistory, setEloHistory] = useState(null)
   const [cloning, setCloning] = useState(false)
   const [creditsRefreshKey, setCreditsRefreshKey] = useState(0)
   const [confirmClone, setConfirmClone] = useState(false)
@@ -468,6 +500,22 @@ export default function DeckArchive() {
         setMatchupMatrix(rows)
       })
       .catch(() => { if (!cancelled) setMatchupMatrix([]) })
+    return () => { cancelled = true }
+  }, [owner, id])
+
+  // PR #79 — ELO history fetch. Pulls the last 20 gauntlet runs from
+  // /api/decks/{id}/elo-history (oldest-first). Empty array if the deck
+  // has no gauntlet runs yet — chart panel hides on empty.
+  useEffect(() => {
+    if (!owner || !id) { setEloHistory(null); return }
+    let cancelled = false
+    api.getDeckEloHistory(`${owner}/${id}`, 20)
+      .then(res => {
+        if (cancelled) return
+        const rows = Array.isArray(res?.runs) ? res.runs : []
+        setEloHistory(rows)
+      })
+      .catch(() => { if (!cancelled) setEloHistory([]) })
     return () => { cancelled = true }
   }, [owner, id])
 
@@ -1518,7 +1566,7 @@ export default function DeckArchive() {
 
           {/* Meta matchups */}
           {metaMatchups.length > 0 && (
-            <Panel code="04.MM" title={`META POSITIONING / / ${archetype}`}>
+            <CollapsiblePanel code="04.MM" title={`META POSITIONING / / ${archetype}`}>
               <div style={{ display: 'grid', gap: 0 }}>
                 {metaMatchups.map((m, i) => {
                   const ratingColor = m.rating === 'favored' ? 'var(--ok)' : m.rating === 'unfavored' ? 'var(--danger)' : 'var(--ink-2)'
@@ -1536,49 +1584,49 @@ export default function DeckArchive() {
                   )
                 })}
               </div>
-            </Panel>
+            </CollapsiblePanel>
           )}
 
           {/* Vulnerable to */}
           {vulnerableTo.length > 0 && (
-            <Panel code="04.V" title="VULNERABLE TO">
+            <CollapsiblePanel code="04.V" title="VULNERABLE TO">
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {vulnerableTo.map((v, i) => <Tag key={i} kind="warn" solid>{v.toUpperCase()}</Tag>)}
               </div>
-            </Panel>
+            </CollapsiblePanel>
           )}
 
           {/* Star cards */}
           {starCards.length > 0 && (
-            <Panel code="04.S" title={`STAR CARDS / / ${starCards.length}`}>
+            <CollapsiblePanel code="04.S" title={`STAR CARDS / / ${starCards.length}`}>
               <div className="grid col-5 gap-2">
                 {starCards.slice(0, 10).map((name, i) => (
                   <CardThumb key={i} name={name} score="★" />
                 ))}
               </div>
-            </Panel>
+            </CollapsiblePanel>
           )}
 
           {/* Finisher cards */}
           {finisherCards.length > 0 && (
-            <Panel code="04.K" title={`WIN CONDITIONS / / ${finisherCards.length}`}>
+            <CollapsiblePanel code="04.K" title={`WIN CONDITIONS / / ${finisherCards.length}`}>
               <div className="grid col-5 gap-2">
                 {finisherCards.slice(0, 10).map((name, i) => (
                   <CardThumb key={i} name={name} />
                 ))}
               </div>
-            </Panel>
+            </CollapsiblePanel>
           )}
 
           {/* Value engine keys */}
           {valueKeys.length > 0 && (
-            <Panel code="04.E" title={`VALUE ENGINE / / ${valueKeys.length} KEY CARDS`}>
+            <CollapsiblePanel code="04.E" title={`VALUE ENGINE / / ${valueKeys.length} KEY CARDS`}>
               <div className="grid col-5 gap-2">
                 {valueKeys.slice(0, 10).map((name, i) => (
                   <CardThumb key={i} name={name} />
                 ))}
               </div>
-            </Panel>
+            </CollapsiblePanel>
           )}
 
           {/* Value engine rationale — explains why each engine was identified */}
@@ -1586,18 +1634,18 @@ export default function DeckArchive() {
 
           {/* Game Changer cards */}
           {gameChangerCards.length > 0 && (
-            <Panel code="04.GC" title={`GAME CHANGERS / / ${gameChangerCards.length}`} right={<Tag kind="bad" solid>B4+</Tag>}>
+            <CollapsiblePanel code="04.GC" title={`GAME CHANGERS / / ${gameChangerCards.length}`} right={<Tag kind="bad" solid>B4+</Tag>}>
               <div className="grid col-5 gap-2">
                 {gameChangerCards.map((name, i) => (
                   <CardThumb key={i} name={name} />
                 ))}
               </div>
-            </Panel>
+            </CollapsiblePanel>
           )}
 
           {/* Card packages (theme-grouped synergy clusters) */}
           {emergentSynergies.length > 0 && (
-            <Panel code="04.H" title={`CARD PACKAGES / / ${emergentSynergies.length} DISCOVERED`}>
+            <CollapsiblePanel code="04.H" title={`CARD PACKAGES / / ${emergentSynergies.length} DISCOVERED`}>
               {emergentSynergies.slice(0, 12).map((syn, i) => (
                 <div key={i} style={{ padding: '6px 0', borderBottom: i < emergentSynergies.length - 1 ? '1px dashed var(--rule-2)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
@@ -1610,7 +1658,7 @@ export default function DeckArchive() {
                   </div>
                 </div>
               ))}
-            </Panel>
+            </CollapsiblePanel>
           )}
 
           {/* Cuttable cards rationale (replaces older thumbnail-only panel) */}
@@ -1618,9 +1666,9 @@ export default function DeckArchive() {
 
           {/* Tutor targets */}
           {analysis?.tutor_targets && (
-            <Panel code="04.F" title="TUTOR TARGETS">
+            <CollapsiblePanel code="04.F" title="TUTOR TARGETS">
               <KV rows={analysis.tutor_targets.map((t, i) => [`TARGET.${i + 1}`, t])} />
-            </Panel>
+            </CollapsiblePanel>
           )}
 
           {/* PR #78 — Matchup Matrix panel. Pulls from /api/decks/{id}/matchups.
@@ -1732,11 +1780,101 @@ export default function DeckArchive() {
             </Panel>
           )}
 
-          {/* PR #78 — ELO HISTORY placeholder. No historical snapshot table
-              exists in the schema yet (showmatch_elo holds only the current
-              rating). When the snapshot table lands, this panel renders an
-              SVG line chart of rating over time. Hidden entirely until that
-              data source exists; left as a sketch for the schema add. */}
+          {/* PR #79 — ELO HISTORY chart. Pulls /api/decks/{id}/elo-history,
+              renders rating-over-time SVG. Hidden when no runs exist (new
+              deck, never gauntleted) so we don't show an empty axis box. */}
+          {eloHistory && eloHistory.length >= 2 && (
+            <Panel code="04.EH" title={`ELO HISTORY / / ${eloHistory.length} RUNS`}>
+              <div className="t-xs muted" style={{ marginBottom: 6 }}>
+                Rating trajectory across the last {eloHistory.length} completed gauntlets, oldest left → newest right. Calibration arc visible — big swings early, smaller swings as the rating converges on true position.
+              </div>
+              {(() => {
+                // Collect series + axis math. Use elo_end as the canonical
+                // post-run rating; show elo_start as a faint dotted track
+                // for "starting point of each run" context.
+                const ends = eloHistory.map(r => r.elo_end || 0)
+                const starts = eloHistory.map(r => r.elo_start || 0)
+                const all = [...ends, ...starts]
+                const minY = Math.min(...all)
+                const maxY = Math.max(...all)
+                const padY = Math.max(50, (maxY - minY) * 0.1)
+                const lo = Math.floor((minY - padY) / 100) * 100
+                const hi = Math.ceil((maxY + padY) / 100) * 100
+                const w = 600  // viewBox width
+                const h = 160 // viewBox height
+                const pad = { top: 10, right: 10, bottom: 22, left: 44 }
+                const plotW = w - pad.left - pad.right
+                const plotH = h - pad.top - pad.bottom
+                const xAt = (i) => pad.left + (eloHistory.length === 1 ? plotW / 2 : (plotW * i / (eloHistory.length - 1)))
+                const yAt = (v) => pad.top + plotH - ((v - lo) / (hi - lo) * plotH)
+                const endLine = ends.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i).toFixed(1)} ${yAt(v).toFixed(1)}`).join(' ')
+                const startLine = starts.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i).toFixed(1)} ${yAt(v).toFixed(1)}`).join(' ')
+                // Y-axis ticks: 4 evenly-spaced rating gridlines
+                const ticks = [0, 0.25, 0.5, 0.75, 1].map(t => Math.round((lo + (hi - lo) * t) / 10) * 10)
+                return (
+                  <>
+                    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none"
+                         style={{ width: '100%', height: 200, display: 'block', border: '1px solid var(--rule-2)', background: 'var(--bg-2, rgba(0,0,0,0.12))' }}>
+                      {/* Gridlines */}
+                      {ticks.map((t, i) => (
+                        <g key={`g-${i}`}>
+                          <line x1={pad.left} x2={w - pad.right}
+                                y1={yAt(t)} y2={yAt(t)}
+                                stroke="var(--rule-2)" strokeWidth="0.5" strokeDasharray="2,3" />
+                          <text x={pad.left - 5} y={yAt(t) + 3}
+                                textAnchor="end" fontSize="8" fill="var(--ink-3)"
+                                fontFamily="inherit" letterSpacing="0.04em">{t}</text>
+                        </g>
+                      ))}
+                      {/* Start-of-run track (faint, dotted) */}
+                      <path d={startLine}
+                            stroke="var(--ink-3)"
+                            strokeWidth="1" strokeDasharray="3,2"
+                            fill="none" opacity="0.6" />
+                      {/* End-of-run line (primary) */}
+                      <path d={endLine}
+                            stroke="var(--accent, var(--ink))"
+                            strokeWidth="2"
+                            fill="none" />
+                      {/* End-of-run dots, color-coded by delta direction */}
+                      {ends.map((v, i) => {
+                        const delta = eloHistory[i].elo_delta || 0
+                        const fill = delta >= 0 ? 'var(--ok)' : 'var(--danger)'
+                        return (
+                          <circle key={`d-${i}`}
+                                  cx={xAt(i)} cy={yAt(v)} r="3"
+                                  fill={fill}
+                                  stroke="var(--bg)" strokeWidth="0.5">
+                            <title>{`Run ${i + 1}: ELO ${Math.round(eloHistory[i].elo_start)} → ${Math.round(v)} (Δ${delta >= 0 ? '+' : ''}${Math.round(delta)}, WR ${eloHistory[i].win_rate}%, ${eloHistory[i].games} games)`}</title>
+                          </circle>
+                        )
+                      })}
+                      {/* X-axis ticks: first, middle, last run */}
+                      {[0, Math.floor((eloHistory.length - 1) / 2), eloHistory.length - 1].filter((v, i, a) => a.indexOf(v) === i && v >= 0).map((i) => {
+                        const r = eloHistory[i]
+                        const label = r?.finished_at ? new Date(r.finished_at).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' }) : `R${i + 1}`
+                        return (
+                          <text key={`x-${i}`}
+                                x={xAt(i)} y={h - 6}
+                                textAnchor="middle" fontSize="8" fill="var(--ink-3)"
+                                fontFamily="inherit" letterSpacing="0.04em">{label}</text>
+                        )
+                      })}
+                    </svg>
+                    <div className="t-xs muted" style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                      <span>━ ending ELO  · · ·  starting ELO</span>
+                      <span>● green = positive delta · red = negative · hover for run details</span>
+                    </div>
+                  </>
+                )
+              })()}
+            </Panel>
+          )}
+          {eloHistory && eloHistory.length === 1 && (
+            <div className="t-xs muted" style={{ padding: '6px 12px' }}>
+              &gt; Run a second gauntlet to start populating the ELO history chart.
+            </div>
+          )}
 
           {curse && (
             <div className="archive-curse-section">

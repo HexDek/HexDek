@@ -986,6 +986,33 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 	sm.gauntlets[deckKey] = result
 	sm.gauntletMu.Unlock()
 
+	// Persist snapshot for ELO-history chart. Best-effort — a DB error
+	// here doesn't fail the gauntlet (the in-memory result still serves
+	// the API). Logged on failure so we notice trends.
+	if sm.sqlDB != nil {
+		rec := db.GauntletRunRecord{
+			DeckKey:    result.DeckKey,
+			Commander:  result.Commander,
+			StartedAt:  result.StartedAt,
+			FinishedAt: result.FinishedAt,
+			Games:      result.Games,
+			Wins:       result.Wins,
+			Losses:     result.Losses,
+			WinRate:    result.WinRate,
+			ELOStart:   result.ELOStart,
+			ELOEnd:     result.ELOEnd,
+			ELODelta:   result.ELODelta,
+			AvgTurns:   result.AvgTurns,
+			Place1st:   result.Placements[0],
+			Place2nd:   result.Placements[1],
+			Place3rd:   result.Placements[2],
+			Place4th:   result.Placements[3],
+		}
+		if err := db.InsertGauntletRun(context.Background(), sm.sqlDB, rec); err != nil {
+			log.Printf("gauntlet_runs insert: %v", err)
+		}
+	}
+
 	sm.flushELO()
 	log.Printf("gauntlet: complete %s — %d games, %d wins (%.1f%%), ELO %+.0f (%0.f → %.0f)",
 		deckKey, result.Games, result.Wins, result.WinRate, result.ELODelta, result.ELOStart, result.ELOEnd)

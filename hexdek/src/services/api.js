@@ -122,6 +122,9 @@ export const api = {
   // Matchup matrix — per-deck head-to-head records (rich dataset beyond
   // the gauntlet result's TopBeaten/TopLostTo summary).
   getDeckMatchups: (id) => request(`/api/decks/${id}/matchups`),
+  // ELO history — chronological list of completed gauntlet runs for the
+  // deck. Returns oldest-first so the chart can plot the calibration arc.
+  getDeckEloHistory: (id, limit = 20) => request(`/api/decks/${id}/elo-history?limit=${limit}`),
   // Aggregate card stats keyed by commander — used as the per-deck card-
   // ranking proxy until true per-deck card performance is exposed.
   getCardStatsByCommander: (commander) => request(`/api/card-stats/${encodeURIComponent(commander)}`),

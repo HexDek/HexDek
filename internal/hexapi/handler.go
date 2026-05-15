@@ -133,6 +133,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/versions", h.handleListVersions)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/analysis", h.handleGetAnalysis)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/matchups", h.handleDeckMatchups)
+	mux.HandleFunc("GET /api/decks/{owner}/{id}/elo-history", h.handleDeckEloHistory)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/upgrade", h.handleDeckUpgrade)
 	mux.HandleFunc("POST /api/decks/{owner}/{id}/analyze", h.handleRunAnalysis)
 	mux.HandleFunc("POST /api/decks/{owner}/{id}/clone", h.handleCloneDeck)
@@ -1321,6 +1322,45 @@ func (h *Handler) handleDeckMatchups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
 		"deck_key": deckKey,
 		"matchups": rows,
+	})
+}
+
+// handleDeckEloHistory returns the most recent gauntlet runs for a deck,
+// chronological (oldest first) so the frontend can plot rating-over-time
+// without re-sorting. ?limit=N caps the returned series (default 20).
+func (h *Handler) handleDeckEloHistory(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	id := r.PathValue("id")
+	if !validatePathComponent(owner) || !validatePathComponent(id) {
+		http.Error(w, "invalid owner or id", http.StatusBadRequest)
+		return
+	}
+	deckKey := owner + "/" + id
+	if h.Showmatch == nil || h.Showmatch.sqlDB == nil {
+		writeJSON(w, map[string]any{"deck_key": deckKey, "runs": []any{}})
+		return
+	}
+	limit := 20
+	if q := r.URL.Query().Get("limit"); q != "" {
+		if n, err := strconv.Atoi(q); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+	rows, err := db.LoadGauntletRuns(r.Context(), h.Showmatch.sqlDB, deckKey, limit)
+	if err != nil {
+		http.Error(w, "query failed", http.StatusInternalServerError)
+		return
+	}
+	// DB returns newest-first; reverse for chronological display.
+	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+		rows[i], rows[j] = rows[j], rows[i]
+	}
+	if rows == nil {
+		rows = []db.GauntletRunRecord{}
+	}
+	writeJSON(w, map[string]any{
+		"deck_key": deckKey,
+		"runs":     rows,
 	})
 }
 

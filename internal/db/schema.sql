@@ -216,6 +216,36 @@ CREATE TABLE IF NOT EXISTS showmatch_game_seat (
 CREATE INDEX IF NOT EXISTS idx_showmatch_game_finished ON showmatch_game(finished_at);
 CREATE INDEX IF NOT EXISTS idx_showmatch_seat_commander ON showmatch_game_seat(commander);
 
+-- Per-gauntlet-run ELO snapshot. One row per completed gauntlet,
+-- captures the rating trajectory for the deck under test (seat 0).
+-- Drives the deck-page ELO history chart — without this table, the
+-- only visible signal is the current rating, hiding the calibration
+-- arc players see over multiple runs.
+CREATE TABLE IF NOT EXISTS gauntlet_runs (
+    run_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    deck_key     TEXT NOT NULL,
+    commander    TEXT NOT NULL DEFAULT '',
+    started_at   INTEGER NOT NULL,
+    finished_at  INTEGER NOT NULL,
+    games        INTEGER NOT NULL,
+    wins         INTEGER NOT NULL,
+    losses       INTEGER NOT NULL,
+    win_rate     REAL NOT NULL DEFAULT 0.0,
+    elo_start    REAL NOT NULL DEFAULT 0.0,
+    elo_end      REAL NOT NULL DEFAULT 0.0,
+    elo_delta    REAL NOT NULL DEFAULT 0.0,
+    avg_turns    REAL NOT NULL DEFAULT 0.0,
+    -- Per-position counts (1st/2nd/3rd/4th) — populated when the
+    -- gauntlet uses the placements tracking added in PR #78. Older
+    -- runs leave these zeroed.
+    place_1st    INTEGER NOT NULL DEFAULT 0,
+    place_2nd    INTEGER NOT NULL DEFAULT 0,
+    place_3rd    INTEGER NOT NULL DEFAULT 0,
+    place_4th    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_deck     ON gauntlet_runs(deck_key, finished_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_finished ON gauntlet_runs(finished_at);
+
 CREATE TABLE IF NOT EXISTS card_win_stats (
     card_name    TEXT NOT NULL,
     commander    TEXT NOT NULL,
