@@ -495,7 +495,30 @@ func moraugTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 	if gs.Phase != "main" && gs.Phase != "precombat_main" && gs.Phase != "postcombat_main" {
 		return
 	}
-	gs.PendingExtraCombats++
+	// Moraug's text: "there's an additional combat phase after this
+	// phase. At the beginning of that combat, untap all creatures you
+	// control." Queue the extra combat with an OnBegin hook that
+	// untaps creatures controlled by THIS Moraug's owner at trigger
+	// time (captured by closure — rider follows the original
+	// controller even if Moraug changes hands later).
+	moraugController := perm.Controller
+	gs.AddExtraCombat(gameengine.PendingExtraCombat{
+		SourceCard: perm.Card.DisplayName(),
+		OnBegin: func(g *gameengine.GameState) {
+			if g == nil || moraugController < 0 || moraugController >= len(g.Seats) {
+				return
+			}
+			s := g.Seats[moraugController]
+			if s == nil {
+				return
+			}
+			for _, p := range s.Battlefield {
+				if p != nil && p.IsCreature() && p.Tapped {
+					p.Tapped = false
+				}
+			}
+		},
+	})
 	gs.LogEvent(gameengine.Event{
 		Kind:   "extra_combat",
 		Seat:   perm.Controller,
@@ -507,7 +530,7 @@ func moraugTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map
 	})
 	emit(gs, "moraug_extra_combat", perm.Card.DisplayName(), map[string]interface{}{
 		"seat":           perm.Controller,
-		"extra_combats":  gs.PendingExtraCombats,
+		"extra_combats":  len(gs.PendingExtraCombats),
 	})
 }
 

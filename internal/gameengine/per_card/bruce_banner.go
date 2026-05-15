@@ -94,13 +94,15 @@ func bruceBannerEnrage(gs *gameengine.GameState, perm *gameengine.Permanent, ctx
 			perm.Tapped = false
 			untapped = true
 		}
-		gs.PendingExtraCombats++
+		gs.AddExtraCombat(gameengine.PendingExtraCombat{
+			SourceCard: perm.Card.DisplayName(),
+		})
 		extraCombat = true
 	}
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":            perm.Controller,
 		"untapped":        untapped,
 		"extra_combat":    extraCombat,
-		"pending_combats": gs.PendingExtraCombats,
+		"pending_combats": len(gs.PendingExtraCombats),
 	})
 }

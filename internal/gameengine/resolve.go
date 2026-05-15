@@ -2486,9 +2486,14 @@ func resolveExtraTurn(gs *GameState, src *Permanent, e *gameast.ExtraTurn) {
 
 func resolveExtraCombat(gs *GameState, src *Permanent, e *gameast.ExtraCombat) {
 	gs.Flags["extra_combats_pending"]++
-	// Mirror into GameState.PendingExtraCombats which the turn loop's
-	// combat-phase loop reads. Flags stays populated for older callers.
-	gs.PendingExtraCombats++
+	// Push a vanilla entry onto the queue. AST-resolved ExtraCombat
+	// nodes don't carry restrictions or OnBegin hooks. Cards that need
+	// those (Bumi Unleashed land-only, Moraug untap-on-begin, etc.)
+	// call gs.AddExtraCombat from their per_card handler with the
+	// appropriate metadata instead.
+	gs.AddExtraCombat(PendingExtraCombat{
+		SourceCard: sourceName(src),
+	})
 	gs.LogEvent(Event{
 		Kind:   "extra_combat",
 		Seat:   controllerSeat(src),

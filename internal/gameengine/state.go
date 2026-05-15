@@ -134,10 +134,26 @@ type GameState struct {
 	// FireDelayedTriggers (turn.go). Mirrors Python game.delayed_triggers.
 	DelayedTriggers []*DelayedTrigger
 
-	// PendingExtraCombats mirrors Python game.pending_extra_combats — the
-	// Aggravated Assault / Seize the Day / Moraug counter. Incremented by
-	// ExtraCombat effects; take_turn's combat loop decrements + reruns.
-	PendingExtraCombats int
+	// PendingExtraCombats is a FIFO queue of extra combat phases waiting
+	// to be played out, in the order they were granted. Aggravated
+	// Assault / Najeela / Seize the Day push vanilla entries (no
+	// restriction, no OnBegin hook); Bumi Unleashed pushes a
+	// "land_creatures_only" entry; Moraug pushes a vanilla entry with an
+	// "untap all your creatures" OnBegin hook. take_turn's combat loop
+	// pops the front, sets gs.CurrentCombatRestriction from that entry,
+	// fires OnBegin if present, then runs a normal combat phase.
+	//
+	// Replaces the prior `int` counter — the counter form couldn't carry
+	// per-combat metadata (restrictions, OnBegin hooks) which cards like
+	// Bumi Unleashed and Moraug need. len(slice) replaces the old "> 0"
+	// check; popping the front replaces the old "--".
+	PendingExtraCombats []PendingExtraCombat
+
+	// CurrentCombatRestriction is non-empty while the engine is in the
+	// middle of running a restricted extra combat (e.g. "land_creatures_only"
+	// for Bumi Unleashed). Read by DeclareAttackers when building the
+	// legal attacker pool. Cleared at end_of_combat for that phase.
+	CurrentCombatRestriction string
 
 	// SpellsCastThisTurn is the GLOBAL cast counter read by Storm (CR
 	// §702.40) — the number of spells cast this turn across ALL seats.
