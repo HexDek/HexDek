@@ -1,0 +1,3 @@
+# Don't track local Playwright artifacts — these are large binary diffs
+# that change every run. CI artifacts go to playwright-report/ via the
+# upload-artifact action when we wire that up.

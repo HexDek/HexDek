@@ -873,25 +873,30 @@ export default function DeckArchive() {
       )}
 
       {/* Vital signs strip — the three big numbers that matter at a glance.
-          HexELO, Power Level (Bracket), Win Rate. Only renders when we
-          have ELO data; pre-gauntlet decks show bracket + sample-pending. */}
+          HexELO, Power Level (Bracket), Win Rate. Decks without gauntlet
+          data show "NOT YET RANKED" sublabels so the placeholders aren't
+          bare em-dashes — gives the user a hint about how to populate. */}
       <div className="deck-vital-signs">
         <div className="deck-vital-signs__cell">
           <div className="deck-vital-signs__num">
             {deckElo?.hex_rating != null ? Math.round(deckElo.hex_rating) : '—'}
           </div>
           <div className="deck-vital-signs__lbl">HexELO</div>
-          {deckElo?.games > 0 && (
+          {deckElo?.games > 0 ? (
             <div className="deck-vital-signs__sub">{deckElo.games.toLocaleString()} GAMES</div>
+          ) : (
+            <div className="deck-vital-signs__sub" style={{ opacity: 0.55 }}>RUN GAUNTLET</div>
           )}
         </div>
         <div className="deck-vital-signs__cell">
           <div className="deck-vital-signs__num">
-            B{wbs}{pls && pls !== wbs ? ` → B${pls}` : ''}
+            {wbs ? `B${wbs}${pls && pls !== wbs ? ` → B${pls}` : ''}` : '—'}
           </div>
           <div className="deck-vital-signs__lbl">POWER LEVEL</div>
-          {wbsLabel && (
+          {wbsLabel ? (
             <div className="deck-vital-signs__sub">{wbsLabel.toUpperCase()}</div>
+          ) : (
+            <div className="deck-vital-signs__sub" style={{ opacity: 0.55 }}>PENDING ANALYSIS</div>
           )}
         </div>
         <div className="deck-vital-signs__cell">
@@ -899,12 +904,14 @@ export default function DeckArchive() {
             {deckElo?.win_rate != null ? `${deckElo.win_rate}%` : '—'}
           </div>
           <div className="deck-vital-signs__lbl">WIN RATE</div>
-          {deckElo?.wins != null && deckElo?.losses != null && (
+          {deckElo?.wins != null && deckElo?.losses != null ? (
             <div className="deck-vital-signs__sub">
               <span style={{ color: 'var(--ok)' }}>{deckElo.wins}W</span>
               {' · '}
               <span style={{ color: 'var(--danger)' }}>{deckElo.losses}L</span>
             </div>
+          ) : (
+            <div className="deck-vital-signs__sub" style={{ opacity: 0.55 }}>NO SAMPLE</div>
           )}
         </div>
       </div>

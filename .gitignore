@@ -67,3 +67,4 @@ __pycache__/
 
 # Test fixtures (generated)
 /internal/tournament/data/
+hexdek/test-results/
