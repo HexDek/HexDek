@@ -7,91 +7,93 @@ import { Btn } from './chrome'
 // Primary path is Firebase email magic-link. Discord OAuth is stubbed
 // (no provider configured) — when Discord auth lands, swap the disabled
 // onClick for a real handler and drop the `disabled` prop.
-export default function AuthPrompt({ onClose, action = 'continue' }) {
+// `inline` (optional) — when true, drops the fixed-position overlay
+// and renders the auth panel flush in the parent layout. Used by the
+// /import landing where AuthPrompt is the *page's* CTA, not a popover.
+export default function AuthPrompt({ onClose, action = 'continue', inline = false }) {
   const navigate = useNavigate()
   const goLogin = () => { onClose(); navigate('/login') }
 
+  if (inline) {
+    return (
+      <div className="panel" style={{ maxWidth: 480, width: '100%' }}>
+        <AuthPromptBody action={action} goLogin={goLogin} onClose={onClose} />
+      </div>
+    )
+  }
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
       background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center',
     }} onClick={onClose}>
       <div className="panel" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, width: '100%' }}>
-        <div className="panel-hd">
-          <span>SIGN IN / / {action.toUpperCase()}</span>
-          <span style={{ cursor: 'pointer' }} onClick={onClose}>X</span>
+        <AuthPromptBody action={action} goLogin={goLogin} onClose={onClose} showCancel />
+      </div>
+    </div>
+  )
+}
+
+function AuthPromptBody({ action, goLogin, onClose, showCancel = true }) {
+  return (
+    <>
+      <div className="panel-hd">
+        <span>SIGN IN / / {action.toUpperCase()}</span>
+        {showCancel && <span style={{ cursor: 'pointer' }} onClick={onClose}>X</span>}
+      </div>
+      <div className="panel-bd" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 22 }}>
+        <div className="t-md" style={{ lineHeight: 1.6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          &gt; SIGN IN TO UPLOAD DECKS, TRACK STATS, AND MORE.
         </div>
-        <div className="panel-bd" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 22 }}>
-          <div className="t-md" style={{ lineHeight: 1.6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            &gt; SIGN IN TO UPLOAD DECKS, TRACK STATS, AND MORE.
-          </div>
 
-          {/* Primary: email magic-link */}
-          <button
-            onClick={goLogin}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              padding: '12px 16px',
-              background: 'var(--accent)',
-              color: 'var(--bg)',
-              border: '1px solid var(--accent)',
-              fontFamily: 'inherit',
-              fontSize: 13,
-              fontWeight: 800,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-            }}
-          >
-            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 16, lineHeight: 1 }}>✉</span>
-              <span>SIGN IN WITH EMAIL</span>
-            </span>
-            <span>↗</span>
-          </button>
+        <button
+          onClick={goLogin}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 12, padding: '12px 16px',
+            background: 'var(--accent)', color: 'var(--bg)',
+            border: '1px solid var(--accent)',
+            fontFamily: 'inherit', fontSize: 13, fontWeight: 800,
+            letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer',
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 16, lineHeight: 1 }}>✉</span>
+            <span>SIGN IN WITH EMAIL</span>
+          </span>
+          <span>↗</span>
+        </button>
 
-          {/* Stubbed: Discord OAuth — disabled until provider is wired. */}
-          <button
-            disabled
-            title="Discord OAuth coming soon — use email for now"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              padding: '12px 16px',
-              background: 'transparent',
-              color: 'var(--ink-2)',
-              border: '1px dashed var(--rule-2)',
-              fontFamily: 'inherit',
-              fontSize: 13,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              cursor: 'not-allowed',
-              opacity: 0.65,
-            }}
-          >
-            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <DiscordGlyph />
-              <span>SIGN IN WITH DISCORD</span>
-            </span>
-            <span className="t-xs muted-2" style={{ letterSpacing: '0.1em' }}>SOON</span>
-          </button>
+        <button
+          disabled
+          title="Discord OAuth coming soon — use email for now"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 12, padding: '12px 16px',
+            background: 'transparent', color: 'var(--ink-2)',
+            border: '1px dashed var(--rule-2)',
+            fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
+            letterSpacing: '0.08em', textTransform: 'uppercase',
+            cursor: 'not-allowed', opacity: 0.65,
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <DiscordGlyph />
+            <span>SIGN IN WITH DISCORD</span>
+          </span>
+          <span className="t-xs muted-2" style={{ letterSpacing: '0.1em' }}>SOON</span>
+        </button>
 
-          <div className="t-xs muted-2" style={{ lineHeight: 1.5 }}>
-            &gt; NO PASSWORD. NO SPAM. ONE CLICK TO YOUR ARCHIVE.
-          </div>
+        <div className="t-xs muted-2" style={{ lineHeight: 1.5 }}>
+          &gt; NO PASSWORD. NO SPAM. ONE CLICK TO YOUR ARCHIVE.
+        </div>
 
+        {showCancel && (
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <Btn sm ghost onClick={onClose}>CANCEL</Btn>
           </div>
-        </div>
+        )}
       </div>
-    </div>
+    </>
   )
 }
 

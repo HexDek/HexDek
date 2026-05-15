@@ -190,9 +190,43 @@ export default function ImportModal({ onClose, onImported }) {
   const navigate = useNavigate()
   const { user } = useAuth()
 
-  // If not authenticated, show auth prompt
+  // If not authenticated, show auth prompt over a teaser landing instead
+  // of a centered modal floating in a black void. Gives anon visitors who
+  // hit /import directly some context about what they'd unlock by signing in.
   if (!user) {
-    return <AuthPrompt onClose={onClose} action="import deck" />
+    return (
+      <div style={{ padding: '40px 20px', maxWidth: 920, margin: '0 auto' }}>
+        <div className="t-xs muted" style={{ letterSpacing: '0.08em', marginBottom: 6 }}>
+          IMPORT / / DECK
+        </div>
+        <h1 style={{
+          fontSize: 48, fontWeight: 800, letterSpacing: '0.02em',
+          margin: '0 0 18px', lineHeight: 1.05,
+        }}>PASTE.<br />ANALYZE.<br />RANK.</h1>
+        <div className="t-md muted" style={{ maxWidth: 540, lineHeight: 1.5, marginBottom: 28 }}>
+          Drop a Moxfield URL, paste a text list, or upload a .txt — HexDek's Freya engine returns an archetype, win lines, mana base grade, cut suggestions, and a bracket estimate in seconds. Then run a gauntlet to get a real HexELO rating.
+        </div>
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: 12, marginBottom: 32,
+        }}>
+          {[
+            ['FREYA ANALYSIS', 'Archetype + roles + combos + cuts on every import.'],
+            ['HEXELO RATING', 'Run a 500-game gauntlet, see how your deck stacks up.'],
+            ['DECK ARCHIVE', 'Versioned. Iterate, save, compare across builds.'],
+          ].map(([h, b]) => (
+            <div key={h} style={{
+              padding: '14px 16px', background: 'var(--panel)',
+              border: '1px solid var(--rule-2)',
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', marginBottom: 6 }}>{h}</div>
+              <div className="t-xs muted" style={{ lineHeight: 1.4 }}>{b}</div>
+            </div>
+          ))}
+        </div>
+        <AuthPrompt onClose={onClose} action="import deck" inline />
+      </div>
+    )
   }
 
   return <ImportModalInner onClose={onClose} onImported={onImported} navigate={navigate} user={user} />
