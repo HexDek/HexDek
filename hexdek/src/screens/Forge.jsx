@@ -10,6 +10,7 @@ export default function Forge() {
   const { data: decks, loading: decksLoading } = useDecks()
   const [searchParams] = useSearchParams()
   const [selectedDeck, setSelectedDeck] = useState(null)
+  const [deckFilter, setDeckFilter] = useState('')
   const [deck, setDeck] = useState(null)
   const [analysis, setAnalysis] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -115,13 +116,41 @@ export default function Forge() {
       <div style={{ padding: 18, flex: 1, display: 'flex', flexDirection: 'column', gap: 14, overflow: 'auto' }}>
         {/* Deck selector */}
         <Panel code="11.SEL" title="SELECT DECK">
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Filter input — with 1300+ decks the pill wall was unscannable.
+              Live filter against owner OR deck name. Empty filter shows all. */}
+          {decks.length > 12 && (
+            <input
+              type="text"
+              value={deckFilter}
+              onChange={(e) => setDeckFilter(e.target.value)}
+              placeholder={`FILTER ${decks.length} DECKS — owner or name...`}
+              style={{
+                width: '100%', padding: '8px 10px', marginBottom: 10,
+                background: 'var(--bg-2, rgba(0,0,0,0.3))',
+                border: '1px solid var(--rule-2)',
+                color: 'var(--ink)', fontFamily: 'inherit', fontSize: 11,
+                letterSpacing: '0.04em',
+              }}
+            />
+          )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', maxHeight: 320, overflowY: 'auto' }}>
             {decksLoading ? (
               <span className="t-xs muted">LOADING DECKS<span className="blink">_</span></span>
             ) : decks.length === 0 ? (
               <span className="t-xs muted">NO DECKS FOUND</span>
-            ) : (
-              decks.map((d) => (
+            ) : (() => {
+              const q = deckFilter.trim().toLowerCase()
+              const filtered = q
+                ? decks.filter(d =>
+                    (d.owner || '').toLowerCase().includes(q) ||
+                    (d.name || '').toLowerCase().includes(q) ||
+                    (d.commander_card || d.commander || '').toLowerCase().includes(q)
+                  )
+                : decks
+              if (filtered.length === 0) {
+                return <span className="t-xs muted">NO MATCHES FOR "{deckFilter}"</span>
+              }
+              return filtered.slice(0, 200).map((d) => (
                 <Tag
                   key={`${d.owner}/${d.id}`}
                   solid={selectedDeck?.id === d.id && selectedDeck?.owner === d.owner}
@@ -130,8 +159,14 @@ export default function Forge() {
                 >
                   {d.owner?.toUpperCase()} / {d.name}
                 </Tag>
-              ))
-            )}
+              )).concat(
+                filtered.length > 200
+                  ? [<span key="more" className="t-xs muted" style={{ alignSelf: 'center' }}>
+                      ...AND {filtered.length - 200} MORE — REFINE FILTER TO SEE
+                    </span>]
+                  : []
+              )
+            })()}
           </div>
         </Panel>
 

@@ -74,6 +74,18 @@ test('import page renders', async ({ page }) => {
   await page.screenshot({ path: shot('import'), fullPage: true })
 })
 
+test('forge page renders', async ({ page }) => {
+  await page.goto('/forge')
+  await page.waitForTimeout(2000)
+  await page.screenshot({ path: shot('forge'), fullPage: true })
+})
+
+test('spectate page renders', async ({ page }) => {
+  await page.goto('/spectate')
+  await page.waitForTimeout(2000)
+  await page.screenshot({ path: shot('spectate'), fullPage: true })
+})
+
 test('owner profile renders', async ({ page }) => {
   await page.goto('/profile/7174n1c')
   await expect(page.locator('text=/7174N1C|DECKS|GAMES/i').first()).toBeVisible({ timeout: 10_000 })
@@ -96,7 +108,11 @@ test('deck page mobile — element captures (Marchesa)', async ({ page }) => {
   // screenshots are independent of the parent overflow clamp.
   const sections = [
     { sel: '.matchup-matrix', name: 'matchup-matrix' },
-    { sel: '[class*="elo-history"], svg.elo-history-chart', name: 'elo-history' },
+    // ELO history chart — Panel.04.EH owns the line chart. Match its
+    // container by walking up from the chart's gridline-dasharray text.
+    { sel: 'svg[viewBox="0 0 600 160"]', name: 'elo-history' },
+    // Card stats panel — also worth a look on mobile.
+    { sel: '.card-stats, .panel:has(.commander-card-stats)', name: 'card-stats' },
   ]
   for (const s of sections) {
     const el = page.locator(s.sel).first()
