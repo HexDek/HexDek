@@ -573,7 +573,10 @@ export default function DeckArchive() {
   }, [deckName, owner])
 
   const cardCount = deck?.card_count || deck?.cards?.length || 99
-  const userBracket = deck?.bracket || '?'
+  // Bracket can be unset on imported decks that haven't been analyzed yet.
+  // Keep `wbs` null in that case so callers can pick their own placeholder
+  // ("—", "PENDING", hide entirely) instead of every site rendering "B?".
+  const userBracket = deck?.bracket || null
   const wbs = analysis?.bracket || userBracket
   const wbsLabel = analysis?.bracket_label || ''
   const pls = analysis?.plays_like || null
@@ -764,7 +767,13 @@ export default function DeckArchive() {
 
       <Tape
         left={`DECK ARCHIVE / / ${owner?.toUpperCase()} / / ${deckName}`}
-        mid={pls ? `Plays Like B${pls} (Bracket B${wbs}) · ${pageTheme.label}` : `Bracket B${wbs} · ${pageTheme.label}`}
+        mid={
+          pls && wbs
+            ? `Plays Like B${pls} (Bracket B${wbs}) · ${pageTheme.label}`
+            : wbs
+              ? `Bracket B${wbs} · ${pageTheme.label}`
+              : `Bracket pending · ${pageTheme.label}`
+        }
         right="EXPORT ↗ ANALYZE ↗"
       />
 
@@ -816,7 +825,7 @@ export default function DeckArchive() {
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
           <div className="deck-hero__meta">
-            <Tag solid>B{wbs}{wbsLabel ? ' · ' + wbsLabel : ''}</Tag>
+            <Tag solid>{wbs ? `B${wbs}` : 'BRACKET PENDING'}{wbs && wbsLabel ? ' · ' + wbsLabel : ''}</Tag>
             {pls && pls !== wbs && <Tag solid kind="warn">PLAYS LIKE B{pls}</Tag>}
             <Tag>{archetype}</Tag>
             {colorIdentity.length > 0 && <Tag>{colorIdentity.join('')}</Tag>}
@@ -890,7 +899,9 @@ export default function DeckArchive() {
         </div>
         <div className="deck-vital-signs__cell">
           <div className="deck-vital-signs__num">
-            {wbs ? `B${wbs}${pls && pls !== wbs ? ` → B${pls}` : ''}` : '—'}
+            {/* Backend can return "?" (string) or null for unknown bracket;
+                both should render as em-dash, not a literal "B?". */}
+            {wbs && wbs !== '?' ? `B${wbs}${pls && pls !== wbs ? ` → B${pls}` : ''}` : '—'}
           </div>
           <div className="deck-vital-signs__lbl">POWER LEVEL</div>
           {wbsLabel ? (
@@ -1220,7 +1231,7 @@ export default function DeckArchive() {
 
           {/* === ANALYSIS TAB === */}
           {activeTab === 'analysis' && <>
-          <Panel code="04.C" title="FREYA / / ENGINE ANALYSIS" right={<Tag solid>Bracket B{wbs}{pls && pls !== wbs ? ` → Plays Like B${pls}` : ''}</Tag>}>
+          <Panel code="04.C" title="FREYA / / ENGINE ANALYSIS" right={<Tag solid>{wbs ? `Bracket B${wbs}${pls && pls !== wbs ? ` → Plays Like B${pls}` : ''}` : 'Bracket pending'}</Tag>}>
             {!analysis ? (
               <div style={{ padding: '20px 0', textAlign: 'center' }}>
                 <div className="t-md muted" style={{ lineHeight: 1.8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
