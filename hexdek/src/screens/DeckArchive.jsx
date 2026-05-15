@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { Panel, KV, Bar, Tag, Btn, Tape, ConfidenceDots, ManaCurveChart, ColorPie, computeColorByCmc } from '../components/chrome'
 import CreditsPanel from '../components/CreditsPanel'
@@ -316,6 +316,111 @@ function WorkshopAddCard({ onAdd }) {
   )
 }
 
+// WorkshopDiff — shows what would happen if the user clicks SAVE UPDATE.
+// Parses both the baseline (workshop-open snapshot) and the current
+// editText into card-count maps and renders a +N / -M summary plus a
+// collapsible per-card list. Lets the user verify their changes before
+// committing a new deck version.
+function WorkshopDiff({ baseline, current }) {
+  const [open, setOpen] = useState(false)
+  const diff = useMemo(() => computeDeckDiff(baseline, current), [baseline, current])
+  if (diff.added.length === 0 && diff.removed.length === 0) {
+    return (
+      <div className="t-xs muted" style={{ margin: '6px 0', opacity: 0.6 }}>
+        NO CHANGES YET
+      </div>
+    )
+  }
+  return (
+    <div style={{ margin: '6px 0', fontSize: 11 }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          background: 'transparent', border: '1px solid var(--rule-2)',
+          padding: '4px 10px', color: 'inherit', font: 'inherit', cursor: 'pointer',
+          letterSpacing: '0.06em',
+        }}
+      >
+        <span style={{ marginRight: 8 }}>{open ? '▼' : '▶'}</span>
+        DIFF{' '}
+        <span style={{ color: 'var(--ok)', fontWeight: 700 }}>+{diff.added.length}</span>
+        {' / '}
+        <span style={{ color: 'var(--danger)', fontWeight: 700 }}>-{diff.removed.length}</span>
+      </button>
+      {open && (
+        <div style={{
+          marginTop: 6, padding: '8px 10px',
+          border: '1px solid var(--rule-2)',
+          background: 'var(--bg-2, rgba(0,0,0,0.2))',
+          maxHeight: 240, overflowY: 'auto',
+        }}>
+          {diff.added.length > 0 && (
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ fontSize: 9, color: 'var(--ok)', letterSpacing: '0.08em', fontWeight: 700 }}>ADDED</div>
+              {diff.added.map((a, i) => (
+                <div key={`a-${i}`} style={{ fontSize: 11 }}>
+                  <span style={{ color: 'var(--ok)' }}>+{a.delta}</span> {a.name}
+                </div>
+              ))}
+            </div>
+          )}
+          {diff.removed.length > 0 && (
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--danger)', letterSpacing: '0.08em', fontWeight: 700 }}>REMOVED</div>
+              {diff.removed.map((r, i) => (
+                <div key={`r-${i}`} style={{ fontSize: 11 }}>
+                  <span style={{ color: 'var(--danger)' }}>-{r.delta}</span> {r.name}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Parse a deck-list textarea into a {name: qty} map. Commander row is
+// preserved by its prefix and treated like a regular 1-qty entry for diff
+// purposes (so swapping commanders shows up as -OLD / +NEW).
+function parseDeckText(text) {
+  const counts = new Map()
+  for (const raw of (text || '').split('\n')) {
+    const line = raw.trim()
+    if (!line) continue
+    const cmdrMatch = line.match(/^COMMANDER:\s*(.+)$/i)
+    if (cmdrMatch) {
+      const name = cmdrMatch[1].trim()
+      counts.set(name, (counts.get(name) || 0) + 1)
+      continue
+    }
+    const m = line.match(/^(\d+)\s+(.+)$/)
+    if (m) {
+      const name = m[2].trim()
+      counts.set(name, (counts.get(name) || 0) + parseInt(m[1], 10))
+    }
+  }
+  return counts
+}
+
+function computeDeckDiff(baseline, current) {
+  const a = parseDeckText(baseline)
+  const b = parseDeckText(current)
+  const names = new Set([...a.keys(), ...b.keys()])
+  const added = []
+  const removed = []
+  for (const name of names) {
+    const before = a.get(name) || 0
+    const after = b.get(name) || 0
+    if (after > before) added.push({ name, delta: after - before })
+    else if (before > after) removed.push({ name, delta: before - after })
+  }
+  added.sort((x, y) => x.name.localeCompare(y.name))
+  removed.sort((x, y) => x.name.localeCompare(y.name))
+  return { added, removed }
+}
+
 // CollapsiblePanel wraps a Panel with a click-to-toggle header. Used to
 // hide lower-tier deep analysis sections by default so the top of the
 // deck page stays scannable. The expand/collapse caret uses the same
@@ -359,6 +464,10 @@ export default function DeckArchive() {
   const [analyzing, setAnalyzing] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState('')
+  // Snapshot of editText taken when the workshop was opened, used as
+  // the baseline for the "SAVE UPDATE (+3 / -1)" diff readout. Stays
+  // stable while the user types — only refreshes on the next workshop-open.
+  const [originalEditText, setOriginalEditText] = useState('')
   const [saving, setSaving] = useState(false)
   // Ref for the Workshop edit panel so we can scroll it into view when it
   // opens. On mobile the sidebar (which holds the WORKSHOP button) renders
@@ -369,6 +478,17 @@ export default function DeckArchive() {
     if (editing && editPanelRef.current) {
       editPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
+  }, [editing])
+  // Snapshot the editText when the workshop opens, so the diff readout
+  // ("SAVE UPDATE (+3 / -1)") has a stable baseline to compare against
+  // even after the user starts typing.
+  useEffect(() => {
+    if (editing) setOriginalEditText(editText)
+    // We intentionally only react to `editing`, not editText, so the
+    // baseline captures the value at OPEN time and stays put while the
+    // user makes edits. ESLint would want editText in the deps but that
+    // would invalidate the baseline every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing])
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [comparePickerOpen, setComparePickerOpen] = useState(false)
@@ -1305,6 +1425,7 @@ export default function DeckArchive() {
                 <strong>SAVE UPDATE</strong> writes a new version of the deck and re-runs Freya analysis.
                 {' '}<strong>CANCEL</strong> discards your edits.
               </ContextBox>
+              <WorkshopDiff baseline={originalEditText} current={editText} />
               <div style={{ display: 'flex', gap: 8 }}>
                 <Btn solid onClick={() => {
                   if (!editText.trim() || saving) return
