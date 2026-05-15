@@ -297,12 +297,52 @@ func (pool *CursePool) SelectForGame() (dna *CurseDNA, idx int) {
 	return &pool.Population[CursePopSize-1], CursePopSize - 1
 }
 
-// PlacementScore converts a 4-player finish position to a fitness value.
-// 1st=1.0, 2nd=0.5, 3rd=0.2, 4th=0.0. Reduces noise vs binary win/loss.
+// PlacementScore converts a finish position to a fitness value in [0,1].
+// For 4-player Commander (the canonical pod size), the scale rewards
+// survival to top-2 disproportionately to acknowledge that "I survived
+// to the 1v1 final" is a meaningful skill the binary W/L view obscures:
+//
+//	1st (won)            → 1.0
+//	2nd (runner-up)      → 0.85   (small gap from 1st — survival rewarded)
+//	3rd                  → 0.45   (still positive credit for not being knocked out first)
+//	4th (knocked out)    → 0.0
+//
+// Design rationale: with the previous linear scale (1.0 / 0.667 / 0.333 / 0.0),
+// the mean per-game score across 4 random placements was 0.500. The new
+// scale shifts that mean to 0.575, slightly inflating the credit a typical
+// game contributes to a deck's TrueSkill update. The asymmetry favors
+// survival-oriented archetypes (control / politics / monarchy / wither walls)
+// over glass-cannon archetypes (combo-or-fizzle) — a deliberate design
+// statement that surviving the chaos is worth more than the linear default
+// implies.
+//
+// For other player counts (rare in EDH, possible in skirmishes), falls
+// back to the linear scale: 1 - (placement-1)/(totalPlayers-1). This
+// keeps the function correct for 2-player (1.0 / 0.0 binary) and arbitrary
+// N without needing per-N tuning.
+//
+// Reduces noise vs binary win/loss (a 3rd-place deck still gets 0.45,
+// not 0.0, so a single unlucky game doesn't drag rating as hard as binary).
 func PlacementScore(placement, totalPlayers int) float64 {
 	if totalPlayers <= 1 || placement <= 0 {
 		return 0.5
 	}
+	// 4-player Commander — canonical pod size, survival-weighted scale.
+	if totalPlayers == 4 {
+		switch placement {
+		case 1:
+			return 1.00
+		case 2:
+			return 0.85
+		case 3:
+			return 0.45
+		case 4:
+			return 0.00
+		default:
+			return 0.0 // out-of-range placements clamp to last
+		}
+	}
+	// Other player counts — linear fallback.
 	return 1.0 - float64(placement-1)/float64(totalPlayers-1)
 }
 

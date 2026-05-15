@@ -61,14 +61,47 @@ func TestRecordResult_UpdatesFitness(t *testing.T) {
 }
 
 func TestPlacementScore(t *testing.T) {
+	// 4-player Commander — survival-weighted scale.
+	// 1st=1.0, 2nd=0.85, 3rd=0.45, 4th=0.0.
 	if s := PlacementScore(1, 4); s != 1.0 {
 		t.Errorf("1st of 4 = %f, want 1.0", s)
+	}
+	if s := PlacementScore(2, 4); s != 0.85 {
+		t.Errorf("2nd of 4 = %f, want 0.85", s)
+	}
+	if s := PlacementScore(3, 4); s != 0.45 {
+		t.Errorf("3rd of 4 = %f, want 0.45", s)
 	}
 	if s := PlacementScore(4, 4); s != 0.0 {
 		t.Errorf("4th of 4 = %f, want 0.0", s)
 	}
-	if s := PlacementScore(2, 4); s < 0.3 || s > 0.7 {
-		t.Errorf("2nd of 4 = %f, want ~0.67", s)
+
+	// 2-player (binary fallback via linear formula).
+	if s := PlacementScore(1, 2); s != 1.0 {
+		t.Errorf("1st of 2 = %f, want 1.0", s)
+	}
+	if s := PlacementScore(2, 2); s != 0.0 {
+		t.Errorf("2nd of 2 = %f, want 0.0", s)
+	}
+
+	// 3-player (linear fallback): 1.0 / 0.5 / 0.0
+	if s := PlacementScore(2, 3); s != 0.5 {
+		t.Errorf("2nd of 3 = %f, want 0.5", s)
+	}
+
+	// Invalid inputs return 0.5 (neutral).
+	if s := PlacementScore(0, 4); s != 0.5 {
+		t.Errorf("placement=0 should return 0.5, got %f", s)
+	}
+	if s := PlacementScore(1, 0); s != 0.5 {
+		t.Errorf("totalPlayers=0 should return 0.5, got %f", s)
+	}
+
+	// Mean per-game score in 4-player (sanity — should be > 0.5 reflecting
+	// the survival-reward shift).
+	mean := (PlacementScore(1, 4) + PlacementScore(2, 4) + PlacementScore(3, 4) + PlacementScore(4, 4)) / 4.0
+	if mean <= 0.5 {
+		t.Errorf("mean 4-player score = %f, want > 0.5 (survival-weighted)", mean)
 	}
 }
 

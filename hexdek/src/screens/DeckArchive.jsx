@@ -1263,7 +1263,17 @@ export default function DeckArchive() {
                   <KV rows={[
                     ['GAMES', `${gauntlet.games?.toLocaleString()}`],
                     ['AVG TURNS', `${gauntlet.avg_turns}`],
-                    ['ELO', `${gauntlet.elo_start} → ${gauntlet.elo_end}`],
+                    // Three-row ELO layout — separates STARTING / DELTA / ENDING
+                    // so the calibration arc reads at a glance instead of being
+                    // hidden behind a single "A → B" line. Delta gets color
+                    // treatment (green positive, red negative) matching the
+                    // ELO DELTA highlight in the 3-col block above.
+                    ['STARTING ELO', gauntlet.elo_start != null ? `${Math.round(gauntlet.elo_start)}` : '—'],
+                    ['ELO DELTA',
+                      <span style={{ color: gauntlet.elo_delta >= 0 ? 'var(--ok)' : 'var(--danger)' }}>
+                        {gauntlet.elo_delta >= 0 ? '+' : ''}{Math.round(gauntlet.elo_delta)}
+                      </span>],
+                    ['ENDING ELO', gauntlet.elo_end != null ? `${Math.round(gauntlet.elo_end)}` : '—'],
                   ]} />
                   {gauntlet.top_beaten?.length > 0 && (
                     <>
