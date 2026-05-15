@@ -244,11 +244,22 @@ export default function DeckShelf({ decks, eloByDeckId = {}, navigate, onAddCard
     >
       {onAddCard && <UploadShelfCard onClick={onAddCard} />}
       {(() => {
-        // Build sibling index: how many decks does each (owner, commander)
-        // pair have, and what's this tile's position in that group? Used
-        // to render a "V3 OF 7" badge so duplicate tiles don't all look
-        // identical to the user.
-        const groupKey = (d) => `${d.owner || ''}|${(d.commander_card || d.commander || '').toUpperCase()}`
+        // Build sibling index for the V-of-N disambiguator badge. Two
+        // tiles are siblings only when (owner, commander, *and* effective
+        // name) all match — i.e. the user hasn't disambiguated them with
+        // a custom name. Two different decks of the same commander that
+        // the user *did* name distinctly ("Neera Storm" vs "Neera Stax")
+        // are treated as independent and don't get the badge — their
+        // names already do the disambiguation.
+        const groupKey = (d) => {
+          const cmdr = (d.commander_card || d.commander || '').toUpperCase()
+          const name = (d.name || '').toUpperCase()
+          // If the deck name equals the commander, the user didn't pick
+          // a distinct name — group these as siblings. Otherwise treat
+          // each named deck as its own independent entry.
+          const effectiveName = name && name !== cmdr ? name : ''
+          return `${d.owner || ''}|${cmdr}|${effectiveName}`
+        }
         const counts = new Map()
         const seenCounts = new Map()
         for (const d of decks || []) counts.set(groupKey(d), (counts.get(groupKey(d)) || 0) + 1)
