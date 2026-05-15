@@ -75,7 +75,7 @@ function UploadShelfCard({ onClick }) {
   )
 }
 
-function DeckShelfCard({ deck: d, deckElo, navigate }) {
+function DeckShelfCard({ deck: d, deckElo, navigate, siblingIndex, siblingCount }) {
   const cmdrName = d.commander_card || d.commander
   const bracketLabel = deckBracketLabel(d)
   const deckKey = `${d.owner}/${d.id}`
@@ -186,6 +186,14 @@ function DeckShelfCard({ deck: d, deckElo, navigate }) {
           {cmdrName && cmdrName.toUpperCase() !== (d.name || '').toUpperCase() && (
             <div style={{ fontSize: 10, marginTop: 2, opacity: 0.85 }}>{cmdrName}</div>
           )}
+          {/* Sibling disambiguator: when the same owner has multiple decks
+              of this commander, show "v3 of 7" so the tiles are visually
+              distinguishable even when name + art are identical. */}
+          {siblingCount > 1 && (
+            <div style={{ fontSize: 9, marginTop: 3, opacity: 0.7, letterSpacing: '0.08em' }}>
+              V{siblingIndex + 1} OF {siblingCount}
+            </div>
+          )}
         </div>
       </div>
       <div
@@ -235,13 +243,34 @@ export default function DeckShelf({ decks, eloByDeckId = {}, navigate, onAddCard
       }}
     >
       {onAddCard && <UploadShelfCard onClick={onAddCard} />}
-      {(decks || []).map((d) => {
-        const deckKey = `${d.owner}/${d.id}`
-        const deckElo = eloByDeckId[deckKey] || eloByDeckId[d.id]
-        return (
-          <DeckShelfCard key={deckKey} deck={d} deckElo={deckElo} navigate={navigate} />
-        )
-      })}
+      {(() => {
+        // Build sibling index: how many decks does each (owner, commander)
+        // pair have, and what's this tile's position in that group? Used
+        // to render a "V3 OF 7" badge so duplicate tiles don't all look
+        // identical to the user.
+        const groupKey = (d) => `${d.owner || ''}|${(d.commander_card || d.commander || '').toUpperCase()}`
+        const counts = new Map()
+        const seenCounts = new Map()
+        for (const d of decks || []) counts.set(groupKey(d), (counts.get(groupKey(d)) || 0) + 1)
+        return (decks || []).map((d) => {
+          const deckKey = `${d.owner}/${d.id}`
+          const deckElo = eloByDeckId[deckKey] || eloByDeckId[d.id]
+          const g = groupKey(d)
+          const total = counts.get(g) || 1
+          const idx = seenCounts.get(g) || 0
+          seenCounts.set(g, idx + 1)
+          return (
+            <DeckShelfCard
+              key={deckKey}
+              deck={d}
+              deckElo={deckElo}
+              navigate={navigate}
+              siblingIndex={idx}
+              siblingCount={total}
+            />
+          )
+        })
+      })()}
     </div>
   )
 }
