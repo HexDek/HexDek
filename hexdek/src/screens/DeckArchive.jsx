@@ -1438,6 +1438,14 @@ export default function DeckArchive() {
                     api.getDeckVersions(`${owner}/${id}`).then(setVersions).catch(() => {})
                   }).catch(() => setSaving(false))
                 }}>{saving ? 'SAVING...' : 'SAVE UPDATE'}</Btn>
+                {/* REVERT — reset to baseline without leaving the workshop.
+                    Only renders when there's something to revert. */}
+                {editText !== originalEditText && (
+                  <Btn ghost onClick={() => setEditText(originalEditText)}
+                       title="Reset textarea to the workshop-open snapshot">
+                    REVERT
+                  </Btn>
+                )}
                 <Btn ghost onClick={() => { setEditing(false); setSaving(false) }}>CANCEL</Btn>
               </div>
               {versions.length > 0 && (
