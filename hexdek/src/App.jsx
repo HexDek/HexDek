@@ -4,31 +4,41 @@ import AppShell from './components/AppShell'
 import { useAuth } from './context/AuthContext'
 import { usePageTracking } from './hooks/useAnalytics'
 
-// CardPage hits Scryfall on mount and then fans out per-deck Freya
-// fetches; lazy-load it so it doesn't bloat the Splash bundle.
-const CardPage = lazy(() => import('./screens/CardPage'))
+// Eager critical-path screens (landing, browse, primary auth flow).
+// These are likely to be on the first paint, so keep them in the main
+// bundle for fast first-route render.
+import Landing from './screens/Landing'
 import Splash from './screens/Splash'
 import Dashboard from './screens/Dashboard'
 import DeckArchive from './screens/DeckArchive'
 import DeckList from './screens/DeckList'
-import GameBoard from './screens/GameBoard'
-import Spectator from './screens/Spectator'
-import SpectateRoom from './screens/SpectateRoom'
-import Report from './screens/Report'
-import Forge from './screens/Forge'
 import Leaderboard from './screens/Leaderboard'
-import About from './screens/About'
-import BugReport from './screens/BugReport'
-import Donations from './screens/Donations'
-import Profile from './screens/Profile'
-import PublicProfile from './screens/PublicProfile'
-import OperatorProfile from './screens/OperatorProfile'
-import Friends from './screens/Friends'
 import Login from './screens/Login'
 import AuthCallback from './screens/AuthCallback'
-import DeckCompare from './screens/DeckCompare'
 import Import from './screens/Import'
-import Landing from './screens/Landing'
+
+// Lazy-load the remaining screens — none are on the first-paint critical
+// path. Each becomes its own chunk via Vite's dynamic-import code-split,
+// which drops the main bundle from ~690KB into a much smaller initial
+// payload + on-demand chunks fetched when the user navigates.
+const CardPage = lazy(() => import('./screens/CardPage'))
+const GameBoard = lazy(() => import('./screens/GameBoard'))
+const Spectator = lazy(() => import('./screens/Spectator'))
+const SpectateRoom = lazy(() => import('./screens/SpectateRoom'))
+const Report = lazy(() => import('./screens/Report'))
+const Forge = lazy(() => import('./screens/Forge'))
+const About = lazy(() => import('./screens/About'))
+const BugReport = lazy(() => import('./screens/BugReport'))
+const Donations = lazy(() => import('./screens/Donations'))
+const Profile = lazy(() => import('./screens/Profile'))
+const PublicProfile = lazy(() => import('./screens/PublicProfile'))
+const OperatorProfile = lazy(() => import('./screens/OperatorProfile'))
+const Friends = lazy(() => import('./screens/Friends'))
+// DeckCompare must stay eager — DeckArchive imports a named export
+// (DeckPicker) from it, which pulls the whole module into the main
+// bundle regardless. Making it lazy() here would generate a warning
+// without actually splitting it out.
+import DeckCompare from './screens/DeckCompare'
 import StreamOverlay from './components/StreamOverlay'
 
 function RequireAuth({ children }) {
