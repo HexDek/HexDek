@@ -856,6 +856,22 @@ const (
 	condScaffoldBecomesTarget   // "becomes the target of a spell or ability"
 	condScaffoldUntilEOTDelayed // "until end of turn" / "next cleanup step"
 	condScaffoldLandPlayOrTap   // "whenever a player plays a land" / "tapped for mana"
+
+	// Era 1 audit additions — 11 new structured-Kind scaffolds bridging
+	// pre-Modern (1993-2014) gaps surfaced by scripts/era1_scaffold_audit.py.
+	// Most reuse existing engine state and just need the Kind dispatched.
+	condScaffoldETBTappedUnless           // "X enters tapped unless Y" — satisfy unless clause
+	condScaffoldDomain                    // "domain" — control 4 different basic land types
+	condScaffoldETBIf                     // "X enters under condition Y" — raw-text routed
+	condScaffoldRepeatN                   // "do this N times" — set X / repeat counter
+	condScaffoldLieutenant                // "as long as you control your commander"
+	condScaffoldKiCountersGE2             // ki-counter threshold on source (Kamigawa flip)
+	condScaffoldSelfIsTapped              // source is tapped
+	condScaffoldAttackedOrBlockedCombat   // source attacked or blocked this combat (Clockwork)
+	condScaffoldCoven                     // 3 creatures with different powers
+	condScaffoldSelfHasCounter            // source has named counter on it
+	condScaffoldDidntAttackThisTurn       // source / controller didn't attack this turn
+	condScaffoldDealtDamageOpponentTurn   // dealt damage to an opponent this turn
 )
 
 type conditionScaffold struct {
@@ -931,7 +947,8 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 	// dropped on the floor. Detect these BEFORE the whitelist filter
 	// because they don't use intervening_if/as_long_as packaging.
 	switch kind {
-	case "paid_optional_cost":
+	case "paid_optional_cost", "was_kicked":
+		// was_kicked is the empty-args canonical form of paid_optional_cost.
 		return detectPaidOptionalCost(cond)
 	case "for_each":
 		return detectForEach(cond)
@@ -939,9 +956,7 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 		return detectETBAs(cond)
 	case "did_prior_action":
 		return detectDidPriorAction(cond)
-	case "mana_spent":
-		// Structured mana-spent condition emitted by conditional_parser
-		// ("at least N <color> mana was spent"). Args = [color, count].
+	case "mana_spent", "no_mana_spent_to_cast":
 		out := conditionScaffold{kind: condScaffoldManaSpentThreshold, count: 4}
 		for _, a := range cond.Args {
 			if n, ok := a.(int); ok && n > 0 {
@@ -949,11 +964,91 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 			}
 		}
 		return out
+
+	// Era 1 audit additions — direct Kind dispatch. Each routes to either
+	// an existing scaffold (canonical short-circuit) or a new shape below.
+	case "hellbent":
+		return conditionScaffold{kind: condScaffoldHellbent}
+	case "raid", "attacked_this_turn":
+		return conditionScaffold{kind: condScaffoldAttackedThisTurn}
+	case "spell_mastery":
+		return conditionScaffold{kind: condScaffoldSpellMastery}
+	case "gained_life_this_turn":
+		return conditionScaffold{kind: condScaffoldGainedLifeThisTurn}
+	case "creature_died_this_turn":
+		return conditionScaffold{kind: condScaffoldCreatureDiedThisTurn}
+	case "no_spells_cast_last_turn":
+		return conditionScaffold{kind: condScaffoldPriorTurnSpellCount, count: 0}
+	case "two_plus_spells_cast_last_turn":
+		return conditionScaffold{kind: condScaffoldPriorTurnSpellCount, count: 2}
+	case "you_control_creature_power_ge":
+		out := conditionScaffold{kind: condScaffoldFerocious, count: 4}
+		for _, a := range cond.Args {
+			if n, ok := a.(int); ok && n > 0 {
+				out.count = n
+			}
+		}
+		return out
+	case "etb_tapped_unless":
+		out := conditionScaffold{kind: condScaffoldETBTappedUnless}
+		if len(cond.Args) > 0 {
+			if s, ok := cond.Args[0].(string); ok {
+				out.rawText = strings.ToLower(strings.TrimSpace(s))
+			}
+		}
+		return out
+	case "domain":
+		return conditionScaffold{kind: condScaffoldDomain, count: 4}
+	case "etb_if":
+		// Reuse the raw-text matcher on args[0] so the existing patterns
+		// (you-cast-from-hand, no-mana-spent, etc.) can satisfy the
+		// precondition. Falls through to a generic ETB flag if nothing
+		// matches.
+		out := conditionScaffold{kind: condScaffoldETBIf}
+		if len(cond.Args) > 0 {
+			if s, ok := cond.Args[0].(string); ok {
+				out.rawText = strings.ToLower(strings.TrimSpace(s))
+			}
+		}
+		return out
+	case "repeat_n":
+		out := conditionScaffold{kind: condScaffoldRepeatN, count: 3}
+		for _, a := range cond.Args {
+			if n, ok := a.(int); ok && n > 0 {
+				out.count = n
+			}
+		}
+		return out
+	case "lieutenant":
+		return conditionScaffold{kind: condScaffoldLieutenant}
+	case "ki_counters_ge_2":
+		return conditionScaffold{kind: condScaffoldKiCountersGE2, count: 2}
+	case "self_is_tapped":
+		return conditionScaffold{kind: condScaffoldSelfIsTapped}
+	case "attacked_or_blocked_this_combat":
+		return conditionScaffold{kind: condScaffoldAttackedOrBlockedCombat}
+	case "coven":
+		return conditionScaffold{kind: condScaffoldCoven}
+	case "self_has_counter":
+		out := conditionScaffold{kind: condScaffoldSelfHasCounter, subtype: "+1/+1", count: 1}
+		if len(cond.Args) > 0 {
+			if s, ok := cond.Args[0].(string); ok {
+				out.subtype = strings.ToLower(strings.TrimSpace(s))
+			}
+		}
+		return out
+	case "didnt_attack_this_turn":
+		return conditionScaffold{kind: condScaffoldDidntAttackThisTurn}
+	case "dealt_damage_to_opponent_this_turn":
+		return conditionScaffold{kind: condScaffoldDealtDamageOpponentTurn}
 	}
 
 	switch kind {
-	case "intervening_if", "as_long_as", "conditional", "raw":
-		// proceed
+	case "intervening_if", "as_long_as", "conditional", "raw", "if":
+		// proceed — "if" is the structurally-bare wrapper the parser emits
+		// when a clause starts with "if ..." and the predicate isn't one
+		// of the canonical Kinds. Treat it like "raw": route through the
+		// text-pattern detector below.
 	default:
 		return conditionScaffold{}
 	}
@@ -2685,6 +2780,247 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 			},
 		})
 		cs.description = fmt.Sprintf("seeded lands on %v + logged land_played/tapped_for_mana (subtype=%s)", seats, cs.subtype)
+
+	case condScaffoldETBTappedUnless:
+		// "X enters tapped unless Y" — satisfy Y so the source enters
+		// untapped. Most "unless" clauses are land-control checks; the
+		// raw-text patterns below seed a covering board state. When
+		// nothing matches, we still mark the source untapped + flag so
+		// the engine's ETB path can fall through cleanly.
+		txt := cs.rawText
+		switch {
+		case strings.Contains(txt, "basic land") || strings.Contains(txt, "two or more basic"):
+			seedSeatLands(gs, 0, 2, "Forest", "forest")
+			seedSeatLands(gs, 0, 2, "Plains", "plains")
+		case strings.Contains(txt, "plains") || strings.Contains(txt, "island") ||
+			strings.Contains(txt, "swamp") || strings.Contains(txt, "mountain") ||
+			strings.Contains(txt, "forest"):
+			// Place a relevant dual-land basic on seat 0.
+			for _, name := range []string{"plains", "island", "swamp", "mountain", "forest"} {
+				if strings.Contains(txt, name) {
+					seedSeatLands(gs, 0, 1, strings.Title(name), name)
+				}
+			}
+		case strings.Contains(txt, "13 or less life") || strings.Contains(txt, "13 or fewer life"):
+			if len(gs.Seats) > 1 && gs.Seats[1] != nil {
+				gs.Seats[1].Life = 13
+			}
+		case strings.Contains(txt, "two or more"):
+			seedSeatLands(gs, 0, 2, "Forest", "forest")
+		}
+		if srcPerm != nil {
+			srcPerm.Tapped = false
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["etb_tapped_unless_satisfied"] = 1
+		}
+		cs.description = "satisfied etb_tapped_unless clause + marked source untapped"
+
+	case condScaffoldDomain:
+		// Domain counts distinct basic land types you control. Seed one of
+		// each basic so CheckDomain reports 5 (max).
+		seedSeatLands(gs, 0, 1, "Plains", "plains")
+		seedSeatLands(gs, 0, 2, "Island", "island")
+		seedSeatLands(gs, 0, 3, "Swamp", "swamp")
+		seedSeatLands(gs, 0, 4, "Mountain", "mountain")
+		seedSeatLands(gs, 0, 5, "Forest", "forest")
+		cs.description = "seeded 5 distinct basic land types on seat 0 (domain max)"
+
+	case condScaffoldETBIf:
+		// Reuse the raw-text matcher: if args[0] looks like one of our
+		// canonical raw-text patterns, dispatch into the matching scaffold
+		// by synthesising a raw-form Condition. Otherwise mark the source
+		// with a generic ETB flag so trigger handlers can short-circuit.
+		if cs.rawText != "" {
+			synthetic := &gameast.Condition{
+				Kind: "raw",
+				Args: []interface{}{cs.rawText},
+			}
+			sub := applyConditionScaffolding(gs, synthetic, srcPerm)
+			if sub.kind != condScaffoldNone {
+				cs.description = "etb_if delegated → " + sub.description
+				break
+			}
+		}
+		if srcPerm != nil {
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["etb_if_satisfied"] = 1
+		}
+		// Generic "cast from hand" priming is the most common variant —
+		// mark the controller as having cast the source from hand this turn.
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.Casts = append(gs.Seats[0].Turn.Casts, gameengine.CastRecord{
+				CardName:  "ETB-If Cast",
+				Types:     []string{"creature"},
+				ManaValue: 2,
+			})
+		}
+		cs.description = "set srcPerm.Flags[etb_if_satisfied]=1 + cast record (generic etb_if)"
+
+	case condScaffoldRepeatN:
+		// "do this N times" / "repeat X times". The engine reads the
+		// repeat count from the surrounding effect; for priming purposes
+		// we just stamp a per-source flag so observers that check
+		// "repeated this turn" succeed.
+		n := cs.count
+		if n < 1 {
+			n = 1
+		}
+		if srcPerm != nil {
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["repeat_n"] = n
+		}
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["repeat_n"] = n
+		cs.description = fmt.Sprintf("stamped repeat_n=%d on srcPerm + game flags", n)
+
+	case condScaffoldLieutenant:
+		// "As long as you control your commander, ..." Stamp a per-seat
+		// flag the engine's commander tracker reads, and place a stand-in
+		// commander permanent on seat 0 so any "is your commander" check
+		// against the battlefield succeeds.
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["controls_commander"] = 1
+		}
+		cmdr := &gameengine.Permanent{
+			Card: &gameengine.Card{
+				Name:          "Lieutenant Commander Setup",
+				Owner:         0,
+				Types:         []string{"creature", "legendary"},
+				BasePower:     3,
+				BaseToughness: 3,
+			},
+			Controller: 0,
+			Owner:      0,
+			Flags:      map[string]int{"is_commander": 1},
+			Counters:   map[string]int{},
+		}
+		gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, cmdr)
+		cs.description = "placed commander stand-in + set controls_commander flag"
+
+	case condScaffoldKiCountersGE2:
+		// Kamigawa flip cards (Faithful Squire, Cunning Bandit, Budoka Pupil)
+		// track ki counters on the source; ≥2 enables the flip. The engine
+		// counts via srcPerm.Counters["ki"].
+		want := cs.count
+		if want < 2 {
+			want = 2
+		}
+		if srcPerm != nil {
+			if srcPerm.Counters == nil {
+				srcPerm.Counters = map[string]int{}
+			}
+			if srcPerm.Counters["ki"] < want {
+				srcPerm.Counters["ki"] = want
+			}
+		}
+		cs.description = fmt.Sprintf("placed %d ki counters on srcPerm", want)
+
+	case condScaffoldSelfIsTapped:
+		// Hollow Trees / Sand Silos / Dwarven Hold: source must be tapped
+		// for the ability to qualify. Tap srcPerm.
+		if srcPerm != nil {
+			srcPerm.Tapped = true
+		}
+		cs.description = "tapped srcPerm (self_is_tapped active)"
+
+	case condScaffoldAttackedOrBlockedCombat:
+		// Clockwork series — "if ~ attacked or blocked this combat".
+		// Stamp both attacked and blocked flags on the source and set
+		// the seat's attacked-this-turn flag so any wider observer sees
+		// combat activity.
+		if srcPerm != nil {
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["attacked_this_combat"] = 1
+			srcPerm.Flags["blocked_this_combat"] = 1
+		}
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.Attacked = true
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["attacked_this_turn"] = 1
+		}
+		cs.description = "set source attacked_this_combat + blocked_this_combat + seat attacked_this_turn"
+
+	case condScaffoldCoven:
+		// Coven (Innistrad Midnight Hunt) — control 3+ creatures with
+		// pairwise-different powers. Seed three creatures at 1/1, 2/2, 3/3.
+		for i, pt := range []int{1, 2, 3} {
+			placePoweredCreature(gs, 0, fmt.Sprintf("Coven Setup %d", i), pt, pt)
+		}
+		cs.description = "placed 3 creatures (1/1, 2/2, 3/3) on seat 0 (coven active)"
+
+	case condScaffoldSelfHasCounter:
+		// "as long as ~ has a counter on it" — Skyclave Sentinel,
+		// Scuttlegator, Woolly Razorback. Stamp the named counter on
+		// srcPerm; default to +1/+1 when args[0] is blank.
+		kind := cs.subtype
+		if kind == "" {
+			kind = "+1/+1"
+		}
+		n := cs.count
+		if n < 1 {
+			n = 1
+		}
+		if srcPerm != nil {
+			if srcPerm.Counters == nil {
+				srcPerm.Counters = map[string]int{}
+			}
+			if srcPerm.Counters[kind] < n {
+				srcPerm.Counters[kind] = n
+			}
+		}
+		cs.description = fmt.Sprintf("placed %d %q counters on srcPerm", n, kind)
+
+	case condScaffoldDidntAttackThisTurn:
+		// Inverse of attacked_this_turn — explicitly clear the flag in
+		// case prior scaffolding stamped it.
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.Attacked = false
+			if gs.Seats[0].Flags != nil {
+				delete(gs.Seats[0].Flags, "attacked_this_turn")
+			}
+		}
+		if gs.Flags != nil {
+			delete(gs.Flags, "attacked_this_turn")
+			delete(gs.Flags, "seat_0_attacked_this_turn")
+		}
+		cs.description = "cleared attacked_this_turn (didnt_attack_this_turn active)"
+
+	case condScaffoldDealtDamageOpponentTurn:
+		// "if you dealt damage to an opponent this turn" — Hatred,
+		// some warrior tribal. Log a damage event and stamp seat flags.
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["dealt_damage_to_opponent_this_turn"] = 1
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["dealt_damage_to_opponent_this_turn"] = 1
+		}
+		gs.LogEvent(gameengine.Event{
+			Kind:   "damage",
+			Seat:   0,
+			Target: 1,
+			Amount: 3,
+			Source: "thor_priming",
+		})
+		cs.description = "set dealt_damage_to_opponent_this_turn flag + logged damage event"
 	}
 	return cs
 }
@@ -2805,6 +3141,30 @@ func traceConditionScaffolding(cond *gameast.Condition, tr *Tracer) {
 		desc = "set Phase=ending Step=end_step/cleanup + delayed_eot_trigger_active"
 	case condScaffoldLandPlayOrTap:
 		desc = fmt.Sprintf("seeded lands + logged land_played/tapped_for_mana (subtype=%s)", cs.subtype)
+	case condScaffoldETBTappedUnless:
+		desc = "satisfied etb_tapped_unless clause + marked source untapped"
+	case condScaffoldDomain:
+		desc = "seeded 5 distinct basic land types on seat 0 (domain)"
+	case condScaffoldETBIf:
+		desc = "etb_if raw-text routed (+ generic ETB flag)"
+	case condScaffoldRepeatN:
+		desc = fmt.Sprintf("stamped repeat_n=%d", cs.count)
+	case condScaffoldLieutenant:
+		desc = "placed commander stand-in + set controls_commander flag"
+	case condScaffoldKiCountersGE2:
+		desc = fmt.Sprintf("placed %d ki counters on srcPerm", cs.count)
+	case condScaffoldSelfIsTapped:
+		desc = "tapped srcPerm (self_is_tapped)"
+	case condScaffoldAttackedOrBlockedCombat:
+		desc = "set source attacked/blocked combat flags + seat attacked_this_turn"
+	case condScaffoldCoven:
+		desc = "placed 3 creatures with different powers (coven)"
+	case condScaffoldSelfHasCounter:
+		desc = fmt.Sprintf("placed %d %q counters on srcPerm", maxInt(cs.count, 1), cs.subtype)
+	case condScaffoldDidntAttackThisTurn:
+		desc = "cleared attacked_this_turn (didnt_attack_this_turn)"
+	case condScaffoldDealtDamageOpponentTurn:
+		desc = "set dealt_damage_to_opponent_this_turn + logged damage"
 	}
 	tr.Record("CONDITION_SETUP", "%q → %s", cs.rawText, desc)
 }
