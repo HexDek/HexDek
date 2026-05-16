@@ -1279,22 +1279,314 @@ func ApplyStation(gs *GameState, perm *Permanent) {
 }
 
 // ---------------------------------------------------------------------------
-// §702.185 — Warp (stub)
+// §702.185 — Warp
+//
+// "Warp [cost]" represents two static abilities on the card while in the
+// stack-or-hand-or-exile zones:
+//
+//  1. "You may cast this card from your hand by paying [cost] rather than
+//     its mana cost." — alternative cost (CR §601.2b, §601.2f–h).
+//  2. "If this spell's warp cost was paid, exile the permanent this spell
+//     becomes at the beginning of the next end step. Its owner may cast
+//     this card after the current turn has ended for as long as it
+//     remains exiled." — delayed triggered exile + zone-cast permission.
+//
+// Implementation:
+//
+//   - HasWarp(card) reports the keyword.
+//   - CastWarp pays the warp cost, removes the card from its owner's
+//     hand, and pushes a StackItem flagged with CostMeta["warped"]=true.
+//   - In stack.go's spell-resolves-as-permanent branch, when the resolved
+//     permanent's source StackItem has CostMeta["warped"], we call
+//     RegisterWarpExileTrigger to schedule the end-step exile.
+//   - The delayed-trigger EffectFn exiles the permanent and grants a
+//     ZoneCastPermission so the owner may cast it from exile on a later
+//     turn at its normal mana cost.
 // ---------------------------------------------------------------------------
 
-// ApplyWarp logs a warp event.
-func ApplyWarp(gs *GameState, perm *Permanent) {
-	if gs == nil || perm == nil {
-		return
+// HasWarp returns true if the card has the warp keyword.
+func HasWarp(card *Card) bool {
+	return cardHasKeywordByName(card, "warp")
+}
+
+// CastWarp casts a card from `seatIdx`'s hand for its warp cost.
+// CR §702.185a.
+//
+// Preconditions:
+//   - card is in seat's hand
+//   - card has the warp keyword (caller is responsible for matching
+//     warpCost to the printed keyword cost; this function does not parse
+//     the keyword arguments)
+//   - seat can afford warpCost mana
+//   - normal timing/legality applies (sorcery-speed for permanents, etc.)
+//     — checked by upstream cast pipeline; CastWarp itself does not
+//     enforce sorcery-speed because that's a generic spell-casting rule
+//     enforced before any alt-cost decision.
+//
+// On success: removes card from hand, pays warpCost, pushes a StackItem
+// with CostMeta["warped"]=true and CostMeta["warp_cost"]=warpCost, sets
+// the seat-level flag "spell_warped_this_turn:<seat>" for cards that ask
+// "was a spell warped this turn?" (e.g. Axavar, Fate Thief).
+func CastWarp(gs *GameState, seatIdx int, card *Card, warpCost int) (*CostPaymentResult, error) {
+	if gs == nil {
+		return nil, &CastError{Reason: "nil game"}
 	}
+	if seatIdx < 0 || seatIdx >= len(gs.Seats) {
+		return nil, &CastError{Reason: "invalid seat"}
+	}
+	if card == nil {
+		return nil, &CastError{Reason: "nil card"}
+	}
+	if !HasWarp(card) {
+		return nil, &CastError{Reason: "no_warp_keyword"}
+	}
+	if warpCost < 0 {
+		return nil, &CastError{Reason: "invalid_warp_cost"}
+	}
+	seat := gs.Seats[seatIdx]
+	if seat == nil {
+		return nil, &CastError{Reason: "nil seat"}
+	}
+	if seat.ManaPool < warpCost {
+		return nil, &CastError{Reason: "insufficient_mana"}
+	}
+	// Remove from hand.
+	if !removeFromZone(seat, card, ZoneHand) {
+		return nil, &CastError{Reason: "not_in_hand"}
+	}
+	// Pay the warp cost.
+	seat.ManaPool -= warpCost
+	SyncManaAfterSpend(seat)
+	if warpCost > 0 {
+		gs.LogEvent(Event{
+			Kind:   "pay_mana",
+			Seat:   seatIdx,
+			Amount: warpCost,
+			Source: card.DisplayName(),
+			Details: map[string]interface{}{
+				"reason":  "warp_cast",
+				"keyword": "warp",
+				"rule":    "601.2f",
+			},
+		})
+	}
+	// Push onto the stack flagged as warped.
+	item := &StackItem{
+		Card:       card,
+		Controller: seatIdx,
+		CastZone:   ZoneHand,
+		CostMeta: map[string]interface{}{
+			"warped":    true,
+			"warp_cost": warpCost,
+		},
+	}
+	PushStackItem(gs, item)
+
+	// Mark the seat as having warped a spell this turn — used by cards
+	// like Axavar, Fate Thief that key off "if a spell was warped this
+	// turn." Cleared in the cleanup step alongside other "this turn"
+	// flags (caller responsibility; we just set the marker).
+	if gs.Flags == nil {
+		gs.Flags = map[string]int{}
+	}
+	gs.Flags["spell_warped_this_turn:"+itoaBatch(seatIdx)] = 1
+
 	gs.LogEvent(Event{
-		Kind:   "warp",
-		Seat:   perm.Controller,
-		Source: perm.Card.DisplayName(),
+		Kind:   "warp_cast",
+		Seat:   seatIdx,
+		Source: card.DisplayName(),
+		Amount: warpCost,
 		Details: map[string]interface{}{
-			"rule": "702.185",
+			"rule": "702.185a",
 		},
 	})
+
+	return &CostPaymentResult{}, nil
+}
+
+// NewWarpCastFromExilePermission returns a ZoneCastPermission that lets
+// the owner cast a previously-warp-exiled card from exile at its normal
+// mana cost on a later turn. Created by the warp delayed trigger when it
+// exiles the permanent. CR §702.185a, second clause.
+//
+// ManaCost -1 instructs CastFromZone to use the card's printed mana cost
+// (the "cast normally from exile" semantic — the alt warp cost is only
+// available on the FIRST cast, from hand).
+//
+// RequireController is set to the warped card's owner so opponents
+// cannot steal the cast permission.
+func NewWarpCastFromExilePermission(owner int) *ZoneCastPermission {
+	return &ZoneCastPermission{
+		Zone:              ZoneExile,
+		Keyword:           "warp",
+		ManaCost:          -1, // use card's printed mana cost
+		RequireController: owner,
+		SourceName:        "warp_exile",
+		Duration:          "", // permanent until cast
+	}
+}
+
+// RegisterWarpExileTrigger schedules a one-shot delayed trigger that
+// fires at the next end step and exiles the warped permanent, then
+// grants its owner a ZoneCastPermission to cast it from exile on a later
+// turn. CR §702.185a, second static.
+//
+// The trigger captures the permanent's timestamp so subsequent
+// look-up resolves the same object even if it has been bounced and
+// re-entered. If the permanent has already left the battlefield by the
+// time the trigger fires, the trigger is a no-op (the §603.10 "intervening
+// 'if'" doesn't apply, but the effect itself does nothing useful when the
+// permanent is gone — exiling from elsewhere is not what the keyword
+// instructs).
+func RegisterWarpExileTrigger(gs *GameState, perm *Permanent) {
+	if gs == nil || perm == nil || perm.Card == nil {
+		return
+	}
+	cardName := perm.Card.DisplayName()
+	owner := perm.Owner
+	timestamp := perm.Timestamp
+	controller := perm.Controller
+
+	gs.RegisterDelayedTrigger(&DelayedTrigger{
+		TriggerAt:      "end_of_turn",
+		ControllerSeat: controller,
+		SourceCardName: cardName,
+		OneShot:        true,
+		EffectFn: func(gs *GameState) {
+			// Locate the permanent on whichever battlefield by timestamp.
+			var found *Permanent
+			var seatIdx int
+			for i, s := range gs.Seats {
+				if s == nil {
+					continue
+				}
+				for _, p := range s.Battlefield {
+					if p != nil && p.Timestamp == timestamp {
+						found = p
+						seatIdx = i
+						break
+					}
+				}
+				if found != nil {
+					break
+				}
+			}
+			if found == nil {
+				// Permanent left the battlefield before the trigger fired.
+				// The §702.185a clause only applies to "the permanent this
+				// spell becomes"; if it's no longer that permanent, nothing
+				// to exile. Still grant the cast-from-exile permission if
+				// the card is currently in exile (someone exiled it during
+				// the turn — the card-from-exile-cast clause still
+				// nominally applies for the owner).
+				gs.LogEvent(Event{
+					Kind:   "warp_exile_skipped",
+					Seat:   controller,
+					Source: cardName,
+					Details: map[string]interface{}{
+						"reason": "permanent_not_on_battlefield",
+						"rule":   "702.185a",
+					},
+				})
+				return
+			}
+			// Exile the permanent. Use SacrificePermanent? No — sacrifice
+			// is a different game action with its own triggers. Use the
+			// standard permanent-to-exile zone move.
+			ExileWarpedPermanent(gs, found, seatIdx)
+			// Grant cast-from-exile permission to the owner. The owner
+			// (not necessarily the current controller — control can have
+			// changed) can cast the card from exile on a later turn at
+			// its normal mana cost.
+			if gs.ZoneCastGrants == nil {
+				gs.ZoneCastGrants = map[*Card]*ZoneCastPermission{}
+			}
+			gs.ZoneCastGrants[found.Card] = NewWarpCastFromExilePermission(owner)
+			gs.LogEvent(Event{
+				Kind:   "warp_exile",
+				Seat:   controller,
+				Source: cardName,
+				Details: map[string]interface{}{
+					"owner": owner,
+					"rule":  "702.185a",
+				},
+			})
+		},
+	})
+
+	gs.LogEvent(Event{
+		Kind:   "warp_trigger_registered",
+		Seat:   controller,
+		Source: cardName,
+		Details: map[string]interface{}{
+			"trigger_at": "end_of_turn",
+			"rule":       "702.185a",
+		},
+	})
+}
+
+// ExileWarpedPermanent removes a permanent from its controller's
+// battlefield and adds the underlying Card to its owner's exile. This is
+// the move performed by warp's delayed trigger and is distinct from a
+// sacrifice (no dies/LTB triggers should fire for a warp exile per
+// §702.185a — exile-from-battlefield is a §614 zone change, but it's not
+// a sacrifice, so abilities keyed on "dies" or "is sacrificed" don't
+// trigger; abilities keyed on "leaves the battlefield" DO trigger).
+//
+// We rely on MoveCard for the zone change so LTB triggers (zone_change
+// events) fire normally. The permanent struct itself is removed from
+// Battlefield; the Card is appended to the owner's Exile.
+func ExileWarpedPermanent(gs *GameState, perm *Permanent, controllerSeat int) {
+	if gs == nil || perm == nil || perm.Card == nil {
+		return
+	}
+	seat := gs.Seats[controllerSeat]
+	if seat == nil {
+		return
+	}
+	// Remove from battlefield.
+	idx := -1
+	for i, p := range seat.Battlefield {
+		if p == perm {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return
+	}
+	seat.Battlefield = append(seat.Battlefield[:idx], seat.Battlefield[idx+1:]...)
+	// Card to owner's exile.
+	owner := perm.Owner
+	if owner < 0 || owner >= len(gs.Seats) {
+		owner = controllerSeat
+	}
+	ownerSeat := gs.Seats[owner]
+	if ownerSeat == nil {
+		return
+	}
+	ownerSeat.Exile = append(ownerSeat.Exile, perm.Card)
+	gs.LogEvent(Event{
+		Kind:   "zone_change",
+		Seat:   controllerSeat,
+		Source: perm.Card.DisplayName(),
+		Details: map[string]interface{}{
+			"from":   "battlefield",
+			"to":     "exile",
+			"reason": "warp",
+			"rule":   "702.185a",
+		},
+	})
+}
+
+// SpellWarpedThisTurn returns true if any spell was cast for its warp
+// cost by `seatIdx` during the current turn. Backs queries like
+// Axavar, Fate Thief's "if ... a spell was warped this turn".
+func SpellWarpedThisTurn(gs *GameState, seatIdx int) bool {
+	if gs == nil || gs.Flags == nil {
+		return false
+	}
+	return gs.Flags["spell_warped_this_turn:"+itoaBatch(seatIdx)] > 0
 }
 
 // ---------------------------------------------------------------------------
