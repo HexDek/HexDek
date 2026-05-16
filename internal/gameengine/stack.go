@@ -1029,6 +1029,18 @@ func ResolveStackTop(gs *GameState) {
 			// a COPY (§706.10a), the resolving permanent is a TOKEN copy.
 			etbPerm := resolvePermanentSpellETB(gs, item)
 
+			// §702.185 — warp: if the spell was cast for its warp cost,
+			// register the delayed "exile at next end step" trigger and
+			// the owner's cast-from-exile permission attaches when the
+			// trigger fires. CR §702.185a.
+			if etbPerm != nil && item.CostMeta != nil {
+				if v, ok := item.CostMeta["warped"]; ok {
+					if b, ok := v.(bool); ok && b {
+						RegisterWarpExileTrigger(gs, etbPerm)
+					}
+				}
+			}
+
 			// Wave 2: evoke — if the spell was cast with evoke, register
 			// a sacrifice trigger on ETB per CR §702.73.
 			if etbPerm != nil && item.CostMeta != nil {
