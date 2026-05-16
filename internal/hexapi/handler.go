@@ -160,6 +160,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/similar", h.handleSimilarDecks)
 	mux.HandleFunc("POST /api/import/moxfield", h.handleMoxfieldImport)
 	mux.HandleFunc("GET /api/imports/{owner}", h.handleListImports)
+	mux.HandleFunc("GET /api/imports/source/moxfield", h.handleMoxfieldSources)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/events", h.handleDeckEvents)
 	mux.HandleFunc("POST /api/feedback", h.handleFeedback)
 	mux.HandleFunc("POST /api/kofi/webhook", h.handleKofiWebhook)
@@ -1270,6 +1271,108 @@ func (h *Handler) handleListImports(w http.ResponseWriter, r *http.Request) {
 		entries = []db.ImportLogEntry{}
 	}
 	writeJSON(w, map[string]any{"owner": owner, "imports": entries})
+}
+
+// handleMoxfieldSources returns every deck on the system whose origin we
+// can trace back to Moxfield. Two complementary sources:
+//
+//  1. import_log rows where source = "moxfield" (per-user uploads via the
+//     /api/import/moxfield endpoint), which include the full source_url.
+//  2. Bulk-imported deck files in data/decks/moxfield* whose filename
+//     convention encodes the Moxfield deck ID as the suffix after the
+//     last underscore — we derive the URL from that.
+//
+// Returned list is the union of both, with `source` distinguishing
+// "import_log" rows from "filename_convention" rows. Optional ?limit
+// caps the total; defaults to 500.
+func (h *Handler) handleMoxfieldSources(w http.ResponseWriter, r *http.Request) {
+	limit := 500
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 5000 {
+			limit = n
+		}
+	}
+
+	type entry struct {
+		Owner       string `json:"owner"`
+		DeckID      string `json:"deck_id"`
+		DeckKey     string `json:"deck_key"`
+		Commander   string `json:"commander,omitempty"`
+		MoxfieldID  string `json:"moxfield_id,omitempty"`
+		MoxfieldURL string `json:"moxfield_url"`
+		Source      string `json:"source"` // "import_log" | "filename_convention"
+		ImportedAt  int64  `json:"imported_at,omitempty"`
+	}
+	out := make([]entry, 0, 256)
+
+	// 1) import_log rows (source = "moxfield")
+	if h.Showmatch != nil && h.Showmatch.sqlDB != nil {
+		rows, err := h.Showmatch.sqlDB.QueryContext(r.Context(),
+			`SELECT owner, deck_key, COALESCE(commander,''), COALESCE(source_url,''), imported_at
+			 FROM import_log WHERE source = 'moxfield'
+			 ORDER BY imported_at DESC`)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var e entry
+				var url string
+				if err := rows.Scan(&e.Owner, &e.DeckKey, &e.Commander, &url, &e.ImportedAt); err != nil {
+					continue
+				}
+				e.MoxfieldURL = url
+				// deck_id is the slug after "owner/"
+				parts := strings.SplitN(e.DeckKey, "/", 2)
+				if len(parts) == 2 {
+					e.DeckID = parts[1]
+				}
+				e.Source = "import_log"
+				out = append(out, e)
+			}
+		}
+	}
+
+	// 2) filename-convention scan of bulk moxfield directories
+	for _, sub := range []string{"moxfield", "moxfield_300"} {
+		dir := filepath.Join(h.DecksDir, sub)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, de := range entries {
+			if de.IsDir() {
+				continue
+			}
+			name := de.Name()
+			if !strings.HasSuffix(name, ".txt") {
+				continue
+			}
+			base := strings.TrimSuffix(name, ".txt")
+			lastUnderscore := strings.LastIndex(base, "_")
+			if lastUnderscore < 0 {
+				continue
+			}
+			moxID := base[lastUnderscore+1:]
+			if len(moxID) < 4 {
+				continue
+			}
+			out = append(out, entry{
+				Owner:       sub,
+				DeckID:      base,
+				DeckKey:     sub + "/" + base,
+				MoxfieldID:  moxID,
+				MoxfieldURL: "https://www.moxfield.com/decks/" + moxID,
+				Source:      "filename_convention",
+			})
+		}
+	}
+
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	writeJSON(w, map[string]any{
+		"total":   len(out),
+		"sources": out,
+	})
 }
 
 func (h *Handler) handleCardWinStats(w http.ResponseWriter, r *http.Request) {
