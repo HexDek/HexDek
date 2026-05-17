@@ -1129,9 +1129,9 @@ export default function DeckArchive() {
           <div className="deck-vital-signs__lbl">WIN RATE</div>
           {deckElo?.wins != null && deckElo?.losses != null ? (
             <div className="deck-vital-signs__sub">
-              <span style={{ color: 'var(--ok)' }}>{deckElo.wins}W</span>
+              <span style={{ color: 'var(--ok)' }}>{deckElo.wins.toLocaleString()}W</span>
               {' · '}
-              <span style={{ color: 'var(--danger)' }}>{deckElo.losses}L</span>
+              <span style={{ color: 'var(--danger)' }}>{deckElo.losses.toLocaleString()}L</span>
             </div>
           ) : (
             <div className="deck-vital-signs__sub" style={{ opacity: 0.55 }}>NO SAMPLE</div>

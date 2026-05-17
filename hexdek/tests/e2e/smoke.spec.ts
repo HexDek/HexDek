@@ -60,7 +60,9 @@ test('deck page (Queen Marchesa) renders with new panels', async ({ page }) => {
 })
 
 test('deck page (Toph) renders', async ({ page }) => {
-  await page.goto('/decks/belgarathrk/belgarath_toph_the_first_metalbender_deck')
+  // toph_20 = Belgarath's actual Toph 2.0 upload (100 cards). The old
+  // belgarath_toph_the_first_metalbender_deck was a 0-card stub.
+  await page.goto('/decks/belgarathrk/toph_20')
   await expect(page.locator('h1')).toBeVisible({ timeout: 15_000 })
   await page.waitForTimeout(DATA_WAIT_MS)
   await page.screenshot({ path: shot('deck-page-toph'), fullPage: true })
