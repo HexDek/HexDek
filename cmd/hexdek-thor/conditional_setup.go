@@ -901,6 +901,25 @@ const (
 	condScaffoldIsSubtype           // raw: "that creature is a(n) <subtype>"
 	condScaffoldAscendBlessing      // raw: "city's blessing" / "if you have the city's blessing"
 	condScaffoldEminenceCommandZone // raw: "in the command zone" eminence-style trigger
+
+	// Era 3 audit additions — 13 new scaffolds bridging 2020-2022 gaps and
+	// the parallel "recent printings" (2025+) cluster surfaced by
+	// data/thor-audit-era3-recent.md. Each maps to existing engine state
+	// (no new fields required); see ManaSpentThreshold + Permanent.Flags
+	// for the per-source stamping pattern.
+	condScaffoldControlNCreatures       // "you control N or more creatures"
+	condScaffoldControlNLands           // "you control N or more lands"
+	condScaffoldCounterReplacementBoost // "+1/+1 counter doubler" replacement (Doubling Season etc)
+	condScaffoldTokenReplacementBoost   // "create that many plus one tokens instead"
+	condScaffoldPersistUndyingCheck     // "if it had no +1/+1 [or -1/-1] counters"
+	condScaffoldCardTypeReveal          // "if it's a land/creature/permanent card" reveal
+	condScaffoldEquipmentAttached       // "as long as ~ is equipped" / "equipped creature"
+	condScaffoldHandSizeThreshold       // "fewer than N cards in hand" / "N or more cards in hand"
+	condScaffoldPutCounterThisTurn      // "you put a counter on ~ this turn"
+	condScaffoldCastNSpellsThisTurn     // count variant: "cast N or more spells this turn"
+	condScaffoldFullParty               // Zendikar Rising full party (4 distinct classes)
+	condScaffoldTotalToughness          // "creatures you control have total toughness N+"
+	condScaffoldMainPhaseOrFirstCombat  // "it's your main phase" / "first combat phase"
 )
 
 type conditionScaffold struct {
@@ -3526,6 +3545,248 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 		}
 		gs.Flags["eminence_active"] = 1
 		cs.description = "set commander_in_command_zone + eminence_active flags"
+
+	case condScaffoldControlNCreatures:
+		// "you control N or more creatures" — seed enough generic creatures
+		// on seat 0 to satisfy the threshold (count+1 to guard against
+		// the count itself being the source).
+		n := cs.count
+		if n < 1 {
+			n = 3
+		}
+		seedSeatCreatures(gs, 0, n+1, "Threshold Creature", "")
+		cs.description = fmt.Sprintf("seeded %d creatures on seat 0 (control_n_creatures n=%d)", n+1, n)
+
+	case condScaffoldControlNLands:
+		// "you control N or more lands" — seed Forests on seat 0. Distinct
+		// from Domain (which needs 5 land TYPES, not 5 lands of one type).
+		n := cs.count
+		if n < 1 {
+			n = 5
+		}
+		seedSeatLands(gs, 0, n+1, "Forest", "forest")
+		cs.description = fmt.Sprintf("seeded %d Forests on seat 0 (control_n_lands n=%d)", n+1, n)
+
+	case condScaffoldCounterReplacementBoost:
+		// +1/+1 counter doubler replacement (Doubling Season, Hardened
+		// Scales, Branching Evolution, Pir, Conclave Mentor). Stamp seat
+		// and game flags the engine's counter-placement hook reads. Also
+		// place a witness creature so the doubler has something to act on.
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["counter_doubler_active"] = 1
+			gs.Seats[0].Flags["plus_one_counter_doubler"] = 1
+		}
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["counter_doubler_active"] = 1
+		placeNamedFriendlyCreature(gs, "Counter Doubler Witness")
+		cs.description = "set counter_doubler_active flag + placed witness creature"
+
+	case condScaffoldTokenReplacementBoost:
+		// Token doubler replacement (Anointed Procession, Parallel Lives,
+		// Doubling Season's token half, Mondrak, Adrix and Nev).
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["token_doubler_active"] = 1
+		}
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["token_doubler_active"] = 1
+		cs.description = "set token_doubler_active flag on seat 0 + game"
+
+	case condScaffoldPersistUndyingCheck:
+		// "if it had no -1/-1 counters on it" (persist) / "if it had no
+		// +1/+1 counters on it" (undying). The check fires at LTB-replace
+		// time against the LAST counter state. Clear the named counter
+		// from srcPerm so the predicate evaluates true.
+		kind := cs.subtype
+		if kind == "" {
+			kind = "+1/+1"
+		}
+		if srcPerm != nil && srcPerm.Counters != nil {
+			delete(srcPerm.Counters, kind)
+		}
+		if srcPerm != nil {
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["persist_undying_check"] = 1
+		}
+		cs.description = fmt.Sprintf("cleared %q counters on srcPerm (persist/undying)", kind)
+
+	case condScaffoldCardTypeReveal:
+		// "if it's a {creature,land,permanent,...} card". Place a card of
+		// the named type on top of the controller's library and stamp a
+		// flag the reveal hook reads.
+		sub := cs.subtype
+		if sub == "" {
+			sub = "creature"
+		}
+		card := &gameengine.Card{
+			Name:  "Revealed " + sub,
+			Owner: 0,
+			Types: []string{sub},
+		}
+		if sub == "permanent" {
+			card.Types = []string{"creature"}
+		}
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Library = append([]*gameengine.Card{card}, gs.Seats[0].Library...)
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["revealed_card_type_"+sub] = 1
+		}
+		cs.description = fmt.Sprintf("placed %q card on top of seat 0 library (card_type_reveal)", sub)
+
+	case condScaffoldEquipmentAttached:
+		// "as long as ~ is equipped" / aura-style attachment check on an
+		// equipment source. Place a creature on seat 0 and link srcPerm
+		// as its attached equipment.
+		target := placeNamedFriendlyCreature(gs, "Equipped Creature")
+		if srcPerm != nil && target != nil {
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["is_equipped"] = 1
+			srcPerm.AttachedTo = target
+			if target.Flags == nil {
+				target.Flags = map[string]int{}
+			}
+			target.Flags["has_equipment"] = 1
+		}
+		cs.description = "placed Equipped Creature on seat 0 and attached srcPerm"
+
+	case condScaffoldHandSizeThreshold:
+		// "fewer than N / N or more / N or fewer cards in hand". Adjust
+		// seat 0 hand size to satisfy the predicate.
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			target := cs.count
+			switch cs.subtype {
+			case "hand_size_lt":
+				// fewer than N — set to N-1 (min 0)
+				want := target - 1
+				if want < 0 {
+					want = 0
+				}
+				trimOrFillHand(gs, 0, want)
+			case "hand_size_le":
+				trimOrFillHand(gs, 0, target)
+			case "hand_size_ge", "hand_size_threshold":
+				want := target + 1
+				if want < 1 {
+					want = 1
+				}
+				trimOrFillHand(gs, 0, want)
+			default:
+				trimOrFillHand(gs, 0, target+1)
+			}
+		}
+		cs.description = fmt.Sprintf("adjusted seat 0 hand for %s count=%d", cs.subtype, cs.count)
+
+	case condScaffoldPutCounterThisTurn:
+		// "you put a counter on ~ this turn". Log a counter-placement
+		// event and stamp the per-turn flag.
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["put_counter_this_turn"] = 1
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["put_counter_this_turn"] = 1
+		}
+		gs.LogEvent(gameengine.Event{
+			Kind:   "counter_placed",
+			Seat:   0,
+			Source: "thor_priming",
+		})
+		cs.description = "set put_counter_this_turn flag + logged counter_placed event"
+
+	case condScaffoldCastNSpellsThisTurn:
+		// "you've cast N or more spells this turn" — increment Turn.Casts
+		// to N+1 so the threshold is strictly cleared, and bump legacy
+		// counters in lockstep.
+		n := cs.count
+		if n < 1 {
+			n = 2
+		}
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			seat := gs.Seats[0]
+			for i := 0; i < n+1; i++ {
+				seat.SpellsCastThisTurn++
+				seat.Turn.SpellsCast++
+				seat.Turn.Casts = append(seat.Turn.Casts, gameengine.CastRecord{
+					CardName:  fmt.Sprintf("Cast %d", i),
+					Types:     []string{"instant"},
+					ManaValue: 1,
+				})
+			}
+			if seat.Flags == nil {
+				seat.Flags = map[string]int{}
+			}
+			seat.Flags["cast_spell_this_turn"] = 1
+			seat.Flags["spells_cast_this_turn"] = seat.Turn.SpellsCast
+		}
+		gs.SpellsCastThisTurn += n + 1
+		cs.description = fmt.Sprintf("incremented Turn.SpellsCast to %d (cast_n_spells threshold=%d)", n+1, n)
+
+	case condScaffoldFullParty:
+		// Zendikar Rising 'full party' — control 4 creatures with the
+		// four distinct party classes: warrior, wizard, cleric, rogue.
+		for _, cls := range []string{"warrior", "wizard", "cleric", "rogue"} {
+			placeNamedFriendlyCreatureWithSubtype(gs, "Party "+cls, cls)
+		}
+		cs.description = "placed warrior + wizard + cleric + rogue on seat 0 (full party)"
+
+	case condScaffoldTotalToughness:
+		// "creatures you control have total toughness N or greater". Seed
+		// creatures totaling at least N+1 toughness via two 4-toughness
+		// creatures by default; scale up for very high thresholds.
+		want := cs.count
+		if want < 1 {
+			want = 8
+		}
+		placed := 0
+		for placed < want+1 {
+			t := 4
+			remaining := (want + 1) - placed
+			if remaining < t {
+				t = remaining
+			}
+			placePoweredCreature(gs, 0, fmt.Sprintf("Toughness Setup %d", placed), 1, t)
+			placed += t
+		}
+		cs.description = fmt.Sprintf("seeded creatures totaling >=%d toughness on seat 0", want+1)
+
+	case condScaffoldMainPhaseOrFirstCombat:
+		// "it's your main phase" / "it's the first combat phase". Set the
+		// phase/step directly so phase-gated abilities evaluate true.
+		switch cs.subtype {
+		case "first_combat_phase":
+			gs.Phase = "combat"
+			gs.Step = "begin_combat"
+			if gs.Flags == nil {
+				gs.Flags = map[string]int{}
+			}
+			gs.Flags["first_combat_phase"] = 1
+		default:
+			gs.Phase = "precombat_main"
+			gs.Step = "main"
+			if gs.Flags == nil {
+				gs.Flags = map[string]int{}
+			}
+			gs.Flags["main_phase"] = 1
+		}
+		cs.description = fmt.Sprintf("set Phase=%q Step=%q (%s)", gs.Phase, gs.Step, cs.subtype)
 	}
 	return cs
 }
@@ -3700,6 +3961,32 @@ func traceConditionScaffolding(cond *gameast.Condition, tr *Tracer) {
 		desc = "primeAscend: 10 permanents + citys_blessing flag"
 	case condScaffoldEminenceCommandZone:
 		desc = "set commander_in_command_zone + eminence_active flags"
+	case condScaffoldControlNCreatures:
+		desc = fmt.Sprintf("seeded %d creatures on seat 0 (control_n_creatures)", cs.count+1)
+	case condScaffoldControlNLands:
+		desc = fmt.Sprintf("seeded %d Forests on seat 0 (control_n_lands)", cs.count+1)
+	case condScaffoldCounterReplacementBoost:
+		desc = "set counter_doubler_active flag + witness creature"
+	case condScaffoldTokenReplacementBoost:
+		desc = "set token_doubler_active flag on seat 0 + game"
+	case condScaffoldPersistUndyingCheck:
+		desc = fmt.Sprintf("cleared %q counters on srcPerm (persist/undying)", cs.subtype)
+	case condScaffoldCardTypeReveal:
+		desc = fmt.Sprintf("placed %q card atop seat 0 library (card_type_reveal)", cs.subtype)
+	case condScaffoldEquipmentAttached:
+		desc = "placed Equipped Creature + attached srcPerm"
+	case condScaffoldHandSizeThreshold:
+		desc = fmt.Sprintf("adjusted seat 0 hand (%s n=%d)", cs.subtype, cs.count)
+	case condScaffoldPutCounterThisTurn:
+		desc = "set put_counter_this_turn flag + logged counter_placed event"
+	case condScaffoldCastNSpellsThisTurn:
+		desc = fmt.Sprintf("incremented Turn.SpellsCast to %d (cast_n_spells)", cs.count+1)
+	case condScaffoldFullParty:
+		desc = "placed warrior+wizard+cleric+rogue (full party)"
+	case condScaffoldTotalToughness:
+		desc = fmt.Sprintf("seeded creatures totaling >=%d toughness", cs.count+1)
+	case condScaffoldMainPhaseOrFirstCombat:
+		desc = fmt.Sprintf("set Phase/Step for %s", cs.subtype)
 	}
 	tr.Record("CONDITION_SETUP", "%q → %s", cs.rawText, desc)
 }
@@ -3939,6 +4226,31 @@ func seedSeatCreatures(gs *gameengine.GameState, seat, count int, name, subtype 
 			Counters:   map[string]int{},
 		}
 		gs.Seats[seat].Battlefield = append(gs.Seats[seat].Battlefield, perm)
+	}
+}
+
+// trimOrFillHand adjusts seat's hand to exactly `n` cards. Existing cards
+// are preserved up to n; excess cards are moved to the graveyard so we
+// don't introduce zone violations. Used by HandSizeThreshold priming.
+func trimOrFillHand(gs *gameengine.GameState, seat, n int) {
+	if seat >= len(gs.Seats) || gs.Seats[seat] == nil {
+		return
+	}
+	if n < 0 {
+		n = 0
+	}
+	s := gs.Seats[seat]
+	for len(s.Hand) > n {
+		last := len(s.Hand) - 1
+		s.Graveyard = append(s.Graveyard, s.Hand[last])
+		s.Hand = s.Hand[:last]
+	}
+	for len(s.Hand) < n {
+		s.Hand = append(s.Hand, &gameengine.Card{
+			Name:  fmt.Sprintf("Hand Filler %d", len(s.Hand)),
+			Owner: seat,
+			Types: []string{"instant"},
+		})
 	}
 }
 
