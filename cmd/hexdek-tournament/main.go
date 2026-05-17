@@ -86,11 +86,23 @@ func main() {
 	flag.Parse()
 
 	// Start pprof HTTP server if enabled.
+	var cpuProfFile *os.File
 	if *pprofFlag {
 		go func() {
 			log.Println("pprof server listening on :6060")
 			log.Println(http.ListenAndServe(":6060", nil))
 		}()
+		if f, err := os.Create("/tmp/hexdek_cpu.prof"); err == nil {
+			if err := rpprof.StartCPUProfile(f); err == nil {
+				cpuProfFile = f
+				log.Println("CPU profile capture started → /tmp/hexdek_cpu.prof")
+			} else {
+				log.Printf("StartCPUProfile failed: %v", err)
+				f.Close()
+			}
+		} else {
+			log.Printf("create cpu prof: %v", err)
+		}
 	}
 
 	if *decksArg == "" && *moxfieldArg == "" {
@@ -344,6 +356,26 @@ func main() {
 		}
 		if *reportPath != "" {
 			fmt.Printf("\nReport written to %s\n", *reportPath)
+		}
+	}
+	if *pprofFlag {
+		if cpuProfFile != nil {
+			rpprof.StopCPUProfile()
+			cpuProfFile.Close()
+			log.Println("CPU profile written to /tmp/hexdek_cpu.prof")
+		}
+		runtime.GC()
+		if f, err := os.Create("/tmp/hexdek_heap_final.prof"); err == nil {
+			rpprof.WriteHeapProfile(f)
+			f.Close()
+			log.Println("final heap profile written to /tmp/hexdek_heap_final.prof")
+		}
+		if p := rpprof.Lookup("allocs"); p != nil {
+			if f, err := os.Create("/tmp/hexdek_allocs.prof"); err == nil {
+				p.WriteTo(f, 0)
+				f.Close()
+				log.Println("allocs profile written to /tmp/hexdek_allocs.prof")
+			}
 		}
 	}
 	os.Exit(0)

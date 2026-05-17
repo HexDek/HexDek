@@ -301,23 +301,35 @@ func evaluateLine(line *ComboConstraint, zoneIndex map[string]*zoneSet, seat *ga
 		needsCast := false
 		castFromCommandZone := false
 
-		acceptedSet := map[string]bool{}
+		// Linear scan over accepted zones — accepted is small (1-3
+		// entries in practice), so avoiding a map allocation pays off
+		// in the hot evaluation path.
+		var acceptsBattlefield, acceptsHand, acceptsCommand, acceptsGraveyard bool
 		for _, zone := range accepted {
-			acceptedSet[zone] = true
+			switch zone {
+			case "battlefield":
+				acceptsBattlefield = true
+			case "hand":
+				acceptsHand = true
+			case "command_zone":
+				acceptsCommand = true
+			case "graveyard":
+				acceptsGraveyard = true
+			}
 		}
 
 		switch {
-		case acceptedSet["battlefield"] && z.battlefield:
+		case acceptsBattlefield && z.battlefield:
 			inAcceptableZone = true
 			// already resolved — no mana required.
-		case acceptedSet["hand"] && z.hand:
+		case acceptsHand && z.hand:
 			inAcceptableZone = true
 			needsCast = true
-		case acceptedSet["command_zone"] && z.commandZone:
+		case acceptsCommand && z.commandZone:
 			inAcceptableZone = true
 			needsCast = true
 			castFromCommandZone = true
-		case acceptedSet["graveyard"] && z.graveyard:
+		case acceptsGraveyard && z.graveyard:
 			inAcceptableZone = true
 			needsCast = true
 		}

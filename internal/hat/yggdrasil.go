@@ -3052,12 +3052,13 @@ func (h *YggdrasilHat) ChooseLandToPlay(gs *gameengine.GameState, seatIdx int, l
 			sc += 2.0
 		}
 
-		landColors := landProducesColors(l)
+		landMask := landProducesColorsMask(l)
 
 		// Hand-aware color sequencing: boost lands that produce colors
 		// matching spells in hand. Stronger boost for near-castable spells.
 		for col, demand := range handDemand {
-			if !landColors[col] {
+			bit := colorSymBit(col)
+			if bit == 0 || landMask&bit == 0 {
 				continue
 			}
 			have := float64(fieldColorSources(seat, col))
@@ -3081,21 +3082,24 @@ func (h *YggdrasilHat) ChooseLandToPlay(gs *gameengine.GameState, seatIdx int, l
 				if demand < 3 {
 					continue
 				}
-				if landColors[col] {
-					have := fieldColorSources(seat, col)
-					need := float64(demand) / 10.0
-					deficit := need - float64(have)*0.3
-					if deficit > 0 {
-						sc += deficit * fixMul
-					}
+				bit := colorSymBit(col)
+				if bit == 0 || landMask&bit == 0 {
+					continue
+				}
+				have := fieldColorSources(seat, col)
+				need := float64(demand) / 10.0
+				deficit := need - float64(have)*0.3
+				if deficit > 0 {
+					sc += deficit * fixMul
 				}
 			}
 		}
 
-		// Basic lands get a small baseline.
-		if strings.Contains(strings.ToLower(name), "plains") || strings.Contains(strings.ToLower(name), "island") ||
-			strings.Contains(strings.ToLower(name), "swamp") || strings.Contains(strings.ToLower(name), "mountain") ||
-			strings.Contains(strings.ToLower(name), "forest") {
+		// Basic lands get a small baseline. Lowercase name once.
+		nameLower := strings.ToLower(name)
+		if strings.Contains(nameLower, "plains") || strings.Contains(nameLower, "island") ||
+			strings.Contains(nameLower, "swamp") || strings.Contains(nameLower, "mountain") ||
+			strings.Contains(nameLower, "forest") {
 			sc += 0.5
 		}
 
@@ -7385,32 +7389,110 @@ func (h *YggdrasilHat) simulateRollout(gs *gameengine.GameState, seatIdx int, ac
 var colorLandTypes = []struct {
 	name string
 	sym  string
+	bit  uint8
 }{
-	{"plains", "W"}, {"island", "U"}, {"swamp", "B"},
-	{"mountain", "R"}, {"forest", "G"},
+	{"plains", "W", colorBitW},
+	{"island", "U", colorBitU},
+	{"swamp", "B", colorBitB},
+	{"mountain", "R", colorBitR},
+	{"forest", "G", colorBitG},
 }
 
-func landProducesColors(c *gameengine.Card) map[string]bool {
-	out := make(map[string]bool)
-	if c == nil {
-		return out
+const (
+	colorBitW uint8 = 1 << iota
+	colorBitU
+	colorBitB
+	colorBitR
+	colorBitG
+	colorBitAll = colorBitW | colorBitU | colorBitB | colorBitR | colorBitG
+)
+
+func colorSymBit(sym string) uint8 {
+	switch sym {
+	case "W":
+		return colorBitW
+	case "U":
+		return colorBitU
+	case "B":
+		return colorBitB
+	case "R":
+		return colorBitR
+	case "G":
+		return colorBitG
 	}
+	return 0
+}
+
+// landProducesColorsMask returns a bitmask of the colors this card can
+// produce as mana. Result is cached on the Card; subsequent calls are
+// O(1). Hot path: called per land per evaluation, and historically
+// allocated a map[string]bool each time (top alloc-space hotspot per
+// perf_round2 audit).
+func landProducesColorsMask(c *gameengine.Card) uint8 {
+	if c == nil {
+		return 0
+	}
+	if c.ProducedColorsReady {
+		return c.ProducedColorsMask
+	}
+	var mask uint8
 	ot := gameengine.OracleTextLower(c)
-	tl := strings.ToLower(c.TypeLine)
+	tl := gameengine.TypeLineLower(c)
 	for _, col := range colorLandTypes {
-		if strings.Contains(tl, col.name) || strings.Contains(ot, "add {"+strings.ToLower(col.sym)+"}") {
-			out[col.sym] = true
+		// Pre-built "add {x}" needle avoids per-call allocation.
+		needle := colorAddNeedles[col.bit]
+		if strings.Contains(tl, col.name) || strings.Contains(ot, needle) {
+			mask |= col.bit
 		}
 	}
 	if strings.Contains(ot, "any color") {
-		for _, col := range colorLandTypes {
-			out[col.sym] = true
-		}
+		mask = colorBitAll
+	}
+	c.ProducedColorsMask = mask
+	c.ProducedColorsReady = true
+	return mask
+}
+
+// colorAddNeedles maps a color bit to the lowercased "add {x}" oracle
+// needle used in landProducesColorsMask. Module-level so we don't
+// rebuild it on each call.
+var colorAddNeedles = map[uint8]string{
+	colorBitW: "add {w}",
+	colorBitU: "add {u}",
+	colorBitB: "add {b}",
+	colorBitR: "add {r}",
+	colorBitG: "add {g}",
+}
+
+// landProducesColors keeps the legacy map-returning API for callers
+// outside the hot path. Internal hot-path callers should use
+// landProducesColorsMask directly.
+func landProducesColors(c *gameengine.Card) map[string]bool {
+	mask := landProducesColorsMask(c)
+	out := make(map[string]bool, 5)
+	if mask&colorBitW != 0 {
+		out["W"] = true
+	}
+	if mask&colorBitU != 0 {
+		out["U"] = true
+	}
+	if mask&colorBitB != 0 {
+		out["B"] = true
+	}
+	if mask&colorBitR != 0 {
+		out["R"] = true
+	}
+	if mask&colorBitG != 0 {
+		out["G"] = true
 	}
 	return out
 }
 
 func fieldColorSources(seat *gameengine.Seat, color string) int {
+	bit := colorSymBit(color)
+	if bit == 0 {
+		return 0
+	}
 	count := 0
 	for _, p := range seat.Battlefield {
 		if p == nil || p.Card == nil {
@@ -7426,8 +7508,7 @@ func fieldColorSources(seat *gameengine.Seat, color string) int {
 		if !isLand {
 			continue
 		}
-		cols := landProducesColors(p.Card)
-		if cols[color] {
+		if landProducesColorsMask(p.Card)&bit != 0 {
 			count++
 		}
 	}
