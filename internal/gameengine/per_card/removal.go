@@ -177,18 +177,14 @@ func cyclonicRiftResolve(gs *gameengine.GameState, item *gameengine.StackItem) {
 		return
 	}
 
-	// Check for overload hint. We use a flag on the card or the gs.Flags
-	// to indicate overload was paid. MVP heuristic: if the game is past
-	// turn 3, assume overload (cEDH plays Rift for overload most of the time).
-	overload := gs.Turn >= 3
-
-	// Also check for explicit overload flag from the casting context.
-	if item.Card != nil {
-		for _, t := range item.Card.Types {
-			if t == "overloaded" {
-				overload = true
-			}
-		}
+	// CR §702.96 — Overload. Read the authoritative flag stamped by
+	// CastOverload / CastWithOverload onto item.CostMeta. Fall back to
+	// the legacy turn-3 heuristic only when the cast pipeline didn't go
+	// through the alt-cost path (e.g. test fixtures that synthesize a
+	// stack item directly).
+	overload := gameengine.IsOverloaded(item)
+	if !overload && item.CostMeta == nil {
+		overload = gs.Turn >= 3
 	}
 
 	if overload {

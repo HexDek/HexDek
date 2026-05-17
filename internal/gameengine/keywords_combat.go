@@ -1515,6 +1515,55 @@ func IsOverloaded(item *StackItem) bool {
 	return ok && b
 }
 
+// CastOverload is the canonical alt-cost entry point (mirrors CastWarp /
+// CastKicker naming). It pays the printed overload cost, removes the card
+// from hand, and pushes a stack item with CostMeta["overloaded"]=true.
+// At resolution, PickTarget treats any single-target filter on this item
+// as if its Quantifier were "each" — CR §702.96 ("change 'target' to
+// 'each'"). The fan-out is driven by the gs.Flags["overload_active"]
+// side-channel set by ResolveStackTop just before effect dispatch.
+func CastOverload(gs *GameState, seatIdx int, card *Card) error {
+	return CastWithOverload(gs, seatIdx, card)
+}
+
+// overloadActiveFlag is the gs.Flags key consulted by PickTarget to
+// expand single-target filters into "each" while an overloaded stack
+// item is being resolved. Kept as a constant so the resolver and the
+// targeter stay in sync.
+const overloadActiveFlag = "overload_active"
+
+// beginOverloadResolution stamps the side-channel flag for the duration
+// of one stack-item resolution. Returns a function the caller defers to
+// clear the flag. Safe to call with item==nil or non-overloaded items;
+// in that case it is a no-op and returns a no-op cleanup.
+func beginOverloadResolution(gs *GameState, item *StackItem) func() {
+	if gs == nil || !IsOverloaded(item) {
+		return func() {}
+	}
+	if gs.Flags == nil {
+		gs.Flags = map[string]int{}
+	}
+	prev, had := gs.Flags[overloadActiveFlag]
+	gs.Flags[overloadActiveFlag] = 1
+	return func() {
+		if had {
+			gs.Flags[overloadActiveFlag] = prev
+		} else {
+			delete(gs.Flags, overloadActiveFlag)
+		}
+	}
+}
+
+// IsOverloadActive reports whether the current resolution context is an
+// overloaded spell. Used by PickTarget — anything that consults targets
+// during overloaded resolution should fan out across all valid targets.
+func IsOverloadActive(gs *GameState) bool {
+	if gs == nil || gs.Flags == nil {
+		return false
+	}
+	return gs.Flags[overloadActiveFlag] > 0
+}
+
 // ============================================================================
 // PROTECTION VARIANTS
 // ============================================================================
