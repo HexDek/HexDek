@@ -22,6 +22,7 @@ import Import from './screens/Import'
 // which drops the main bundle from ~690KB into a much smaller initial
 // payload + on-demand chunks fetched when the user navigates.
 const CardPage = lazy(() => import('./screens/CardPage'))
+const SharePreview = lazy(() => import('./screens/SharePreview'))
 const GameBoard = lazy(() => import('./screens/GameBoard'))
 const Spectator = lazy(() => import('./screens/Spectator'))
 const SpectateRoom = lazy(() => import('./screens/SpectateRoom'))
@@ -57,6 +58,17 @@ export default function App() {
           /obs/:gameId is an alias of /stream/:gameId for streamers
           who configured their browser source against the legacy
           /obs path; both render the same component. */}
+      {/* /share/:owner/:id — link-preview-friendly deck page. Sits
+          outside AppShell so the global nav/sidebar/footer don't render,
+          giving social embeds (Discord, Slack, Twitter) a clean frame. */}
+      <Route
+        path="share/:owner/:id"
+        element={
+          <Suspense fallback={null}>
+            <SharePreview />
+          </Suspense>
+        }
+      />
       <Route path="stream/:gameId" element={<StreamOverlay />} />
       <Route path="stream" element={<StreamOverlay />} />
       <Route path="obs/:gameId" element={<StreamOverlay />} />
