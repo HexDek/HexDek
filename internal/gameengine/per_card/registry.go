@@ -1948,6 +1948,19 @@ func registerDefaults() {
 	// lifegain_counter, land_tax, shuffle_self_from_grave,
 	// etb_library_tutor). Wave intentionally narrow.
 	registerSamLoyalAttendant(Global())
+
+	// dev/muninn-handlers-181-200 — saturation continues. Today's
+	// (2026-05-17) parser_gaps.json adds two genuinely uncovered bespoke
+	// cards at the tail: Burnished Hart (#171, sac-for-two-basics fetcher)
+	// and Trostani, Selesnya's Voice (#174, another-creature-enters
+	// toughness-lifegain + populate). All other 2026-05-17 first-seen
+	// entries are token strings ("Wistfulness Token", "creature token
+	// knight Token", etc.) or cascade-mode variants of already-covered
+	// cards. Signal is genuinely saturated against the current corpus —
+	// further tail coverage now waits on fresh tournament runs to surface
+	// new card types.
+	registerBurnishedHart(Global())
+	registerTrostaniSelesnyasVoice(Global())
 }
 
 func init() {
