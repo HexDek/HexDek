@@ -1810,6 +1810,24 @@ func registerDefaults() {
 	registerGeologicalAppraiser(Global())
 	registerElderscaleWurm(Global())
 	registerPrestonTheVanisher(Global())
+
+	// dev/muninn-handlers-61-80 — 10 snowflakes from the top-80 parser
+	// gaps that the 51-70 and 81-100 waves skipped. Skipped here (already
+	// covered): Tiamat / Titania / Sméagol / Yathan / Breaching Leviathan
+	// / Wary Farmer / Compy Swarm / Sarcomancy / Goblin Goliath / Kami
+	// of Transience (51-70); Ghitu Journeymage / Dreamcaller Siren /
+	// Acclaimed Contender (etb_tribe_gate_family); Loyal Warhound
+	// (land_tax_family).
+	registerNessianWildsRavager(Global())
+	registerIchorid(Global())
+	registerCuriousHomunculus(Global())
+	registerBringerOfTheLastGift(Global())
+	registerFearlessSwashbuckler(Global())
+	registerLifeOfTheParty(Global())
+	registerDarigaazReincarnated(Global())
+	registerFeastOfTheVictoriousDead(Global())
+	registerGauFeralYouth(Global())
+	registerLoreholdArchivist(Global())
 }
 
 func init() {
