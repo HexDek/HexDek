@@ -426,42 +426,7 @@ function computeDeckDiff(baseline, current) {
 // hide lower-tier deep analysis sections by default so the top of the
 // deck page stays scannable. The expand/collapse caret uses the same
 // rotating triangle pattern as RationalePanels.jsx's per-row Caret.
-// EloSparkline — tiny inline trend of the deck's ending HexELO across the
-// last N gauntlet runs. Lives in the vital-signs strip alongside the big
-// number. Oldest left → newest right. Stroke color tracks the net delta
-// from first → last run, so a glance tells you trajectory before you
-// even look at the dots.
-function EloSparkline({ runs, width = 80, height = 22 }) {
-  if (!Array.isArray(runs) || runs.length < 2) return null
-  const ends = runs.map(r => Number(r?.elo_end) || 0)
-  const minY = Math.min(...ends)
-  const maxY = Math.max(...ends)
-  const span = maxY - minY || 1
-  const padY = 2
-  const plotH = height - padY * 2
-  const stepX = width / (ends.length - 1)
-  const yAt = (v) => padY + plotH - ((v - minY) / span) * plotH
-  const points = ends.map((v, i) => `${(i * stepX).toFixed(1)},${yAt(v).toFixed(1)}`)
-  const path = `M ${points.join(' L ')}`
-  const netDelta = ends[ends.length - 1] - ends[0]
-  const stroke = netDelta > 0 ? 'var(--ok)' : netDelta < 0 ? 'var(--danger)' : 'var(--ink-2)'
-  const last = ends[ends.length - 1]
-  const lastX = (ends.length - 1) * stepX
-  const lastY = yAt(last)
-  const tip = `Last ${runs.length} runs: ${Math.round(ends[0])} → ${Math.round(last)} (${netDelta >= 0 ? '+' : ''}${Math.round(netDelta)})`
-  return (
-    <svg className="elo-sparkline"
-         viewBox={`0 0 ${width} ${height}`}
-         width={width} height={height}
-         preserveAspectRatio="none"
-         role="img" aria-label={tip}>
-      <title>{tip}</title>
-      <path d={path} fill="none" stroke={stroke} strokeWidth="1.25"
-            strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={lastX} cy={lastY} r="1.6" fill={stroke} />
-    </svg>
-  )
-}
+// EloSparkline lives in components/EloSparkline.jsx — imported above.
 
 function CollapsiblePanel({ code, title, right, defaultOpen = false, children }) {
   const [open, setOpen] = useState(defaultOpen)
