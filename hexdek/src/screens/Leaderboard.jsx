@@ -81,9 +81,9 @@ function DeltaDisplay({ delta }) {
 function RecordDisplay({ wins, losses }) {
   return (
     <span>
-      <span style={{ color: 'var(--ok)' }}>{wins}W</span>
+      <span style={{ color: 'var(--ok)' }}>{wins.toLocaleString()}W</span>
       <span className="muted-2"> - </span>
-      <span style={{ color: 'var(--danger)' }}>{losses}L</span>
+      <span style={{ color: 'var(--danger)' }}>{losses.toLocaleString()}L</span>
     </span>
   )
 }
@@ -345,7 +345,7 @@ function LeaderboardContent() {
                   <td className="lb-td lb-td--mu">
                     <span className="t-xs muted-2">{Math.round(entry.mu || 0)}</span>
                   </td>
-                  <td className="lb-td lb-td--games">{entry.games || 0}</td>
+                  <td className="lb-td lb-td--games">{(entry.games || 0).toLocaleString()}</td>
                   <td className="lb-td lb-td--winrate">
                     {entry.win_rate != null ? `${entry.win_rate.toFixed(1)}%` : '--'}
                   </td>
@@ -520,7 +520,7 @@ function LeaderboardMobileCard({ entry, index, flagFor, countries, navigate, onC
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="t-xs muted">{entry.games || 0} GAMES</span>
+              <span className="t-xs muted">{(entry.games || 0).toLocaleString()} GAMES</span>
               <DeltaDisplay delta={entry.delta} />
             </div>
           </div>
