@@ -54,10 +54,13 @@ export const Tag = ({ children, kind, solid, onClick, style }) => (
   </span>
 )
 
-export const Btn = ({ children, solid, sm, ghost, arrow = '↗', onClick }) => (
+export const Btn = ({ children, solid, sm, ghost, arrow = '↗', onClick, disabled, title, style }) => (
   <button
     className={`btn ${solid ? 'btn--solid' : ''} ${sm ? 'btn--sm' : ''} ${ghost ? 'btn--ghost' : ''}`}
     onClick={onClick}
+    disabled={disabled}
+    title={title}
+    style={style}
   >
     <span>{children}</span>
     {arrow && <span className="arr">{arrow}</span>}

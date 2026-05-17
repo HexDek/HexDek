@@ -163,6 +163,36 @@ type CompletedGame struct {
 	// RngSeed is the engine seed for this game. Surfaced for replay /
 	// anti-cheat (Phase 1: capture-only). 0 = unknown/not captured.
 	RngSeed int64 `json:"rng_seed"`
+	// Timeline is the per-turn capture used by the replay viewer.
+	// Populated for live games; empty for games rehydrated from
+	// SQLite (the persisted schema only stores end-of-game seats).
+	// omitempty keeps /api/games payloads lean for callers that don't
+	// need the scrubber.
+	Timeline []TurnSnapshot `json:"timeline,omitempty"`
+}
+
+// TurnSnapshot is the per-turn record attached to CompletedGame so
+// the post-game report can scrub through the game. Captured at the
+// end of each turn in the live showmatch loop. Drops the per-seat
+// Eval telemetry from GameSnapshot to keep payload size sane —
+// scrubbing 30 turns × 4 seats × full eval would 3x the response.
+type TurnSnapshot struct {
+	Turn       int                `json:"turn"`
+	ActiveSeat int                `json:"active_seat"`
+	Seats      []SeatTurnSnapshot `json:"seats"`
+	// Events fired during this turn. Already deduped/coalesced by
+	// extractEvents, same shape the live spectator log uses.
+	Events []LogEntry `json:"events,omitempty"`
+}
+
+type SeatTurnSnapshot struct {
+	Life        int                 `json:"life"`
+	HandSize    int                 `json:"hand_size"`
+	LibrarySize int                 `json:"library_size"`
+	GYSize      int                 `json:"gy_size"`
+	Lost        bool                `json:"lost,omitempty"`
+	LossReason  string              `json:"loss_reason,omitempty"`
+	Battlefield []PermanentSnapshot `json:"battlefield,omitempty"`
 }
 
 type persistJob struct {
@@ -1636,6 +1666,10 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 	showEvalCollector := hat.NewEvalSnapshotCollector()
 	var showGameEvents []hat.GameEvent
 	showETBs := make(map[int][]string)
+	// timeline accumulates a TurnSnapshot per executed turn for the
+	// replay viewer. Attached to CompletedGame below; in-memory only
+	// (SQLite game schema doesn't persist per-turn detail).
+	var timeline []TurnSnapshot
 	for turn := 1; turn <= showmatchMaxTurn; turn++ {
 		gs.Turn = turn
 
@@ -1676,6 +1710,8 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 		sm.mu.Unlock()
 
 		sm.broadcastToSpectators(wsEnvelope{Type: "game", Payload: snap})
+
+		timeline = append(timeline, buildTurnSnapshot(turn, gs.Active, snap.Seats, newEntries))
 
 		if gs.CheckEnd() {
 			break
@@ -1753,6 +1789,7 @@ func (sm *Showmatch) runOneGame(rng *rand.Rand) {
 		FinishedAt: time.Now(),
 		FinalSeats: finalSnap.Seats,
 		RngSeed:    gs.Seed,
+		Timeline:   timeline,
 	}
 	sm.gameHistory = append(sm.gameHistory, completed)
 	if len(sm.gameHistory) > 50 {
@@ -2116,6 +2153,31 @@ func (sm *Showmatch) captureSnapshot(gs *gameengine.GameState, commanders []stri
 		snap.Seats[i] = ss
 	}
 	return snap
+}
+
+// buildTurnSnapshot converts the per-seat data from a fully-captured
+// GameSnapshot into the compact TurnSnapshot stored on CompletedGame.
+// Strips the Eval block (carried only for the live spectator) and
+// duplicated Commander labels (already on CompletedGame.Commanders).
+func buildTurnSnapshot(turn, active int, seats []SeatSnapshot, events []LogEntry) TurnSnapshot {
+	out := TurnSnapshot{
+		Turn:       turn,
+		ActiveSeat: active,
+		Seats:      make([]SeatTurnSnapshot, len(seats)),
+		Events:     events,
+	}
+	for i, s := range seats {
+		out.Seats[i] = SeatTurnSnapshot{
+			Life:        s.Life,
+			HandSize:    s.HandSize,
+			LibrarySize: s.LibrarySize,
+			GYSize:      s.GYSize,
+			Lost:        s.Lost,
+			LossReason:  s.LossReason,
+			Battlefield: s.Battlefield,
+		}
+	}
+	return out
 }
 
 // hexELOStartRating returns the bracket-seeded starting ELO.
@@ -2651,6 +2713,7 @@ func (sm *Showmatch) RegisterShowmatch(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/live/stats", sm.handleLiveStatsReal)
 	mux.HandleFunc("GET /api/games", sm.handleGames)
 	mux.HandleFunc("GET /api/games/{id}", sm.handleGameByID)
+	mux.HandleFunc("GET /api/games/{id}/report", sm.handleGameReport)
 	mux.HandleFunc("GET /api/live/speed", sm.handleGetSpeed)
 	mux.HandleFunc("POST /api/live/speed", sm.handleSetSpeed)
 	mux.HandleFunc("GET /ws/live", sm.handleSpectatorWS)
@@ -3206,6 +3269,33 @@ func (sm *Showmatch) handleGames(w http.ResponseWriter, r *http.Request) {
 }
 
 func (sm *Showmatch) handleGameByID(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id := parseInt(idStr)
+	if id <= 0 {
+		http.Error(w, "invalid game id", http.StatusBadRequest)
+		return
+	}
+	game := sm.GetGame(id)
+	if game == nil {
+		http.Error(w, "game not found", http.StatusNotFound)
+		return
+	}
+	// Strip Timeline from the lightweight endpoint — callers on
+	// /api/games and /api/games/{id} (history lists, dashboards) only
+	// need summary fields. /api/games/{id}/report returns the full
+	// timeline for the replay viewer.
+	lite := *game
+	lite.Timeline = nil
+	writeJSON(w, lite)
+}
+
+// handleGameReport returns the CompletedGame with its per-turn
+// Timeline populated, used by the post-game replay viewer.
+// Returns the same struct as /api/games/{id} but does not strip
+// Timeline. Older games rehydrated from SQLite will have an empty
+// Timeline (per-turn data isn't persisted) — the UI handles that
+// fallback by collapsing the scrubber.
+func (sm *Showmatch) handleGameReport(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id := parseInt(idStr)
 	if id <= 0 {
