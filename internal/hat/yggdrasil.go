@@ -197,6 +197,13 @@ type YggdrasilHat struct {
 	// read by classifyOpponent from decision functions. See
 	// opponent_profile.go for shape and rules.
 	opponentProfiles []*OpponentProfile
+
+	// convictionDiag is the non-acting concession diagnostic. ShouldConcede
+	// always returns false, but each turn we record what a candidate
+	// trigger *would* have decided so post-game analysis can compare
+	// trigger fire vs. actual game outcome. See conviction.go and
+	// docs/conviction-reassessment-2026-05-17.md.
+	convictionDiag *convictionDiagnostic
 }
 
 const (
@@ -6357,8 +6364,15 @@ func (h *YggdrasilHat) ChoosePutBack(gs *gameengine.GameState, seatIdx int, hand
 // happen for infinite loops / resolver lockups, which the engine handles
 // via SBA cap (infinite_loop_draw) and stack loopDetector.
 // Everyone fights to the death.
+//
+// Non-acting diagnostic still runs: each turn we record what candidate
+// conviction triggers (score window, win-line extinction) would have
+// decided. The return value is unconditionally false; the samples are
+// emitted as "conviction_diagnostic" events for post-game analysis per
+// docs/conviction-reassessment-2026-05-17.md.
 
 func (h *YggdrasilHat) ShouldConcede(gs *gameengine.GameState, seatIdx int) bool {
+	h.recordConvictionSample(gs, seatIdx)
 	return false
 }
 
