@@ -39,6 +39,9 @@ test('deck list renders with decks loaded', async ({ page }) => {
 })
 
 test('leaderboard renders with ELO data', async ({ page }) => {
+  // Leaderboard mounts 1313 rows + fetches country flags + fullPage
+  // screenshot — can exceed 30s default on a fresh backend cache.
+  test.setTimeout(60_000)
   await page.goto('/leaderboard')
   await expect(page.locator('text=/LEADERBOARD|RANKINGS/i').first()).toBeVisible({ timeout: 10_000 })
   await page.waitForFunction(
