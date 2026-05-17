@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Panel, Tag, Tape } from '../components/chrome'
 import CardLink from '../components/CardLink'
@@ -121,12 +121,22 @@ export default function SharePreview() {
     return () => { cancelled = true }
   }, [deck?.commander_card])
 
-  const eloByDeckId = {}
-  for (const e of elo) {
-    if (e.deck_id) eloByDeckId[e.deck_id] = e
-  }
+  // ELO index + this deck's row. Recomputing on every render burned
+  // measurable CPU during the 4-stage hydration (deck → analysis →
+  // similar decks → commander card stats each fire a setState). Cache
+  // the index against the live ELO array reference.
+  const eloByDeckId = useMemo(() => {
+    const idx = {}
+    for (const e of elo) {
+      if (e.deck_id) idx[e.deck_id] = e
+    }
+    return idx
+  }, [elo])
   const deckKey = owner && id ? `${owner}/${id}` : null
-  const deckElo = eloByDeckId[deckKey] || eloByDeckId[id] || null
+  const deckElo = useMemo(
+    () => eloByDeckId[deckKey] || eloByDeckId[id] || null,
+    [eloByDeckId, deckKey, id]
+  )
 
   const slugToTitle = (slug, ownerSlug) => {
     if (!slug) return 'DECK'
@@ -143,7 +153,11 @@ export default function SharePreview() {
   const pls = analysis?.plays_like || null
   const archetype = analysis?.archetype?.toUpperCase() || 'UNKNOWN'
 
-  const colorIdentity = (() => {
+  // colorIdentity walks every card scanning mana_cost regexes when the
+  // analysis payload doesn't carry color_identity — on a 100-card deck
+  // that's ~100 regex executions per render. Memoize so it runs once per
+  // deck/analysis change instead of once per render.
+  const colorIdentity = useMemo(() => {
     if (Array.isArray(analysis?.color_identity) && analysis.color_identity.length) {
       return [...analysis.color_identity].map(c => c.toUpperCase()).filter(c => 'WUBRG'.includes(c))
         .sort((a, b) => 'WUBRG'.indexOf(a) - 'WUBRG'.indexOf(b))
@@ -161,9 +175,9 @@ export default function SharePreview() {
     }
     if (ci.size === 0) for (const c of cards) scan(c.mana_cost)
     return Array.from(ci).sort((a, b) => 'WUBRG'.indexOf(a) - 'WUBRG'.indexOf(b))
-  })()
+  }, [analysis?.color_identity, deck?.commander_card, cards])
 
-  const pageTheme = deriveTheme(colorIdentity)
+  const pageTheme = useMemo(() => deriveTheme(colorIdentity), [colorIdentity])
   const cmdrCardName = deck?.commander_card || cards.find(c => c.name?.startsWith('COMMANDER:'))?.name?.replace('COMMANDER:', '').trim()
   const cmdrImageUrl = cmdrCardName ? cardArtUrl(cmdrCardName) : null
   const cmdrFullUrl = cmdrCardName ? cardImageUrl(cmdrCardName) : null
@@ -230,20 +244,26 @@ export default function SharePreview() {
     )
   }
 
+  // Hot-cards ranking — filter+map+sort over commanderCardStats. Memoize
+  // so it doesn't re-run on every render (e.g. when the ELO ticker
+  // pushes a fresh `elo` array but nothing in this section changed).
+  const ranked = useMemo(() => {
+    const baseline = 25
+    const deckCardNames = new Set(cards.map(c => c.name))
+    return (commanderCardStats || [])
+      .filter(s => deckCardNames.has(s.card_name || s.name || s.CardName))
+      .filter(s => (s.games_included || s.games || s.Games || 0) >= 20)
+      .map(s => {
+        const games = s.games_included || s.games || s.Games || 0
+        const wins = s.wins_when_included || s.wins || s.Wins || 0
+        const wr = games > 0 ? wins / games * 100 : 0
+        return { name: s.card_name || s.name || s.CardName, games, wins, wr, lift: (wr - baseline) * Math.sqrt(games) }
+      })
+      .filter(r => r.lift > 0)
+      .sort((a, b) => b.lift - a.lift)
+      .slice(0, 5)
+  }, [commanderCardStats, cards])
   const baseline = 25
-  const deckCardNames = new Set(cards.map(c => c.name))
-  const ranked = (commanderCardStats || [])
-    .filter(s => deckCardNames.has(s.card_name || s.name || s.CardName))
-    .filter(s => (s.games_included || s.games || s.Games || 0) >= 20)
-    .map(s => {
-      const games = s.games_included || s.games || s.Games || 0
-      const wins = s.wins_when_included || s.wins || s.Wins || 0
-      const wr = games > 0 ? wins / games * 100 : 0
-      return { name: s.card_name || s.name || s.CardName, games, wins, wr, lift: (wr - baseline) * Math.sqrt(games) }
-    })
-    .filter(r => r.lift > 0)
-    .sort((a, b) => b.lift - a.lift)
-    .slice(0, 5)
 
   return (
     <div
