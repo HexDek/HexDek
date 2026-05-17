@@ -1330,8 +1330,11 @@ func jhoiraActivated(gs *gameengine.GameState, src *gameengine.Permanent, abilit
 // ---------------------------------------------------------------------------
 
 func init() {
-	r := Global()
+	registerBatch17Sweep(Global())
+	AddResetHook(registerBatch17Sweep)
+}
 
+func registerBatch17Sweep(r *Registry) {
 	// Upkeep engines
 	registerHowlingMine(r)
 	registerBlackMarketConnections(r)

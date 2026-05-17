@@ -15,13 +15,8 @@ package per_card
 // alongside the auto-generated stubs rather than replacing them.
 
 func init() {
-	r := Global()
-	registerPhenaxGodOfDeceptionCustom(r)
-	registerObekaBruteChronologistCustom(r)
-	registerJhoiraAgelessInnovatorCustom(r)
-	registerShadowheartDarkJusticiarCustom(r)
-	registerSplinterRadicalRatCustom(r)
-	registerGhenArcanumWeaverCustom(r)
+	RegisterActivatedStubsBatch1(Global())
+	AddResetHook(RegisterActivatedStubsBatch1)
 }
 
 // RegisterActivatedStubsBatch1 re-runs the registrations on a given

@@ -661,7 +661,11 @@ func roamingThroneETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 // ---------------------------------------------------------------------------
 
 func init() {
-	r := Global()
+	registerObekaSupport(Global())
+	AddResetHook(registerObekaSupport)
+}
+
+func registerObekaSupport(r *Registry) {
 	registerBraidOfFire(r)
 	registerRevelInRiches(r)
 	registerSphinxOfTheSecondSun(r)

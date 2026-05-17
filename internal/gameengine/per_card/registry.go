@@ -77,12 +77,47 @@ func Global() *Registry {
 
 // Reset wipes the global registry and re-runs the batch-#1 default
 // registration. Tests call this in t.Cleanup() to isolate runs.
+//
+// Reset also re-invokes every callback registered via AddResetHook so
+// that handlers wired in by sibling init() functions (tribal_lords.go,
+// obeka_support.go, the zz_*_register.go batches, etc.) are restored.
+// Go runs init() exactly once per process, so without this the post-
+// Reset registry permanently loses anything registered outside
+// registerDefaults().
 func Reset() {
 	globalMu.Lock()
 	global = newRegistry()
 	globalMu.Unlock()
 	registerDefaults()
+	r := Global()
+	resetHooksMu.Lock()
+	hooks := append([]func(*Registry){}, resetHooks...)
+	resetHooksMu.Unlock()
+	for _, fn := range hooks {
+		fn(r)
+	}
 	installEngineHooks()
+}
+
+// resetHooks holds callbacks that restore handlers wired by sibling
+// init() functions. AddResetHook lets each init() participate in
+// Reset() without registry.go needing to know about every batch.
+var (
+	resetHooksMu sync.Mutex
+	resetHooks   []func(*Registry)
+)
+
+// AddResetHook registers fn to be called on the fresh global registry
+// after every Reset(). init() functions that populate the registry
+// should call AddResetHook(themselves) so their handlers survive a
+// test-driven Reset().
+func AddResetHook(fn func(*Registry)) {
+	if fn == nil {
+		return
+	}
+	resetHooksMu.Lock()
+	resetHooks = append(resetHooks, fn)
+	resetHooksMu.Unlock()
 }
 
 // NormalizeName lowercases, strips punctuation, and collapses whitespace.
@@ -1890,15 +1925,28 @@ func registerDefaults() {
 	registerArchpriestOfShadows(Global())
 	registerVolatileStormdrake(Global())
 
+	// dev/muninn-bulk-patterns-4 — two more bulk-pattern families.
+	// shuffle_self_from_grave_family.go covers Dread / Purity / Guile /
+	// Vigor — the Planar Chaos eternal cycle's "When ~ is put into a
+	// graveyard from anywhere, shuffle it into its owner's library"
+	// line. Worldspine Wurm shares the shape but keeps its bespoke
+	// handler (it bundles the die→three-Wurm-token half on the same
+	// trigger). etb_library_tutor_family.go covers nine ETB
+	// search-for-card-to-hand tutors (Trophy / Treasure / Trinket /
+	// Stoneforge Mystic / Heliod's Pilgrim / Spellseeker / Imperial
+	// Recruiter / Fierce Empath / Thalia's Lancers); Rune-Scarred
+	// Demon's unfiltered "any card" case keeps its bespoke handler
+	// because it wants a smarter highest-CMC chooser than first-match.
+	// (bulk-patterns-4 family registrations will land via separate merge)
+
 	// dev/muninn-handlers-161-180 — gap log saturation. After wave 141-160
 	// merged, the only top-170 parser_gaps entry without a bespoke or
 	// family-backed handler is Sam, Loyal Attendant (#159, single-game
-	// 2026-05-14 hit). Every other tail entry is either covered by an
-	// existing per_card file or wired through one of the family scaffolds
-	// (etb_tribe_gate, evoke_color_gate, gated_etb_effect,
-	// end_step_intervening_if, lifegain_counter, land_tax). Wave
-	// intentionally narrow — keeping the cadence going as fresh tournament
-	// runs surface new tail entries.
+	// 2026-05-14 hit). Every other tail entry is covered by an existing
+	// per_card file or one of the family scaffolds (etb_tribe_gate,
+	// evoke_color_gate, gated_etb_effect, end_step_intervening_if,
+	// lifegain_counter, land_tax, shuffle_self_from_grave,
+	// etb_library_tutor). Wave intentionally narrow.
 	registerSamLoyalAttendant(Global())
 }
 
