@@ -1712,6 +1712,43 @@ func registerDefaults() {
 	registerKnightOfTheWhiteOrchid(Global())
 	registerVibrance(Global())
 	registerOversoldCemetery(Global())
+
+	// dev/muninn-bulk-patterns — generic family handlers, one body per
+	// shape rather than one per card. Future family members drop in by
+	// adding a config row, not a new file.
+	//
+	// land_tax_family.go covers Loyal Warhound, Sand Scout, Aerial
+	// Surveyor — the "ETB/attack/upkeep: if opponent controls more
+	// lands than you, fetch a basic <type>" shape. Existing hand-rolled
+	// siblings (Knight of the White Orchid, Claim Jumper, Land Tax)
+	// stay because they were already registered above; the family
+	// handler only owns the gap cards.
+	//
+	// evoke_color_gate.go covers Wistfulness and Deceit — the
+	// "hybrid evoke, two color-gated ETBs" shape. Vibrance keeps its
+	// own handler (registered above) so this file only owns the gap
+	// cards.
+	registerLandTaxFamily(Global())
+	registerEvokeColorGateFamily(Global())
+
+	// dev/muninn-handlers-31-40 — Muninn parser-gap snowflakes #31-#40
+	// (counts at branch creation): Ravenloft Adventurer (#31, 31K),
+	// Gisela the Broken Blade (#32, 31K), Evercoat Ursine (#33, 29K),
+	// Phoenix Fleet Airship (#34, 28K), Archmage Ascension (#35, 27K),
+	// Cyclone Summoner (#36, 27K), Unstable Glyphbridge // Sandswirl
+	// Wanderglyph (#37, 25K), Sand Scout (#40, 23K — land-to-graveyard
+	// token half only; ETB Desert fetch already covered by
+	// registerLandTaxFamily above). Witch of the Moors (#38) and Lord
+	// Jyscal Guado (#39) are owned by the parallel handlers-21-30
+	// worker.
+	registerRavenloftAdventurer(Global())
+	registerGiselaTheBrokenBlade(Global())
+	registerEvercoatUrsine(Global())
+	registerPhoenixFleetAirship(Global())
+	registerArchmageAscension(Global())
+	registerCycloneSummoner(Global())
+	registerUnstableGlyphbridge(Global())
+	registerSandScout(Global())
 }
 
 func init() {
