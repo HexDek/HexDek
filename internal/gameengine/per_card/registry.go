@@ -1731,17 +1731,22 @@ func registerDefaults() {
 	registerLandTaxFamily(Global())
 	registerEvokeColorGateFamily(Global())
 
+	// dev/muninn-handlers-21-30 — snowflakes #21-#30 + 3 stragglers.
+	// Skipped (covered elsewhere): Taii Wakeen (#24), Lathiel (#27),
+	// Zoyowa (#29), Wistfulness (#21, in evoke_color_gate family).
+	registerWeddingRing(Global())
+	registerKaitoShizuki(Global())
+	registerSunderflock(Global())
+	registerLuxArtillery(Global())
+	registerSmirkingSpelljacker(Global())
+	registerCracklingSpellslinger(Global())
+	registerWitchOfTheMoors(Global())
+	registerLordJyscalGuado(Global())
+	registerGenesisChamber(Global())
 
-	// dev/muninn-handlers-31-40 — Muninn parser-gap snowflakes #31-#40
-	// (counts at branch creation): Ravenloft Adventurer (#31, 31K),
-	// Gisela the Broken Blade (#32, 31K), Evercoat Ursine (#33, 29K),
-	// Phoenix Fleet Airship (#34, 28K), Archmage Ascension (#35, 27K),
-	// Cyclone Summoner (#36, 27K), Unstable Glyphbridge // Sandswirl
-	// Wanderglyph (#37, 25K), Sand Scout (#40, 23K — land-to-graveyard
-	// token half only; ETB Desert fetch already covered by
-	// registerLandTaxFamily above). Witch of the Moors (#38) and Lord
-	// Jyscal Guado (#39) are owned by the parallel handlers-21-30
-	// worker.
+	// dev/muninn-handlers-31-40 — snowflakes #31-#40. Sand Scout's ETB
+	// Desert fetch is covered by registerLandTaxFamily above; only the
+	// land-to-graveyard token half lives here.
 	registerRavenloftAdventurer(Global())
 	registerGiselaTheBrokenBlade(Global())
 	registerEvercoatUrsine(Global())
