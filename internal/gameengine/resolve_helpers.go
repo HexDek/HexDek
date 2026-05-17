@@ -3043,6 +3043,10 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 				if len(opps) > 0 {
 					opp := opps[0]
 					DealDamage(gs, opp, scaledAmount, sourceName(src))
+					// §702.179 — for_each scaling damage from a
+					// player's source advances that player's speed
+					// (once-per-turn gated).
+					SpeedDamageReporter(gs, controllerSeat(src))
 				}
 			}
 		}

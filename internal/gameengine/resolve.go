@@ -218,8 +218,30 @@ func ResolveEffect(gs *GameState, src *Permanent, effect gameast.Effect) {
 // -----------------------------------------------------------------------------
 
 func resolveSequence(gs *GameState, src *Permanent, e *gameast.Sequence) {
+	// §702.178 max-speed rider hook. The rider fires once per spell
+	// resolution, not once per nested sequence. We gate on a depth
+	// counter on gs.Flags keyed off the resolution call so nested
+	// Sequence nodes don't re-fire the rider for the same source.
+	outer := false
+	if gs != nil {
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		if gs.Flags["_max_speed_rider_depth"] == 0 {
+			outer = true
+		}
+		gs.Flags["_max_speed_rider_depth"]++
+	}
+
 	for _, item := range e.Items {
 		ResolveEffect(gs, src, item)
+	}
+
+	if gs != nil {
+		gs.Flags["_max_speed_rider_depth"]--
+		if outer {
+			ApplyMaxSpeedRider(gs, src)
+		}
 	}
 }
 
@@ -760,8 +782,10 @@ func applyDamage(gs *GameState, src *Permanent, t Target, amount int) {
 			"source": sourceName(src),
 		})
 		// §702.179 — Spell/ability damage from a player's source also
-		// advances that player's speed (once-per-turn gated).
-		AdvanceSpeed(gs, controllerSeat(src))
+		// advances that player's speed (once-per-turn gated). Routed
+		// through SpeedDamageReporter for consistency with the combat
+		// damage hook.
+		SpeedDamageReporter(gs, controllerSeat(src))
 	case TargetKindPermanent:
 		if t.Permanent == nil {
 			return
