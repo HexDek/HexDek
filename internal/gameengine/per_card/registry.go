@@ -1712,6 +1712,25 @@ func registerDefaults() {
 	registerKnightOfTheWhiteOrchid(Global())
 	registerVibrance(Global())
 	registerOversoldCemetery(Global())
+
+	// dev/muninn-handlers-31-40 — Muninn parser-gap snowflakes #31-#40
+	// (counts at branch creation): Ravenloft Adventurer (#31, 31K),
+	// Gisela the Broken Blade (#32, 31K), Evercoat Ursine (#33, 29K),
+	// Phoenix Fleet Airship (#34, 28K), Archmage Ascension (#35, 27K),
+	// Cyclone Summoner (#36, 27K), Unstable Glyphbridge // Sandswirl
+	// Wanderglyph (#37, 25K), Sand Scout (#40, 23K — land-to-graveyard
+	// token half only; ETB Desert fetch lives in the parallel
+	// land_tax_family / dev/muninn-bulk-patterns work). Witch of the
+	// Moors (#38) and Lord Jyscal Guado (#39) are owned by the
+	// parallel handlers-21-30 worker.
+	registerRavenloftAdventurer(Global())
+	registerGiselaTheBrokenBlade(Global())
+	registerEvercoatUrsine(Global())
+	registerPhoenixFleetAirship(Global())
+	registerArchmageAscension(Global())
+	registerCycloneSummoner(Global())
+	registerUnstableGlyphbridge(Global())
+	registerSandScout(Global())
 }
 
 func init() {
