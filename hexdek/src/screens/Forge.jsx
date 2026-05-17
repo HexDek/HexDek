@@ -364,7 +364,7 @@ export default function Forge() {
                   ['WIN RATE', `${gauntlet.win_rate || 0}%`],
                 ]} />
                 <div className="t-xs muted" style={{ marginTop: 10 }}>
-                  &gt; GAUNTLET IN PROGRESS. UPDATING EVERY 2S<span className="blink">_</span>
+                  &gt; GAUNTLET IN PROGRESS. STREAMING LIVE VIA SSE<span className="blink">_</span>
                 </div>
               </Panel>
             )}
