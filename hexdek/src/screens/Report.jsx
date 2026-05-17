@@ -211,6 +211,196 @@ const deriveTimeline = (game, commanders) => {
   return out
 }
 
+/* ─── Replay Scrubber ───────────────────────────────────────────
+   Renders a turn slider over CompletedGame.timeline[] (per-turn
+   snapshots captured server-side during live play). At each turn
+   position we show:
+     · life totals + zone counts per seat
+     · board state per seat (compact list of permanents)
+     · the events fired during that turn (cast/play_land/combat/etc.)
+
+   Fallback: games rehydrated from SQLite have no timeline (per-turn
+   data isn't persisted); we render a single-line notice and skip the
+   scrubber instead of fabricating interpolated frames.
+*/
+const ReplayScrubber = ({ game, commanders }) => {
+  const timeline = game?.timeline || []
+  const totalTurns = timeline.length
+  const [turnIdx, setTurnIdx] = useState(0) // 0-based into timeline
+  const [playing, setPlaying] = useState(false)
+
+  // Auto-play tick — advance one turn per second while `playing`.
+  useEffect(() => {
+    if (!playing || totalTurns === 0) return
+    const id = setInterval(() => {
+      setTurnIdx(i => {
+        if (i >= totalTurns - 1) {
+          setPlaying(false)
+          return i
+        }
+        return i + 1
+      })
+    }, 900)
+    return () => clearInterval(id)
+  }, [playing, totalTurns])
+
+  // Clamp the slider to a valid index when timeline shrinks (e.g. on
+  // game switch). Defensive — totalTurns only changes when game does.
+  useEffect(() => {
+    if (turnIdx >= totalTurns) setTurnIdx(Math.max(0, totalTurns - 1))
+  }, [totalTurns, turnIdx])
+
+  if (totalTurns === 0) {
+    return (
+      <Panel code="RPT.X" title="REPLAY VIEWER" style={{ gridColumn: '1 / -1' }}>
+        <div className="t-xs muted-2" style={{ lineHeight: 1.5 }}>
+          &gt; NO PER-TURN TIMELINE FOR THIS GAME. LIVE GAMES CAPTURED AFTER
+          THE REPLAY VIEWER LANDED CARRY A TIMELINE; OLDER GAMES REHYDRATED
+          FROM SQLITE DO NOT (THE SCHEMA ONLY STORES END-OF-GAME SEATS).
+        </div>
+      </Panel>
+    )
+  }
+
+  const snap = timeline[turnIdx]
+  const turnNo = snap?.turn ?? (turnIdx + 1)
+  const activeSeat = snap?.active_seat ?? -1
+  const events = snap?.events || []
+
+  return (
+    <Panel
+      code="RPT.X"
+      title={`REPLAY VIEWER / / TURN ${turnNo} OF ${timeline[totalTurns - 1].turn}`}
+      style={{ gridColumn: '1 / -1' }}
+      right={
+        <span className="t-xs muted">
+          {turnIdx + 1}/{totalTurns} SNAPSHOTS
+        </span>
+      }
+    >
+      {/* Transport: prev / play / next / jump-to-end */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+        <Btn sm arrow={null} onClick={() => { setPlaying(false); setTurnIdx(0) }} disabled={turnIdx === 0} title="Jump to start">⏮</Btn>
+        <Btn sm arrow={null} onClick={() => { setPlaying(false); setTurnIdx(Math.max(0, turnIdx - 1)) }} disabled={turnIdx === 0} title="Previous turn">◀</Btn>
+        <Btn sm arrow={null} solid={playing} onClick={() => setPlaying(p => !p)}>{playing ? '⏸ PAUSE' : '▶ PLAY'}</Btn>
+        <Btn sm arrow={null} onClick={() => { setPlaying(false); setTurnIdx(Math.min(totalTurns - 1, turnIdx + 1)) }} disabled={turnIdx >= totalTurns - 1} title="Next turn">▶</Btn>
+        <Btn sm arrow={null} onClick={() => { setPlaying(false); setTurnIdx(totalTurns - 1) }} disabled={turnIdx >= totalTurns - 1} title="Jump to end">⏭</Btn>
+        <span className="t-xs muted" style={{ marginLeft: 8 }}>
+          ACTIVE: {activeSeat >= 0 ? `SEAT.${String(activeSeat + 1).padStart(2, '0')} · ${(commanders[activeSeat] || 'UNKNOWN').split(',')[0].toUpperCase()}` : '—'}
+        </span>
+      </div>
+
+      {/* The slider itself */}
+      <input
+        type="range"
+        min={0}
+        max={totalTurns - 1}
+        value={turnIdx}
+        onChange={e => { setPlaying(false); setTurnIdx(parseInt(e.target.value, 10)) }}
+        style={{ width: '100%', accentColor: 'var(--accent)' }}
+        aria-label="Turn slider"
+      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+        <span className="t-xs muted-2">T1</span>
+        <span className="t-xs muted-2">T{timeline[totalTurns - 1].turn}</span>
+      </div>
+
+      <div className="hr" style={{ margin: '14px 0 10px' }} />
+
+      {/* Per-seat board state at this turn */}
+      <div className="grid col-4 gap-4">
+        {(snap?.seats || []).map((s, i) => {
+          const cmdr = commanders[i] || 'UNKNOWN'
+          const perms = s.battlefield || []
+          const isActive = i === activeSeat
+          const lifePct = Math.max(0, Math.min(100, (s.life / 40) * 100))
+          const accent = s.lost ? 'var(--danger)' : isActive ? 'var(--accent)' : 'var(--rule-2)'
+          return (
+            <div key={i} className="panel" style={{ padding: 0, borderColor: accent }}>
+              <div style={{ padding: '8px 10px' }}>
+                <div className="flex justify-between items-center" style={{ marginBottom: 4 }}>
+                  <span className="t-xs muted">SEAT.{String(i + 1).padStart(2, '0')}</span>
+                  {s.lost && <Tag kind="bad">ELIMINATED</Tag>}
+                  {!s.lost && isActive && <Tag kind="ok" solid>ACTIVE</Tag>}
+                </div>
+                <div className="t-md" style={{ fontWeight: 700, lineHeight: 1.2 }}>
+                  {cmdr.split(',')[0].toUpperCase()}
+                </div>
+                <div className="hr" style={{ margin: '8px 0' }} />
+                <div className="t-xs muted" style={{ marginBottom: 2 }}>LIFE</div>
+                <Bar value={lifePct} />
+                <div className="t-xs" style={{ marginTop: 3, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                  {s.life} / 40
+                  {s.lost && s.loss_reason && (
+                    <span className="muted-2" style={{ marginLeft: 6, fontWeight: 400 }}>
+                      · {s.loss_reason.replace(/_/g, ' ').toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div className="hr" style={{ margin: '8px 0' }} />
+                <KV rows={[
+                  ['HAND', String(s.hand_size)],
+                  ['LIBRARY', String(s.library_size)],
+                  ['GRAVEYARD', String(s.gy_size)],
+                  ['BATTLEFIELD', String(perms.length)],
+                ]} />
+                {perms.length > 0 && (
+                  <>
+                    <div className="hr" style={{ margin: '8px 0' }} />
+                    <div className="t-xs muted" style={{ marginBottom: 4 }}>BATTLEFIELD</div>
+                    <div style={{ maxHeight: 140, overflowY: 'auto', borderTop: '1px dashed var(--rule-2)' }}>
+                      {perms.map((p, j) => (
+                        <div key={j} style={{
+                          display: 'grid', gridTemplateColumns: '1fr auto',
+                          padding: '3px 0', borderBottom: '1px dashed var(--rule-2)',
+                          alignItems: 'center', gap: 6,
+                        }}>
+                          <span className="t-xs" style={{
+                            fontWeight: p.is_commander ? 700 : 400,
+                            color: p.is_commander ? 'var(--warn)' : 'var(--ink)',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {p.is_commander ? '★ ' : ''}{p.name?.toUpperCase()}
+                          </span>
+                          <span className="t-xs muted-2">
+                            {p.power != null ? `${p.power}/${p.toughness ?? '?'}` : (p.type || '').slice(0, 4)}
+                            {p.tapped ? ' ⤵' : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Event log for this turn */}
+      <div className="hr" style={{ margin: '14px 0 8px' }} />
+      <div className="t-xs muted" style={{ marginBottom: 6 }}>EVENTS — TURN {turnNo}</div>
+      {events.length === 0 ? (
+        <div className="t-xs muted-2">— NO RECORDED EVENTS THIS TURN —</div>
+      ) : (
+        <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+          {events.map((ev, i) => (
+            <div key={i} style={{
+              display: 'grid', gridTemplateColumns: '54px 1fr 80px',
+              padding: '4px 0', borderBottom: '1px dashed var(--rule-2)',
+              alignItems: 'baseline', gap: 8,
+            }}>
+              <span className="t-xs muted-2">T{ev.turn}</span>
+              <span className="t-xs" style={{ lineHeight: 1.35 }}>{ev.action}</span>
+              <span className="t-xs muted text-right" style={{ textTransform: 'uppercase' }}>{ev.kind}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  )
+}
+
 /* ─── Deck Context Selector (top bar) ────────────────────────── */
 const DeckSelector = ({ commanders, selected, onSelect }) => {
   // Deduplicate commander names from all games
@@ -315,12 +505,21 @@ export default function Report() {
         api.getLiveELO().then(setElo).catch(() => {})
 
         if (gameId) {
-          const g = await api.getGame(gameId)
+          // /report carries the per-turn Timeline used by the
+          // scrubber; the plain /games/{id} endpoint strips it.
+          const g = await api.getGameReport(gameId)
           setGame(g)
         } else {
           const list = await api.getGames(1)
           if (list?.length > 0) {
-            setGame(list[0])
+            // Hydrate the most-recent game with its full report so
+            // the scrubber works on the default "no gameId" view too.
+            try {
+              const full = await api.getGameReport(list[0].game_id)
+              setGame(full || list[0])
+            } catch {
+              setGame(list[0])
+            }
           }
         }
         const full = await api.getGames(50)
@@ -418,6 +617,11 @@ export default function Report() {
               <Stat2 k="END" v={endReasonShort(featuredGame.end_reason)} />
             </div>
           </div>
+        )}
+
+        {/* Replay scrubber — per-turn timeline with board/life/event delta */}
+        {featuredGame && (
+          <ReplayScrubber game={featuredGame} commanders={commanders} />
         )}
 
         {/* Final board state — all seats */}
