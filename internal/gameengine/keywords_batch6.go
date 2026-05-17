@@ -1105,23 +1105,11 @@ func ApplyGift(gs *GameState, seatIdx int, perm *Permanent) bool {
 // lives in keywords_stubs_tail.go.
 
 // ---------------------------------------------------------------------------
-// §702.177 — Visit (stub)
+// §702.177 — Visit
 // ---------------------------------------------------------------------------
-
-// ApplyVisit logs a visit event. Visit is a set-specific mechanic.
-func ApplyVisit(gs *GameState, seatIdx int, perm *Permanent) {
-	if gs == nil || perm == nil {
-		return
-	}
-	gs.LogEvent(Event{
-		Kind:   "visit",
-		Seat:   seatIdx,
-		Source: perm.Card.DisplayName(),
-		Details: map[string]interface{}{
-			"rule": "702.177",
-		},
-	})
-}
+// HasVisit / ApplyVisit / VisitedThisTurn / ClearVisitFlags live in
+// keywords_visit.go where the mechanic is implemented as a per-permanent
+// "visited_this_turn" counter with trigger fan-out and EOT cleanup.
 
 // ---------------------------------------------------------------------------
 // §702.178 — Max Speed (stub)
@@ -1194,10 +1182,135 @@ func ApplyStartYourEngines(gs *GameState, seatIdx int) {
 }
 
 // ---------------------------------------------------------------------------
-// §702.180 — Harmonize (stub)
+// §702.180 — Harmonize
+//
+// Harmonize is an enchantment subtype introduced in Aetherdrift. A Harmonize
+// enchantment provides its controller with one or more activated abilities
+// that read "{cost}: Search your library for a card, put it into your hand,
+// then shuffle." Each activation pays the cost; the activation must be at
+// sorcery speed unless the printed ability says otherwise.
+//
+// Modeling:
+//   - HasHarmonize(perm)         reports the subtype via Subtypes / Types /
+//                                TypeLine, since the card-types and subtypes
+//                                are mixed in the Card.Types slice.
+//   - HasHarmonizeCard(card)     same check for a Card.
+//   - HarmonizeActivate          pays the activation cost, searches the
+//                                controller's library for a card, moves it
+//                                to hand, shuffles, and logs the activation.
 // ---------------------------------------------------------------------------
 
-// ApplyHarmonize logs a harmonize event.
+// HasHarmonize reports whether the permanent is a Harmonize enchantment.
+// Per the Aetherdrift introduction, Harmonize is a noncreature enchantment
+// subtype, so we accept either an explicit Subtypes entry (post-layers) or
+// a substring match in the printed Types / TypeLine.
+func HasHarmonize(perm *Permanent) bool {
+	if perm == nil || perm.Card == nil {
+		return false
+	}
+	if !cardHasType(perm.Card, "enchantment") {
+		return false
+	}
+	return cardHasSubtype(perm.Card, "harmonize")
+}
+
+// HasHarmonizeCard reports whether the card has the Harmonize subtype while
+// off the battlefield. Used during deck analysis / cast-pipeline checks.
+func HasHarmonizeCard(card *Card) bool {
+	if card == nil {
+		return false
+	}
+	if !cardHasType(card, "enchantment") {
+		return false
+	}
+	return cardHasSubtype(card, "harmonize")
+}
+
+// HarmonizeActivate activates a Harmonize enchantment's search-library
+// ability. The controller pays `cost` mana, searches their library for the
+// first card matching `cardFilter` (or the first card at all if filter is
+// nil), puts it into their hand, and shuffles. Returns true on a successful
+// activation (cost paid and search resolved, even if no card was found).
+//
+// Sorcery-speed gating: the activation is rejected unless `seatIdx` is the
+// active player. Per CR §307 / §602, search-library activated abilities on
+// Harmonize enchantments are restricted to sorcery speed.
+//
+// `cardFilter` lets the caller restrict the search (e.g. "creature card",
+// basic land, specific subtype). nil means "any card" — useful for tutor-
+// style Harmonize abilities. The first matching card encountered in library
+// order is selected; this keeps tests deterministic and matches the
+// existing tutor helpers in keywords_batch5.go (Transfigure) and
+// keywords_misc.go.
+func HarmonizeActivate(gs *GameState, seatIdx int, perm *Permanent, cost int, cardFilter func(*Card) bool) bool {
+	if gs == nil || perm == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
+		return false
+	}
+	if !HasHarmonize(perm) {
+		return false
+	}
+	if perm.Controller != seatIdx {
+		return false
+	}
+	// Sorcery-speed gate (CR §307.4 — activated abilities on enchantments
+	// default to instant speed, but Harmonize search abilities are printed
+	// at sorcery speed; enforce it here).
+	if gs.Active != seatIdx {
+		return false
+	}
+	seat := gs.Seats[seatIdx]
+	if seat == nil || seat.ManaPool < cost {
+		return false
+	}
+
+	seat.ManaPool -= cost
+	SyncManaAfterSpend(seat)
+
+	foundIdx := -1
+	for i, c := range seat.Library {
+		if c == nil {
+			continue
+		}
+		if cardFilter != nil && !cardFilter(c) {
+			continue
+		}
+		foundIdx = i
+		break
+	}
+
+	foundName := "<none>"
+	if foundIdx >= 0 {
+		found := seat.Library[foundIdx]
+		MoveCard(gs, found, seatIdx, "library", "hand", "tutor-to-hand")
+		if found != nil {
+			foundName = found.DisplayName()
+		}
+	}
+
+	// Shuffle library per Harmonize wording ("...then shuffle.").
+	if gs.Rng != nil && len(seat.Library) > 1 {
+		gs.Rng.Shuffle(len(seat.Library), func(i, j int) {
+			seat.Library[i], seat.Library[j] = seat.Library[j], seat.Library[i]
+		})
+	}
+
+	gs.LogEvent(Event{
+		Kind:   "harmonize_activate",
+		Seat:   seatIdx,
+		Source: perm.Card.DisplayName(),
+		Amount: cost,
+		Details: map[string]interface{}{
+			"found": foundName,
+			"rule":  "702.180",
+		},
+	})
+	return true
+}
+
+// ApplyHarmonize is retained as a thin logging hook for callers that only
+// want to record that a Harmonize ability was used (e.g. analytics paths
+// that don't drive the search themselves). New callers should prefer
+// HarmonizeActivate, which performs the actual search.
 func ApplyHarmonize(gs *GameState, seatIdx int) {
 	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
 		return
@@ -1212,21 +1325,155 @@ func ApplyHarmonize(gs *GameState, seatIdx int) {
 }
 
 // ---------------------------------------------------------------------------
-// §702.181 — Mobilize (stub)
+// §702.181 — Mobilize
+//
+// "Mobilize N" (Aetherdrift):
+//   "Whenever this creature attacks, create N 1/1 red Mercenary creature
+//    tokens that are tapped and attacking. Exile them at the beginning of
+//    the next end step."
+//
+// Modeling:
+//   - HasMobilize(card)          reports the keyword.
+//   - MobilizeCount(card)        extracts N from the keyword args; falls
+//                                back to 1 (the §702.181a default) if the
+//                                argument is missing or not numeric.
+//   - ApplyMobilize              runs the attack trigger: mints N tapped-
+//                                attacking Mercenary tokens that attack the
+//                                same defender as the source, and registers
+//                                a one-shot end-of-turn delayed trigger to
+//                                exile them. Mirrors the Myriad pattern in
+//                                keywords_combat.go.
+//   - FireMobilizeTriggers       checks every declared attacker and fires
+//                                ApplyMobilize for each one with the
+//                                keyword. Wired into CheckAttackKeywordsCombat.
 // ---------------------------------------------------------------------------
 
-// ApplyMobilize logs a mobilize event.
-func ApplyMobilize(gs *GameState, seatIdx int) {
-	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
+// HasMobilize reports whether the card carries the mobilize keyword.
+func HasMobilize(card *Card) bool {
+	return cardHasKeywordByName(card, "mobilize")
+}
+
+// MobilizeCount returns N for "Mobilize N". Defaults to 1 if no numeric
+// argument is parsed — matches the §702.181a fallback for "Mobilize" with
+// no explicit count printed.
+func MobilizeCount(card *Card) int {
+	n := keywordArgCost(card, "mobilize")
+	if n <= 0 {
+		return 1
+	}
+	return n
+}
+
+// ApplyMobilize fires the Mobilize attack trigger for `attacker`. Creates N
+// 1/1 red Mercenary creature tokens that are tapped and attacking the same
+// defender as `attacker`, and registers a one-shot end-of-turn delayed
+// trigger to exile them (per the §702.181b reminder text).
+//
+// If the attacker has no recorded defender (e.g. tests calling this in
+// isolation) the tokens are created but no AttackerDefender is set; they
+// are still flagged "attacking" so combat-damage assignment can pick them
+// up if a defender is later assigned by the caller.
+func ApplyMobilize(gs *GameState, attacker *Permanent, attackerSeat int) {
+	if gs == nil || attacker == nil {
 		return
 	}
+	if attacker.Card == nil || !HasMobilize(attacker.Card) {
+		return
+	}
+	if attackerSeat < 0 || attackerSeat >= len(gs.Seats) {
+		return
+	}
+	n := MobilizeCount(attacker.Card)
+	if n <= 0 {
+		return
+	}
+
+	defSeat, hasDef := AttackerDefender(attacker)
+	sourceName := attacker.Card.DisplayName()
+
+	seat := gs.Seats[attackerSeat]
+	if seat == nil {
+		return
+	}
+
+	tokens := make([]*Permanent, 0, n)
+	for i := 0; i < n; i++ {
+		token := &Permanent{
+			Card: &Card{
+				Name:          "Mercenary Token",
+				Owner:         attackerSeat,
+				BasePower:     1,
+				BaseToughness: 1,
+				Types:         []string{"token", "creature", "mercenary"},
+				Colors:        []string{"R"},
+			},
+			Controller:    attackerSeat,
+			Owner:         attackerSeat,
+			Timestamp:     gs.NextTimestamp(),
+			Counters:      map[string]int{},
+			Flags:         map[string]int{flagAttacking: 1, "mobilize_token": 1},
+			Tapped:        true,
+			SummoningSick: false,
+		}
+		if hasDef {
+			setAttackerDefender(token, defSeat)
+		}
+		seat.Battlefield = append(seat.Battlefield, token)
+		RegisterReplacementsForPermanent(gs, token)
+		FirePermanentETBTriggers(gs, token)
+		seat.Turn.TokensCreated++
+		seat.Turn.CreaturesEntered++
+		tokens = append(tokens, token)
+	}
+
 	gs.LogEvent(Event{
-		Kind: "mobilize",
-		Seat: seatIdx,
+		Kind:   "mobilize",
+		Seat:   attackerSeat,
+		Source: sourceName,
+		Amount: n,
 		Details: map[string]interface{}{
-			"rule": "702.181",
+			"defender": defSeat,
+			"tokens":   n,
+			"rule":     "702.181",
 		},
 	})
+
+	// Exile at the beginning of the next end step. Mirrors Myriad's
+	// delayed-trigger pattern but uses end_of_turn rather than
+	// end_of_combat so tokens persist through the damage step (and can
+	// chump-block if a defender retaliates, though Mercenary tokens are
+	// usually printed with "this creature can't block").
+	capturedTokens := tokens
+	gs.RegisterDelayedTrigger(&DelayedTrigger{
+		TriggerAt:      "end_of_turn",
+		ControllerSeat: attackerSeat,
+		SourceCardName: sourceName + " (mobilize)",
+		OneShot:        true,
+		EffectFn: func(gs *GameState) {
+			for _, tok := range capturedTokens {
+				if alive(gs, tok) {
+					ExilePermanent(gs, tok, nil)
+				}
+			}
+		},
+	})
+}
+
+// FireMobilizeTriggers iterates declared attackers and fires ApplyMobilize
+// for every one that has the keyword. Called from
+// CheckAttackKeywordsCombat in keywords_combat.go.
+func FireMobilizeTriggers(gs *GameState, attackerSeat int, attackers []*Permanent) {
+	if gs == nil {
+		return
+	}
+	for _, atk := range attackers {
+		if atk == nil || atk.Card == nil {
+			continue
+		}
+		if HasMobilize(atk.Card) {
+			ApplyMobilize(gs, atk, attackerSeat)
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1238,17 +1485,11 @@ func HasTiered(card *Card) bool {
 	return cardHasKeywordByName(card, "tiered")
 }
 
-// ---------------------------------------------------------------------------
-// §702.183 — Job Select (stub)
-// ---------------------------------------------------------------------------
-
-// HasJobSelect returns true if the card has the job select keyword.
-func HasJobSelect(card *Card) bool {
-	return cardHasKeywordByName(card, "job select")
-}
+// §702.183 Job Select implementation moved to keywords_job_select.go
+// §702.184 Station implementation moved to keywords_station.go
 
 // ---------------------------------------------------------------------------
-// §702.184 — Station (stub)
+// §702.184 — Station moved (stub helpers below remain only if not moved)
 // ---------------------------------------------------------------------------
 
 // ApplyStation logs a station event.
@@ -1578,31 +1819,18 @@ func SpellWarpedThisTurn(gs *GameState, seatIdx int) bool {
 }
 
 // ---------------------------------------------------------------------------
-// §702.186 — Solved (stub)
+// §702.186 — Solved
 // ---------------------------------------------------------------------------
-
-// HasSolved returns true if the card has the solved keyword.
-func HasSolved(card *Card) bool {
-	return cardHasKeywordByName(card, "solved")
-}
+// IsSolved / MarkSolved / ClearSolved / HasSolveAbility live in
+// keywords_solved.go where the designation is implemented as a real
+// per-permanent flag with "became_solved" trigger fan-out.
 
 // ---------------------------------------------------------------------------
-// §702.187 — Mayhem (stub)
+// §702.187 — Mayhem
 // ---------------------------------------------------------------------------
-
-// ApplyMayhem logs a mayhem event.
-func ApplyMayhem(gs *GameState, seatIdx int) {
-	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
-		return
-	}
-	gs.LogEvent(Event{
-		Kind: "mayhem",
-		Seat: seatIdx,
-		Details: map[string]interface{}{
-			"rule": "702.187",
-		},
-	})
-}
+// HasMayhem / MayhemCost / CastMayhem live in keywords_mayhem.go where the
+// alt-cost mechanic is implemented in full (cast-from-graveyard gated on
+// "if you discarded it this turn," exile-on-resolve per §702.187c).
 
 // ---------------------------------------------------------------------------
 // §702.190 — Infinity (stub)
