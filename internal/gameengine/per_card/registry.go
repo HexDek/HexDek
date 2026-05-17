@@ -166,6 +166,56 @@ func normalizeNameSlow(name string) string {
 	return b.String()
 }
 
+// lookupCandidates returns the ordered list of normalized name keys to try
+// when dispatching a handler. The first hit wins. The fallbacks unify five
+// runtime-rename surfaces under one rule, so existing handlers fire on
+// variants without requiring per-variant aliases:
+//
+//   - "X (cascade)"                — cascade-cast spells (cascade.go renames
+//     StackItem.Card.Name; the same name shows up on resulting permanents)
+//   - "X (Urza copy)"              — Urza, Lord High Artificer copies and
+//     other ETB-copy-token patterns that suffix the source name
+//   - "X (Miirym Token)" / "(... Token)" — token rider tags from the
+//     dragon-doubling family
+//   - "X (Restore-Relic token)"    — Lorehold Archivist's spell-token
+//     surrogate
+//   - "Front // Back"              — DFC: also try the front face alone
+//
+// All variants are runtime mutations that never appear as base card names,
+// so stripping a single trailing parenthetical or a " // " split is safe
+// against collision with real printed names.
+//
+// Wave dev/muninn-handlers-201-220: previously the variant suffixes silently
+// bypassed every dispatcher except fireETB/fireTrigger (which had a partial
+// " // " fallback only). That left ~5k cumulative gap-log hits for cards
+// that DO have handlers — Necromancy (cascade), Vibrance (cascade), Land Tax
+// (cascade), Phoenix Fleet Airship (Urza copy), Tiamat (Miirym Token), etc.
+// This helper centralizes the fallback chain so all five fire* dispatchers
+// use the same rules.
+func lookupCandidates(displayName string) []string {
+	nk := normalizeName(displayName)
+	out := []string{nk}
+	if idx := strings.LastIndex(nk, " ("); idx > 0 && strings.HasSuffix(nk, ")") {
+		stripped := strings.TrimSpace(nk[:idx])
+		if stripped != "" && stripped != nk {
+			out = append(out, stripped)
+			// After stripping the suffix, try DFC front face too — covers
+			// e.g. "Eccentric Pestfinder // Turn Stones (cascade)".
+			if dfc := strings.Index(stripped, " // "); dfc > 0 {
+				if front := strings.TrimSpace(stripped[:dfc]); front != "" {
+					out = append(out, front)
+				}
+			}
+		}
+	}
+	if idx := strings.Index(nk, " // "); idx > 0 {
+		if front := strings.TrimSpace(nk[:idx]); front != "" && front != out[len(out)-1] {
+			out = append(out, front)
+		}
+	}
+	return out
+}
+
 // -----------------------------------------------------------------------------
 // Registration
 // -----------------------------------------------------------------------------
@@ -238,14 +288,13 @@ func fireETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	if perm == nil || perm.Card == nil {
 		return
 	}
-	name := perm.Card.DisplayName()
 	reg := Global()
 	reg.mu.RLock()
-	nk := normalizeName(name)
-	handlers := append([]ETBHandler(nil), reg.etb[nk]...)
-	if len(handlers) == 0 {
-		if idx := strings.Index(nk, " // "); idx >= 0 {
-			handlers = append([]ETBHandler(nil), reg.etb[strings.TrimSpace(nk[:idx])]...)
+	var handlers []ETBHandler
+	for _, k := range lookupCandidates(perm.Card.DisplayName()) {
+		if hs := reg.etb[k]; len(hs) > 0 {
+			handlers = append([]ETBHandler(nil), hs...)
+			break
 		}
 	}
 	reg.mu.RUnlock()
@@ -262,10 +311,15 @@ func fireOnCast(gs *gameengine.GameState, item *gameengine.StackItem) {
 	if item == nil || item.Card == nil {
 		return
 	}
-	name := item.Card.DisplayName()
 	reg := Global()
 	reg.mu.RLock()
-	handlers := append([]CastHandler(nil), reg.onCast[normalizeName(name)]...)
+	var handlers []CastHandler
+	for _, k := range lookupCandidates(item.Card.DisplayName()) {
+		if hs := reg.onCast[k]; len(hs) > 0 {
+			handlers = append([]CastHandler(nil), hs...)
+			break
+		}
+	}
 	reg.mu.RUnlock()
 	for _, h := range handlers {
 		h(gs, item)
@@ -279,10 +333,15 @@ func fireOnResolve(gs *gameengine.GameState, item *gameengine.StackItem) int {
 	if item == nil || item.Card == nil {
 		return 0
 	}
-	name := item.Card.DisplayName()
 	reg := Global()
 	reg.mu.RLock()
-	handlers := append([]ResolveHandler(nil), reg.onResolve[normalizeName(name)]...)
+	var handlers []ResolveHandler
+	for _, k := range lookupCandidates(item.Card.DisplayName()) {
+		if hs := reg.onResolve[k]; len(hs) > 0 {
+			handlers = append([]ResolveHandler(nil), hs...)
+			break
+		}
+	}
 	reg.mu.RUnlock()
 	for _, h := range handlers {
 		h(gs, item)
@@ -295,10 +354,15 @@ func fireActivated(gs *gameengine.GameState, src *gameengine.Permanent, abilityI
 	if src == nil || src.Card == nil {
 		return
 	}
-	name := src.Card.DisplayName()
 	reg := Global()
 	reg.mu.RLock()
-	handlers := append([]ActivatedHandler(nil), reg.activated[normalizeName(name)]...)
+	var handlers []ActivatedHandler
+	for _, k := range lookupCandidates(src.Card.DisplayName()) {
+		if hs := reg.activated[k]; len(hs) > 0 {
+			handlers = append([]ActivatedHandler(nil), hs...)
+			break
+		}
+	}
 	reg.mu.RUnlock()
 	for _, h := range handlers {
 		h(gs, src, abilityIdx, ctx)
@@ -368,12 +432,12 @@ func fireTrigger(gs *gameengine.GameState, event string, ctx map[string]interfac
 			if perm == nil || perm.Card == nil {
 				continue
 			}
-			name := normalizeName(perm.Card.DisplayName())
 			reg.mu.RLock()
-			byEvent := reg.onTrigger[name]
-			if byEvent == nil {
-				if idx := strings.Index(name, " // "); idx >= 0 {
-					byEvent = reg.onTrigger[strings.TrimSpace(name[:idx])]
+			var byEvent map[string][]TriggerHandler
+			for _, k := range lookupCandidates(perm.Card.DisplayName()) {
+				if m := reg.onTrigger[k]; m != nil {
+					byEvent = m
+					break
 				}
 			}
 			var handlers []TriggerHandler
@@ -1961,6 +2025,31 @@ func registerDefaults() {
 	// new card types.
 	registerBurnishedHart(Global())
 	registerTrostaniSelesnyasVoice(Global())
+
+	// dev/muninn-handlers-201-220 — dispatch-layer fix instead of more
+	// bespoke handlers. Re-running hexdek-muninn --all --top 250 against
+	// fresh data confirms wave 181-200's saturation note: every base card
+	// in the top 175 already has a per_card file or family-scaffold
+	// registration. What's still polluting the gap log is name-variant
+	// dispatch: cascade-cast spells get renamed to "X (cascade)" by
+	// gameengine/cascade.go, Urza copies become "X (Urza copy)", dragon-
+	// doubler tokens become "X (Miirym Token)", etc. None of those
+	// variant names matched the registered handler key, so dozens of
+	// existing handlers silently bypassed cascade/copy/token hits — about
+	// 5k cumulative gap-log counts across Necromancy/Vibrance/Land Tax/
+	// Phoenix Fleet Airship/Tiamat cascades, with fresh last_seen=2026-05-17
+	// on most.
+	//
+	// Fix lives in lookupCandidates (above): single name-fallback chain
+	// shared by all five fire* dispatchers. Strips one trailing
+	// parenthetical, then falls back to the DFC front face. Net effect is
+	// that every existing handler now fires on its cascade/copy/token
+	// variants without per-card alias plumbing — equivalent to wiring 10+
+	// new handlers in terms of gap-log coverage, but anchored in one
+	// place that future renames don't need to re-discover.
+	//
+	// No new card registrations in this wave. See
+	// muninn_handlers_201_220_test.go for the dispatch regression test.
 }
 
 func init() {
