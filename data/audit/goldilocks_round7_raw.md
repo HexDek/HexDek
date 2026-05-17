@@ -1,0 +1,83 @@
+# Thor — Per-Card Interaction Stress Test Report
+
+**Date:** 2026-05-17 09:20:30
+**Cards tested:** 35708
+**Total tests:** 31963
+**Failures:** 62
+**Time:** 1s
+**Rate:** 25897 tests/s
+
+## Invariant Violations (62)
+
+| Card | Interaction | Invariant | Message |
+|------|-------------|-----------|--------|
+| Collective Voyage | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Karlach, Fury of Avernus | goldilocks_invariant | TurnStructure | [untap] TurnStructure: step "begin_combat" is invalid for phase "combat" |
+| Nightsquad Commando | goldilocks_dead_effect |  | effect=create_token abilityKind=triggered filterBase="": board was set up but nothing changed |
+| Minion of the Mighty | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Finest Hour | goldilocks_invariant | TurnStructure | [untap] TurnStructure: step "begin_combat" is invalid for phase "combat" |
+| Werewolf Pack Leader | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Pyroclast Consul | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Phage the Untouchable | goldilocks_invariant | TurnStructure | [lose_game] TurnStructure: active seat 0 is Lost but life is 20 with no LossReason |
+| Axavar, Fate Thief | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Soul-Guide Lantern | goldilocks_dead_effect |  | effect=exile abilityKind=triggered filterBase="card": board was set up but nothing changed |
+| Foot Mystic | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Veteran Guardmouse | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Lord of Tresserhorn | goldilocks_dead_effect |  | effect=modification_effect abilityKind=triggered filterBase="": board was set up but nothing changed |
+| Demonic Hordes | goldilocks_dead_effect |  | effect=destroy abilityKind=activated filterBase="land": board was set up but nothing changed |
+| Lord Dregg, Insect Invader | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Putrid Pals | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Fraying Omnipotence | goldilocks_dead_effect |  | effect=lose_life abilityKind=static filterBase="": board was set up but nothing changed |
+| Insectoid Exterminator | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Winnower Patrol | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Sensation Gorger | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Heartfire Hero | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Hobgoblin Captain | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Expose the Culprit | goldilocks_unverified |  | effect kind 'turn_face_up' not in verifiable set |
+| Flowerfoot Swordmaster | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Scourge of Numai | goldilocks_dead_effect |  | effect=modification_effect abilityKind=triggered filterBase="": board was set up but nothing changed |
+| Michelangelo, Game Master | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Mouse Trapper | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Emberheart Challenger | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Temporal Intervention | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Insatiable Skittermaw | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Reaver Drone | goldilocks_dead_effect |  | effect=modification_effect abilityKind=triggered filterBase="": board was set up but nothing changed |
+| Etali, Primal Conqueror // Etali, Primal Sickness | goldilocks_invariant | CardIdentity | [modification_effect] CardIdentity: card "LibCard 1-0" (ptr 0xc003f3f4a0) appears in both seat 0 battlefield and seat 0 ... |
+| Trynn, Champion of Freedom | goldilocks_dead_effect |  | effect=create_token abilityKind=triggered filterBase="": board was set up but nothing changed |
+| Roving Actuator | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Waterspout Weavers | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Fishing Gear | goldilocks_dead_effect |  | effect=exile abilityKind=triggered filterBase="that_player": board was set up but nothing changed |
+| Whiskervale Forerunner | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Mana-Charged Dragon | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Leaf-Crowned Elder | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Nettle Guard | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Gnoll Hunter | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Ink Dissolver | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Rat King, Verminister | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Mudbutton Clanger | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Squeaking Pie Grubfellows | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Kavaron Skywarden | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Wolf-Skull Shaman | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Pox Plague | goldilocks_dead_effect |  | effect=lose_life abilityKind=static filterBase="": board was set up but nothing changed |
+| Whiskerquill Scribe | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Fathom Fleet Boarder | goldilocks_dead_effect |  | effect=modification_effect abilityKind=triggered filterBase="": board was set up but nothing changed |
+| Targ Nar, Demon-Fang Gnoll | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Tiger-Tribe Hunter | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Planar Engineering | goldilocks_dead_effect |  | effect=sacrifice abilityKind=static filterBase="land": board was set up but nothing changed |
+| Wandering Graybeard | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| A-Heartfire Hero | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Alpharael, Stonechosen | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Shared Trauma | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Seedglaive Mentor | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Kithkin Zephyrnaut | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Voidforged Titan | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Nightshade Schemers | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+| Intrepid Outlander | goldilocks_dead_effect |  | effect=ability_word abilityKind=static filterBase="": board was set up but nothing changed |
+
+## Failures by Interaction
+
+| Interaction | Failures |
+|-------------|----------|
+| goldilocks_dead_effect | 57 |
+| goldilocks_invariant | 4 |
+| goldilocks_unverified | 1 |
