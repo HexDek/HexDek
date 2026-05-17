@@ -1453,6 +1453,13 @@ func applyCombatDamageToPlayer(gs *GameState, src *Permanent, amount, seatIdx in
 	// canonical entry point + once-per-turn gate.
 	SpeedDamageReporter(gs, src.Controller)
 
+	// §702.111 — Renown: if this creature has renown N, isn't already
+	// renowned, and just dealt combat damage to a player, put N
+	// +1/+1 counters on it and mark it renowned. No-op for sources
+	// without the keyword (single keyword lookup) so the per-damage
+	// dispatch cost stays flat.
+	ApplyRenownOnCombatDamage(gs, src, seatIdx)
+
 	fireCombatDamageTriggers(gs, src, amount, "player", seatIdx, nil)
 }
 
