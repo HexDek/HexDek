@@ -1884,23 +1884,10 @@ func HasInfinity(card *Card) bool {
 // ---------------------------------------------------------------------------
 // §701.4 — Behold
 // ---------------------------------------------------------------------------
-
-// Behold reveals a card from your hand to opponents. Per CR §701.4, you
-// reveal a card from your hand and it becomes "beheld" for the rest of the
-// game for triggered ability purposes.
-func Behold(gs *GameState, seatIdx int, card *Card) {
-	if gs == nil || card == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
-		return
-	}
-	gs.LogEvent(Event{
-		Kind:   "behold",
-		Seat:   seatIdx,
-		Source: card.DisplayName(),
-		Details: map[string]interface{}{
-			"rule": "701.4",
-		},
-	})
-}
+// Behold / BeholdRevealFromHand / BeholdChoosePermanent / HasBeheld /
+// BeheldCount / ClearBeholdRegistry live in keywords_behold.go where
+// the keyword action is implemented as a real per-seat per-turn
+// registry with quality matching and "when you behold" trigger fan-out.
 
 // ---------------------------------------------------------------------------
 // §701.11 — Triple
