@@ -20,6 +20,7 @@ import { MOCK_DECK_ANALYSIS } from '../services/mock'
 import { DeckPicker } from './DeckCompare'
 import DeckExportModal from '../components/DeckExportModal'
 import ContextBox from '../components/ContextBox'
+import EloSparkline from '../components/EloSparkline'
 
 // Brutalist stat-summary panel: mana curve, card-type breakdown, color
 // pips. Computed entirely from the in-memory deck card list — no extra
