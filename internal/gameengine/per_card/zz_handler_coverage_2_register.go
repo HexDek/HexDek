@@ -16,20 +16,8 @@ package per_card
 // flips from "partial" to whatever the custom handler does.
 
 func init() {
-	r := Global()
-	registerArcadesCustom(r)
-	registerTifaLockhartCustom(r)
-	registerVeyranCustom(r)
-	registerShadowCustom(r)
-	registerErietteCustom(r)
-	registerInallaCustom(r)
-	registerEddieBrockCustom(r)
-	registerTiamatCustom(r)
-	registerMayaelCustom(r)
-	registerGiadaCustom(r)
-	registerGhyrsonStarnCustom(r)
-	registerChocoCustom(r)
-	registerIsshinCustom(r)
+	RegisterHandlerCoverage2(Global())
+	AddResetHook(RegisterHandlerCoverage2)
 }
 
 // RegisterHandlerCoverage2 re-runs the registrations on a given Registry.

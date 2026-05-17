@@ -561,7 +561,11 @@ func applyTribalBuff(gs *gameengine.GameState, lord *gameengine.Permanent, creat
 // ---------------------------------------------------------------------------
 
 func init() {
-	r := Global()
+	registerTribalLords(Global())
+	AddResetHook(registerTribalLords)
+}
+
+func registerTribalLords(r *Registry) {
 	registerRooftopStorm(r)
 	registerEndlessRanks(r)
 	registerDeathBaron(r)

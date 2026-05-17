@@ -15,18 +15,8 @@ package per_card
 // every registered handler so this stacks rather than replaces.
 
 func init() {
-	r := Global()
-	registerSliverGravemotherCustom(r)
-	registerYennaRedtoothRegentCustom(r)
-	registerAmaliaBenavidesCustom(r)
-	registerSaheeliRadiantCreatorCustom(r)
-	registerKardurDoomscourgeCustom(r)
-	registerFelotharSteadfastCustom(r)
-	registerMondrakGloryDominus(r)
-	registerSolphimMayhemDominus(r)
-	registerDrivnodCarnageDominus(r)
-	registerZopandrelHungerDominus(r)
-	registerIxhelScionOfAtraxa(r)
+	RegisterEra2(Global())
+	AddResetHook(RegisterEra2)
 }
 
 // RegisterEra2 re-runs the registrations on a given Registry. Tests

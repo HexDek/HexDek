@@ -128,7 +128,11 @@ func itoa(n int) string {
 // ---------------------------------------------------------------------------
 
 func init() {
-	r := Global()
+	registerCombatRestrictions(Global())
+	AddResetHook(registerCombatRestrictions)
+}
+
+func registerCombatRestrictions(r *Registry) {
 	registerPropaganda(r)
 	registerSilentArbiter(r)
 }

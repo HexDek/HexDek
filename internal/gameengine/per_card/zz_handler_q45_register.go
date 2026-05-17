@@ -16,13 +16,8 @@ package per_card
 // intentionally not included here. See the PR body for the breakdown.
 
 func init() {
-	r := Global()
-	registerGyrudaDoomOfDepthsCustom(r)
-	registerMorlunDevourerOfSpidersCustom(r)
-	registerUreniTheSongUnendingCustom(r)
-	registerEllieVengefulHunterCustom(r)
-	registerYorionSkyNomadCustom(r)
-	registerMisterNegativeCustom(r)
+	RegisterHandlerQ45(Global())
+	AddResetHook(RegisterHandlerQ45)
 }
 
 // RegisterHandlerQ45 re-runs the registrations on a given Registry.

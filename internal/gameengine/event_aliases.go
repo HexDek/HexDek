@@ -358,6 +358,7 @@ var eventAliasTable = map[string][]string{
 	"upkeep":                     {"upkeep_controller"},
 	"upkeep_start":               {"upkeep_controller"},
 	"begin_combat_controller":    {"combat_begin"},
+	"begin_combat":               {"combat_begin"},
 
 	// -----------------------------------------------------------------------
 	// Catch-all parser fallbacks
