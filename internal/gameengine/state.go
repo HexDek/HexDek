@@ -202,6 +202,19 @@ type GameState struct {
 	// so the map doesn't grow unbounded.
 	MayhemDiscards map[*Card]int
 
+	// PlotExile tracks cards exiled via the Plot activated ability (CR
+	// §702.172 / Outlaws of Thunder Junction). Keyed by the exiled card
+	// pointer; value is a *PlotMeta capturing the seat that activated
+	// plot, the turn on which plot was activated, and the same value
+	// echoed as ExiledAt for handler ergonomics. Written by
+	// ActivatePlot; read by CastPlot to enforce the "on a later turn"
+	// gate (gs.Turn > meta.Turn). Entries are removed when the plot
+	// card is cast from exile; entries for cards that leave exile by
+	// any other route (e.g. opponent's exile-zone wipe) become stale
+	// and are cleared on the next CheckEnd / EndOfTurnCleanup sweep
+	// that detects the card is no longer in any exile zone.
+	PlotExile map[*Card]*PlotMeta
+
 	// ParadigmExile tracks cards exiled with the Paradigm keyword ability
 	// (Secrets of Strixhaven). At the beginning of the controller's first
 	// main phase, the engine creates a copy of each paradigm card and casts
