@@ -2127,6 +2127,75 @@ export default function DeckArchive() {
             )
           })()}
 
+          {/* SIMILAR DECKS — thumbnail tile version below HOT CARDS.
+              Reuses the similarDecks fetch already running for the sidebar
+              widget. Surfaces commander art, owner, and live HexELO so a
+              reader scanning a deck page can jump straight to a peer build
+              without scrolling back up to the sidebar. Hidden until the
+              fetch resolves with at least one match. */}
+          {similarDecks && similarDecks.length > 0 && (
+            <Panel code="04.SD" title={`SIMILAR DECKS / / ${similarDecks.length} MATCH${similarDecks.length === 1 ? '' : 'ES'}`}>
+              <div className="t-xs muted" style={{ marginBottom: 8 }}>
+                Decks ranked by shared-card overlap with bonuses for matching commander, archetype, and bracket. HexELO pulled live from the gauntlet ladder.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
+                {similarDecks.map((d) => {
+                  const cmdrArt = d.commander_card ? cardArtUrl(d.commander_card) : null
+                  const showName = (d.commander || d.name || d.id || '').toUpperCase()
+                  const peerElo = eloByDeckId[`${d.owner}/${d.id}`] || eloByDeckId[d.id] || null
+                  const hexRating = peerElo && peerElo.hex_rating ? Math.round(peerElo.hex_rating) : null
+                  return (
+                    <Link
+                      key={`sd-${d.owner}/${d.id}`}
+                      to={`/decks/${d.owner}/${d.id}`}
+                      className="panel"
+                      style={{ display: 'block', padding: 0, textDecoration: 'none', color: 'var(--ink)' }}
+                      title={`${showName} · ${d.owner} · ${d.shared_cards} shared`}
+                    >
+                      <div
+                        className={cmdrArt ? '' : 'hatch'}
+                        style={{
+                          aspectRatio: '5/4',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          borderBottom: '1px solid var(--rule-2)',
+                          backgroundImage: cmdrArt ? `url(${cmdrArt})` : undefined,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center 25%',
+                          filter: 'saturate(0.6) contrast(1.05)',
+                        }}
+                      >
+                        {hexRating != null && (
+                          <span style={{
+                            position: 'absolute', top: 4, right: 4,
+                            background: 'rgba(12,13,10,0.78)', padding: '1px 4px',
+                            fontSize: 9, fontWeight: 700, color: 'var(--ok)',
+                            fontVariantNumeric: 'tabular-nums', letterSpacing: '0.02em',
+                          }}>{hexRating}</span>
+                        )}
+                        <span style={{
+                          position: 'absolute', bottom: 4, left: 4,
+                          background: 'rgba(12,13,10,0.78)', padding: '1px 4px',
+                          fontSize: 8, color: 'var(--ink-3)',
+                          fontVariantNumeric: 'tabular-nums', letterSpacing: '0.02em',
+                        }}>{d.shared_cards} SHARED</span>
+                      </div>
+                      <div style={{ padding: '5px 7px' }}>
+                        <div className="t-xs" style={{
+                          fontWeight: 700, letterSpacing: '0.04em',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>{showName}</div>
+                        <div className="t-xs muted-2" style={{
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>{(d.owner || '').toUpperCase()}</div>
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            </Panel>
+          )}
+
           {/* PR #79 — ELO HISTORY chart. Pulls /api/decks/{id}/elo-history,
               renders rating-over-time SVG. Hidden when no runs exist (new
               deck, never gauntleted) so we don't show an empty axis box. */}
