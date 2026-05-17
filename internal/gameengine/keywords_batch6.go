@@ -333,27 +333,9 @@ func ApplyMutate(gs *GameState, mutatingPerm *Permanent, targetPerm *Permanent, 
 	})
 }
 
-// ApplyMutatePlaceholder is the legacy stub entry point. It now delegates
-// to ApplyMutate when a valid target is available, or logs a stub event
-// when no target can be auto-selected.
-func ApplyMutatePlaceholder(gs *GameState, perm *Permanent) {
-	if gs == nil || perm == nil {
-		return
-	}
-	source := "<nil>"
-	if perm.Card != nil {
-		source = perm.Card.DisplayName()
-	}
-	gs.LogEvent(Event{
-		Kind:   "mutate",
-		Seat:   perm.Controller,
-		Source: source,
-		Details: map[string]interface{}{
-			"stub": true,
-			"rule": "702.140",
-		},
-	})
-}
+// §702.140 — ApplyMutatePlaceholder removed. Real impl: ApplyMutate above.
+// No production callers existed (verified by grep), so the orphan stub
+// went away in round 23 cleanup.
 
 // ===========================================================================
 // §702.150 — For Mirrodin!
@@ -1124,11 +1106,24 @@ func HasMaxSpeed(perm *Permanent) bool {
 }
 
 // ---------------------------------------------------------------------------
-// §702.179 — Start Your Engines! (stub)
+// §702.179 — Start Your Engines!
 // ---------------------------------------------------------------------------
 
 // ApplyStartYourEngines animates all Vehicles the controller controls
-// until end of turn, making them creature artifacts.
+// until end of turn, making them creature artifacts. Records on each
+// animated permanent whether we *added* the creature type so the
+// cleanup-step hook can restore the original type list without stripping
+// "creature" from vehicles that were already creatures (Living Metal,
+// crewed-pre-engine, etc.).
+//
+// State written per animated permanent:
+//
+//   p.Flags["start_your_engines"]                 = 1
+//   p.Flags["start_your_engines_added_creature"]  = 1 (only if we appended "creature")
+//
+// EndStepClearStartYourEngines reads both flags and is wired into the
+// cleanup-step pass in phases.go (next to ClearMayhemDiscards /
+// ClearVisitFlags).
 func ApplyStartYourEngines(gs *GameState, seatIdx int) {
 	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
 		return
@@ -1150,24 +1145,25 @@ func ApplyStartYourEngines(gs *GameState, seatIdx int) {
 				break
 			}
 		}
-		if isVehicle {
-			// Make it a creature until EOT.
-			hasCreature := false
-			for _, t := range p.Card.Types {
-				if strings.EqualFold(t, "creature") {
-					hasCreature = true
-					break
-				}
-			}
-			if !hasCreature {
-				p.Card.Types = append(p.Card.Types, "creature")
-			}
-			if p.Flags == nil {
-				p.Flags = map[string]int{}
-			}
-			p.Flags["start_your_engines"] = 1
-			count++
+		if !isVehicle {
+			continue
 		}
+		hasCreature := false
+		for _, t := range p.Card.Types {
+			if strings.EqualFold(t, "creature") {
+				hasCreature = true
+				break
+			}
+		}
+		if p.Flags == nil {
+			p.Flags = map[string]int{}
+		}
+		if !hasCreature {
+			p.Card.Types = append(p.Card.Types, "creature")
+			p.Flags["start_your_engines_added_creature"] = 1
+		}
+		p.Flags["start_your_engines"] = 1
+		count++
 	}
 
 	gs.LogEvent(Event{
@@ -1179,6 +1175,60 @@ func ApplyStartYourEngines(gs *GameState, seatIdx int) {
 			"rule":              "702.179",
 		},
 	})
+}
+
+// EndStepClearStartYourEngines is the cleanup-step counterpart to
+// ApplyStartYourEngines: for each permanent flagged as animated this
+// turn it strips the "creature" type we added (if any), clears both
+// flags, and invalidates the characteristics cache so SBAs see the
+// restored type set.
+//
+// Idempotent: running it twice in succession is a no-op on the second
+// pass. Safe to call on a GameState with no animated permanents.
+// Returns the number of permanents whose flags were cleared (mostly
+// useful for tests / telemetry).
+func EndStepClearStartYourEngines(gs *GameState) int {
+	if gs == nil {
+		return 0
+	}
+	cleared := 0
+	for _, seat := range gs.Seats {
+		if seat == nil {
+			continue
+		}
+		for _, p := range seat.Battlefield {
+			if p == nil || p.Flags == nil {
+				continue
+			}
+			if p.Flags["start_your_engines"] == 0 {
+				continue
+			}
+			if p.Flags["start_your_engines_added_creature"] == 1 && p.Card != nil {
+				kept := p.Card.Types[:0]
+				for _, t := range p.Card.Types {
+					if strings.EqualFold(t, "creature") {
+						continue
+					}
+					kept = append(kept, t)
+				}
+				p.Card.Types = kept
+			}
+			delete(p.Flags, "start_your_engines")
+			delete(p.Flags, "start_your_engines_added_creature")
+			cleared++
+		}
+	}
+	if cleared > 0 {
+		gs.InvalidateCharacteristicsCache()
+		gs.LogEvent(Event{
+			Kind:   "start_your_engines_clear",
+			Amount: cleared,
+			Details: map[string]interface{}{
+				"rule": "702.179",
+			},
+		})
+	}
+	return cleared
 }
 
 // ---------------------------------------------------------------------------
@@ -1488,24 +1538,10 @@ func HasTiered(card *Card) bool {
 // §702.183 Job Select implementation moved to keywords_job_select.go
 // §702.184 Station implementation moved to keywords_station.go
 
-// ---------------------------------------------------------------------------
-// §702.184 — Station moved (stub helpers below remain only if not moved)
-// ---------------------------------------------------------------------------
-
-// ApplyStation logs a station event.
-func ApplyStation(gs *GameState, perm *Permanent) {
-	if gs == nil || perm == nil {
-		return
-	}
-	gs.LogEvent(Event{
-		Kind:   "station",
-		Seat:   perm.Controller,
-		Source: perm.Card.DisplayName(),
-		Details: map[string]interface{}{
-			"rule": "702.184",
-		},
-	})
-}
+// §702.184 — ApplyStation orphan stub removed. Real impl: ActivateStation
+// in keywords_station.go (counter + threshold + becomes_stationed event).
+// No production callers existed (verified by grep), so the orphan went
+// away in round 23 cleanup.
 
 // ---------------------------------------------------------------------------
 // §702.185 — Warp
