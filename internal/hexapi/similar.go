@@ -2,6 +2,7 @@ package hexapi
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,19 +13,24 @@ import (
 // handleSimilarDecks answers GET /api/decks/{owner}/{id}/similar with the
 // top-N decks ranked by composite similarity to the target deck.
 //
-// Score = shared_cards (raw count, after stripping the commander)
-//       + 30  if same commander_card
-//       + 10  if same archetype  (Freya strategy.json)
-//       +  5  if same bracket    (Freya strategy.json or filename slug)
+// Similarity (0-100+ composite, returned as `similarity`):
 //
-// Decks with shared_cards <= 10 AND no commander/archetype/bracket bonus
-// are dropped — the frontend's "no similar decks found" empty state
-// kicks in when the response is empty.
+//	60 * jaccard(target.cards, other.cards)   // card overlap, set-size normalized
+//	+ 25  if same commander_card
+//	+ 15  if same archetype
+//	+ 10  if bracket distance == 0
+//	+  4  if bracket distance == 1            // adjacent brackets
+//	+  5  if commander color identity matches // mono-W vs mono-W, Bant vs Bant, etc.
 //
-// Doing this server-side avoids the N+1 fan-out the frontend would need
-// otherwise (the deck-list endpoint returns metadata only). The walk is
-// O(n_decks * avg_deck_size); at the current scale (a few hundred decks,
-// ~100 cards each) it's a single-digit-ms scan.
+// Jaccard (|A∩B| / |A∪B|) replaces the old raw shared-card count so a
+// 60-card overlap between two 99-card decks ranks above 60 shared cards
+// out of 200 — the old metric biased toward large decks. Bracket adjacency
+// gives partial credit for "one power tier off" decks instead of 0/all.
+//
+// Drop floor: similarity < 12 AND no commander/archetype/color match.
+//
+// The walk is O(n_decks * avg_deck_size); at the current scale (a few
+// hundred decks, ~100 cards each) it's a single-digit-ms scan.
 func (h *Handler) handleSimilarDecks(w http.ResponseWriter, r *http.Request) {
 	owner := r.PathValue("owner")
 	id := r.PathValue("id")
@@ -52,7 +58,7 @@ func (h *Handler) handleSimilarDecks(w http.ResponseWriter, r *http.Request) {
 
 	type scored struct {
 		row   map[string]any
-		score int
+		score float64
 	}
 	var ranked []scored
 
@@ -91,47 +97,31 @@ func (h *Handler) handleSimilarDecks(w http.ResponseWriter, r *http.Request) {
 			if len(sig.cards) == 0 {
 				continue
 			}
-			shared := 0
-			for c := range target.cards {
-				if sig.cards[c] {
-					shared++
-				}
-			}
-			score := shared
-			if target.commanderCard != "" && sig.commanderCard != "" &&
-				strings.EqualFold(target.commanderCard, sig.commanderCard) {
-				score += 30
-			}
-			if target.archetype != "" && sig.archetype != "" &&
-				strings.EqualFold(target.archetype, sig.archetype) {
-				score += 10
-			}
-			if target.bracket != "" && sig.bracket != "" && target.bracket == sig.bracket {
-				score += 5
-			}
-			// Drop floor: trivially-similar decks (3 cards in common, no
-			// shared commander/archetype/bracket) shouldn't pollute the
-			// list. Anything with >10 shared cards OR any bonus passes.
-			if shared <= 10 && score == shared {
+			s := computeSimilarity(target, sig)
+			if s.dropped {
 				continue
 			}
 
 			ranked = append(ranked, scored{
 				row: map[string]any{
-					"owner":          ow,
-					"id":             otherID,
-					"name":           sig.commanderName,
-					"commander":      sig.commanderName,
-					"commander_card": sig.commanderCard,
-					"bracket":        sig.bracket,
-					"archetype":      sig.archetype,
-					"shared_cards":   shared,
-					"same_commander": strings.EqualFold(target.commanderCard, sig.commanderCard) && target.commanderCard != "",
-					"same_archetype": strings.EqualFold(target.archetype, sig.archetype) && target.archetype != "",
-					"same_bracket":   target.bracket == sig.bracket && target.bracket != "",
-					"score":          score,
+					"owner":            ow,
+					"id":               otherID,
+					"name":             sig.commanderName,
+					"commander":        sig.commanderName,
+					"commander_card":   sig.commanderCard,
+					"bracket":          sig.bracket,
+					"archetype":        sig.archetype,
+					"shared_cards":     s.shared,
+					"overlap_pct":      s.overlapPct,
+					"same_commander":   s.sameCommander,
+					"same_archetype":   s.sameArchetype,
+					"same_bracket":     s.bracketDistance == 0 && target.bracket != "" && sig.bracket != "",
+					"bracket_distance": s.bracketDistance,
+					"same_colors":      s.sameColors,
+					"score":            int(math.Round(s.score)), // back-compat field
+					"similarity":       int(math.Round(s.score)),
 				},
-				score: score,
+				score: s.score,
 			})
 		}
 	}
@@ -159,13 +149,126 @@ func (h *Handler) handleSimilarDecks(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
+// similarityResult is the breakdown used to build the response row.
+type similarityResult struct {
+	shared          int
+	overlapPct      int // 0-100, Jaccard * 100, rounded
+	sameCommander   bool
+	sameArchetype   bool
+	bracketDistance int // -1 when either side unknown
+	sameColors      bool
+	score           float64
+	dropped         bool
+}
+
+// computeSimilarity is pure — exposed for unit tests.
+func computeSimilarity(target, other deckSig) similarityResult {
+	res := similarityResult{bracketDistance: -1}
+
+	for c := range target.cards {
+		if other.cards[c] {
+			res.shared++
+		}
+	}
+	union := len(target.cards) + len(other.cards) - res.shared
+	jaccard := 0.0
+	if union > 0 {
+		jaccard = float64(res.shared) / float64(union)
+	}
+	res.overlapPct = int(math.Round(jaccard * 100))
+
+	score := 60.0 * jaccard
+
+	if target.commanderCard != "" && other.commanderCard != "" &&
+		strings.EqualFold(target.commanderCard, other.commanderCard) {
+		res.sameCommander = true
+		score += 25
+	}
+	if target.archetype != "" && other.archetype != "" &&
+		strings.EqualFold(target.archetype, other.archetype) {
+		res.sameArchetype = true
+		score += 15
+	}
+	if tb, ok := parseBracket(target.bracket); ok {
+		if ob, ok2 := parseBracket(other.bracket); ok2 {
+			dist := tb - ob
+			if dist < 0 {
+				dist = -dist
+			}
+			res.bracketDistance = dist
+			switch dist {
+			case 0:
+				score += 10
+			case 1:
+				score += 4
+			}
+		}
+	}
+	if len(target.colors) > 0 && colorIdentityEqual(target.colors, other.colors) {
+		res.sameColors = true
+		score += 5
+	}
+
+	res.score = score
+
+	// Drop floor: nothing-in-common decks shouldn't pollute the list.
+	if score < 12 && !res.sameCommander && !res.sameArchetype && !res.sameColors {
+		res.dropped = true
+	}
+	return res
+}
+
+// parseBracket returns the integer bracket (1-5) parsed from the sig value.
+// The filename parser uses "?" for unknown and "1".."5" otherwise; strategy.json
+// writes the int directly via itoa.
+func parseBracket(s string) (int, bool) {
+	if s == "" || s == "?" {
+		return 0, false
+	}
+	n := parseInt(s)
+	if n <= 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+func colorIdentityEqual(a, b []string) bool {
+	// Normalize first — uppercase, dedupe, sort — then compare.
+	// (Comparing raw lengths early would mis-reject [W,W] vs [W].)
+	norm := func(in []string) []string {
+		seen := map[string]bool{}
+		out := make([]string, 0, len(in))
+		for _, c := range in {
+			c = strings.ToUpper(strings.TrimSpace(c))
+			if c == "" || seen[c] {
+				continue
+			}
+			seen[c] = true
+			out = append(out, c)
+		}
+		sort.Strings(out)
+		return out
+	}
+	na, nb := norm(a), norm(b)
+	if len(na) == 0 || len(na) != len(nb) {
+		return false
+	}
+	for i := range na {
+		if na[i] != nb[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // deckSig is the minimal projection of a deck used for similarity scoring.
 type deckSig struct {
-	cards          map[string]bool // normalized lowercased card names (no commander)
-	commanderName  string
-	commanderCard  string
-	bracket        string
-	archetype      string
+	cards         map[string]bool // normalized lowercased card names (no commander)
+	commanderName string
+	commanderCard string
+	bracket       string
+	archetype     string
+	colors        []string // commander color identity, e.g. ["W","U"]
 }
 
 // loadDeckSignature reads a deck file and pulls just the data we need
@@ -208,12 +311,15 @@ func loadDeckSignature(decksDir, owner, id, deckPath string) deckSig {
 		sig.cards[strings.ToLower(name)] = true
 	}
 
-	// Freya sidecar — for archetype and an authoritative bracket.
+	// Freya sidecar — for archetype, canonical bracket, color identity.
 	strategyFile := filepath.Join(decksDir, owner, "freya", id+".strategy.json")
 	if sd, err := os.ReadFile(strategyFile); err == nil {
 		var strat struct {
-			Archetype string `json:"archetype"`
-			Bracket   int    `json:"bracket"`
+			Archetype     string `json:"archetype"`
+			Bracket       int    `json:"bracket"`
+			ColorIdentity struct {
+				CommanderColors []string `json:"commander_colors"`
+			} `json:"color_identity"`
 		}
 		if json.Unmarshal(sd, &strat) == nil {
 			if strat.Archetype != "" {
@@ -221,6 +327,9 @@ func loadDeckSignature(decksDir, owner, id, deckPath string) deckSig {
 			}
 			if strat.Bracket > 0 {
 				sig.bracket = itoa(strat.Bracket)
+			}
+			if len(strat.ColorIdentity.CommanderColors) > 0 {
+				sig.colors = strat.ColorIdentity.CommanderColors
 			}
 		}
 	}
