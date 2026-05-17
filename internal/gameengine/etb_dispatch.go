@@ -45,6 +45,13 @@ func FirePermanentETBTriggers(gs *GameState, perm *Permanent) {
 		initSagaLoreCounters(gs, perm)
 	}
 
+	// CR §726.2: the first time a daybound/nightbound permanent enters
+	// the battlefield while the game has no day/night designation, the
+	// game becomes day. Cheap fast-path: the hook returns immediately
+	// when state is already set or the entering permanent isn't a
+	// werewolf-class card.
+	OnDayboundOrNightboundETB(gs, perm)
+
 	CheckAscend(gs, perm.Controller)
 
 	if !perm.IsLand() {
