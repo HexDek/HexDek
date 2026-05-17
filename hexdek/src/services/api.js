@@ -130,6 +130,9 @@ export const api = {
   // bill against the daily free-tier quota.
   startGauntlet: (id, games = 500) => authedRequest(`/api/gauntlet/${id}?games=${games}`, { method: 'POST' }),
   getGauntlet: (id) => request(`/api/gauntlet/${id}`),
+  // SSE stream of gauntlet/tournament progress. Returns the EventSource
+  // URL so callers can `new EventSource(api.tournamentEventsUrl(id))`.
+  tournamentEventsUrl: (id) => `${API_BASE}/api/tournaments/${id}/events`,
   // Matchup matrix — per-deck head-to-head records (rich dataset beyond
   // the gauntlet result's TopBeaten/TopLostTo summary).
   getDeckMatchups: (id) => request(`/api/decks/${id}/matchups`),

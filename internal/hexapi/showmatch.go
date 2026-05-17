@@ -232,6 +232,12 @@ type Showmatch struct {
 	gauntletMu sync.RWMutex
 	gauntlets  map[string]*GauntletResult
 
+	// gauntletSubs holds the active SSE subscribers per deck key. Each
+	// subscriber receives a snapshot of GauntletResult after every
+	// completed game and on terminal status transitions, then is closed.
+	gauntletSubsMu sync.Mutex
+	gauntletSubs   map[string]map[*gauntletSubscriber]struct{}
+
 	// credits is the optional credit-economy gate for paid gauntlet
 	// runs. When nil (e.g. tests, dev runs without main wiring), the
 	// gauntlet handler falls back to "free for everyone" — the
@@ -291,6 +297,7 @@ func NewShowmatch(astPath, oraclePath, decksDir string, database *sql.DB) *Showm
 		persistCh:       make(chan persistJob, 512),
 		spectators:      make(map[*spectatorConn]struct{}),
 		gauntlets:       make(map[string]*GauntletResult),
+		gauntletSubs:    make(map[string]map[*gauntletSubscriber]struct{}),
 		rooms:           NewRoomManager(),
 		heimdall:        heimdall.New("data", &huginnAdapter{dataDir: "data"}, muninnSink, newTelemetrySink()),
 		muninnSink:      muninnSink,
@@ -686,11 +693,14 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 	targetDeck := sm.findDeckInPool(owner, id)
 	if targetDeck == nil {
 		log.Printf("gauntlet: deck %s not in engine pool — filtered at startup or missing", deckKey)
-		sm.gauntletMu.Lock()
-		sm.gauntlets[deckKey] = &GauntletResult{
+		errResult := &GauntletResult{
 			DeckKey: deckKey, Status: "error", Commander: id,
 		}
+		sm.gauntletMu.Lock()
+		sm.gauntlets[deckKey] = errResult
 		sm.gauntletMu.Unlock()
+		sm.broadcastGauntlet(deckKey, *errResult)
+		sm.closeGauntletSubs(deckKey)
 		return
 	}
 
@@ -939,6 +949,12 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 			}
 		}
 		result.Games = g + 1
+		result.WinRate = math.Round(float64(result.Wins)/float64(result.Games)*1000) / 10
+
+		sm.gauntletMu.RLock()
+		snap := *result
+		sm.gauntletMu.RUnlock()
+		sm.broadcastGauntlet(deckKey, snap)
 
 		if (g+1)%1000 == 0 {
 			sm.gauntletMu.Lock()
@@ -984,7 +1000,10 @@ func (sm *Showmatch) RunGauntlet(owner, id string, numGames int) {
 
 	sm.gauntletMu.Lock()
 	sm.gauntlets[deckKey] = result
+	finalSnap := *result
 	sm.gauntletMu.Unlock()
+	sm.broadcastGauntlet(deckKey, finalSnap)
+	sm.closeGauntletSubs(deckKey)
 
 	// Persist snapshot for ELO-history chart. Best-effort — a DB error
 	// here doesn't fail the gauntlet (the in-memory result still serves
@@ -2637,6 +2656,7 @@ func (sm *Showmatch) RegisterShowmatch(mux *http.ServeMux) {
 	mux.HandleFunc("GET /ws/live", sm.handleSpectatorWS)
 	mux.HandleFunc("POST /api/gauntlet/{owner}/{id}", sm.handleStartGauntlet)
 	mux.HandleFunc("GET /api/gauntlet/{owner}/{id}", sm.handleGetGauntlet)
+	mux.HandleFunc("GET /api/tournaments/{owner}/{id}/events", sm.handleTournamentEvents)
 	mux.HandleFunc("GET /api/decks/{owner}/{id}/curse", sm.handleDeckCurse)
 	mux.HandleFunc("PATCH /api/decks/{owner}/{id}/curse", sm.handlePatchCurse)
 	mux.HandleFunc("GET /api/achievements/{owner}", sm.handleAchievements)
@@ -2763,6 +2783,132 @@ func (sm *Showmatch) handleGetGauntlet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, result)
+}
+
+// gauntletSubscriber is one SSE listener for a gauntlet's progress.
+type gauntletSubscriber struct {
+	ch chan GauntletResult
+}
+
+func (sm *Showmatch) subscribeGauntlet(deckKey string) *gauntletSubscriber {
+	sub := &gauntletSubscriber{ch: make(chan GauntletResult, 16)}
+	sm.gauntletSubsMu.Lock()
+	if _, ok := sm.gauntletSubs[deckKey]; !ok {
+		sm.gauntletSubs[deckKey] = make(map[*gauntletSubscriber]struct{})
+	}
+	sm.gauntletSubs[deckKey][sub] = struct{}{}
+	sm.gauntletSubsMu.Unlock()
+	return sub
+}
+
+func (sm *Showmatch) unsubscribeGauntlet(deckKey string, sub *gauntletSubscriber) {
+	sm.gauntletSubsMu.Lock()
+	if subs, ok := sm.gauntletSubs[deckKey]; ok {
+		if _, ok := subs[sub]; ok {
+			delete(subs, sub)
+			close(sub.ch)
+		}
+		if len(subs) == 0 {
+			delete(sm.gauntletSubs, deckKey)
+		}
+	}
+	sm.gauntletSubsMu.Unlock()
+}
+
+func (sm *Showmatch) broadcastGauntlet(deckKey string, snap GauntletResult) {
+	// Lock is held across the non-blocking sends so a concurrent
+	// unsubscribe cannot close(ch) between our membership check and
+	// the send (which would panic). Each send is a single select with
+	// default — bounded constant time.
+	sm.gauntletSubsMu.Lock()
+	defer sm.gauntletSubsMu.Unlock()
+	for s := range sm.gauntletSubs[deckKey] {
+		select {
+		case s.ch <- snap:
+		default:
+			// Subscriber buffer full — drop this delta rather than
+			// stall the gauntlet loop. The next event catches them up.
+		}
+	}
+}
+
+func (sm *Showmatch) closeGauntletSubs(deckKey string) {
+	sm.gauntletSubsMu.Lock()
+	subs := sm.gauntletSubs[deckKey]
+	delete(sm.gauntletSubs, deckKey)
+	sm.gauntletSubsMu.Unlock()
+	for s := range subs {
+		close(s.ch)
+	}
+}
+
+// handleTournamentEvents streams gauntlet progress as Server-Sent Events.
+// One `snapshot` event is sent immediately with the current state, then
+// further `snapshot` events fire after every completed game until the
+// gauntlet reaches a terminal status (complete | error) or the client
+// disconnects.
+func (sm *Showmatch) handleTournamentEvents(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("owner")
+	id := r.PathValue("id")
+	deckKey := owner + "/" + id
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	sub := sm.subscribeGauntlet(deckKey)
+	defer sm.unsubscribeGauntlet(deckKey, sub)
+
+	if init := sm.GetGauntlet(deckKey); init != nil {
+		writeSSE(w, flusher, "snapshot", init)
+		if init.Status == "complete" || init.Status == "error" {
+			return
+		}
+	} else {
+		writeSSE(w, flusher, "snapshot", map[string]any{
+			"status":   "none",
+			"deck_key": deckKey,
+		})
+	}
+
+	ctx := r.Context()
+	keepalive := time.NewTicker(15 * time.Second)
+	defer keepalive.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case snap, ok := <-sub.ch:
+			if !ok {
+				return
+			}
+			writeSSE(w, flusher, "snapshot", snap)
+			if snap.Status == "complete" || snap.Status == "error" {
+				return
+			}
+		case <-keepalive.C:
+			if _, err := w.Write([]byte(": ping\n\n")); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
+func writeSSE(w http.ResponseWriter, flusher http.Flusher, event string, data any) {
+	b, err := json.Marshal(data)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, b)
+	flusher.Flush()
 }
 
 // CurseResponse is the JSON payload for GET /api/decks/{owner}/{id}/curse.
