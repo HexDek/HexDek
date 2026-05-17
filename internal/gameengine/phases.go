@@ -657,6 +657,10 @@ func UntapAll(gs *GameState, seatIdx int) {
 	// effects. DescendedThisTurn is written by MoveCard in zone_move.go.
 	seat.Turn.Reset()
 	seat.DescendedThisTurn = false
+	// CR §701.4 — close the "beheld this turn" window. Behold registry
+	// is game-turn-scoped, not per-seat-scoped, so the active seat's
+	// untap step is the canonical reset point.
+	ClearBeholdRegistry(gs)
 	// Snapshot life total at turn start for Vecna-trilogy end-step checks
 	// and similar "life lost this turn" computations.
 	if seat.Flags == nil {

@@ -209,6 +209,17 @@ type GameState struct {
 	// permanently. Keyed by seat index.
 	ParadigmExile map[int][]*Card
 
+	// BeholdRegistry tracks per-seat per-quality "beheld this turn"
+	// counts. CR §701.4 (Bloomburrow Behold). Outer key: seat index.
+	// Inner key: lowercased quality name (typically a creature subtype,
+	// e.g. "dragon", "squirrel"). Value: how many times that quality has
+	// been beheld this turn by that seat — most cards only key off >0
+	// but the counter form lets handlers that care about repeated
+	// beholds (e.g. "second time you behold a Dragon this turn") do so
+	// without rewiring. Written by Behold, read by HasBeheld, cleared
+	// by ClearBeholdRegistry at the start of each turn (UntapAll).
+	BeholdRegistry map[int]map[string]int
+
 	// CardFirstPlayed maps a card display name to the turn number on
 	// which it first resolved as a spell during this game. Populated by
 	// ResolveStackTop only for spell stack items (item.Card != nil and
