@@ -1604,22 +1604,11 @@ func HasSolved(card *Card) bool {
 }
 
 // ---------------------------------------------------------------------------
-// §702.187 — Mayhem (stub)
+// §702.187 — Mayhem
 // ---------------------------------------------------------------------------
-
-// ApplyMayhem logs a mayhem event.
-func ApplyMayhem(gs *GameState, seatIdx int) {
-	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
-		return
-	}
-	gs.LogEvent(Event{
-		Kind: "mayhem",
-		Seat: seatIdx,
-		Details: map[string]interface{}{
-			"rule": "702.187",
-		},
-	})
-}
+// HasMayhem / MayhemCost / CastMayhem live in keywords_mayhem.go where the
+// alt-cost mechanic is implemented in full (cast-from-graveyard gated on
+// "if you discarded it this turn," exile-on-resolve per §702.187c).
 
 // ---------------------------------------------------------------------------
 // §702.190 — Infinity (stub)

@@ -309,6 +309,7 @@ func ScanExpiredDurations(gs *GameState, phase, step string) {
 		}
 
 		ExpireZoneCastGrants(gs)
+		ClearMayhemDiscards(gs)
 	}
 
 	// 3) Delayed triggers — we don't expire them here; they consume

@@ -890,6 +890,16 @@ func DiscardCard(gs *GameState, card *Card, seat int) {
 		gs.Flags = map[string]int{}
 	}
 	gs.Flags["discarded_"+strconv.Itoa(seat)]++
+	// CR §702.187: record per-card discard turn so Mayhem can later check
+	// "if you discarded it this turn." Mayhem casts from graveyard, so
+	// only track when the card lands in the graveyard (NecropotenceSkipsDraw
+	// reroutes to exile, which makes the card un-mayhem-able anyway).
+	if HasMayhem(card) {
+		if gs.MayhemDiscards == nil {
+			gs.MayhemDiscards = map[*Card]int{}
+		}
+		gs.MayhemDiscards[card] = gs.Turn
+	}
 	dest := "graveyard"
 	if NecropotenceSkipsDraw(gs, seat) {
 		dest = "exile"

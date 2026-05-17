@@ -193,6 +193,15 @@ type GameState struct {
 	// cast. Consumed by the AI/Hat's cast-from-zone decision logic.
 	ZoneCastGrants map[*Card]*ZoneCastPermission
 
+	// MayhemDiscards tracks which cards were discarded on which turn. CR
+	// §702.187: a card with mayhem may be cast from its owner's graveyard
+	// for its mayhem cost "if you discarded it this turn." Keyed by the
+	// discarded card pointer; value is the turn number on which it was
+	// discarded. DiscardCard writes here; CastMayhem checks
+	// `gs.MayhemDiscards[card] == gs.Turn`. Cleared in end-of-turn cleanup
+	// so the map doesn't grow unbounded.
+	MayhemDiscards map[*Card]int
+
 	// ParadigmExile tracks cards exiled with the Paradigm keyword ability
 	// (Secrets of Strixhaven). At the beginning of the controller's first
 	// main phase, the engine creates a copy of each paradigm card and casts
