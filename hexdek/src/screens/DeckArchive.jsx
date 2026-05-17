@@ -2078,6 +2078,55 @@ export default function DeckArchive() {
             </Panel>
           )}
 
+          {/* HOT CARDS — top 5 by win-rate contribution. Same source as
+              CARD STATS above, but ranked by lift over the 25% 4-player
+              baseline weighted by √games so a 5-game hot streak can't
+              outrank a 200-game performer. Mobile-friendly: tiles wrap
+              from 5 columns down to 2 on narrow viewports. */}
+          {commanderCardStats && commanderCardStats.length > 0 && (() => {
+            const baseline = 25
+            const deckCardNames = new Set(cards.map(c => c.name))
+            const ranked = commanderCardStats
+              .filter(s => deckCardNames.has(s.card_name || s.name))
+              .filter(s => (s.games_included || s.games || 0) >= 20)
+              .map(s => {
+                const games = s.games_included || s.games || 0
+                const wins = s.wins_when_included || s.wins || 0
+                const wr = games > 0 ? wins / games * 100 : 0
+                return { name: s.card_name || s.name, games, wins, wr, lift: (wr - baseline) * Math.sqrt(games) }
+              })
+              .filter(r => r.lift > 0)
+              .sort((a, b) => b.lift - a.lift)
+              .slice(0, 5)
+            if (ranked.length === 0) return null
+            return (
+              <Panel code="04.HC" title={`HOT CARDS / / TOP ${ranked.length} BY WR CONTRIBUTION`}>
+                <div className="t-xs muted" style={{ marginBottom: 8 }}>
+                  Cards in this deck pulling the most weight in {deck?.commander_card || 'commander'} games — sorted by win-rate lift over the 25% 4-player baseline, sample-size weighted (√games).
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 }}>
+                  {ranked.map((r, i) => (
+                    <div key={i} style={{ position: 'relative' }}>
+                      <CardThumb name={r.name} />
+                      <div style={{
+                        position: 'absolute', top: 4, right: 4,
+                        background: 'rgba(12,13,10,0.78)', padding: '1px 4px',
+                        fontSize: 9, fontWeight: 700, color: 'var(--ok)',
+                        fontVariantNumeric: 'tabular-nums', letterSpacing: '0.02em',
+                      }}>{r.wr.toFixed(0)}%</div>
+                      <div style={{
+                        position: 'absolute', bottom: 28, left: 4,
+                        background: 'rgba(12,13,10,0.78)', padding: '1px 4px',
+                        fontSize: 8, color: 'var(--ink-3)',
+                        fontVariantNumeric: 'tabular-nums', letterSpacing: '0.02em',
+                      }}>{r.games}g · +{(r.wr - baseline).toFixed(0)}</div>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            )
+          })()}
+
           {/* PR #79 — ELO HISTORY chart. Pulls /api/decks/{id}/elo-history,
               renders rating-over-time SVG. Hidden when no runs exist (new
               deck, never gauntleted) so we don't show an empty axis box. */}
