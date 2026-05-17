@@ -422,10 +422,16 @@ func doorOfDestiniesSpellCast(gs *gameengine.GameState, perm *gameengine.Permane
 //
 // "Whenever you cast an artifact spell, create a 1/1 colorless Thopter
 // artifact creature token with flying."
+//
+// 2026-05-17: Promoted from emitPartial stub to a real spell_cast trigger.
+// Modeled on Sythis, Harvest's Hand — gate caster_seat == controller and
+// the cast card is an artifact, then mint a Thopter token. Clears the
+// "thopter creation requires cast observer hook" Muninn snippet (~68 hits).
 // ---------------------------------------------------------------------------
 
 func registerSaiMasterThopterist(r *Registry) {
 	r.OnETB("Sai, Master Thopterist", saiETB)
+	r.OnTrigger("Sai, Master Thopterist", "spell_cast", saiOnSpellCast)
 }
 
 func saiETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
@@ -436,7 +442,33 @@ func saiETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		"seat":   perm.Controller,
 		"effect": "artifact_cast_creates_thopter",
 	})
-	emitPartial(gs, "sai", "Sai, Master Thopterist", "thopter creation requires cast observer hook for artifacts")
+}
+
+func saiOnSpellCast(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[string]interface{}) {
+	const slug = "sai_artifact_cast_thopter"
+	if gs == nil || perm == nil || ctx == nil {
+		return
+	}
+	caster, _ := ctx["caster_seat"].(int)
+	if caster != perm.Controller {
+		return
+	}
+	card, _ := ctx["card"].(*gameengine.Card)
+	if card == nil || !cardHasType(card, "artifact") {
+		return
+	}
+	tok := gameengine.CreateCreatureToken(gs, perm.Controller, "Thopter Token",
+		[]string{"artifact", "creature", "thopter"}, 1, 1)
+	if tok != nil {
+		if tok.Flags == nil {
+			tok.Flags = map[string]int{}
+		}
+		tok.Flags["kw:flying"] = 1
+	}
+	emit(gs, slug, "Sai, Master Thopterist", map[string]interface{}{
+		"seat":  perm.Controller,
+		"spell": card.DisplayName(),
+	})
 }
 
 // ---------------------------------------------------------------------------
