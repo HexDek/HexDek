@@ -1791,6 +1791,22 @@ func registerDefaults() {
 	registerSarcomancy(Global())
 	registerGoblinGoliath(Global())
 	registerKamiOfTransience(Global())
+
+	// dev/muninn-handlers-81-100 — 10 snowflakes pulled from the top-100
+	// parser gaps (positions 81-99; #88 Markov Purifier already covered by
+	// lifegain_endstep_family, and #82-84/86/96-97/100 deferred: Sneak,
+	// Prototype, alt-cost first-spell, multi-noncreature reveal, DFC
+	// enchantment, and Enlist all want machinery we don't have yet).
+	registerViconiaDrowApostate(Global())
+	registerMintharaMercilessSoul(Global())
+	registerRuinLurkerBat(Global())
+	registerDoomsdayExcruciator(Global())
+	registerRankleAndTorbran(Global())
+	registerScorpionSeethingStriker(Global())
+	registerTolsimirMidnightsLight(Global())
+	registerGeologicalAppraiser(Global())
+	registerElderscaleWurm(Global())
+	registerPrestonTheVanisher(Global())
 }
 
 func init() {
