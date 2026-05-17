@@ -8,6 +8,7 @@ import CardRolesGrid from '../components/CardRolesGrid'
 import CardLink from '../components/CardLink'
 import CurseDisplay from '../components/CurseDisplay'
 import MatchupsPanel from '../components/MatchupsPanel'
+import TagInput from '../components/TagInput'
 import ManaCost from '../components/ManaCost'
 import { AchievementsPanel, BadgeShowcase } from '../components/AchievementsPanel'
 import { toast } from '../components/Toast'
@@ -541,6 +542,30 @@ export default function DeckArchive() {
   const cancelNameEdit = () => {
     setEditingName(false)
     setNameDraft('')
+  }
+
+  // Tags are persisted via deck_meta; the UI debounces autosave so the
+  // user can pile chips on without an explicit SAVE click. 600ms after
+  // the last edit we PATCH the new array. Optimistic state update keeps
+  // the chip render instant even when the network is slow.
+  const [savingTags, setSavingTags] = useState(false)
+  const tagsSaveTimer = useRef(null)
+  const handleTagsChange = (next) => {
+    setDeck(d => ({ ...(d || {}), tags: next }))
+    if (!owner || !id) return
+    if (tagsSaveTimer.current) clearTimeout(tagsSaveTimer.current)
+    tagsSaveTimer.current = setTimeout(async () => {
+      setSavingTags(true)
+      try {
+        const updated = await api.patchDeck(`${owner}/${id}`, { tags: next })
+        setDeck(d => ({ ...(d || {}), tags: updated.tags || [] }))
+        trackEvent('tag_deck', { deck: `${owner}/${id}`, count: next.length })
+      } catch {
+        toast.error('TAG SAVE FAILED')
+      } finally {
+        setSavingTags(false)
+      }
+    }, 600)
   }
 
   const commitNameEdit = async () => {
@@ -1119,6 +1144,25 @@ export default function DeckArchive() {
             <div className="deck-hero__sub">{cmdrCardName}</div>
           )}
           {/* gameplan_summary hidden — Freya win-line detection needs accuracy pass */}
+          {/* Tags: owners get an editable autocomplete chip field; visitors
+              see a static chip row when there are any. The field is hidden
+              from visitors with no tags to avoid an empty box. */}
+          {isOwner ? (
+            <div style={{ marginTop: 8, maxWidth: 520 }}>
+              <TagInput
+                value={Array.isArray(deck?.tags) ? deck.tags : []}
+                onChange={handleTagsChange}
+                owner={owner}
+                placeholder={savingTags ? 'SAVING…' : 'ADD TAG — e.g. cedh, budget, brew'}
+              />
+            </div>
+          ) : (Array.isArray(deck?.tags) && deck.tags.length > 0 && (
+            <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {deck.tags.map(t => (
+                <Tag key={t}>{t.toUpperCase()}</Tag>
+              ))}
+            </div>
+          ))}
           </div>
         </div>
       </div>

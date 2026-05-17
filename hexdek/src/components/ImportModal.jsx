@@ -6,6 +6,7 @@ import { toast } from './Toast'
 import { trackEvent } from '../hooks/useAnalytics'
 import AuthPrompt from './AuthPrompt'
 import ContextBox from './ContextBox'
+import TagInput from './TagInput'
 import './ImportModal.css'
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -244,6 +245,7 @@ function ImportModalInner({ onClose, onImported, navigate, user }) {
     )
   })
   const [commander, setCommander] = useState('')
+  const [tags, setTags] = useState([])
   const [deckList, setDeckList] = useState('')
   const [moxfieldUrl, setMoxfieldUrl] = useState('')
   const [fileName, setFileName] = useState('')
@@ -361,6 +363,7 @@ function ImportModalInner({ onClose, onImported, navigate, user }) {
         const result = await api.importMoxfield({
           url: moxfieldUrl.trim(),
           owner: owner.trim() || 'imported',
+          tags,
         })
         trackEvent('import_moxfield', {
           owner: owner.trim() || 'imported',
@@ -405,6 +408,7 @@ function ImportModalInner({ onClose, onImported, navigate, user }) {
         name: name.trim() || 'Imported Deck',
         owner: owner.trim() || 'imported',
         deckList: payloadList,
+        tags,
       })
       trackEvent('import_deck_full', {
         name: name.trim() || 'Imported Deck',
@@ -533,6 +537,15 @@ function ImportModalInner({ onClose, onImported, navigate, user }) {
                   value={commander}
                   onChange={e => setCommander(e.target.value)}
                   placeholder="AUTO-DETECTED FROM LIST"
+                />
+              </div>
+              <div className="import-modal__field" style={{ gridColumn: '1 / -1' }}>
+                <label className="import-modal__label">TAGS</label>
+                <TagInput
+                  value={tags}
+                  onChange={setTags}
+                  owner={owner.trim().toLowerCase()}
+                  placeholder="ADD TAG — e.g. cedh, budget, brew"
                 />
               </div>
             </div>

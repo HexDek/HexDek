@@ -69,20 +69,31 @@ export const api = {
   getLiveStats: () => request('/api/live/stats'),
   getLiveGame: () => request('/api/live/game'),
   getLiveELO: () => request('/api/live/elo'),
-  importDeck: (name, owner, deckList) => request('/api/decks', {
+  importDeck: (name, owner, deckList, tags) => request('/api/decks', {
     method: 'POST',
-    body: JSON.stringify({ name, owner, deck_list: deckList }),
+    body: JSON.stringify({ name, owner, deck_list: deckList, ...(tags?.length ? { tags } : {}) }),
   }),
   // Full-page /import flow targets the dedicated alias route so the
   // backend can split metrics if we ever care to (same handler today).
-  importDeckFull: ({ name, owner, deckList }) => request('/api/decks/import', {
+  importDeckFull: ({ name, owner, deckList, tags }) => request('/api/decks/import', {
     method: 'POST',
-    body: JSON.stringify({ name, owner, deck_list: deckList }),
+    body: JSON.stringify({ name, owner, deck_list: deckList, ...(tags?.length ? { tags } : {}) }),
   }),
-  importMoxfield: ({ url, owner }) => request('/api/import/moxfield', {
+  importMoxfield: ({ url, owner, tags }) => request('/api/import/moxfield', {
     method: 'POST',
-    body: JSON.stringify({ url, owner }),
+    body: JSON.stringify({ url, owner, ...(tags?.length ? { tags } : {}) }),
   }),
+  // Tag autocomplete — returns [{tag, count}, ...] ranked by usage.
+  // Owner defaults to the caller's X-HexDek-Owner (server-side) so the
+  // suggestions are personal; pass owner: '*' to span every deck.
+  getTagSuggestions: ({ q = '', owner, limit = 20 } = {}) => {
+    const params = new URLSearchParams()
+    if (q) params.set('q', q)
+    if (owner) params.set('owner', owner)
+    if (limit) params.set('limit', String(limit))
+    const qs = params.toString()
+    return authedRequest(`/api/tags${qs ? `?${qs}` : ''}`)
+  },
   searchCards: (q, limit = 6) => request(`/api/cards/search?q=${encodeURIComponent(q)}&limit=${limit}`),
   runAnalysis: (id) => request(`/api/decks/${id}/analyze`, { method: 'POST' }),
   updateDeck: (id, deckList) => authedRequest(`/api/decks/${id}`, {

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -23,6 +25,7 @@ CREATE TABLE IF NOT EXISTS deck_meta (
     id           TEXT NOT NULL,
     custom_name  TEXT NOT NULL DEFAULT '',
     cloned_from  TEXT NOT NULL DEFAULT '',
+    tags         TEXT NOT NULL DEFAULT '',
     updated_at   INTEGER NOT NULL,
     PRIMARY KEY (owner, id)
 );
@@ -54,6 +57,12 @@ func EnsureDeckMetaSchema(ctx context.Context, db *sql.DB) error {
 	// column error so this is safe to run repeatedly.
 	if _, err := db.ExecContext(ctx,
 		`ALTER TABLE deck_meta ADD COLUMN cloned_from TEXT NOT NULL DEFAULT ''`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return err
+		}
+	}
+	if _, err := db.ExecContext(ctx,
+		`ALTER TABLE deck_meta ADD COLUMN tags TEXT NOT NULL DEFAULT ''`); err != nil {
 		if !strings.Contains(err.Error(), "duplicate column") {
 			return err
 		}
@@ -125,6 +134,141 @@ func (h *Handler) saveClonedFrom(ctx context.Context, owner, id, src string) err
 	return err
 }
 
+// MaxTagsPerDeck caps how many tags a single deck may carry. Keeps the
+// UI usable and prevents pathological clients from inflating deck_meta.
+const MaxTagsPerDeck = 16
+
+// MaxTagLen bounds the length of a single tag string.
+const MaxTagLen = 32
+
+// normalizeTags trims, lowercases, dedupes and length-limits an incoming
+// tag list. Tag matching elsewhere is case-insensitive, so we normalize
+// on the way in. Returns ("", nil) for an empty list, or the JSON-encoded
+// array on success. Validation errors short-circuit with a non-nil err.
+func normalizeTags(raw []string) (string, error) {
+	if len(raw) == 0 {
+		return "", nil
+	}
+	if len(raw) > MaxTagsPerDeck {
+		return "", errors.New("too many tags (max 16)")
+	}
+	seen := make(map[string]bool, len(raw))
+	out := make([]string, 0, len(raw))
+	for _, t := range raw {
+		t = strings.TrimSpace(strings.ToLower(t))
+		if t == "" {
+			continue
+		}
+		if len(t) > MaxTagLen {
+			return "", errors.New("tag too long (max 32 chars)")
+		}
+		for _, c := range t {
+			if c < 0x20 || c == 0x7f {
+				return "", errors.New("tag contains control characters")
+			}
+		}
+		if seen[t] {
+			continue
+		}
+		seen[t] = true
+		out = append(out, t)
+	}
+	if len(out) == 0 {
+		return "", nil
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// decodeTags parses the stored JSON tag array. Returns an empty slice
+// for blank or malformed input so callers don't have to guard.
+func decodeTags(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var tags []string
+	if err := json.Unmarshal([]byte(s), &tags); err != nil {
+		return nil
+	}
+	return tags
+}
+
+func (h *Handler) loadTags(ctx context.Context, owner, id string) []string {
+	if h.db == nil {
+		return nil
+	}
+	var raw string
+	err := h.db.QueryRowContext(ctx,
+		`SELECT tags FROM deck_meta WHERE owner = ? AND id = ?`,
+		owner, id).Scan(&raw)
+	if err != nil {
+		return nil
+	}
+	return decodeTags(raw)
+}
+
+func (h *Handler) saveTags(ctx context.Context, owner, id, tagsJSON string) error {
+	if h.db == nil {
+		return errors.New("hexapi: deck_meta storage not initialized")
+	}
+	_, err := h.db.ExecContext(ctx,
+		`INSERT INTO deck_meta (owner, id, tags, updated_at)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT(owner, id) DO UPDATE SET
+		   tags       = excluded.tags,
+		   updated_at = excluded.updated_at`,
+		owner, id, tagsJSON, time.Now().Unix())
+	return err
+}
+
+// allTagsForOwner returns every distinct tag string used by the given
+// owner, with a usage count so the autocomplete can rank common tags
+// first. When owner is empty the query spans every owner — handy for
+// admin tooling but the autocomplete passes the requester's owner so
+// suggestions stay personal.
+func (h *Handler) allTagsForOwner(ctx context.Context, owner string) ([]tagSuggestion, error) {
+	if h.db == nil {
+		return nil, nil
+	}
+	var rows *sql.Rows
+	var err error
+	if owner == "" {
+		rows, err = h.db.QueryContext(ctx,
+			`SELECT tags FROM deck_meta WHERE tags != ''`)
+	} else {
+		rows, err = h.db.QueryContext(ctx,
+			`SELECT tags FROM deck_meta WHERE owner = ? AND tags != ''`,
+			owner)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	counts := map[string]int{}
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			continue
+		}
+		for _, t := range decodeTags(raw) {
+			counts[t]++
+		}
+	}
+	out := make([]tagSuggestion, 0, len(counts))
+	for t, n := range counts {
+		out = append(out, tagSuggestion{Tag: t, Count: n})
+	}
+	return out, nil
+}
+
+type tagSuggestion struct {
+	Tag   string `json:"tag"`
+	Count int    `json:"count"`
+}
+
 // CloneRateLimit is the cap on clone-creates per user per hour. Exported
 // so tests can lower it without poking at unexported internals.
 const CloneRateLimit = 10
@@ -185,51 +329,128 @@ func (h *Handler) handlePatchDeck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Name *string `json:"name"`
+		Name *string   `json:"name"`
+		Tags *[]string `json:"tags"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
 		return
 	}
-	if body.Name == nil {
+	if body.Name == nil && body.Tags == nil {
 		http.Error(w, "no patchable fields supplied", http.StatusBadRequest)
 		return
 	}
 
-	name := strings.TrimSpace(*body.Name)
-	if len(name) > 120 {
-		http.Error(w, "name too long (max 120 chars)", http.StatusBadRequest)
-		return
-	}
-	// Disallow control chars and embedded newlines so the name renders
-	// cleanly in the UI and as a hero title.
-	for _, c := range name {
-		if c < 0x20 || c == 0x7f {
-			http.Error(w, "name contains control characters", http.StatusBadRequest)
+	if body.Name != nil {
+		name := strings.TrimSpace(*body.Name)
+		if len(name) > 120 {
+			http.Error(w, "name too long (max 120 chars)", http.StatusBadRequest)
+			return
+		}
+		// Disallow control chars and embedded newlines so the name renders
+		// cleanly in the UI and as a hero title.
+		for _, c := range name {
+			if c < 0x20 || c == 0x7f {
+				http.Error(w, "name contains control characters", http.StatusBadRequest)
+				return
+			}
+		}
+		if err := h.saveCustomName(r.Context(), owner, id, name); err != nil {
+			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 
-	if err := h.saveCustomName(r.Context(), owner, id, name); err != nil {
-		http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
-		return
+	if body.Tags != nil {
+		tagsJSON, err := normalizeTags(*body.Tags)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := h.saveTags(r.Context(), owner, id, tagsJSON); err != nil {
+			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// Build a fresh summary so the client can swap state directly.
 	commander, bracket, color := parseDeckFilename(id)
+	customName := h.loadCustomName(r.Context(), owner, id)
 	displayName := commander
-	if name != "" {
-		displayName = name
+	if customName != "" {
+		displayName = customName
 	}
 	resp := map[string]any{
 		"owner":       owner,
 		"id":          id,
 		"name":        displayName,
 		"commander":   commander,
-		"custom_name": name,
+		"custom_name": customName,
 		"bracket":     bracket,
 		"color":       color,
+		"tags":        h.loadTags(r.Context(), owner, id),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// handleListTags returns the distinct tags in use for autocomplete, with
+// a usage count so the client can rank popular tags first.
+//
+// Query params:
+//
+//	owner=...  (optional) — restrict to one owner. Defaults to the caller's
+//	                        X-HexDek-Owner header; pass owner=* to span all.
+//	q=...      (optional) — case-insensitive substring filter.
+//	limit=N    (optional, default 20, max 100) — cap on returned suggestions.
+//
+// Always returns 200 with a JSON array (possibly empty) so the client
+// doesn't have to special-case "no decks yet".
+func (h *Handler) handleListTags(w http.ResponseWriter, r *http.Request) {
+	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+	limit := 20
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+	owner := strings.TrimSpace(r.URL.Query().Get("owner"))
+	if owner == "" {
+		owner = strings.TrimSpace(strings.ToLower(r.Header.Get("X-HexDek-Owner")))
+	}
+	if owner == "*" {
+		owner = ""
+	}
+
+	suggestions, err := h.allTagsForOwner(r.Context(), owner)
+	if err != nil {
+		http.Error(w, "tags: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if q != "" {
+		filtered := suggestions[:0]
+		for _, s := range suggestions {
+			if strings.Contains(s.Tag, q) {
+				filtered = append(filtered, s)
+			}
+		}
+		suggestions = filtered
+	}
+	// Most-used first, alphabetical tiebreaker so results are stable
+	// across requests when counts match.
+	sort.Slice(suggestions, func(i, j int) bool {
+		if suggestions[i].Count != suggestions[j].Count {
+			return suggestions[i].Count > suggestions[j].Count
+		}
+		return suggestions[i].Tag < suggestions[j].Tag
+	})
+	if len(suggestions) > limit {
+		suggestions = suggestions[:limit]
+	}
+	if suggestions == nil {
+		suggestions = []tagSuggestion{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(suggestions)
 }
