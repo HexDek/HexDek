@@ -425,6 +425,43 @@ function computeDeckDiff(baseline, current) {
 // hide lower-tier deep analysis sections by default so the top of the
 // deck page stays scannable. The expand/collapse caret uses the same
 // rotating triangle pattern as RationalePanels.jsx's per-row Caret.
+// EloSparkline — tiny inline trend of the deck's ending HexELO across the
+// last N gauntlet runs. Lives in the vital-signs strip alongside the big
+// number. Oldest left → newest right. Stroke color tracks the net delta
+// from first → last run, so a glance tells you trajectory before you
+// even look at the dots.
+function EloSparkline({ runs, width = 80, height = 22 }) {
+  if (!Array.isArray(runs) || runs.length < 2) return null
+  const ends = runs.map(r => Number(r?.elo_end) || 0)
+  const minY = Math.min(...ends)
+  const maxY = Math.max(...ends)
+  const span = maxY - minY || 1
+  const padY = 2
+  const plotH = height - padY * 2
+  const stepX = width / (ends.length - 1)
+  const yAt = (v) => padY + plotH - ((v - minY) / span) * plotH
+  const points = ends.map((v, i) => `${(i * stepX).toFixed(1)},${yAt(v).toFixed(1)}`)
+  const path = `M ${points.join(' L ')}`
+  const netDelta = ends[ends.length - 1] - ends[0]
+  const stroke = netDelta > 0 ? 'var(--ok)' : netDelta < 0 ? 'var(--danger)' : 'var(--ink-2)'
+  const last = ends[ends.length - 1]
+  const lastX = (ends.length - 1) * stepX
+  const lastY = yAt(last)
+  const tip = `Last ${runs.length} runs: ${Math.round(ends[0])} → ${Math.round(last)} (${netDelta >= 0 ? '+' : ''}${Math.round(netDelta)})`
+  return (
+    <svg className="elo-sparkline"
+         viewBox={`0 0 ${width} ${height}`}
+         width={width} height={height}
+         preserveAspectRatio="none"
+         role="img" aria-label={tip}>
+      <title>{tip}</title>
+      <path d={path} fill="none" stroke={stroke} strokeWidth="1.25"
+            strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={lastX} cy={lastY} r="1.6" fill={stroke} />
+    </svg>
+  )
+}
+
 function CollapsiblePanel({ code, title, right, defaultOpen = false, children }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
@@ -508,6 +545,12 @@ export default function DeckArchive() {
   // this commander — surfaces "is this card pulling weight" signal.
   const [matchupMatrix, setMatchupMatrix] = useState(null)
   const [commanderCardStats, setCommanderCardStats] = useState(null)
+  // deckCardStats: per-deck card win rates from /api/deck-card-stats/{owner}/{id}.
+  // Preferred source for the HOT CARDS widget — richer than the commander
+  // aggregate because the server intersects the card_stats pool with this
+  // deck's actual list and ranks by win-rate-above-baseline. null = not yet
+  // fetched; { cards: [...] } populated on success or after a 404 fallback.
+  const [deckCardStats, setDeckCardStats] = useState(null)
   // PR #79 — ELO history runs (oldest-first). Each entry is one completed
   // gauntlet, captures elo_start / elo_end / win_rate / placements. Drives
   // the rating-over-time chart on the deck page.
@@ -746,6 +789,24 @@ export default function DeckArchive() {
       .catch(() => { if (!cancelled) setCommanderCardStats([]) })
     return () => { cancelled = true }
   }, [deck?.commander_card])
+
+  // Per-deck card stats — primary source for the HOT CARDS widget.
+  // Server returns the cards pre-intersected with this deck's list and
+  // pre-sorted by win-rate-above-baseline, so the widget renders directly
+  // off `cards` with no client-side ranking. A 404 (older server without
+  // the endpoint deployed) silently degrades to an empty result so the
+  // widget falls back to the commander aggregate already fetched above.
+  useEffect(() => {
+    if (!owner || !id) { setDeckCardStats(null); return }
+    let cancelled = false
+    api.getDeckCardStats(`${owner}/${id}`)
+      .then(res => {
+        if (cancelled) return
+        setDeckCardStats(res && Array.isArray(res.cards) ? res : { cards: [] })
+      })
+      .catch(() => { if (!cancelled) setDeckCardStats({ cards: [] }) })
+    return () => { cancelled = true }
+  }, [owner, id])
 
   // Similar decks — independent fetch so the rest of the page renders
   // immediately. Server scans DecksDir and returns a ranked top-5.
@@ -1123,6 +1184,9 @@ export default function DeckArchive() {
             <div className="deck-vital-signs__sub">{deckElo.games.toLocaleString()} GAMES</div>
           ) : (
             <div className="deck-vital-signs__sub" style={{ opacity: 0.55 }}>RUN GAUNTLET</div>
+          )}
+          {eloHistory && eloHistory.length >= 2 && (
+            <EloSparkline runs={eloHistory} />
           )}
         </div>
         <div className="deck-vital-signs__cell">
@@ -2081,32 +2145,62 @@ export default function DeckArchive() {
             </Panel>
           )}
 
-          {/* HOT CARDS — top 5 by win-rate contribution. Same source as
-              CARD STATS above, but ranked by lift over the 25% 4-player
-              baseline weighted by √games so a 5-game hot streak can't
-              outrank a 200-game performer. Mobile-friendly: tiles wrap
-              from 5 columns down to 2 on narrow viewports. */}
-          {commanderCardStats && commanderCardStats.length > 0 && (() => {
-            const baseline = 25
-            const deckCardNames = new Set(cards.map(c => c.name))
-            // PascalCase + snake_case schema compat; see CARD STATS above.
-            const ranked = commanderCardStats
-              .filter(s => deckCardNames.has(s.card_name || s.name || s.CardName))
-              .filter(s => (s.games_included || s.games || s.Games || 0) >= 20)
-              .map(s => {
-                const games = s.games_included || s.games || s.Games || 0
-                const wins = s.wins_when_included || s.wins || s.Wins || 0
-                const wr = games > 0 ? wins / games * 100 : 0
-                return { name: s.card_name || s.name || s.CardName, games, wins, wr, lift: (wr - baseline) * Math.sqrt(games) }
-              })
-              .filter(r => r.lift > 0)
-              .sort((a, b) => b.lift - a.lift)
-              .slice(0, 5)
+          {/* HOT CARDS — top 5 by win-rate contribution.
+              Primary source: /api/deck-card-stats/{owner}/{id} (per-deck —
+              richer signal, server already intersected with this deck's
+              list and computed delta vs a data-driven baseline). Fallback:
+              the commander aggregate from CARD STATS above, used when the
+              new endpoint 404s or returns no matches. In both cases tiles
+              are sorted by lift = delta × √games so a 5-game hot streak
+              can't outrank a 200-game performer. Mobile-friendly: tiles
+              wrap from 5 columns down to 2 on narrow viewports. */}
+          {(() => {
+            const perDeckRows = deckCardStats?.cards
+            const usingPerDeck = Array.isArray(perDeckRows) && perDeckRows.length > 0
+            let baseline = 25
+            let ranked = []
+            if (usingPerDeck) {
+              // Server returns win_rate / win_rate_delta as 0..1; the widget
+              // displays percentages, so scale once here.
+              baseline = (typeof deckCardStats.baseline_win_rate === 'number'
+                ? deckCardStats.baseline_win_rate
+                : 0.25) * 100
+              ranked = perDeckRows
+                .map(s => {
+                  const games = s.games || 0
+                  const wins = s.wins || 0
+                  const wr = (typeof s.win_rate === 'number' ? s.win_rate : (games > 0 ? wins / games : 0)) * 100
+                  const delta = (typeof s.win_rate_delta === 'number' ? s.win_rate_delta * 100 : wr - baseline)
+                  return { name: s.card_name, games, wins, wr, lift: delta * Math.sqrt(games) }
+                })
+                .filter(r => r.lift > 0)
+                .sort((a, b) => b.lift - a.lift)
+                .slice(0, 5)
+            } else if (commanderCardStats && commanderCardStats.length > 0) {
+              // Fallback: commander aggregate. PascalCase + snake_case schema
+              // compat; see CARD STATS above.
+              const deckCardNames = new Set(cards.map(c => c.name))
+              ranked = commanderCardStats
+                .filter(s => deckCardNames.has(s.card_name || s.name || s.CardName))
+                .filter(s => (s.games_included || s.games || s.Games || 0) >= 20)
+                .map(s => {
+                  const games = s.games_included || s.games || s.Games || 0
+                  const wins = s.wins_when_included || s.wins || s.Wins || 0
+                  const wr = games > 0 ? wins / games * 100 : 0
+                  return { name: s.card_name || s.name || s.CardName, games, wins, wr, lift: (wr - baseline) * Math.sqrt(games) }
+                })
+                .filter(r => r.lift > 0)
+                .sort((a, b) => b.lift - a.lift)
+                .slice(0, 5)
+            }
             if (ranked.length === 0) return null
+            const description = usingPerDeck
+              ? `Cards in this deck pulling the most weight across recorded games — sorted by win-rate lift over the ${baseline.toFixed(0)}% baseline, sample-size weighted (√games).`
+              : `Cards in this deck pulling the most weight in ${deck?.commander_card || 'commander'} games — sorted by win-rate lift over the 25% 4-player baseline, sample-size weighted (√games).`
             return (
               <Panel code="04.HC" title={`HOT CARDS / / TOP ${ranked.length} BY WR CONTRIBUTION`}>
                 <div className="t-xs muted" style={{ marginBottom: 8 }}>
-                  Cards in this deck pulling the most weight in {deck?.commander_card || 'commander'} games — sorted by win-rate lift over the 25% 4-player baseline, sample-size weighted (√games).
+                  {description}
                 </div>
                 <div className="hot-cards-grid">
                   {ranked.map((r, i) => (

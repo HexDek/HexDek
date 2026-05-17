@@ -125,9 +125,15 @@ export const api = {
   // ELO history — chronological list of completed gauntlet runs for the
   // deck. Returns oldest-first so the chart can plot the calibration arc.
   getDeckEloHistory: (id, limit = 20) => request(`/api/decks/${id}/elo-history?limit=${limit}`),
-  // Aggregate card stats keyed by commander — used as the per-deck card-
-  // ranking proxy until true per-deck card performance is exposed.
+  // Aggregate card stats keyed by commander — broad signal, shared by
+  // every deck for a given commander. Still powers the CARD STATS panel
+  // (TOP PERFORMERS / UNDERPERFORMERS) which is commander-level by design.
   getCardStatsByCommander: (commander) => request(`/api/card-stats/${encodeURIComponent(commander)}`),
+  // Per-deck card stats — intersects the cross-commander card_stats pool
+  // with this deck's actual card list and ranks by win-rate-above-baseline.
+  // Richer signal than the commander aggregate for the HOT CARDS widget;
+  // server returns the cards pre-filtered and pre-sorted by delta.
+  getDeckCardStats: (id) => request(`/api/deck-card-stats/${id}`),
 
   // Credit economy. All four require X-HexDek-Owner.
   getCreditBalance: () => authedRequest('/api/credits'),
