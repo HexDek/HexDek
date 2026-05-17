@@ -1096,6 +1096,20 @@ func ResolveStackTop(gs *GameState) {
 					"rule":      "702.33",
 				},
 			})
+		} else if ShouldReturnToHandOnResolve(item) {
+			// CR §702.27b: if the buyback cost was paid, the spell
+			// returns to its owner's hand instead of the graveyard.
+			MoveCard(gs, item.Card, item.Controller, "stack", "hand", "buyback")
+			gs.LogEvent(Event{
+				Kind:   "resolve",
+				Seat:   item.Controller,
+				Source: name,
+				Details: map[string]interface{}{
+					"to":     "hand",
+					"reason": "buyback",
+					"rule":   "702.27b",
+				},
+			})
 		} else {
 			// CR §608.2g: non-permanent spells go to the graveyard on
 			// resolution.
