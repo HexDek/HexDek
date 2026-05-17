@@ -35,6 +35,7 @@ const Profile = lazy(() => import('./screens/Profile'))
 const PublicProfile = lazy(() => import('./screens/PublicProfile'))
 const OperatorProfile = lazy(() => import('./screens/OperatorProfile'))
 const Friends = lazy(() => import('./screens/Friends'))
+const AdminConviction = lazy(() => import('./screens/AdminConviction'))
 // DeckCompare must stay eager — DeckArchive imports a named export
 // (DeckPicker) from it, which pulls the whole module into the main
 // bundle regardless. Making it lazy() here would generate a warning
@@ -107,6 +108,14 @@ export default function App() {
         <Route path="operator" element={<RequireAuth><OperatorProfile /></RequireAuth>} />
         <Route path="me" element={<Navigate to="/operator" replace />} />
         <Route path="friends" element={<RequireAuth><Friends /></RequireAuth>} />
+        <Route
+          path="admin/conviction"
+          element={
+            <Suspense fallback={null}>
+              <AdminConviction />
+            </Suspense>
+          }
+        />
       </Route>
     </Routes>
   )
