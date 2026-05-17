@@ -90,7 +90,26 @@ func NormalizeName(name string) string {
 	return normalizeName(name)
 }
 
+// normalizedNameCache memoizes normalizeName by raw input. fireTrigger
+// calls normalizeName(perm.Card.DisplayName()) for every battlefield
+// permanent on every trigger event, and the underlying string-builder
+// path showed up as the single largest allocator in the perf profile
+// (~14M alloc objects / 285MB across a 500-game tournament). The card
+// name space is bounded (~32K oracle entries \u00d7 ~2 face variants), so a
+// process-wide sync.Map both eliminates the alloc churn and keeps
+// goroutine-parallel tournament workers contention-free.
+var normalizedNameCache sync.Map // map[string]string
+
 func normalizeName(name string) string {
+	if v, ok := normalizedNameCache.Load(name); ok {
+		return v.(string)
+	}
+	out := normalizeNameSlow(name)
+	normalizedNameCache.Store(name, out)
+	return out
+}
+
+func normalizeNameSlow(name string) string {
 	name = strings.ToLower(strings.TrimSpace(name))
 	var b strings.Builder
 	b.Grow(len(name))
