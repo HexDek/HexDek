@@ -77,7 +77,17 @@ function ManaCurveMini({ curve }) {
 }
 
 function CommanderHero({ owner, id, deck, analysis, side, onPickReplace }) {
-  const cmdr = deck?.commander_card || deck?.commander || (id || '').replace(/_/g, ' ').toUpperCase()
+  // Strip bracket marker, owner slug, and trailing moxfield hash from the
+  // id-based fallback so unparsed decks don't show titles like
+  // "HERIGAST ERUPTING NULLKITE B2 LAODI Z8BQG8TF".
+  const cleanIdTitle = (slug, ownerSlug) => {
+    let s = String(slug || '')
+    s = s.replace(/_[A-Za-z0-9]{8,}$/, '')
+    if (ownerSlug) s = s.replace(new RegExp(`_${ownerSlug.toLowerCase()}$`, 'i'), '')
+    s = s.replace(/_b[0-5]$/i, '')
+    return s.replace(/_/g, ' ').toUpperCase() || 'DECK'
+  }
+  const cmdr = deck?.commander_card || deck?.commander || cleanIdTitle(id, owner)
   const art = cardArtUrl(cmdr)
   const archetype = analysis?.archetype?.toUpperCase() || '—'
   const bracket = analysis?.bracket || deck?.bracket
