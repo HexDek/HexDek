@@ -76,12 +76,16 @@ func main() {
 		verboseFlg = flag.Bool("verbose", false, "show all events (not just key ones)")
 
 		// Analytics mode flags.
-		analyzeFlag = flag.Bool("analyze", false, "run analytics mode (not spectator)")
-		gamesFlag   = flag.Int("games", 50, "number of games to analyze (analytics mode)")
-		hatFlag     = flag.String("hat", "greedy", "hat type: greedy, poker, octo")
-		topCardsN   = flag.Int("top-cards", 10, "show top N cards by win contribution")
-		reportFlag  = flag.String("report", "", "write analytics report to this path")
-		workersFlag = flag.Int("workers", 0, "worker goroutines (0 = NumCPU)")
+		analyzeFlag    = flag.Bool("analyze", false, "run analytics mode (not spectator)")
+		gamesFlag      = flag.Int("games", 50, "number of games to analyze (analytics mode)")
+		hatFlag        = flag.String("hat", "greedy", "hat type: greedy, poker, octo, yggdrasil")
+		hatBudgetFlag  = flag.Int("hat-budget", 50, "yggdrasil budget (only used when --hat=yggdrasil)")
+		hatTurnBudget  = flag.Int("turn-budget", 0, "yggdrasil per-turn eval budget (0=legacy)")
+		hatNoiseFlag   = flag.Float64("hat-noise", 0.2, "yggdrasil targeting σ (0=deterministic)")
+		topCardsN      = flag.Int("top-cards", 10, "show top N cards by win contribution")
+		reportFlag     = flag.String("report", "", "write analytics report to this path")
+		workersFlag    = flag.Int("workers", 0, "worker goroutines (0 = NumCPU)")
+		poolFlag       = flag.Bool("pool", false, "pool mode: each game picks --seats random decks from the full pool")
 	)
 	flag.Parse()
 
@@ -91,7 +95,8 @@ func main() {
 
 	if *analyzeFlag {
 		runAnalytics(*decksFlag, *astPath, *oraclePath, *seedFlag, *seatsFlag,
-			*maxTurns, *gamesFlag, *hatFlag, *topCardsN, *reportFlag, *workersFlag)
+			*maxTurns, *gamesFlag, *hatFlag, *topCardsN, *reportFlag, *workersFlag,
+			*hatBudgetFlag, *hatTurnBudget, *hatNoiseFlag, *poolFlag)
 	} else {
 		pauseOnAnomaly = *pauseFlag
 		verbose = *verboseFlg
@@ -103,7 +108,7 @@ func main() {
 // ANALYTICS MODE
 // ---------------------------------------------------------------------------
 
-func runAnalytics(decksPath, astPath, oraclePath string, seed int64, seats, maxTurns, nGames int, hatKind string, topCards int, reportPath string, workers int) {
+func runAnalytics(decksPath, astPath, oraclePath string, seed int64, seats, maxTurns, nGames int, hatKind string, topCards int, reportPath string, workers int, yggBudget, yggTurnBudget int, yggNoise float64, poolMode bool) {
 	fmt.Printf("%s%s=== HEIMDALL ANALYTICS ENGINE ===%s\n", colorBold, colorCyan, colorReset)
 	fmt.Println("Deep per-card, per-player, per-game analysis")
 	fmt.Println()
@@ -141,17 +146,58 @@ func runAnalytics(decksPath, astPath, oraclePath string, seed int64, seats, maxT
 	}
 	fmt.Println()
 
-	// Hat factory.
-	var factory tournament.HatFactory
+	// Hat factories. For poker/yggdrasil we build per-deck factories so each
+	// seat can carry its own Freya StrategyProfile (mirrors hexdek-tournament).
+	var hatFactories []tournament.HatFactory
 	switch strings.ToLower(hatKind) {
 	case "greedy":
-		factory = func() gameengine.Hat { return &hat.GreedyHat{} }
+		hatFactories = []tournament.HatFactory{
+			func() gameengine.Hat { return &hat.GreedyHat{} },
+		}
 	case "poker":
-		factory = func() gameengine.Hat { return hat.NewPokerHat() }
+		hatFactories = make([]tournament.HatFactory, len(deckPaths))
+		for i, p := range deckPaths {
+			prof := hat.LoadStrategyFromFreya(p)
+			if prof != nil {
+				fmt.Printf("  deck %s: Freya strategy loaded (archetype=%s)\n",
+					filepath.Base(p), prof.Archetype)
+			}
+			capturedProf := prof
+			hatFactories[i] = func() gameengine.Hat {
+				if capturedProf != nil {
+					return hat.NewPokerHatWithStrategy(capturedProf)
+				}
+				return hat.NewPokerHat()
+			}
+		}
 	case "octo":
-		factory = func() gameengine.Hat { return &hat.OctoHat{} }
+		hatFactories = []tournament.HatFactory{
+			func() gameengine.Hat { return &hat.OctoHat{} },
+		}
+	case "yggdrasil":
+		hatFactories = make([]tournament.HatFactory, len(deckPaths))
+		for i, p := range deckPaths {
+			prof := hat.LoadStrategyFromFreya(p)
+			if prof != nil {
+				fmt.Printf("  deck %s: Freya strategy loaded (archetype=%s, combos=%d)\n",
+					filepath.Base(p), prof.Archetype, len(prof.ComboPieces))
+			}
+			b := yggBudget
+			if prof != nil && prof.PowerPercentile > 0 {
+				b = hat.BudgetForPower(b, prof.PowerPercentile)
+			}
+			capturedProf := prof
+			capturedB := b
+			capturedTB := yggTurnBudget
+			capturedNoise := yggNoise
+			hatFactories[i] = func() gameengine.Hat {
+				yh := hat.NewYggdrasilHatWithNoise(capturedProf, capturedB, capturedNoise)
+				yh.TurnBudget = capturedTB
+				return yh
+			}
+		}
 	default:
-		log.Fatalf("unknown hat %q (want greedy|poker|octo)", hatKind)
+		log.Fatalf("unknown hat %q (want greedy|poker|octo|yggdrasil)", hatKind)
 	}
 
 	fmt.Printf("Running %d games with %s hat, %d seats...\n", nGames, hatKind, seats)
@@ -161,12 +207,13 @@ func runAnalytics(decksPath, astPath, oraclePath string, seed int64, seats, maxT
 		NSeats:           seats,
 		NGames:           nGames,
 		Seed:             seed,
-		HatFactories:     []tournament.HatFactory{factory},
+		HatFactories:     hatFactories,
 		Workers:          workers,
 		CommanderMode:    true,
 		AuditEnabled:     true,
 		AnalyticsEnabled: true,
 		MaxTurnsPerGame:  maxTurns,
+		PoolMode:         poolMode,
 	}
 
 	result, err := tournament.Run(cfg)
