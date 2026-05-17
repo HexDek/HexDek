@@ -34,15 +34,15 @@ const SEVERITY_OPTIONS = [
 
 function severityTag(ev) {
   if (ev.score_triggered && ev.winline_extinct) {
-    return <Tag kind="danger" solid style={{ fontSize: 8 }}>BOTH</Tag>
+    return <Tag kind="danger" solid>BOTH</Tag>
   }
   if (ev.score_triggered) {
-    return <Tag kind="warn" solid style={{ fontSize: 8 }}>SCORE</Tag>
+    return <Tag kind="warn" solid>SCORE</Tag>
   }
   if (ev.winline_extinct) {
-    return <Tag kind="warn" solid style={{ fontSize: 8 }}>WINLINE</Tag>
+    return <Tag kind="warn" solid>WINLINE</Tag>
   }
-  return <Tag kind="info" style={{ fontSize: 8 }}>—</Tag>
+  return <Tag kind="info">—</Tag>
 }
 
 function formatTime(iso) {
@@ -145,13 +145,14 @@ export default function AdminConviction() {
     : null
 
   return (
-    <div style={{ padding: '20px 30px', maxWidth: 1400, margin: '0 auto' }}>
+    <div className="admin-conviction" style={{ maxWidth: 1400, margin: '0 auto', padding: '20px 30px' }}>
+      <style>{adminConvictionCSS}</style>
       <Panel
         code="ADM.CV"
         title="CONVICTION DIAGNOSTIC — LIVE"
         right={
-          <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-            <Tag kind={autoRefresh ? 'ok' : undefined} style={{ fontSize: 8 }}>
+          <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <Tag kind={autoRefresh ? 'ok' : undefined}>
               {autoRefresh ? 'AUTO 3s' : 'PAUSED'}
             </Tag>
             <Btn sm arrow={null} onClick={() => setAutoRefresh((v) => !v)}>
@@ -167,7 +168,16 @@ export default function AdminConviction() {
           right={`TRIGGERED ${counts.triggered} · SCORE ${counts.score} · WINLINE ${counts.winline}`}
         />
         {evictionWarning && (
-          <div className="t-sm" style={{ color: 'var(--warn)', padding: '6px 10px' }}>
+          <div
+            className="t-sm"
+            role="status"
+            style={{
+              color: 'var(--warn)',
+              padding: '8px 10px',
+              borderBottom: '1px solid var(--rule-2)',
+              background: 'color-mix(in srgb, var(--warn) 8%, transparent)',
+            }}
+          >
             {evictionWarning}
           </div>
         )}
@@ -236,9 +246,19 @@ export default function AdminConviction() {
         style={{ marginTop: 16 }}
       >
         {error && (
-          <div className="t-md" style={{ color: 'var(--danger)', padding: '12px 4px' }}>
+          <div
+            className="t-md"
+            role="alert"
+            style={{
+              color: 'var(--danger)',
+              padding: '12px',
+              border: '1px solid var(--danger)',
+              background: 'color-mix(in srgb, var(--danger) 8%, transparent)',
+              margin: '8px 0',
+            }}
+          >
             <strong>ERROR:</strong> {error}
-            <div className="t-sm muted-2" style={{ marginTop: 4 }}>
+            <div className="t-sm muted" style={{ marginTop: 6, color: 'var(--ink-2)' }}>
               The endpoint is gated by HEXDEK_ADMIN_OWNER. Make sure your owner slug
               (set in localStorage as <code>hexdek_owner</code>) matches the configured
               admin owner, or call from localhost.
@@ -246,13 +266,25 @@ export default function AdminConviction() {
           </div>
         )}
         {loading && !error && (
-          <div className="t-md muted-2" style={{ padding: '12px 4px' }}>Loading…</div>
+          <div className="t-md" style={{ padding: '16px 4px', color: 'var(--ink-2)' }}>Loading…</div>
         )}
         {!loading && !error && filtered.length === 0 && (
-          <div className="t-md muted-2" style={{ padding: '12px 4px' }}>
-            No events match the current filters. {events.length === 0
-              ? 'The ring buffer is empty — start a game with a hat that records conviction samples.'
-              : `${events.length} samples in the buffer — try loosening the filters.`}
+          <div
+            className="t-md"
+            style={{
+              padding: '24px 16px',
+              textAlign: 'center',
+              color: 'var(--ink)',
+              border: '1px dashed var(--rule-2)',
+              margin: '8px 0',
+            }}
+          >
+            <div style={{ marginBottom: 6 }}>No events match the current filters.</div>
+            <div className="t-sm" style={{ color: 'var(--ink-2)' }}>
+              {events.length === 0
+                ? 'The ring buffer is empty — start a game with a hat that records conviction samples.'
+                : `${events.length} samples in the buffer — try loosening the filters.`}
+            </div>
           </div>
         )}
         {!loading && !error && filtered.length > 0 && (
@@ -272,17 +304,37 @@ export default function AdminConviction() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((ev) => (
-                  <tr key={ev.seq} style={{ borderTop: '1px solid var(--rule-2)' }}>
+                {filtered.map((ev, i) => (
+                  <tr
+                    key={ev.seq}
+                    className="cv-row"
+                    style={{
+                      borderTop: '1px solid var(--rule-2)',
+                      background: i % 2 === 1 ? 'color-mix(in srgb, var(--ink) 3%, transparent)' : 'transparent',
+                    }}
+                  >
                     <Td>{ev.seq}</Td>
                     <Td>{formatTime(ev.captured_at)}</Td>
                     <Td title={String(ev.game_seed ?? '')}>{formatSeed(ev.game_seed)}</Td>
                     <Td>{ev.seat}</Td>
                     <Td>{ev.turn}</Td>
-                    <Td>{Number(ev.relative_position ?? 0).toFixed(3)}</Td>
+                    <Td style={{ color: (ev.relative_position ?? 0) < 0 ? 'var(--warn)' : undefined }}>
+                      {Number(ev.relative_position ?? 0).toFixed(3)}
+                    </Td>
                     <Td>{ev.window_samples}</Td>
                     <Td>{severityTag(ev)}</Td>
-                    <Td className="muted-2">{ev.winline_detail || '—'}</Td>
+                    <Td
+                      title={ev.winline_detail || ''}
+                      style={{
+                        color: 'var(--ink-2)',
+                        maxWidth: 360,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {ev.winline_detail || '—'}
+                    </Td>
                   </tr>
                 ))}
               </tbody>
@@ -296,14 +348,29 @@ export default function AdminConviction() {
 
 const inputStyle = {
   width: '100%',
-  padding: '4px 6px',
+  padding: '6px 8px',
   fontSize: 11,
   fontFamily: 'inherit',
   background: 'var(--bg-1)',
   color: 'var(--ink)',
   border: '1px solid var(--rule-2)',
   borderRadius: 0,
+  minHeight: 28,
 }
+
+const adminConvictionCSS = `
+  .admin-conviction .cv-row { transition: background 120ms ease; }
+  .admin-conviction .cv-row:hover { background: color-mix(in srgb, var(--ink) 8%, transparent) !important; }
+  .admin-conviction input:focus,
+  .admin-conviction select:focus {
+    outline: 1px solid var(--hi);
+    outline-offset: -1px;
+    border-color: var(--hi);
+  }
+  @media (max-width: 720px) {
+    .admin-conviction { padding: 12px 10px !important; }
+  }
+`
 
 const tableStyle = {
   width: '100%',
@@ -337,9 +404,9 @@ function Th({ children }) {
   )
 }
 
-function Td({ children, className, title }) {
+function Td({ children, className, title, style }) {
   return (
-    <td className={className} title={title} style={{ padding: '4px 8px', verticalAlign: 'top' }}>
+    <td className={className} title={title} style={{ padding: '6px 8px', verticalAlign: 'top', ...style }}>
       {children}
     </td>
   )
