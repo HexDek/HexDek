@@ -1755,6 +1755,28 @@ func registerDefaults() {
 	registerCycloneSummoner(Global())
 	registerUnstableGlyphbridge(Global())
 	registerSandScout(Global())
+
+	// dev/muninn-bulk-patterns-2 — three more bulk-pattern families for
+	// the Muninn parser gaps.
+	//
+	// lifegain_endstep_family.go covers Markov Purifier and Tivash, Gloom
+	// Summoner — the "At the beginning of your end step, if you gained
+	// life this turn, you may pay [cost], [effect]" shape. Hand-rolled
+	// siblings (Witch of the Moors, Lathiel, Bre of Clan Stoutarm) keep
+	// their bespoke implementations.
+	//
+	// etb_tribe_gate_family.go covers Ghitu Journeymage, Dreamcaller
+	// Siren, and Acclaimed Contender — the "When this creature enters,
+	// if you control another <tribe>, <effect>" shape.
+	//
+	// lifegain_counter_family.go covers Celestial Unicorn, Exemplar of
+	// Light, and Archangel of Thune — the "Whenever you gain life, put a
+	// +1/+1 counter on <self|each own creature>" shape. Heliod, Karlov,
+	// and Vito keep their bespoke handlers because their effects diverge
+	// from this skeleton.
+	registerLifegainEndStepFamily(Global())
+	registerEtbTribeGateFamily(Global())
+	registerLifegainCounterFamily(Global())
 }
 
 func init() {
