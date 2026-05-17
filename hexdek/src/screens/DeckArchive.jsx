@@ -430,6 +430,7 @@ function CollapsiblePanel({ code, title, right, defaultOpen = false, children })
   return (
     <Panel
       code={code}
+      className={open ? '' : 'panel--collapsed'}
       title={(
         <button
           type="button"

@@ -75,6 +75,8 @@ body {
   color: var(--ink-2); text-transform: uppercase;
 }
 .panel-bd { padding: 12px; }
+.panel--collapsed .panel-bd { display: none; }
+.panel--collapsed .panel-hd { border-bottom: 0; }
 
 /* Corner crops */
 .crop {
