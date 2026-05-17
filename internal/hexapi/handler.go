@@ -175,6 +175,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/telemetry/pageview", h.handlePageview)
 	mux.HandleFunc("POST /api/telemetry/stitch", h.handleStitch)
 	mux.HandleFunc("GET /api/resolve-owner", h.handleResolveOwner)
+	mux.HandleFunc("GET /api/tags", h.handleListTags)
 }
 
 type DeckSummary struct {
@@ -194,6 +195,7 @@ type DeckSummary struct {
 	GameChangerCount int       `json:"game_changer_count,omitempty"`
 	Archetype        string    `json:"archetype,omitempty"`
 	Legal            *bool     `json:"legal,omitempty"`
+	Tags             []string  `json:"tags,omitempty"`
 }
 
 func (h *Handler) handleListDecks(w http.ResponseWriter, r *http.Request) {
@@ -262,6 +264,7 @@ func (h *Handler) handleListDecks(w http.ResponseWriter, r *http.Request) {
 		if custom := h.loadCustomName(r.Context(), decks[i].Owner, decks[i].ID); custom != "" {
 			decks[i].Name = custom
 		}
+		decks[i].Tags = h.loadTags(r.Context(), decks[i].Owner, decks[i].ID)
 	}
 
 	sort.Slice(decks, func(i, j int) bool {
@@ -366,6 +369,7 @@ func (h *Handler) handleGetDeck(w http.ResponseWriter, r *http.Request) {
 	production := computeManaProduction(h.cardDB, cards)
 	customName := h.loadCustomName(r.Context(), owner, id)
 	clonedFrom := h.loadClonedFrom(r.Context(), owner, id)
+	tags := h.loadTags(r.Context(), owner, id)
 	writeJSON(w, map[string]any{
 		"id":              id,
 		"owner":           owner,
@@ -378,6 +382,7 @@ func (h *Handler) handleGetDeck(w http.ResponseWriter, r *http.Request) {
 		"card_count":      totalCards,
 		"cards":           cards,
 		"mana_production": production,
+		"tags":            tags,
 	})
 }
 
@@ -966,9 +971,10 @@ func (h *Handler) handleProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 type ImportRequest struct {
-	Name     string `json:"name"`
-	Owner    string `json:"owner"`
-	DeckList string `json:"deck_list"`
+	Name     string   `json:"name"`
+	Owner    string   `json:"owner"`
+	DeckList string   `json:"deck_list"`
+	Tags     []string `json:"tags,omitempty"`
 }
 
 func (h *Handler) handleImportDeck(w http.ResponseWriter, r *http.Request) {
@@ -1055,6 +1061,12 @@ func (h *Handler) handleImportDeck(w http.ResponseWriter, r *http.Request) {
 		h.saveCustomName(r.Context(), owner, finalID, name)
 	}
 
+	if len(req.Tags) > 0 {
+		if tagsJSON, err := normalizeTags(req.Tags); err == nil && tagsJSON != "" {
+			h.saveTags(r.Context(), owner, finalID, tagsJSON)
+		}
+	}
+
 	h.logImport(r.Context(), db.ImportLogEntry{
 		Owner:     owner,
 		DeckKey:   owner + "/" + finalID,
@@ -1074,6 +1086,7 @@ func (h *Handler) handleImportDeck(w http.ResponseWriter, r *http.Request) {
 		"commander_card": cmdrCard,
 		"card_count":     len(cards),
 		"file_path":      filepath.Join(owner, filepath.Base(deckPath)),
+		"tags":           h.loadTags(r.Context(), owner, finalID),
 	})
 }
 
@@ -1094,8 +1107,9 @@ var moxfieldClient = &http.Client{
 func (h *Handler) handleMoxfieldImport(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req struct {
-		URL   string `json:"url"`
-		Owner string `json:"owner"`
+		URL   string   `json:"url"`
+		Owner string   `json:"owner"`
+		Tags  []string `json:"tags"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
@@ -1214,6 +1228,12 @@ func (h *Handler) handleMoxfieldImport(w http.ResponseWriter, r *http.Request) {
 	finalID := strings.TrimSuffix(filepath.Base(deckPath), ".txt")
 	go h.registerDeckVersion(owner, finalID, cmdrName, cardNames)
 
+	if len(req.Tags) > 0 {
+		if tagsJSON, err := normalizeTags(req.Tags); err == nil && tagsJSON != "" {
+			h.saveTags(r.Context(), owner, finalID, tagsJSON)
+		}
+	}
+
 	h.logImport(r.Context(), db.ImportLogEntry{
 		Owner:     owner,
 		DeckKey:   owner + "/" + finalID,
@@ -1226,13 +1246,14 @@ func (h *Handler) handleMoxfieldImport(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, map[string]any{
-		"id":         finalID,
-		"owner":      owner,
-		"name":       deckName,
-		"commander":  cmdrName,
-		"card_count": len(cardNames),
-		"source":     "moxfield",
+		"id":          finalID,
+		"owner":       owner,
+		"name":        deckName,
+		"commander":   cmdrName,
+		"card_count":  len(cardNames),
+		"source":      "moxfield",
 		"moxfield_id": moxID,
+		"tags":        h.loadTags(r.Context(), owner, finalID),
 	})
 }
 
