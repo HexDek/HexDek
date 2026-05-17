@@ -1424,6 +1424,7 @@ func registerDefaults() {
 	registerKumenaTyrantOfOrazca(Global())
 	registerKyloxVisionaryInventor(Global())
 	registerKynaiosAndTiroOfMeletis(Global())
+	registerLandTax(Global())
 	registerLathielTheBounteousDawn(Global())
 	registerLaughingJasperFlint(Global())
 	registerLaviniaAzoriusRenegade(Global())
