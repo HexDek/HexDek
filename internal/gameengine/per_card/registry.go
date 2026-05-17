@@ -1755,6 +1755,21 @@ func registerDefaults() {
 	registerCycloneSummoner(Global())
 	registerUnstableGlyphbridge(Global())
 	registerSandScout(Global())
+
+	// dev/muninn-handlers-41-50 — snowflakes from the 41-60 range.
+	// Skipped (already covered): Genesis Chamber (#41 — registered
+	// above), Loyal Warhound (#46 — land_tax_family above), Wistfulness
+	// (#21) and Deceit (#44) live in the evoke_color_gate family above.
+	registerCrownOfGondor(Global())
+	registerRoccoCabarettiCaterer(Global())
+	registerSepticRats(Global())
+	registerAngelOfDestiny(Global())
+	registerWildPair(Global())
+	registerCourierBat(Global())
+	registerIngeniousProdigy(Global())
+	registerStarCharter(Global())
+	registerStarlitSoothsayer(Global())
+	registerElanorGardner(Global())
 }
 
 func init() {
