@@ -58,15 +58,23 @@ func abdelAdrianETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 		}
 	}
 
+	// Route exile through the proper battlefield-exit API so §614
+	// would_be_exiled replacements, §903.9b commander redirect, aura
+	// detach, replacement-effect unregistering, and LTB triggers all
+	// fire. The previous removePermanent+MoveCard pattern passed a nil
+	// perm into FireZoneChangeTriggers and produced 321 grinder crashes
+	// on 2026-05-11. See docs/may11-nil-deref-forensics.md.
 	exiledNames := make([]string, 0, len(picks))
+	exiledCount := 0
 	for _, p := range picks {
-		card := p.Card
-		removePermanent(gs, p)
-		moveCardBetweenZones(gs, seat, card, "battlefield", "exile", "abdel_adrian")
-		exiledNames = append(exiledNames, card.DisplayName())
+		name := p.Card.DisplayName()
+		if gameengine.ExilePermanent(gs, p, perm) {
+			exiledNames = append(exiledNames, name)
+			exiledCount++
+		}
 	}
 
-	for range picks {
+	for i := 0; i < exiledCount; i++ {
 		token := &gameengine.Card{
 			Name:          "Soldier Token",
 			Owner:         seat,
@@ -82,15 +90,15 @@ func abdelAdrianETB(gs *gameengine.GameState, perm *gameengine.Permanent) {
 	if perm.Flags == nil {
 		perm.Flags = map[string]int{}
 	}
-	perm.Flags["abdel_exiled_count"] = len(picks)
+	perm.Flags["abdel_exiled_count"] = exiledCount
 
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":          seat,
-		"exiled_count":  len(picks),
+		"exiled_count":  exiledCount,
 		"exiled_cards":  exiledNames,
-		"tokens_created": len(picks),
+		"tokens_created": exiledCount,
 	})
-	if len(picks) > 0 {
+	if exiledCount > 0 {
 		emitPartial(gs, slug, perm.Card.DisplayName(),
 			"ltb_return_of_exiled_permanents_not_wired_pending_observer_pool")
 	}
