@@ -1502,17 +1502,11 @@ func HasTiered(card *Card) bool {
 	return cardHasKeywordByName(card, "tiered")
 }
 
-// ---------------------------------------------------------------------------
-// §702.183 — Job Select (stub)
-// ---------------------------------------------------------------------------
-
-// HasJobSelect returns true if the card has the job select keyword.
-func HasJobSelect(card *Card) bool {
-	return cardHasKeywordByName(card, "job select")
-}
+// §702.183 Job Select implementation moved to keywords_job_select.go
+// §702.184 Station implementation moved to keywords_station.go
 
 // ---------------------------------------------------------------------------
-// §702.184 — Station (stub)
+// §702.184 — Station moved (stub helpers below remain only if not moved)
 // ---------------------------------------------------------------------------
 
 // ApplyStation logs a station event.
