@@ -68,3 +68,5 @@ __pycache__/
 # Test fixtures (generated)
 /internal/tournament/data/
 hexdek/test-results/
+hexdek/audit-r4/
+hexdek/playwright-report/

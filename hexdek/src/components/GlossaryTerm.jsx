@@ -29,6 +29,10 @@ export default function GlossaryTerm({
 }) {
   const entry = getGlossaryTerm(term)
   const [open, setOpen] = useState(false)
+  // flip = anchor panel to the right edge of the trigger instead of the
+  // left edge. Set when the trigger sits in the right half of the viewport
+  // so a 320px-wide panel doesn't overflow the right margin.
+  const [flip, setFlip] = useState(false)
   const wrapRef = useRef(null)
   const panelId = useId()
 
@@ -58,6 +62,14 @@ export default function GlossaryTerm({
     e.stopPropagation()
     e.preventDefault()
     const next = !open
+    if (next && wrapRef.current) {
+      // Compute panel anchor side BEFORE opening. If the trigger sits past
+      // the viewport midpoint, flip the anchor to the right edge so the
+      // 320px panel grows leftward into the viewport.
+      const rect = wrapRef.current.getBoundingClientRect()
+      const vw = window.innerWidth || document.documentElement.clientWidth || 0
+      setFlip(rect.left + 320 > vw - 12)
+    }
     setOpen(next)
     if (next && onOpen) onOpen(term)
   }
@@ -89,7 +101,7 @@ export default function GlossaryTerm({
           id={panelId}
           role="region"
           aria-label={`${entry.title} explanation`}
-          className={`gloss-panel ${inline ? 'gloss-panel--inline' : 'gloss-panel--popover'}`}
+          className={`gloss-panel ${inline ? 'gloss-panel--inline' : 'gloss-panel--popover'} ${flip ? 'gloss-panel--flip' : ''}`}
         >
           <span className="gloss-panel-title">{entry.title}</span>
           <span className="gloss-panel-body">{entry.body}</span>

@@ -877,13 +877,34 @@ body {
 }
 .deck-hero__title {
   margin: 0;
-  font-size: 60px; font-weight: 900;
+  /* Scale title with viewport — long commander names (Emet-Selch,
+     Unsundered // Hades, Sorcerer of Eld) overflow the hero at a flat
+     60px on narrow desktops. clamp() drops to 36px on small screens
+     while keeping the dramatic 60px on full-width. */
+  font-size: clamp(34px, 5.2vw, 60px);
+  font-weight: 900;
   letter-spacing: -0.05em; line-height: 0.92;
   color: var(--ink);
   text-transform: uppercase;
   text-shadow:
     0 2px 18px rgba(0, 0, 0, 0.6),
     0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  /* Wrap edge cases: long, unbroken commander tokens (e.g. names with
+     "//" or no spaces) used to push the title past the hero edge. Let
+     them break anywhere as a last resort. */
+  overflow-wrap: anywhere;
+  word-break: normal;
+  hyphens: none;
+  /* text-wrap: balance smooths the ragged-right line so a 2-line break
+     doesn't end up as "EMET SELCH UNSUNDERED HADES /n SORCERER OF ELD"
+     with one very-long and one short line. */
+  text-wrap: balance;
+  /* Hard cap on lines — a 6-line title pushes everything below the fold.
+     Display 4 lines max with ellipsis for the (rare) longer names. */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .deck-hero__title-row {
   display: flex; align-items: baseline; gap: 12px;
@@ -992,8 +1013,9 @@ body {
 }
 @media (max-width: 900px) {
   .deck-hero { min-height: 220px; }
-  .deck-hero__title { font-size: 36px; }
-  .deck-hero__title-input { font-size: 36px; }
+  /* Tighter clamp on mobile so long names cap at 3 lines (was 4) */
+  .deck-hero__title { -webkit-line-clamp: 3; }
+  .deck-hero__title-input { font-size: clamp(28px, 8vw, 36px); }
   .deck-hero__rename { font-size: 16px; padding: 2px 4px; }
   .deck-hero__body { padding: 12px 16px 14px; margin-left: 8px; }
   .deck-hero__card { width: 140px; }
@@ -2503,8 +2525,10 @@ body {
    the trigger, not the viewport, so a wide panel + right-side trigger
    pushed content off the left edge of the screen). Pin the panel to the
    viewport directly with `position: fixed` near the bottom of the
-   screen so it's always fully visible regardless of trigger location. */
-@media (max-width: 480px) {
+   screen so it's always fully visible regardless of trigger location.
+   Extended to 760px so tablet-width browsers (480-900px range, where the
+   side panels also stack) also get the bottom-pinned panel. */
+@media (max-width: 760px) {
   .gloss-panel {
     position: fixed;
     top: auto;
@@ -2515,6 +2539,18 @@ body {
     width: auto;
     z-index: 100;
   }
+}
+
+/* On desktop, if the trigger sits in a right-aligned cell the absolutely-
+   positioned panel (anchored left:0 to the trigger) can blow past the
+   viewport's right edge. The .gloss-panel--flip variant flips its anchor
+   to the right edge so the panel grows left instead. The component still
+   uses left:0 by default; this class is opt-in via JS edge detection if
+   we add it later. For now, prefer constraining max-width so the panel
+   never extends past 320px from its anchor. */
+.gloss-panel--flip {
+  left: auto;
+  right: 0;
 }
 /* ── RECONNECT BANNER ── */
 /* Pinned above the appbar whenever the global LiveSocket isn't 'live'.

@@ -180,11 +180,31 @@ function DeckShelfCard({ deck: d, deckElo, navigate, siblingIndex, siblingCount 
             ...titleStyle,
           }}
         >
-          <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.15, letterSpacing: '0.02em' }}>
+          <div
+            title={d.name || cmdrName}
+            style={{
+              fontSize: 13, fontWeight: 700, lineHeight: 1.15, letterSpacing: '0.02em',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              overflowWrap: 'anywhere',
+            }}
+          >
             {d.name || cmdrName}
           </div>
           {cmdrName && cmdrName.toUpperCase() !== (d.name || '').toUpperCase() && (
-            <div style={{ fontSize: 10, marginTop: 2, opacity: 0.85 }}>{cmdrName}</div>
+            <div
+              title={cmdrName}
+              style={{
+                fontSize: 10, marginTop: 2, opacity: 0.85,
+                display: '-webkit-box',
+                WebkitLineClamp: 1,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                overflowWrap: 'anywhere',
+              }}
+            >{cmdrName}</div>
           )}
           {/* Sibling disambiguator: when the same owner has multiple decks
               of this commander, show "v3 of 7" so the tiles are visually
