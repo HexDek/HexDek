@@ -1792,11 +1792,14 @@ func registerDefaults() {
 	registerGoblinGoliath(Global())
 	registerKamiOfTransience(Global())
 
-	// dev/muninn-handlers-81-100 — 10 snowflakes pulled from the top-100
-	// parser gaps (positions 81-99; #88 Markov Purifier already covered by
-	// lifegain_endstep_family, and #82-84/86/96-97/100 deferred: Sneak,
-	// Prototype, alt-cost first-spell, multi-noncreature reveal, DFC
-	// enchantment, and Enlist all want machinery we don't have yet).
+	// dev/muninn-handlers-51-60-finish — closes the remaining top-50 + 51-60 holdouts.
+	registerTranscendentDragon(Global())
+	registerRiverSongsDiary(Global())
+	registerEonFrolicker(Global())
+	registerTombstoneStairwell(Global())
+	registerFrodoSauronsBane(Global())
+
+	// dev/muninn-handlers-81-100 — 10 snowflakes from the top-100 parser gaps.
 	registerViconiaDrowApostate(Global())
 	registerMintharaMercilessSoul(Global())
 	registerRuinLurkerBat(Global())
