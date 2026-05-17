@@ -1828,6 +1828,42 @@ func registerDefaults() {
 	registerFeastOfTheVictoriousDead(Global())
 	registerGauFeralYouth(Global())
 	registerLoreholdArchivist(Global())
+	// Muninn parser-gap wave #101-120 (11 handlers). Pulls high-frequency
+	// uncovered cards from a fresh parser_gaps.json snapshot. Most cards
+	// in the 101-120 ordinal frequency band already had per_card files;
+	// this wave picks the next-tier gaps still missing handlers across
+	// the top 250. Markov Purifier, Tivash, and Celestial Unicorn extend
+	// the lifegain-trigger family. Skitterbeam, Gruff Triplets,
+	// Quicksilver Fountain, Grave Scrabbler, Hurkyl, Oracle of Bones,
+	// Bygone Bishop (investigate-on-cheap-creature), and Trumpeting
+	// Carnosaur (ETB discover 5) close the rest. Note: Wistfulness +
+	// Deceit are already wired by registerEvokeColorGateFamily above.
+	registerSkitterbeamBattalion(Global())
+	registerMarkovPurifier(Global())
+	registerTivashGloomSummoner(Global())
+	registerCelestialUnicorn(Global())
+	registerGruffTriplets(Global())
+	registerQuicksilverFountain(Global())
+	registerGraveScrabbler(Global())
+	registerHurkylMasterWizard(Global())
+	registerOracleOfBones(Global())
+	registerBygoneBishop(Global())
+	registerTrumpetingCarnosaur(Global())
+
+	// dev/muninn-bulk-patterns-3 — two more bulk-pattern families
+	// covering 3 gap cards across two ETB/end-step shapes.
+	// gated_etb_effect_family.go scaffolds "When ~ enters, if <self-gate>,
+	// <effect>" with pluggable gates (was_cast / not_token / sneak_entry).
+	// Entries: Weftwalking (was_cast), Leonardo, Leader in Blue
+	// (sneak_entry). end_step_intervening_if_family.go scaffolds
+	// "At the beginning of [each|your] end step, if <condition>, <effect>"
+	// with pluggable gates. Entry: Lighthouse Chronologist (not_my_turn).
+	// Cards investigated for both families but already covered by
+	// concurrent per_card files (Gruff Triplets, Hurkyl Master Wizard,
+	// Skitterbeam Battalion) are noted in each entry list and kept on
+	// their bespoke handlers.
+	registerGatedEtbEffectFamily(Global())
+	registerEndStepInterveningIfFamily(Global())
 }
 
 func init() {
