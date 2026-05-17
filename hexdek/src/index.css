@@ -597,6 +597,12 @@ body {
 }
 .archive-main {
   padding: 16px; display: flex; flex-direction: column; gap: 14px;
+  /* Grid items default to min-width:auto, which lets long panel content
+     blow out the column width on narrow viewports. Force the column to
+     respect its grid track so children with `min-width: 0` can actually
+     shrink (otherwise win-condition titles, tutor lists, and matchup
+     rows overflow past the panel edge on Pixel 7). */
+  min-width: 0;
 }
 
 /* ── DECK ARCHIVE PAGE THEMING ──
@@ -1703,6 +1709,11 @@ body {
 
   .winline-row { grid-template-columns: 1fr; gap: 4px; }
   .winline-row > :first-child { display: none; }
+  /* Single-column stack mode: don't let inline tags or content blocks
+     stretch to fill the row. Long tutor lists must wrap rather than
+     getting clipped at the panel border. */
+  .winline-row > .tag { justify-self: start; }
+  .winline-row > div { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
 
   .deck-hero__body { padding: 8px; gap: 8px; }
   .deck-hero__card { flex: 0 0 58%; width: 58%; }
