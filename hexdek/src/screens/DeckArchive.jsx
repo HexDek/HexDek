@@ -2022,14 +2022,17 @@ export default function DeckArchive() {
                 // Filter to cards that are actually in this deck's list, with
                 // enough sample size to be meaningful. Sort by win rate desc.
                 const deckCardNames = new Set(cards.map(c => c.name))
+                // Backend ships PascalCase (CardName/Games/Wins/WinRate); legacy
+                // pipelines used snake_case. Read both so the panel survives
+                // either schema.
                 const rows = commanderCardStats
-                  .filter(s => deckCardNames.has(s.card_name || s.name))
-                  .filter(s => (s.games_included || s.games || 0) >= 20)
+                  .filter(s => deckCardNames.has(s.card_name || s.name || s.CardName))
+                  .filter(s => (s.games_included || s.games || s.Games || 0) >= 20)
                   .map(s => {
-                    const games = s.games_included || s.games || 0
-                    const wins = s.wins_when_included || s.wins || 0
+                    const games = s.games_included || s.games || s.Games || 0
+                    const wins = s.wins_when_included || s.wins || s.Wins || 0
                     return {
-                      name: s.card_name || s.name,
+                      name: s.card_name || s.name || s.CardName,
                       games,
                       wins,
                       wr: games > 0 ? wins / games * 100 : 0,
@@ -2086,14 +2089,15 @@ export default function DeckArchive() {
           {commanderCardStats && commanderCardStats.length > 0 && (() => {
             const baseline = 25
             const deckCardNames = new Set(cards.map(c => c.name))
+            // PascalCase + snake_case schema compat; see CARD STATS above.
             const ranked = commanderCardStats
-              .filter(s => deckCardNames.has(s.card_name || s.name))
-              .filter(s => (s.games_included || s.games || 0) >= 20)
+              .filter(s => deckCardNames.has(s.card_name || s.name || s.CardName))
+              .filter(s => (s.games_included || s.games || s.Games || 0) >= 20)
               .map(s => {
-                const games = s.games_included || s.games || 0
-                const wins = s.wins_when_included || s.wins || 0
+                const games = s.games_included || s.games || s.Games || 0
+                const wins = s.wins_when_included || s.wins || s.Wins || 0
                 const wr = games > 0 ? wins / games * 100 : 0
-                return { name: s.card_name || s.name, games, wins, wr, lift: (wr - baseline) * Math.sqrt(games) }
+                return { name: s.card_name || s.name || s.CardName, games, wins, wr, lift: (wr - baseline) * Math.sqrt(games) }
               })
               .filter(r => r.lift > 0)
               .sort((a, b) => b.lift - a.lift)
@@ -2104,22 +2108,15 @@ export default function DeckArchive() {
                 <div className="t-xs muted" style={{ marginBottom: 8 }}>
                   Cards in this deck pulling the most weight in {deck?.commander_card || 'commander'} games — sorted by win-rate lift over the 25% 4-player baseline, sample-size weighted (√games).
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 }}>
+                <div className="hot-cards-grid">
                   {ranked.map((r, i) => (
-                    <div key={i} style={{ position: 'relative' }}>
+                    <div key={i} className="hot-cards-tile">
                       <CardThumb name={r.name} />
-                      <div style={{
-                        position: 'absolute', top: 4, right: 4,
-                        background: 'rgba(12,13,10,0.78)', padding: '1px 4px',
-                        fontSize: 9, fontWeight: 700, color: 'var(--ok)',
-                        fontVariantNumeric: 'tabular-nums', letterSpacing: '0.02em',
-                      }}>{r.wr.toFixed(0)}%</div>
-                      <div style={{
-                        position: 'absolute', bottom: 28, left: 4,
-                        background: 'rgba(12,13,10,0.78)', padding: '1px 4px',
-                        fontSize: 8, color: 'var(--ink-3)',
-                        fontVariantNumeric: 'tabular-nums', letterSpacing: '0.02em',
-                      }}>{r.games}g · +{(r.wr - baseline).toFixed(0)}</div>
+                      {/* WR chip pinned to the top-right of the art. games + lift
+                          chip sits in the top-left so neither overlaps the card
+                          name footer rendered by CardThumb. */}
+                      <span className="hot-cards-chip hot-cards-chip--wr">{r.wr.toFixed(0)}%</span>
+                      <span className="hot-cards-chip hot-cards-chip--games">{r.games}g · +{(r.wr - baseline).toFixed(0)}</span>
                     </div>
                   ))}
                 </div>
@@ -2138,7 +2135,7 @@ export default function DeckArchive() {
               <div className="t-xs muted" style={{ marginBottom: 8 }}>
                 Decks ranked by shared-card overlap with bonuses for matching commander, archetype, and bracket. HexELO pulled live from the gauntlet ladder.
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
+              <div className="similar-decks-grid">
                 {similarDecks.map((d) => {
                   const cmdrArt = d.commander_card ? cardArtUrl(d.commander_card) : null
                   const showName = (d.commander || d.name || d.id || '').toUpperCase()
@@ -2148,46 +2145,21 @@ export default function DeckArchive() {
                     <Link
                       key={`sd-${d.owner}/${d.id}`}
                       to={`/decks/${d.owner}/${d.id}`}
-                      className="panel"
-                      style={{ display: 'block', padding: 0, textDecoration: 'none', color: 'var(--ink)' }}
+                      className="panel similar-decks-tile"
                       title={`${showName} · ${d.owner} · ${d.shared_cards} shared`}
                     >
                       <div
-                        className={cmdrArt ? '' : 'hatch'}
-                        style={{
-                          aspectRatio: '5/4',
-                          position: 'relative',
-                          overflow: 'hidden',
-                          borderBottom: '1px solid var(--rule-2)',
-                          backgroundImage: cmdrArt ? `url(${cmdrArt})` : undefined,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center 25%',
-                          filter: 'saturate(0.6) contrast(1.05)',
-                        }}
+                        className={`similar-decks-tile__art ${cmdrArt ? '' : 'hatch'}`}
+                        style={cmdrArt ? { backgroundImage: `url(${cmdrArt})` } : undefined}
                       >
                         {hexRating != null && (
-                          <span style={{
-                            position: 'absolute', top: 4, right: 4,
-                            background: 'rgba(12,13,10,0.78)', padding: '1px 4px',
-                            fontSize: 9, fontWeight: 700, color: 'var(--ok)',
-                            fontVariantNumeric: 'tabular-nums', letterSpacing: '0.02em',
-                          }}>{hexRating}</span>
+                          <span className="similar-decks-tile__chip similar-decks-tile__chip--elo">{hexRating}</span>
                         )}
-                        <span style={{
-                          position: 'absolute', bottom: 4, left: 4,
-                          background: 'rgba(12,13,10,0.78)', padding: '1px 4px',
-                          fontSize: 8, color: 'var(--ink-3)',
-                          fontVariantNumeric: 'tabular-nums', letterSpacing: '0.02em',
-                        }}>{d.shared_cards} SHARED</span>
+                        <span className="similar-decks-tile__chip similar-decks-tile__chip--shared">{d.shared_cards} SHARED</span>
                       </div>
-                      <div style={{ padding: '5px 7px' }}>
-                        <div className="t-xs" style={{
-                          fontWeight: 700, letterSpacing: '0.04em',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>{showName}</div>
-                        <div className="t-xs muted-2" style={{
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>{(d.owner || '').toUpperCase()}</div>
+                      <div className="similar-decks-tile__body">
+                        <div className="similar-decks-tile__name t-xs">{showName}</div>
+                        <div className="similar-decks-tile__owner t-xs muted-2">{(d.owner || '').toUpperCase()}</div>
                       </div>
                     </Link>
                   )
