@@ -67,6 +67,11 @@ func FirePermanentETBTriggers(gs *GameState, perm *Permanent) {
 		"card":            perm.Card,
 	})
 
+	// CR §702.182 — Eerie fires on enchantment ETBs for the entering
+	// permanent's controller. Cheap early return inside the hook when
+	// the entering permanent isn't an enchantment.
+	OnEnchantmentETB(gs, perm)
+
 	fireObserverETBTriggers(gs, perm)
 }
 
