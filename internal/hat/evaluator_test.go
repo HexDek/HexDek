@@ -403,6 +403,40 @@ func TestDefaultWeightsForArchetype_AllDefined(t *testing.T) {
 	}
 }
 
+// Freya classifies decks into archetype strings the hat constants didn't
+// cover (lifegain, voltron, lands matter, ...). Before this fix these all
+// silently fell back to midrange. The test pins each to its own profile by
+// checking the dimension that should be the archetype's signature dial.
+func TestDefaultWeightsForArchetype_FreyaArchetypesDistinct(t *testing.T) {
+	mid := DefaultWeightsForArchetype(ArchetypeMidrange)
+	cases := []struct {
+		arch    string
+		field   string
+		got     func(EvalWeights) float64
+		baseGot float64
+		minVal  float64
+	}{
+		{ArchetypeLifegain, "LifeResource", func(w EvalWeights) float64 { return w.LifeResource }, mid.LifeResource, 1.5},
+		{ArchetypeVoltron, "CommanderProgress", func(w EvalWeights) float64 { return w.CommanderProgress }, mid.CommanderProgress, 1.5},
+		{ArchetypeLandsMatter, "ManaAdvantage", func(w EvalWeights) float64 { return w.ManaAdvantage }, mid.ManaAdvantage, 1.5},
+		{ArchetypeCountersMatter, "BoardPresence", func(w EvalWeights) float64 { return w.BoardPresence }, mid.BoardPresence, 1.1},
+		{ArchetypeMill, "ComboProximity", func(w EvalWeights) float64 { return w.ComboProximity }, mid.ComboProximity, 1.0},
+		{ArchetypeStorm, "ComboProximity", func(w EvalWeights) float64 { return w.ComboProximity }, mid.ComboProximity, 1.5},
+		{ArchetypeSuperfriends, "PlaneswalkerProgress", func(w EvalWeights) float64 { return w.PlaneswalkerProgress }, mid.PlaneswalkerProgress, 1.5},
+		{ArchetypeBlink, "ActivationTempo", func(w EvalWeights) float64 { return w.ActivationTempo }, mid.ActivationTempo, 0.7},
+		{ArchetypeExtraCombats, "BoardPresence", func(w EvalWeights) float64 { return w.BoardPresence }, mid.BoardPresence, 1.2},
+	}
+	for _, tc := range cases {
+		w := DefaultWeightsForArchetype(tc.arch)
+		if w == mid {
+			t.Errorf("archetype %q returned midrange weights — missing profile", tc.arch)
+		}
+		if tc.got(w) < tc.minVal {
+			t.Errorf("archetype %q: %s = %.2f, want >= %.2f", tc.arch, tc.field, tc.got(w), tc.minVal)
+		}
+	}
+}
+
 func TestEvaluator_ManaAdvantage(t *testing.T) {
 	gs := newTestGame(t, 2)
 	gs.Seats[0].Life = 40
