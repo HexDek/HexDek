@@ -292,7 +292,10 @@ export function WinConditionRationale({ winLines }) {
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
                 <Caret open={open} />
                 <Tag kind={WINLINE_KIND[wl.type] ?? null} solid>{(wl.type || '').toUpperCase()}</Tag>
-                <span className="t-md" style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {/* min-width: 0 + flex: 1 lets the title actually shrink
+                    inside the flex parent so text-overflow:ellipsis kicks
+                    in instead of overflowing past the panel edge. */}
+                <span className="t-md" style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>
                   {(wl.pieces || []).join(' + ')}
                 </span>
               </span>
