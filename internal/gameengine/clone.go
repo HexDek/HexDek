@@ -202,7 +202,8 @@ func (gs *GameState) CloneForRollout(rng *rand.Rand) *GameState {
 			AbilityIdx: si.AbilityIdx,
 			IsCopy:     si.IsCopy,
 			CastZone:   si.CastZone,
-			ChosenX:    si.ChosenX,
+			ChosenX:      si.ChosenX,
+			CleaveActive: si.CleaveActive,
 		}
 		// Targets.
 		if len(si.Targets) > 0 {
