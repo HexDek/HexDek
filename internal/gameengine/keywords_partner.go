@@ -53,6 +53,27 @@ func HasBarePartner(card *Card) bool {
 	return ReadPartnerInfo(card).Partner
 }
 
+// IsBackground returns true if the card's type line includes the
+// "Background" subtype (CR §702.124e — Background is an enchantment
+// subtype introduced in CLB). Backgrounds pair with commanders that
+// have "Choose a Background"; they are NOT themselves commanders
+// unless their controller's deck pairs one with a chooser.
+//
+// Detection delegates to cardHasSubtype, which checks both Card.Types
+// (canonical for runtime cards) and Card.TypeLine (fallback for
+// tokens / corpus-loaded cards that haven't been re-parsed).
+func IsBackground(card *Card) bool {
+	return cardHasSubtype(card, "background")
+}
+
+// HasChooseABackground returns true if the card carries the "Choose a
+// Background" commander keyword (CR §702.131 — CLB legendary creatures
+// like Wilson, Refined Grizzly). Cards with this keyword may be paired
+// with any Background-subtype enchantment as a second commander.
+func HasChooseABackground(card *Card) bool {
+	return ReadPartnerInfo(card).ChooseBackground
+}
+
 // ---------------------------------------------------------------------------
 // Pair-legality wrapper
 // ---------------------------------------------------------------------------
@@ -75,9 +96,23 @@ func HasBarePartner(card *Card) bool {
 //
 // Cross-category mixes (Friends Forever + bare Partner, Partner with X
 // vs. unrelated partner card, etc.) are rejected.
+//
+// The Background pairing (case 4) is wired explicitly at the card-
+// facing surface so it stays auditable from this file alone — callers
+// reading keywords_partner.go don't have to chase the rule through
+// the multiplayer.go legality validator. The remaining four cases
+// delegate to ValidatePartnerPair, the canonical implementation.
 func CanBeCommandersTogether(a, b *Card) bool {
 	if a == nil || b == nil {
 		return false
+	}
+	// §702.124e — Choose a Background pairs with any single Background.
+	// Order-independent: either side may be the chooser.
+	if HasChooseABackground(a) && IsBackground(b) {
+		return true
+	}
+	if HasChooseABackground(b) && IsBackground(a) {
+		return true
 	}
 	return ValidatePartnerPair([]*Card{a, b}) == nil
 }
