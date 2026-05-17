@@ -11,6 +11,20 @@ import ContextBox from '../components/ContextBox'
 
 const VIEW_KEY = 'hexdek_deck_view'
 
+const ARCHETYPE_CHIPS = [
+  { id: 'all', label: 'ALL', match: () => true },
+  { id: 'aggro', label: 'AGGRO', match: (a) => a.includes('aggro') },
+  { id: 'combo', label: 'COMBO', match: (a) => a.includes('combo') || a.includes('storm') },
+  { id: 'control', label: 'CONTROL', match: (a) => a.includes('control') },
+  { id: 'tokens', label: 'TOKENS', match: (a) => a.includes('token') || a.includes('go wide') || a.includes('aristocrat') },
+  { id: 'voltron', label: 'VOLTRON', match: (a) => a.includes('voltron') },
+  { id: 'midrange', label: 'MIDRANGE', match: (a) => a.includes('midrange') },
+  { id: 'lands', label: 'LANDS', match: (a) => a.includes('lands') },
+  { id: 'tribal', label: 'TRIBAL', match: (a) => a.includes('tribal') },
+  { id: 'stax', label: 'STAX', match: (a) => a.includes('stax') },
+  { id: 'turns', label: 'TURNS', match: (a) => a.includes('turns') },
+]
+
 export default function DeckList() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [decks, setDecks] = useState([])
@@ -25,6 +39,7 @@ export default function DeckList() {
     user ? 'mine' : 'all'
   )
   const [legalFilter, setLegalFilter] = useState('all')
+  const [archetypeFilter, setArchetypeFilter] = useState(searchParams.get('archetype') || 'all')
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState(() => {
     if (typeof localStorage === 'undefined') return 'shelf'
@@ -69,9 +84,14 @@ export default function DeckList() {
 
   const baseDecks = (tab === 'mine' && user) ? myDecks : decks
   const hasLegalityData = decks.some(d => d.legal != null)
+  const activeChip = ARCHETYPE_CHIPS.find(c => c.id === archetypeFilter) || ARCHETYPE_CHIPS[0]
   const filtered = baseDecks.filter(d => {
     if (legalFilter === 'legal' && d.legal === false) return false
     if (legalFilter === 'illegal' && d.legal !== false) return false
+    if (archetypeFilter !== 'all') {
+      const a = (d.archetype || d.analysis?.archetype || '').toLowerCase()
+      if (!a || !activeChip.match(a)) return false
+    }
     if (!filter) return true
     const q = filter.toLowerCase()
     const haystack = `${d.name} ${d.commander_card || ''} ${d.commander || ''} ${d.owner || ''}`.toLowerCase()
@@ -153,6 +173,34 @@ export default function DeckList() {
           <div style={{ width: 1, height: 16, background: 'var(--rule-2)' }} />
           <Tag solid={viewMode === 'shelf'} onClick={() => setViewMode('shelf')} style={{ cursor: 'pointer' }}>SHELF</Tag>
           <Tag solid={viewMode === 'list'} onClick={() => setViewMode('list')} style={{ cursor: 'pointer' }}>LIST</Tag>
+        </div>
+
+        {/* Archetype chips */}
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 6,
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
+          {ARCHETYPE_CHIPS.map(chip => (
+            <Tag
+              key={chip.id}
+              solid={archetypeFilter === chip.id}
+              onClick={() => {
+                setArchetypeFilter(chip.id)
+                const next = new URLSearchParams(searchParams)
+                if (chip.id === 'all') next.delete('archetype')
+                else next.set('archetype', chip.id)
+                setSearchParams(next, { replace: true })
+              }}
+              style={{ cursor: 'pointer', flexShrink: 0 }}
+            >
+              {chip.label}
+            </Tag>
+          ))}
         </div>
 
         {/* Deck grid */}
