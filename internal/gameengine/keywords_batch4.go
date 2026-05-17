@@ -367,55 +367,14 @@ func FireExtortTriggers(gs *GameState, casterSeat int) {
 }
 
 // ---------------------------------------------------------------------------
-// Tribute N — CR §702.109
+// Tribute N — CR §702.121
 // ---------------------------------------------------------------------------
-//
-// As this creature ETBs, an opponent may put N +1/+1 counters on it.
-// If they don't, a triggered ability fires (card-specific).
-
-// ApplyTribute offers the defending player a choice. In the engine's greedy
-// AI, the opponent always refuses tribute (maximizing the controller's
-// punishment trigger). Returns true if tribute was paid (counters placed),
-// false if refused.
-func ApplyTribute(gs *GameState, perm *Permanent, n int) bool {
-	if gs == nil || perm == nil || n <= 0 {
-		return false
-	}
-	seatIdx := perm.Controller
-	if seatIdx < 0 || seatIdx >= len(gs.Seats) {
-		return false
-	}
-
-	// Choose an opponent. In a multiplayer game, pick the first active one.
-	opps := gs.Opponents(seatIdx)
-	if len(opps) == 0 {
-		return false
-	}
-
-	// AI heuristic: opponent accepts tribute (pays the counters) if N <= 2,
-	// reasoning that a small stat boost is less dangerous than most tribute
-	// punishment triggers. For N > 2 the opponent refuses, letting the
-	// punishment fire rather than giving a large power/toughness boost.
-	tributePaid := n <= 2
-
-	if tributePaid {
-		perm.AddCounter("+1/+1", n)
-		gs.InvalidateCharacteristicsCache()
-	}
-
-	gs.LogEvent(Event{
-		Kind:   "tribute",
-		Seat:   seatIdx,
-		Source: perm.Card.DisplayName(),
-		Amount: n,
-		Details: map[string]interface{}{
-			"paid":     tributePaid,
-			"opponent": opps[0],
-			"rule":     "702.109",
-		},
-	})
-	return tributePaid
-}
+// HasTribute / TributeAmount / ApplyTribute / WasTributeAccepted /
+// WasTributeRefused / TributeResolved / TributeOpponent live in
+// keywords_tribute.go. The ETB choice is implemented as a two-callback
+// flow (controller chooses opponent → opponent decides yes/no) with
+// per-card "tribute_resolved" trigger fan-out for the §702.121b
+// "if tribute wasn't paid" payoff.
 
 // ---------------------------------------------------------------------------
 // Outlast — CR §702.107
