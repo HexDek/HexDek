@@ -876,7 +876,7 @@ func tryEquipAll(gs *gameengine.GameState, seatIdx int) {
 		hasIndestructible := strings.Contains(equipOT, "indestructible")
 
 		for _, p := range seat.Battlefield {
-			if p == nil || !p.IsCreature() || p.Controller != seatIdx {
+			if p == nil || p == equip || !p.IsCreature() || p.Controller != seatIdx {
 				continue
 			}
 			score := gs.PowerOf(p)*2 + gs.ToughnessOf(p)

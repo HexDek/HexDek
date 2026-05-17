@@ -584,6 +584,11 @@ func ActivateEquip(gs *GameState, seatIdx int, equipment *Permanent, target *Per
 	if !target.IsCreature() {
 		return false
 	}
+	// CR §702.6b — an Equipment can't equip itself. Creature-Equipments
+	// (Reconfigure, Living weapon) satisfy both IsEquipment and IsCreature.
+	if equipment == target {
+		return false
+	}
 	if equipment.Controller != seatIdx || target.Controller != seatIdx {
 		return false
 	}
