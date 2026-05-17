@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Btn, Panel, Tag, Tape } from '../components/chrome'
 import { api, cardArtUrl } from '../services/api'
 import { useLiveSocket } from '../hooks/useLiveSocket'
+import { useModalKeyboard } from '../hooks/useModalKeyboard'
 import ContextBox from '../components/ContextBox'
 
 function normalizeCardName(name) {
@@ -310,6 +311,7 @@ export default function DeckCompare() {
 }
 
 function DeckPicker({ excludeKey, onClose, onPick }) {
+  const panelRef = useModalKeyboard({ onClose })
   const [decks, setDecks] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
@@ -327,10 +329,23 @@ function DeckPicker({ excludeKey, onClose, onPick }) {
 
   return (
     <div className="cmp-picker" onMouseDown={onClose}>
-      <div className="cmp-picker__panel" onMouseDown={e => e.stopPropagation()}>
+      <div
+        ref={panelRef}
+        className="cmp-picker__panel"
+        onMouseDown={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Pick deck to compare"
+      >
         <div className="cmp-picker__hd">
           <span>PICK DECK TO COMPARE</span>
-          <span className="cmp-picker__close" onClick={onClose}>ESC</span>
+          <button
+            type="button"
+            className="cmp-picker__close"
+            onClick={onClose}
+            aria-label="Close picker"
+            style={{ background: 'transparent', border: 'none', color: 'inherit', font: 'inherit', cursor: 'pointer', padding: 0 }}
+          >ESC</button>
         </div>
         <input
           autoFocus
@@ -338,7 +353,6 @@ function DeckPicker({ excludeKey, onClose, onPick }) {
           placeholder="FILTER DECKS..."
           value={filter}
           onChange={e => setFilter(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Escape') onClose() }}
         />
         <div className="cmp-picker__list">
           {loading ? <div className="cmp-picker__note">LOADING...</div>

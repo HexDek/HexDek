@@ -15,6 +15,7 @@ import { toast } from '../components/Toast'
 import { api, cardArtUrl, cardImageUrl, API_BASE } from '../services/api'
 import { useArtContrast } from '../hooks/useArtContrast'
 import { useLiveSocket } from '../hooks/useLiveSocket'
+import { useModalKeyboard } from '../hooks/useModalKeyboard'
 import { useAuth } from '../context/AuthContext'
 import { trackEvent } from '../hooks/useAnalytics'
 import { MOCK_DECK_ANALYSIS } from '../services/mock'
@@ -495,11 +496,7 @@ export default function DeckArchive() {
       return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
     }
     const onKey = (e) => {
-      if (e.key === 'Escape' && cardSearchOpen) {
-        setCardSearchOpen(false)
-        e.preventDefault()
-        return
-      }
+      // Escape handled inside the modal via useModalKeyboard.
       const isK = e.key === 'k' || e.key === 'K'
       if (!isK) return
       if (e.metaKey || e.ctrlKey) {
@@ -517,7 +514,7 @@ export default function DeckArchive() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [cardSearchOpen])
+  }, [])
 
   useEffect(() => {
     if (cardSearchOpen && cardSearchInputRef.current) {
@@ -2601,6 +2598,11 @@ export default function DeckArchive() {
 }
 
 function CardSearchModal({ value, onChange, totalCards, matchCount, inputRef, onClose }) {
+  const panelRef = useModalKeyboard({ onClose })
+  const chromeBtn = {
+    background: 'transparent', border: 'none', color: 'inherit',
+    font: 'inherit', cursor: 'pointer', padding: 0, letterSpacing: '0.08em',
+  }
   return (
     <div
       onMouseDown={onClose}
@@ -2616,7 +2618,11 @@ function CardSearchModal({ value, onChange, totalCards, matchCount, inputRef, on
       }}
     >
       <div
+        ref={panelRef}
         onMouseDown={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Find card in deck"
         className="panel"
         style={{
           width: 'min(460px, 92vw)',
@@ -2633,7 +2639,7 @@ function CardSearchModal({ value, onChange, totalCards, matchCount, inputRef, on
           fontSize: 9, letterSpacing: '0.12em', color: 'var(--ink-3)', fontWeight: 700,
         }}>
           <span>FIND CARD IN DECK</span>
-          <span onClick={onClose} style={{ cursor: 'pointer', letterSpacing: '0.08em' }}>ESC</span>
+          <button type="button" onClick={onClose} aria-label="Close search" style={chromeBtn}>ESC</button>
         </div>
         <input
           ref={inputRef}
@@ -2642,6 +2648,7 @@ function CardSearchModal({ value, onChange, totalCards, matchCount, inputRef, on
           onChange={e => onChange(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') onClose() }}
           placeholder="Type a card name..."
+          aria-label="Card name filter"
           style={{
             width: '100%',
             padding: '12px 14px',
@@ -2662,9 +2669,9 @@ function CardSearchModal({ value, onChange, totalCards, matchCount, inputRef, on
           <span>
             {value.trim() ? `${matchCount} / ${totalCards} MATCH` : `${totalCards} CARDS TOTAL`}
           </span>
-          <span style={{ display: 'inline-flex', gap: 8 }}>
+          <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
             {value && (
-              <span onClick={() => onChange('')} style={{ cursor: 'pointer' }}>CLEAR</span>
+              <button type="button" onClick={() => onChange('')} style={chromeBtn}>CLEAR</button>
             )}
             <span className="muted">ENTER OR ESC TO CLOSE</span>
           </span>
