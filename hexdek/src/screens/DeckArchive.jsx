@@ -772,7 +772,22 @@ export default function DeckArchive() {
     return () => es.close()
   }, [owner, id])
 
-  const deckName = deck?.custom_name || deck?.commander || id?.replace(/_/g, ' ').toUpperCase() || 'DECK'
+  // Fallback when commander/custom_name isn't loaded yet — strip
+  // bracket marker, owner slug, and trailing moxfield hash so we don't
+  // render titles like "HERIGAST ERUPTING NULLKITE B2 LAODI Z8BQG8TF".
+  const slugToTitle = (slug, ownerSlug) => {
+    if (!slug) return 'DECK'
+    let s = String(slug)
+    // Moxfield-style trailing 8+char random hash.
+    s = s.replace(/_[A-Za-z0-9]{8,}$/, '')
+    if (ownerSlug) {
+      s = s.replace(new RegExp(`_${ownerSlug.toLowerCase()}$`, 'i'), '')
+    }
+    // Bracket marker (_b1.._b5).
+    s = s.replace(/_b[0-5]$/i, '')
+    return s.replace(/_/g, ' ').toUpperCase() || 'DECK'
+  }
+  const deckName = deck?.custom_name || deck?.commander || slugToTitle(id, owner)
 
   useEffect(() => {
     if (!deckName) return
