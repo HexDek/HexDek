@@ -829,6 +829,17 @@ type Card struct {
 	// ToLower in hot evaluator loops.
 	OracleTextCache string
 	oracleTextReady bool
+
+	// TypeLineLowerCache — lowercased TypeLine, computed lazily.
+	TypeLineLowerCache string
+	typeLineLowerReady bool
+
+	// ProducedColorsMask — bitmask of mana colors this card (typically a
+	// land) can produce. Bits: W=1, U=2, B=4, R=8, G=16. Computed lazily
+	// by hat.LandProducesColorsMask. Saves per-evaluation map allocation
+	// and repeated strings.Contains across colors.
+	ProducedColorsMask  uint8
+	ProducedColorsReady bool
 }
 
 func (c *Card) DeepCopy() *Card {

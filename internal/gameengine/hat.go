@@ -140,6 +140,22 @@ func OracleTextLower(card *Card) string {
 	return card.OracleTextCache
 }
 
+// TypeLineLower returns the lowercased TypeLine for a card, caching the
+// result on the Card so subsequent calls are O(1). Hat evaluators query
+// this many times per game; without the cache, strings.ToLower runs in
+// the hottest inner loops.
+func TypeLineLower(card *Card) string {
+	if card == nil {
+		return ""
+	}
+	if card.typeLineLowerReady {
+		return card.TypeLineLowerCache
+	}
+	card.TypeLineLowerCache = strings.ToLower(card.TypeLine)
+	card.typeLineLowerReady = true
+	return card.TypeLineLowerCache
+}
+
 // Activation is a legal activated-ability choice surfaced to a Hat.
 // Index is the position in Permanent.Card.AST.Abilities of the chosen
 // ability; the engine re-dispatches once the Hat picks one.
