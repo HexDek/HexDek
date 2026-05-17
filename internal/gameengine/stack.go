@@ -992,6 +992,13 @@ func ResolveStackTop(gs *GameState) {
 	// and go to graveyard per §608.2g.
 	isPermanent := isSpell && item.Card != nil && isPermanentSpell(item.Card)
 
+	// CR §702.96 — Overload: while this stack item resolves, every
+	// "target X" in its text reads as "each X". The side-channel flag
+	// is set here so PickTarget (called by both the snowflake hook and
+	// stock Effect dispatch below) fans out single-target filters.
+	endOverload := beginOverloadResolution(gs, item)
+	defer endOverload()
+
 	// Per-card resolve-time snowflake dispatch. Fired BEFORE stock Effect
 	// dispatch; when a handler is registered (fired > 0), we SKIP the
 	// stock dispatch — the handler is the authoritative spell body.

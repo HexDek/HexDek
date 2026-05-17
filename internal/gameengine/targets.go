@@ -30,6 +30,18 @@ func PickTarget(gs *GameState, src *Permanent, f gameast.Filter) []Target {
 		srcSeat = src.Controller
 	}
 
+	// CR §702.96 — Overload. While an overloaded spell is resolving,
+	// every "target X" in its text reads as "each X". We fan out across
+	// all valid targets regardless of the printed Quantifier. Self,
+	// "you/controller", and equipped/enchanted self-references are left
+	// alone — those don't carry the word "target" on the printed card.
+	if f.Quantifier != "each" && f.Quantifier != "each_player" && IsOverloadActive(gs) && isOverloadExpandable(f) {
+		if isPlayerFilter(f) {
+			return allPlayerTargets(gs, f, srcSeat)
+		}
+		return allPermanentTargets(gs, f, srcSeat)
+	}
+
 	// Fan-out quantifiers first.
 	switch f.Quantifier {
 	case "each", "each_player":
@@ -79,6 +91,28 @@ func PickTarget(gs *GameState, src *Permanent, f gameast.Filter) []Target {
 
 	// Permanent/creature/card filters on the battlefield.
 	return pickPermanentTarget(gs, f, srcSeat, src)
+}
+
+// isOverloadExpandable returns true if a Filter should fan out from
+// single-target to "each" when the controlling stack item is overloaded.
+// Self-references and controller-side anchors ("you", "controller",
+// equipped/enchanted X, "this", "self") never read as "target" on the
+// printed card, so overload doesn't touch them — CR §702.96 only
+// rewrites the word "target".
+func isOverloadExpandable(f gameast.Filter) bool {
+	switch f.Base {
+	case "self", "it", "this",
+		"that_creature", "that creature",
+		"this_creature", "this creature",
+		"that_thing", "that", "them",
+		"pronoun", "pronoun_it",
+		"you", "controller",
+		"equipped_creature", "equipped creature",
+		"enchanted_creature", "enchanted creature",
+		"enchanted_permanent", "enchanted_land", "enchanted":
+		return false
+	}
+	return true
 }
 
 // isPlayerFilter returns true if the filter targets a player (not a permanent).
