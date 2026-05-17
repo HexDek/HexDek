@@ -63,6 +63,23 @@ const classifyWinCondition = (endReason) => {
   }
 }
 
+// Short label for the END stat in the result block — the column is
+// narrow (1fr of 4 in result-block-grid) and the raw replacement
+// produces strings like "LAST SEAT STANDING" that overflow.
+const END_REASON_SHORT = {
+  last_seat_standing: 'LAST SEAT',
+  sba_704_5a: 'DAMAGE',
+  sba_704_5b: 'MILL',
+  sba_704_5c: 'POISON',
+  sba_704_5d: 'CMDR DMG',
+  concession: 'CONCEDE',
+  turn_limit: 'TURN CAP',
+}
+const endReasonShort = (r) => {
+  if (!r) return '?'
+  return END_REASON_SHORT[r.toLowerCase()] || r.replace(/_/g, ' ').toUpperCase()
+}
+
 // pickMVP scores the winner's final-board permanents by a composite
 // weight and returns the top scorer with a human-readable reason. Still
 // a heuristic in the strict sense (we don't have per-card impact
@@ -398,7 +415,7 @@ export default function Report() {
               </div>
               <Stat2 k="TURNS" v={String(featuredGame.turns)} />
               <Stat2 k="PLAYERS" v={String(commanders.length)} big />
-              <Stat2 k="END" v={(featuredGame.end_reason || '?').replace(/_/g, ' ').toUpperCase().slice(0, 12)} />
+              <Stat2 k="END" v={endReasonShort(featuredGame.end_reason)} />
             </div>
           </div>
         )}

@@ -19,6 +19,24 @@ import { API_BASE, cardArtUrl } from '../services/api'
 
 const MIN_GAMES_FOR_RANKING = 3
 
+// Narrow viewports (mobile sidebar column on Pixel-class devices) can't
+// fit the full 6-column ledger without truncating commander names to
+// "Szarekh, the Silen...". Below this breakpoint we collapse the full
+// ledger to the same dense layout used by BEST/WORST above.
+function useIsNarrow(breakpoint = 720) {
+  const [narrow, setNarrow] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia(`(max-width: ${breakpoint}px)`).matches
+  )
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`)
+    const onChange = (e) => setNarrow(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [breakpoint])
+  return narrow
+}
+
 function winRateColor(wr) {
   if (wr >= 60) return 'var(--ok)'
   if (wr <= 40) return 'var(--danger)'
@@ -154,6 +172,7 @@ function MatchupRow({ row, dense }) {
 export default function MatchupsPanel({ owner, id, code = '04.MU' }) {
   const [rows, setRows] = useState(null)
   const [error, setError] = useState(false)
+  const narrow = useIsNarrow()
 
   useEffect(() => {
     if (!owner || !id) return
@@ -264,27 +283,31 @@ export default function MatchupsPanel({ owner, id, code = '04.MU' }) {
       )}
 
       {/* Top / bottom 5 ledger — middle entries dropped to keep the panel
-          scannable. Same min-games gate as the leaderboards above. */}
+          scannable. Same min-games gate as the leaderboards above. Narrow
+          viewports drop the G/W/L columns and use the dense layout to
+          avoid truncating commander names. */}
       {(topFive.length > 0 || bottomFive.length > 0) && (
         <div>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '28px 1fr 36px 36px 36px 70px',
-            gap: 8,
-            padding: '4px 0',
-            borderBottom: '1px solid var(--rule-2)',
-            fontSize: 9,
-            letterSpacing: '0.1em',
-            color: 'var(--ink-3)',
-            fontWeight: 700,
-          }}>
-            <span></span>
-            <span>OPPONENT</span>
-            <span style={{ textAlign: 'right' }}>G</span>
-            <span style={{ textAlign: 'right' }}>W</span>
-            <span style={{ textAlign: 'right' }}>L</span>
-            <span style={{ textAlign: 'right' }}>WIN %</span>
-          </div>
+          {!narrow && (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '28px 1fr 36px 36px 36px 70px',
+              gap: 8,
+              padding: '4px 0',
+              borderBottom: '1px solid var(--rule-2)',
+              fontSize: 9,
+              letterSpacing: '0.1em',
+              color: 'var(--ink-3)',
+              fontWeight: 700,
+            }}>
+              <span></span>
+              <span>OPPONENT</span>
+              <span style={{ textAlign: 'right' }}>G</span>
+              <span style={{ textAlign: 'right' }}>W</span>
+              <span style={{ textAlign: 'right' }}>L</span>
+              <span style={{ textAlign: 'right' }}>WIN %</span>
+            </div>
+          )}
           {topFive.length > 0 && (
             <>
               <div style={{
@@ -297,7 +320,7 @@ export default function MatchupsPanel({ owner, id, code = '04.MU' }) {
                   MIN {MIN_GAMES_FOR_RANKING} GAMES
                 </span>
               </div>
-              {topFive.map((r) => <MatchupRow key={`t-${r.opponent_commander}`} row={r} />)}
+              {topFive.map((r) => <MatchupRow key={`t-${r.opponent_commander}`} row={r} dense={narrow} />)}
             </>
           )}
           {bottomFive.length > 0 && (
@@ -314,7 +337,7 @@ export default function MatchupsPanel({ owner, id, code = '04.MU' }) {
                   MIN {MIN_GAMES_FOR_RANKING} GAMES
                 </span>
               </div>
-              {bottomFive.map((r) => <MatchupRow key={`bot-${r.opponent_commander}`} row={r} />)}
+              {bottomFive.map((r) => <MatchupRow key={`bot-${r.opponent_commander}`} row={r} dense={narrow} />)}
             </>
           )}
         </div>
