@@ -1865,16 +1865,7 @@ func registerDefaults() {
 	registerGatedEtbEffectFamily(Global())
 	registerEndStepInterveningIfFamily(Global())
 
-	// dev/muninn-handlers-121-140 — 10 handlers for the next tier of
-	// uncovered parser-gap entries. Skipped (already covered elsewhere):
-	// Wistfulness / Deceit (evoke_color_gate family); Loyal Warhound /
-	// Aerial Warden (land_tax_family); Ghitu Journeymage / Dreamcaller
-	// Siren / Acclaimed Contender (etb_tribe_gate family); Leonardo,
-	// Leader in Blue / Weftwalking (gated_etb_effect family); Lighthouse
-	// Chronologist (end_step_intervening_if family); Sméagol / Frodo /
-	// Sam (smeagol_helpful_guide.go / frodo_*.go); Aerial Surveyor (land
-	// tax family). Sai, Master Thopterist is promoted in-place inside
-	// tribal_lords.go — no new register call.
+	// dev/muninn-handlers-121-140 — 10 handlers.
 	registerEmeritusOfWoe(Global())
 	registerArguelsBloodFast(Global())
 	registerAradeshTheFounder(Global())
@@ -1884,6 +1875,20 @@ func registerDefaults() {
 	registerPhyrexianDreadnought(Global())
 	registerNoxiousGearhulk(Global())
 	registerMasterOfDeath(Global())
+
+	// dev/muninn-handlers-141-160 — 12 handlers for tail-of-corpus snowflakes + Rune-Scarred Demon.
+	registerRuneScarredDemon(Global())
+	registerRoilElemental(Global())
+	registerAbzanFalconer(Global())
+	registerArchangelOfTithes(Global())
+	registerQuilledGreatwurm(Global())
+	registerBloodthirstyConqueror(Global())
+	registerAnticausalVestige(Global())
+	registerItThatBetrays(Global())
+	registerRootwaterMatriarch(Global())
+	registerWorldspineWurm(Global())
+	registerArchpriestOfShadows(Global())
+	registerVolatileStormdrake(Global())
 }
 
 func init() {
