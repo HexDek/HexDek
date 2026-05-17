@@ -542,6 +542,14 @@ func DeclareAttackers(gs *GameState, attackerSeat int) []*Permanent {
 	// the most life. Fires after attack declaration but before blockers.
 	FireDethroneTriggers(gs, attackerSeat, declared)
 
+	// §702.101 — Battalion: "Whenever this creature and at least two other
+	// creatures attack, ..." Iterates each battalion-bearing attacker and
+	// fires a battalion_triggered card trigger when the controller has
+	// 3+ attacking creatures total. Scans the full `attackers` slice
+	// (declared + §506.3 scoop-in) so creatures that entered attacking
+	// count toward the threshold.
+	FireBattalionTriggers(gs, attackerSeat, attackers)
+
 	// Combat-file attack keywords: battle cry, myriad, melee, annihilator,
 	// provoke. Fires after exalted so that buffs layer correctly.
 	CheckAttackKeywordsCombat(gs, attackerSeat, attackers)
