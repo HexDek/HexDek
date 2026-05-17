@@ -318,8 +318,19 @@ func main() {
 		astPath       = flag.String("ast", "data/rules/ast_dataset.jsonl", "AST dataset JSONL path")
 		oraclePath    = flag.String("oracle", "data/rules/oracle-cards.json", "Scryfall oracle-cards.json path")
 		nightmareFlag = flag.Int("nightmare-boards", 10000, "number of nightmare board tests")
+		seedCardsFlag = flag.String("seed-cards", "", "comma-separated card names to force into seat 0's deck every chaos game (handler-focused fuzz)")
+		seedCmdrFlag  = flag.String("seed-cmdr", "", "force seat 0's commander to this name (must be a legendary creature in oracle corpus)")
 	)
 	flag.Parse()
+
+	var seedCards []string
+	if strings.TrimSpace(*seedCardsFlag) != "" {
+		for _, s := range strings.Split(*seedCardsFlag, ",") {
+			if t := strings.TrimSpace(s); t != "" {
+				seedCards = append(seedCards, t)
+			}
+		}
+	}
 
 	workers := *workersFlag
 	if workers <= 0 {
@@ -399,6 +410,7 @@ func main() {
 					job.gameIdx, job.permutation,
 					chaosCorpus, corpus, meta,
 					*seatsFlag, *seedFlag, *maxTurnsFlag,
+					seedCards, *seedCmdrFlag,
 				)
 				gameResults <- result
 				done := atomic.AddInt64(&completed, 1)
@@ -640,6 +652,7 @@ func runChaosGame(gameIdx, permutation int,
 	corpus *astload.Corpus,
 	meta *deckparser.MetaDB,
 	nSeats int, masterSeed int64, maxTurns int,
+	seedCards []string, seedCmdr string,
 ) (result chaosGameResult) {
 
 	result.GameIdx = gameIdx
@@ -663,6 +676,35 @@ func runChaosGame(gameIdx, permutation int,
 				PanicValue: "failed to generate chaos deck",
 			})
 			return
+		}
+	}
+
+	// Handler-focused fuzz: force seat 0's commander + seed cards.
+	if seedCmdr != "" {
+		for _, cc := range chaosCorpus.LegendaryCreatures {
+			if cc.Name == seedCmdr {
+				chaosDecks[0].Commander = cc
+				break
+			}
+		}
+	}
+	if len(seedCards) > 0 {
+		present := make(map[string]bool, len(chaosDecks[0].Cards))
+		for _, n := range chaosDecks[0].Cards {
+			present[n] = true
+		}
+		swapIdx := len(chaosDecks[0].Cards) - 1
+		for _, name := range seedCards {
+			if name == chaosDecks[0].Commander.Name || present[name] {
+				continue
+			}
+			if swapIdx < 0 {
+				chaosDecks[0].Cards = append(chaosDecks[0].Cards, name)
+			} else {
+				chaosDecks[0].Cards[swapIdx] = name
+				swapIdx--
+			}
+			present[name] = true
 		}
 	}
 
