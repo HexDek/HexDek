@@ -1439,6 +1439,10 @@ func applyCombatDamageToPlayer(gs *GameState, src *Permanent, amount, seatIdx in
 	// controller becomes the monarch.
 	CheckMonarchCombatSteal(gs, seatIdx, src.Controller)
 
+	// §702.179 — Speed advances by 1 (once per turn per dealer) when a
+	// player's source deals combat damage to a player.
+	AdvanceSpeed(gs, src.Controller)
+
 	fireCombatDamageTriggers(gs, src, amount, "player", seatIdx, nil)
 }
 

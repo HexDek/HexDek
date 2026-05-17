@@ -1094,15 +1094,35 @@ func ApplyGift(gs *GameState, seatIdx int, perm *Permanent) bool {
 // "visited_this_turn" counter with trigger fan-out and EOT cleanup.
 
 // ---------------------------------------------------------------------------
-// §702.178 — Max Speed (stub)
+// §702.178 — Max Speed
 // ---------------------------------------------------------------------------
+//
+// "Max speed" is a rider keyword: the effect after "max speed —" only
+// kicks in while the permanent's controller is at MaxSpeedCap (4). The
+// player-side speed counter system lives in keywords_speed_counter.go;
+// this file just exposes the rider predicates resolvers call.
 
-// HasMaxSpeed returns true if the permanent has the max speed keyword.
-func HasMaxSpeed(perm *Permanent) bool {
+// HasMaxSpeedKeyword reports whether the printed text of the permanent
+// includes the max-speed rider keyword. Pure keyword check, no game
+// state needed.
+func HasMaxSpeedKeyword(perm *Permanent) bool {
 	if perm == nil {
 		return false
 	}
 	return perm.HasKeyword("max speed")
+}
+
+// HasMaxSpeed reports whether the max-speed rider on this permanent is
+// currently active — i.e. the permanent has the keyword AND its
+// controller is at max speed (Seat.Speed == MaxSpeedCap). Resolvers
+// gating riders should call this rather than the bare keyword check.
+//
+// Returns false for nil game / nil perm / unknown controller.
+func HasMaxSpeed(gs *GameState, perm *Permanent) bool {
+	if !HasMaxSpeedKeyword(perm) {
+		return false
+	}
+	return MaxSpeedActive(gs, perm.Controller)
 }
 
 // ---------------------------------------------------------------------------

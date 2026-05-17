@@ -1489,11 +1489,8 @@ func sba704_5z(gs *GameState) bool {
 		if !hasStartEngines {
 			continue
 		}
-		if s.Flags == nil {
-			s.Flags = map[string]int{}
-		}
-		if s.Flags["speed"] == 0 {
-			s.Flags["speed"] = 1
+		if s.Speed == 0 {
+			s.Speed = 1
 			gs.LogEvent(Event{
 				Kind: "speed_initialized",
 				Seat: s.Idx,

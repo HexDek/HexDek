@@ -759,6 +759,9 @@ func applyDamage(gs *GameState, src *Permanent, t Target, amount int) {
 			"amount": modified,
 			"source": sourceName(src),
 		})
+		// §702.179 — Spell/ability damage from a player's source also
+		// advances that player's speed (once-per-turn gated).
+		AdvanceSpeed(gs, controllerSeat(src))
 	case TargetKindPermanent:
 		if t.Permanent == nil {
 			return
