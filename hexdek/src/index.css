@@ -680,6 +680,23 @@ body {
 .deck-archive-page .panel-hd { border-bottom-color: color-mix(in srgb, var(--accent) 22%, var(--rule-2)); }
 .deck-archive-page .tag--solid { background: var(--accent); border-color: var(--accent); color: var(--inv-ink); }
 
+/* ── GAUNTLET STAT GRID ──
+   Three quick-read tiles (WIN RATE / RECORD / ELO DELTA) above the KV
+   block. Kept at 3 columns even on phones because the values are
+   short (≤6 chars); stacking them into three full-width slabs ate too
+   much vertical space without adding any clarity. Stat font shrinks
+   on narrow viewports so the tiles still fit a 390px column. */
+.gauntlet-stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+@media (max-width: 480px) {
+  .gauntlet-stat-grid { gap: 8px; }
+  .gauntlet-stat-grid .gauntlet-stat-num { font-size: 18px; letter-spacing: -0.02em; }
+}
+
 /* ── VITAL SIGNS (the three big numbers below the hero) ── */
 .deck-vital-signs {
   display: grid;

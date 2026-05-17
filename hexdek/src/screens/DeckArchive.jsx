@@ -1589,9 +1589,11 @@ export default function DeckArchive() {
 
           {gauntlet && gauntlet.status !== 'none' && (
             <Panel code="04.G" title="GAUNTLET REPORT" right={
-              <Tag solid kind={gauntlet.status === 'complete' ? 'ok' : null}>
-                {gauntlet.status === 'running' ? `${gauntlet.games}/${gauntlet.target}` : gauntlet.status?.toUpperCase()}
-              </Tag>
+              gauntlet.status === 'running'
+                ? <Tag kind="warn">{`${gauntlet.games}/${gauntlet.target}`}</Tag>
+                : <Tag solid kind={gauntlet.status === 'complete' ? 'ok' : 'bad'}>
+                    {gauntlet.status?.toUpperCase()}
+                  </Tag>
             }>
               {gauntlet.status === 'running' ? (
                 <div style={{ padding: '16px 0', textAlign: 'center' }}>
@@ -1603,18 +1605,18 @@ export default function DeckArchive() {
                 </div>
               ) : gauntlet.status === 'complete' ? (
                 <div>
-                  <div className="grid col-3" style={{ gap: 14, marginBottom: 14 }}>
+                  <div className="gauntlet-stat-grid">
                     <div>
                       <div className="t-xs muted">WIN RATE</div>
-                      <div className="t-2xl" style={{ fontWeight: 700, color: gauntlet.win_rate >= 25 ? 'var(--ok)' : 'var(--danger)' }}>{gauntlet.win_rate}%</div>
+                      <div className="t-2xl gauntlet-stat-num" style={{ fontWeight: 700, color: gauntlet.win_rate >= 25 ? 'var(--ok)' : 'var(--danger)' }}>{gauntlet.win_rate}%</div>
                     </div>
                     <div>
                       <div className="t-xs muted">RECORD</div>
-                      <div className="t-2xl" style={{ fontWeight: 700 }}><span style={{ color: 'var(--ok)' }}>{gauntlet.wins}W</span> — <span style={{ color: 'var(--danger)' }}>{gauntlet.losses}L</span></div>
+                      <div className="t-2xl gauntlet-stat-num" style={{ fontWeight: 700 }}><span style={{ color: 'var(--ok)' }}>{gauntlet.wins}W</span> — <span style={{ color: 'var(--danger)' }}>{gauntlet.losses}L</span></div>
                     </div>
                     <div>
                       <div className="t-xs muted">ELO DELTA</div>
-                      <div className="t-2xl" style={{ fontWeight: 700, color: gauntlet.elo_delta >= 0 ? 'var(--ok)' : 'var(--danger)' }}>
+                      <div className="t-2xl gauntlet-stat-num" style={{ fontWeight: 700, color: gauntlet.elo_delta >= 0 ? 'var(--ok)' : 'var(--danger)' }}>
                         {gauntlet.elo_delta >= 0 ? '+' : ''}{Math.round(gauntlet.elo_delta)}
                       </div>
                     </div>
@@ -1622,16 +1624,10 @@ export default function DeckArchive() {
                   <KV rows={[
                     ['GAMES', `${gauntlet.games?.toLocaleString()}`],
                     ['AVG TURNS', `${gauntlet.avg_turns}`],
-                    // Three-row ELO layout — separates STARTING / DELTA / ENDING
-                    // so the calibration arc reads at a glance instead of being
-                    // hidden behind a single "A → B" line. Delta gets color
-                    // treatment (green positive, red negative) matching the
-                    // ELO DELTA highlight in the 3-col block above.
+                    // STARTING / ENDING ELO frame the calibration arc; the
+                    // delta itself is already prominent in the tile above,
+                    // so we don't repeat it here.
                     ['STARTING ELO', gauntlet.elo_start != null ? `${Math.round(gauntlet.elo_start)}` : '—'],
-                    ['ELO DELTA',
-                      <span style={{ color: gauntlet.elo_delta >= 0 ? 'var(--ok)' : 'var(--danger)' }}>
-                        {gauntlet.elo_delta >= 0 ? '+' : ''}{Math.round(gauntlet.elo_delta)}
-                      </span>],
                     ['ENDING ELO', gauntlet.elo_end != null ? `${Math.round(gauntlet.elo_end)}` : '—'],
                   ]} />
 
