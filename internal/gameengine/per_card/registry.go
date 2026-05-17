@@ -1678,6 +1678,15 @@ func registerDefaults() {
 	// stub were genuine no-ops.
 	registerPrimeSpeakerZeganaCustom(Global())
 	registerKarumonixTheRatKingCustom(Global())
+
+	// dev/muninn-top5-handlers — top Muninn parser-gap snowflakes:
+	// Necromancy (#3, 237,901 hits), Bloodchief Ascension (#4, 223,731),
+	// Kodama of the East Tree (#7, 121,703). Light-Paws and Tiamat (#5/#6)
+	// are already covered by light_paws_emperors_voice.go and
+	// custom_tiamat.go.
+	registerNecromancy(Global())
+	registerBloodchiefAscension(Global())
+	registerKodamaOfTheEastTree(Global())
 }
 
 func init() {
