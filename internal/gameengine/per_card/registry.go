@@ -1688,6 +1688,19 @@ func registerDefaults() {
 	registerNecromancy(Global())
 	registerBloodchiefAscension(Global())
 	registerKodamaOfTheEastTree(Global())
+
+	// dev/muninn-handlers-13-20 — next tranche of Muninn parser-gap
+	// snowflakes by hit count: Claim Jumper (74K), Twilight Prophet
+	// (71K), Grave Venerations (67K), Birthing Ritual (66K), Lasting
+	// Tarfire (61K), Valakut Exploration (60K). Chainer Nightmare Adept
+	// (#14, 73K) and Frodo Adventurous Hobbit (#18, 64K) already have
+	// hand-written handlers registered earlier in this file.
+	registerClaimJumper(Global())
+	registerTwilightProphet(Global())
+	registerGraveVenerations(Global())
+	registerBirthingRitual(Global())
+	registerLastingTarfire(Global())
+	registerValakutExploration(Global())
 }
 
 func init() {
