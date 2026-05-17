@@ -782,6 +782,11 @@ func UntapAll(gs *GameState, seatIdx int) {
 					"rule":   "500.2",
 				},
 			})
+			// CR §702.124 — Inspired triggers on the tapped→untapped
+			// transition. FireInspiredTriggers is a no-op for
+			// permanents without the keyword, so the per-permanent
+			// dispatch cost is a single keyword lookup.
+			FireInspiredTriggers(gs, p)
 		}
 	}
 }
