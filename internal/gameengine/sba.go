@@ -1607,22 +1607,34 @@ func sba704_6d(gs *GameState) bool {
 		if s == nil || len(s.CommanderNames) == 0 {
 			continue
 		}
+		// inCommandZone — avoids re-appending a commander already moved by
+		// a prior SBA pass or by a per-card hook (Gerrard's die trigger).
+		inCommandZone := func(c *Card) bool {
+			for _, existing := range s.CommandZone {
+				if existing == c {
+					return true
+				}
+			}
+			return false
+		}
 		// Graveyard.
 		kept := s.Graveyard[:0]
 		for _, c := range s.Graveyard {
 			if c != nil && isCommanderName(s.CommanderNames, c.DisplayName()) {
-				s.CommandZone = append(s.CommandZone, c)
-				gs.LogEvent(Event{
-					Kind:   "sba_704_6d",
-					Seat:   s.Idx,
-					Target: -1,
-					Source: c.DisplayName(),
-					Details: map[string]interface{}{
-						"rule":      "704.6d+903.9a",
-						"card":      c.DisplayName(),
-						"from_zone": "graveyard",
-					},
-				})
+				if !inCommandZone(c) {
+					s.CommandZone = append(s.CommandZone, c)
+					gs.LogEvent(Event{
+						Kind:   "sba_704_6d",
+						Seat:   s.Idx,
+						Target: -1,
+						Source: c.DisplayName(),
+						Details: map[string]interface{}{
+							"rule":      "704.6d+903.9a",
+							"card":      c.DisplayName(),
+							"from_zone": "graveyard",
+						},
+					})
+				}
 				changed = true
 				continue
 			}
@@ -1633,18 +1645,20 @@ func sba704_6d(gs *GameState) bool {
 		kept = s.Exile[:0]
 		for _, c := range s.Exile {
 			if c != nil && isCommanderName(s.CommanderNames, c.DisplayName()) {
-				s.CommandZone = append(s.CommandZone, c)
-				gs.LogEvent(Event{
-					Kind:   "sba_704_6d",
-					Seat:   s.Idx,
-					Target: -1,
-					Source: c.DisplayName(),
-					Details: map[string]interface{}{
-						"rule":      "704.6d+903.9a",
-						"card":      c.DisplayName(),
-						"from_zone": "exile",
-					},
-				})
+				if !inCommandZone(c) {
+					s.CommandZone = append(s.CommandZone, c)
+					gs.LogEvent(Event{
+						Kind:   "sba_704_6d",
+						Seat:   s.Idx,
+						Target: -1,
+						Source: c.DisplayName(),
+						Details: map[string]interface{}{
+							"rule":      "704.6d+903.9a",
+							"card":      c.DisplayName(),
+							"from_zone": "exile",
+						},
+					})
+				}
 				changed = true
 				continue
 			}
