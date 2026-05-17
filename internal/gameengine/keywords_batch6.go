@@ -1122,23 +1122,11 @@ func ApplySpaceSculptor(gs *GameState, perm *Permanent, landType string) {
 }
 
 // ---------------------------------------------------------------------------
-// §702.177 — Visit (stub)
+// §702.177 — Visit
 // ---------------------------------------------------------------------------
-
-// ApplyVisit logs a visit event. Visit is a set-specific mechanic.
-func ApplyVisit(gs *GameState, seatIdx int, perm *Permanent) {
-	if gs == nil || perm == nil {
-		return
-	}
-	gs.LogEvent(Event{
-		Kind:   "visit",
-		Seat:   seatIdx,
-		Source: perm.Card.DisplayName(),
-		Details: map[string]interface{}{
-			"rule": "702.177",
-		},
-	})
-}
+// HasVisit / ApplyVisit / VisitedThisTurn / ClearVisitFlags live in
+// keywords_visit.go where the mechanic is implemented as a per-permanent
+// "visited_this_turn" counter with trigger fan-out and EOT cleanup.
 
 // ---------------------------------------------------------------------------
 // §702.178 — Max Speed (stub)
@@ -1595,13 +1583,11 @@ func SpellWarpedThisTurn(gs *GameState, seatIdx int) bool {
 }
 
 // ---------------------------------------------------------------------------
-// §702.186 — Solved (stub)
+// §702.186 — Solved
 // ---------------------------------------------------------------------------
-
-// HasSolved returns true if the card has the solved keyword.
-func HasSolved(card *Card) bool {
-	return cardHasKeywordByName(card, "solved")
-}
+// IsSolved / MarkSolved / ClearSolved / HasSolveAbility live in
+// keywords_solved.go where the designation is implemented as a real
+// per-permanent flag with "became_solved" trigger fan-out.
 
 // ---------------------------------------------------------------------------
 // §702.187 — Mayhem
