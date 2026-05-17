@@ -506,6 +506,10 @@ type TurnCounters struct {
 	ExiledCards      int  // cards exiled this turn (from any zone)
 	CastFromExile    int  // spells cast from exile this turn (cascade, impulse draw, etc.)
 	Descended        bool // a permanent card entered graveyard this turn (Ixalan)
+	// SpeedAdvancedThisTurn gates §702.178 / §702.179 — speed advances at
+	// most once per turn regardless of how many damage events the player's
+	// sources cause. Read+set by AdvanceSpeed in keywords_speed_counter.go.
+	SpeedAdvancedThisTurn bool
 	Attacked         bool // this seat declared attackers this turn
 	Casts            []CastRecord // ordered log of every spell cast this turn
 }
@@ -569,6 +573,13 @@ type Seat struct {
 	Lost           bool
 	Won            bool
 	PoisonCounters int
+
+	// Speed is the Aetherdrift player-speed counter (CR §702.178 /
+	// §702.179). Range 0..MaxSpeedCap (4). Persists across turns. The
+	// once-per-turn advancement gate lives on Turn.SpeedAdvancedThisTurn
+	// so it auto-resets in UntapAll. Read via SpeedOf / advanced via
+	// AdvanceSpeed in keywords_speed_counter.go.
+	Speed int
 
 	// StartingLife is the opening life total for this seat (CR §103.3 /
 	// §903.7). Defaults to 20 on seat construction; SetupCommanderGame
