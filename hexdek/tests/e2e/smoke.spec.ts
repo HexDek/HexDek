@@ -207,6 +207,9 @@ test('card page renders for Sol Ring', async ({ page }) => {
 // deck-page render pipeline (analysis bundle, gauntlet panel, ELO history)
 // surface in CI instead of in user reports.
 test('moxfield deck sample — 5 deep-page renders, fail on console error', async ({ page, request }) => {
+  // 5 decks × (15s nav + 4s data wait + screenshot) easily exceeds the
+  // default 30s test timeout. Give it 3 minutes.
+  test.setTimeout(180_000)
   const r = await request.get('/api/decks?owner=moxfield')
   expect(r.ok(), 'fetch /api/decks?owner=moxfield').toBe(true)
   const decks: Array<{ owner: string; id: string }> = await r.json()
@@ -257,6 +260,8 @@ test('moxfield deck sample — 5 deep-page renders, fail on console error', asyn
 // TUTOR TARGETS, MATCHUP MATRIX, CARD STATS, ELO HISTORY, etc).
 test('deck page mobile — deep analysis section audit (Marchesa)', async ({ page }) => {
   test.skip(test.info().project.name !== 'mobile', 'mobile-only audit test')
+  // 60+ panels each scrolled into view + screenshotted easily exceeds 30s.
+  test.setTimeout(180_000)
   await page.goto('/decks/7174n1c/god_save_the_queen')
   await expect(page.locator('h1')).toBeVisible({ timeout: 15_000 })
   // Long initial wait — gauntlet, matchups, elo-history, card-stats all
