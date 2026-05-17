@@ -173,7 +173,9 @@ func pickPlayerTarget(gs *GameState, f gameast.Filter, srcSeat int) []Target {
 func pickPermanentTarget(gs *GameState, f gameast.Filter, srcSeat int, src *Permanent) []Target {
 	// "any_target" / "any target" is the Lightning-Bolt classic — can be any
 	// creature, player, or planeswalker. MVP picks an opponent seat.
-	if f.Base == "any_target" || f.Base == "any target" || f.Base == "any" {
+	// The corpus parser also emits this as {base:"target", quantifier:"any"}.
+	if f.Base == "any_target" || f.Base == "any target" || f.Base == "any" ||
+		(f.Quantifier == "any" && (f.Base == "target" || f.Base == "")) {
 		opps := gs.Opponents(srcSeat)
 		if len(opps) > 0 {
 			return []Target{{Kind: TargetKindSeat, Seat: opps[0]}}
