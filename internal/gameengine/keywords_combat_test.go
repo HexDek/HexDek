@@ -813,25 +813,35 @@ func TestSplice_ApplyOntoArcane(t *testing.T) {
 		CMC:   1,
 	}
 
+	// Splice card needs a real spell effect for the engine to "add the
+	// spliced card's text" — §702.47b. A vanilla draw-1 rider is plenty.
 	spliceCard := &Card{
 		Name: "Glacial Ray",
 		CMC:  2,
 		AST: &gameast.CardAST{
-			Name:      "Glacial Ray",
-			Abilities: []gameast.Ability{&gameast.Keyword{Name: "splice", Args: []interface{}{float64(2)}}},
+			Name: "Glacial Ray",
+			Abilities: []gameast.Ability{
+				&gameast.Keyword{Name: "splice", Args: []interface{}{float64(2)}},
+				&gameast.Activated{Effect: &gameast.Draw{Count: gameast.NumberOrRef{IsInt: true, Int: 1}}},
+			},
 		},
 	}
 	gs.Seats[0].Hand = append(gs.Seats[0].Hand, spliceCard)
 
-	ApplySplice(gs, 0, arcaneSpell)
-
+	item := &StackItem{Card: arcaneSpell, Controller: 0}
+	if n := ApplySplice(gs, 0, item); n != 1 {
+		t.Fatalf("expected 1 splice applied, got %d", n)
+	}
 	// Splice cost should have been paid.
 	if gs.Seats[0].ManaPool != 8 {
 		t.Errorf("splice cost of 2 should be paid, mana pool=%d", gs.Seats[0].ManaPool)
 	}
-	// Splice card should still be in hand.
+	// Splice card should still be in hand (§702.47b).
 	if len(gs.Seats[0].Hand) != 1 {
 		t.Error("splice card should remain in hand")
+	}
+	if item.Effect == nil {
+		t.Fatal("ApplySplice should have appended the spliced card's effect to item.Effect")
 	}
 }
 

@@ -1120,20 +1120,61 @@ func SpliceCost(card *Card) int {
 	return keywordArgCost(card, "splice")
 }
 
-// ApplySplice checks if the caster has cards with splice in hand and the
-// spell being cast is arcane. If so, adds the splice effects (simplified:
-// logs the event, pays the cost). The spliced card stays in hand.
-func ApplySplice(gs *GameState, seatIdx int, spellCard *Card) {
-	if gs == nil || spellCard == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
-		return
+// ApplySplice scans the caster's hand for cards with splice that can be
+// spliced onto `item` (an Arcane spell on the stack), pays each splice
+// cost, and APPENDS the spliced card's spell effect to item.Effect so
+// the base spell and every spliced rider both resolve together.
+//
+// CR §702.47:
+//   - §702.47a: Splice is a static ability that functions in any zone
+//                from which you could play the card with splice.
+//   - §702.47b: As you cast an Arcane spell, you may reveal a card with
+//                splice from your hand and pay its splice cost. If you
+//                do, add the spliced card's text in addition to the
+//                spell's text. The spliced card remains in your hand
+//                — it is NOT cast and does NOT enter the graveyard on
+//                resolution.
+//   - §702.47c: You can splice multiple cards onto one spell.
+//
+// Behavior:
+//   - Returns the count of splices applied (0 when none).
+//   - No-op when item.IsCopy is true: copies aren't "cast" (CR §706.10)
+//     and §702.47b explicitly gates splice on "as you cast." This is
+//     what prevents splice from double-applying to a storm/Twinflame
+//     copy that inherited the already-merged item.Effect.
+//   - No-op when item.Card isn't Arcane (§702.47b — splice onto Arcane).
+//   - For each spliced card: appends its collectSpellEffect to
+//     item.Effect, wrapping in a gameast.Sequence (or growing the
+//     existing Sequence) so the chain resolves in order.
+//   - Spliced cards stay in hand (no zone move). Their splice cost is
+//     paid from seat.ManaPool.
+//
+// Greedy policy: splices every card whose cost the seat can afford, in
+// hand order. A more nuanced selector (Hat-driven "which splices are
+// worth the mana") can wrap this; the engine-level helper takes the
+// "all you can afford" view that mirrors the Python reference and
+// keeps the cost path testable in isolation.
+func ApplySplice(gs *GameState, seatIdx int, item *StackItem) int {
+	if gs == nil || item == nil || item.Card == nil {
+		return 0
 	}
-	// Check if spell is arcane.
-	if !cardHasSubtype(spellCard, "arcane") {
-		return
+	if seatIdx < 0 || seatIdx >= len(gs.Seats) {
+		return 0
+	}
+	// §706.10 / §702.47b: copies aren't cast → no splice.
+	if item.IsCopy {
+		return 0
+	}
+	if !cardHasSubtype(item.Card, "arcane") {
+		return 0
 	}
 	seat := gs.Seats[seatIdx]
+	if seat == nil {
+		return 0
+	}
+	applied := 0
 	for _, handCard := range seat.Hand {
-		if handCard == nil || handCard == spellCard {
+		if handCard == nil || handCard == item.Card {
 			continue
 		}
 		if !HasSplice(handCard) {
@@ -1143,20 +1184,59 @@ func ApplySplice(gs *GameState, seatIdx int, spellCard *Card) {
 		if seat.ManaPool < cost {
 			continue
 		}
-		// Pay splice cost (card stays in hand).
+		spliceEffect := collectSpellEffect(handCard)
+		// §702.47b says "add the card's text" — if the spliced card has
+		// no resolvable spell effect (parser miss or vanilla riderless
+		// keyword card), the splice cost would buy nothing. Refuse the
+		// no-op splice rather than burning the caster's mana on a wash.
+		if spliceEffect == nil {
+			continue
+		}
 		seat.ManaPool -= cost
 		SyncManaAfterSpend(seat)
+		appendSplicedEffect(item, spliceEffect)
+		applied++
 		gs.LogEvent(Event{
 			Kind:   "splice",
 			Seat:   seatIdx,
 			Source: handCard.DisplayName(),
 			Amount: cost,
 			Details: map[string]interface{}{
-				"onto":  spellCard.DisplayName(),
-				"rule":  "702.47",
+				"onto": item.Card.DisplayName(),
+				"rule": "702.47b",
 			},
 		})
 	}
+	return applied
+}
+
+// appendSplicedEffect merges a spliced card's spell effect into the
+// host StackItem's Effect chain. CR §702.47b — "add the spliced card's
+// text to that spell."
+//
+// Composition rules:
+//   - item.Effect == nil: the spliced rider becomes the entire effect.
+//     The base spell may have no AST-resolvable effect of its own (a
+//     permanent spell or a stub instant); the splice is still the spell
+//     body the resolver runs.
+//   - item.Effect is already a Sequence: append in place so a second
+//     splice on the same item lands as Sequence{base, splice1, splice2}
+//     rather than nesting Sequences.
+//   - item.Effect is anything else: wrap into a fresh Sequence carrying
+//     {base, splice}.
+func appendSplicedEffect(item *StackItem, spliced gameast.Effect) {
+	if item == nil || spliced == nil {
+		return
+	}
+	if item.Effect == nil {
+		item.Effect = spliced
+		return
+	}
+	if seq, ok := item.Effect.(*gameast.Sequence); ok {
+		seq.Items = append(seq.Items, spliced)
+		return
+	}
+	item.Effect = &gameast.Sequence{Items: []gameast.Effect{item.Effect, spliced}}
 }
 
 // ---------------------------------------------------------------------------
