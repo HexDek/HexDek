@@ -98,6 +98,30 @@ func FirePhaseTriggers(gs *GameState, phase, step string) {
 			return
 		}
 	}
+
+	// Also dispatch per-card OnTrigger handlers for the phase/step. AST-
+	// parsed triggers above are pushed via PushTriggeredAbility; per-card
+	// handlers exist for cards whose phase abilities never made it through
+	// the parser (e.g. The One Ring's "at the beginning of your upkeep,
+	// you lose 1 life for each burden counter on it"). Without this fan-out
+	// the handlers are dead at runtime — they only fire from tests calling
+	// FireCardTrigger directly. Event names are the canonical aliases
+	// declared in event_aliases.go (NormalizeEventSingle re-maps).
+	ctx := map[string]interface{}{
+		"phase":       phase,
+		"step":        step,
+		"active_seat": gs.Active,
+	}
+	switch step {
+	case "upkeep":
+		FireCardTrigger(gs, "upkeep", ctx)
+	case "draw":
+		FireCardTrigger(gs, "draw_step", ctx)
+	case "end", "end_step", "end_of_turn":
+		FireCardTrigger(gs, "end_step", ctx)
+	case "untap":
+		FireCardTrigger(gs, "untap", ctx)
+	}
 }
 
 // triggerMatchesPhaseStep returns true if the trigger fires at the given
