@@ -21,12 +21,35 @@ deploy_backend() {
     echo "=== Uploading to DARKSTAR ==="
     scp hexdek-server-linux "$DARKSTAR:/tmp/hexdek-server-new"
 
-    echo "=== Swapping binary + restarting on port 8090 ==="
-    ssh "$DARKSTAR" 'pkill -f hexdek-server || true; sleep 1; mv /tmp/hexdek-server-new $HOME/hexdek/hexdek-server && chmod +x $HOME/hexdek/hexdek-server && $HOME/hexdek/start-hexdek.sh'
+    echo "=== Swapping binary + restarting via setsid -f ==="
+    # ssh -n detaches stdin, and setsid -f forks the remote start-hexdek.sh into
+    # its own session so ssh isn't waiting on inherited FDs from the server's
+    # children. The </dev/null >/dev/null 2>&1 redirection severs every FD the
+    # ssh remote shell would otherwise wait on, which is the combination that
+    # makes this call return immediately.
+    #
+    # Important: do NOT pkill -f hexdek-server from here. The ssh remote shell's
+    # own command line contains the literal string "hexdek-server", so pkill -f
+    # matches and kills the parent shell, breaking the ssh session (exit 255).
+    # start-hexdek.sh handles stopping the previous server on its own.
+    ssh -n "$DARKSTAR" 'set -e; mv /tmp/hexdek-server-new "$HOME/hexdek/hexdek-server" && chmod +x "$HOME/hexdek/hexdek-server" && setsid -f "$HOME/hexdek/start-hexdek.sh" </dev/null >/dev/null 2>&1'
+
+    echo "=== Waiting for :8090 to come up ==="
+    local tries=0
+    local max_tries=20
+    until ssh -n -o ConnectTimeout=5 "$DARKSTAR" "ss -tln 2>/dev/null | grep -q ':8090 '" 2>/dev/null; do
+        tries=$((tries + 1))
+        if [ "$tries" -ge "$max_tries" ]; then
+            echo "ERROR: hexdek-server did not bind :8090 within $((max_tries * 2))s"
+            ssh -n "$DARKSTAR" 'tail -30 /tmp/hexdek-server.log 2>/dev/null || true'
+            rm -f hexdek-server-linux
+            return 1
+        fi
+        sleep 2
+    done
 
     echo "=== Verifying ==="
-    sleep 3
-    ssh "$DARKSTAR" 'ss -tlnp | grep 8090 && tail -3 /tmp/hexdek-server.log'
+    ssh -n "$DARKSTAR" 'ss -tlnp 2>/dev/null | grep :8090; echo "---"; tail -3 /tmp/hexdek-server.log'
     rm -f hexdek-server-linux
     echo "=== Backend deploy complete ==="
 }
