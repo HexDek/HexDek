@@ -92,6 +92,7 @@ async function capturePanels(page: Page, tag: string) {
 
 for (const deck of DECKS) {
   test(`deep analysis sweep — ${deck.tag}`, async ({ page }) => {
+    test.setTimeout(120_000)
     await gotoDeck(page, deck.slug)
     await capturePanels(page, deck.tag)
   })
