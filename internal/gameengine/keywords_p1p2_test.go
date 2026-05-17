@@ -322,59 +322,13 @@ func TestShouldEntwine_Greedy(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 4. Buyback tests — CR §702.27
-// ---------------------------------------------------------------------------
-
-func TestNewBuybackCost_CanPay(t *testing.T) {
-	gs := newP1P2Game(t)
-	gs.Seats[0].ManaPool = 5
-
-	cost := NewBuybackCost(3)
-	if !cost.CanPayFn(gs, 0) {
-		t.Fatal("should be able to pay buyback 3 with 5 mana")
-	}
-
-	gs.Seats[0].ManaPool = 2
-	if cost.CanPayFn(gs, 0) {
-		t.Fatal("should NOT be able to pay buyback 3 with 2 mana")
-	}
-}
-
-func TestNewBuybackCost_Pay(t *testing.T) {
-	gs := newP1P2Game(t)
-	gs.Seats[0].ManaPool = 5
-
-	cost := NewBuybackCost(3)
-	ok := cost.PayFn(gs, 0)
-	if !ok {
-		t.Fatal("buyback payment should succeed")
-	}
-	if gs.Seats[0].ManaPool != 2 {
-		t.Fatalf("expected 2 mana remaining, got %d", gs.Seats[0].ManaPool)
-	}
-}
-
-func TestShouldReturnToHandOnResolve(t *testing.T) {
-	item := &StackItem{
-		CostMeta: map[string]interface{}{"buyback": true},
-	}
-	if !ShouldReturnToHandOnResolve(item) {
-		t.Fatal("should detect buyback on stack item")
-	}
-
-	item2 := &StackItem{
-		CostMeta: map[string]interface{}{"buyback": false},
-	}
-	if ShouldReturnToHandOnResolve(item2) {
-		t.Fatal("should not detect buyback when set to false")
-	}
-
-	item3 := &StackItem{}
-	if ShouldReturnToHandOnResolve(item3) {
-		t.Fatal("should not detect buyback on empty CostMeta")
-	}
-}
+// Buyback tests live in keywords_buyback_test.go (TestHasBuyback*,
+// TestBuybackCost*, TestCastBuyback*, TestIsBoughtBack_*,
+// TestShouldReturnToHandOnResolve_*, TestBuyback_*EndToEnd*) — the
+// AdditionalCost-style stubs that were previously exercised here
+// (NewBuybackCost, CastSpellWithBuyback, the CostMeta["buyback"] form of
+// ShouldReturnToHandOnResolve) have been removed in favour of the real
+// alt-cost implementation gated on CostMeta["bought_back"].
 
 // ---------------------------------------------------------------------------
 // 5. Wither tests — CR §702.80

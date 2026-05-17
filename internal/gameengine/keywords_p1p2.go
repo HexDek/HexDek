@@ -303,99 +303,13 @@ func ShouldEntwine(gs *GameState, seatIdx int, spellCost int, entwineCost int) b
 	return CanPayEntwine(gs, seatIdx, spellCost, entwineCost)
 }
 
-// ---------------------------------------------------------------------------
-// 4. Buyback — CR §702.27
-//
-// Additional cost at cast time. On resolution, return to hand instead of
-// graveyard.
-// ---------------------------------------------------------------------------
-
-// NewBuybackCost creates an AdditionalCost for buyback. The buybackMana
-// is the extra mana to pay at cast time. When paid, the spell returns to
-// hand on resolution instead of going to the graveyard.
-func NewBuybackCost(buybackMana int) *AdditionalCost {
-	return &AdditionalCost{
-		Kind:       AddCostKindPayLife, // Reuse pay structure; actual cost is mana.
-		Label:      "buyback",
-		LifeAmount: 0, // We override with a custom CanPayFn/PayFn below.
-		CanPayFn: func(gs *GameState, seatIdx int) bool {
-			if seatIdx < 0 || seatIdx >= len(gs.Seats) {
-				return false
-			}
-			return gs.Seats[seatIdx].ManaPool >= buybackMana
-		},
-		PayFn: func(gs *GameState, seatIdx int) bool {
-			if seatIdx < 0 || seatIdx >= len(gs.Seats) {
-				return false
-			}
-			seat := gs.Seats[seatIdx]
-			if seat.ManaPool < buybackMana {
-				return false
-			}
-			seat.ManaPool -= buybackMana
-			SyncManaAfterSpend(seat)
-			gs.LogEvent(Event{
-				Kind:   "pay_mana",
-				Seat:   seatIdx,
-				Amount: buybackMana,
-				Details: map[string]interface{}{
-					"reason": "buyback",
-					"rule":   "702.27",
-				},
-			})
-			return true
-		},
-	}
-}
-
-// CastSpellWithBuyback casts a spell with the buyback additional cost.
-// If buyback was paid, the stack item is tagged so ResolveStackTop returns
-// it to hand instead of graveyard.
-func CastSpellWithBuyback(gs *GameState, seatIdx int, card *Card, targets []Target, buybackMana int) (*CostPaymentResult, error) {
-	buybackCost := NewBuybackCost(buybackMana)
-
-	// Check if we can afford normal cost + buyback.
-	normalCost := manaCostOf(card)
-	canBuyback := gs != nil && seatIdx >= 0 && seatIdx < len(gs.Seats) &&
-		gs.Seats[seatIdx].ManaPool >= normalCost+buybackMana
-
-	var addCosts []*AdditionalCost
-	if canBuyback {
-		addCosts = []*AdditionalCost{buybackCost}
-	}
-
-	result, err := CastSpellWithCosts(gs, seatIdx, card, targets, nil, addCosts, false)
-	if err != nil {
-		return result, err
-	}
-
-	// Tag the stack item for buyback return-to-hand on resolution.
-	if canBuyback && len(gs.Stack) > 0 {
-		top := gs.Stack[len(gs.Stack)-1]
-		if top != nil && top.Card == card {
-			if top.CostMeta == nil {
-				top.CostMeta = map[string]interface{}{}
-			}
-			top.CostMeta["buyback"] = true
-		}
-	}
-
-	return result, nil
-}
-
-// ShouldReturnToHandOnResolve checks the stack item for buyback.
-// Called by ResolveStackTop to determine post-resolution zone routing.
-func ShouldReturnToHandOnResolve(item *StackItem) bool {
-	if item == nil || item.CostMeta == nil {
-		return false
-	}
-	v, ok := item.CostMeta["buyback"]
-	if !ok {
-		return false
-	}
-	b, ok := v.(bool)
-	return ok && b
-}
+// Buyback (CR §702.27) is implemented in keywords_buyback.go as a real
+// alt-cost mechanic mirroring the Warp / Flashback pattern. The earlier
+// AdditionalCost-style stub (NewBuybackCost, CastSpellWithBuyback,
+// ShouldReturnToHandOnResolve gated on CostMeta["buyback"]) was a
+// placeholder and has been removed; the canonical hook is
+// ShouldReturnToHandOnResolve in keywords_buyback.go, gated on
+// CostMeta["bought_back"]=true and consumed by ResolveStackTop.
 
 // ---------------------------------------------------------------------------
 // 5. Wither — CR §702.80
