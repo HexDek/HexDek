@@ -6,8 +6,16 @@ import { useArtContrast } from '../hooks/useArtContrast'
 function humanizeGames(n) {
   if (n == null) return '—'
   if (n < 1000) return `${n} GAMES`
-  if (n < 100_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K GAMES`
-  if (n < 1_000_000) return `${Math.round(n / 1000)}K GAMES`
+  if (n < 100_000) {
+    const k = (n / 1000).toFixed(1).replace(/\.0$/, '')
+    // 99999 → "100.0" → "100" — fold into the >=100K branch so the
+    // visual category lines up with the numeric value.
+    if (k === '100') return `100K GAMES`
+    return `${k}K GAMES`
+  }
+  // Round to the nearest thousand, but promote to M once we hit 1000K
+  // so 999500 renders as "1M" instead of the broken "1000K".
+  if (n < 999_500) return `${Math.round(n / 1000)}K GAMES`
   return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M GAMES`
 }
 
@@ -81,6 +89,9 @@ function DeckShelfCard({ deck: d, deckElo, navigate, siblingIndex, siblingCount 
   const deckKey = `${d.owner}/${d.id}`
   const artUrl = cmdrName ? cardArtUrl(cmdrName) : null
   const artContrast = useArtContrast(artUrl)
+  // The effective title we actually render — used to decide whether the
+  // commander subtitle would just duplicate it (unnamed deck case).
+  const titleText = d.name || cmdrName || ''
   // Light commander art (white/cyan/silver themes) makes the white
   // overlay name disappear; flip to dark text + light shadow when the
   // sampled top of the art is bright. Falls back to the original
@@ -193,7 +204,7 @@ function DeckShelfCard({ deck: d, deckElo, navigate, siblingIndex, siblingCount 
           >
             {d.name || cmdrName}
           </div>
-          {cmdrName && cmdrName.toUpperCase() !== (d.name || '').toUpperCase() && (
+          {cmdrName && cmdrName.toUpperCase() !== titleText.toUpperCase() && (
             <div
               title={cmdrName}
               style={{
@@ -208,10 +219,25 @@ function DeckShelfCard({ deck: d, deckElo, navigate, siblingIndex, siblingCount 
           )}
           {/* Sibling disambiguator: when the same owner has multiple decks
               of this commander, show "v3 of 7" so the tiles are visually
-              distinguishable even when name + art are identical. */}
+              distinguishable even when name + art are identical. Rendered
+              as a chip so it stays legible over both light and dark art —
+              plain opacity'd text was washing out on white commanders. */}
           {siblingCount > 1 && (
-            <div style={{ fontSize: 9, marginTop: 3, opacity: 0.7, letterSpacing: '0.08em' }}>
-              V{siblingIndex + 1} OF {siblingCount}
+            <div style={{ marginTop: 4 }}>
+              <span
+                style={{
+                  display: 'inline-block',
+                  padding: '1px 5px',
+                  fontSize: 9,
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  background: artContrast === 'light' ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.55)',
+                  color: artContrast === 'light' ? '#0c0d0a' : '#f4f0e6',
+                  textShadow: 'none',
+                }}
+              >
+                V{siblingIndex + 1} OF {siblingCount}
+              </span>
             </div>
           )}
         </div>
@@ -222,14 +248,17 @@ function DeckShelfCard({ deck: d, deckElo, navigate, siblingIndex, siblingCount 
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          gap: 6,
+          flexWrap: 'wrap',
+          rowGap: 2,
           borderTop: '1px solid var(--rule-2)',
           fontSize: 10,
           letterSpacing: '0.06em',
         }}
       >
-        <span className="muted">{d.card_count || d.cardCount || 0} CARDS</span>
+        <span className="muted" style={{ minWidth: 0, whiteSpace: 'nowrap' }}>{d.card_count || d.cardCount || 0} CARDS</span>
         {deckElo && deckElo.games > 0 ? (
-          <span>
+          <span style={{ minWidth: 0, whiteSpace: 'nowrap', textAlign: 'right' }}>
             <span style={{ fontWeight: 700 }}>{Math.round(deckElo.rating)}</span>
             <span className="muted"> · </span>
             <span style={{ color: deckElo.win_rate >= 25 ? 'var(--ok)' : 'var(--danger)', fontWeight: 700 }}>
