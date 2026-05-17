@@ -320,9 +320,12 @@ body {
   font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;
 }
 .seat-name {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%;
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding-right: 6px;
 }
 .seat-stats {
+  flex: 0 0 auto;
   white-space: nowrap; font-size: 10px;
 }
 .seat-body {
