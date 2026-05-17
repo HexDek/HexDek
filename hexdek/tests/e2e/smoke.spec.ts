@@ -144,3 +144,161 @@ test('deck workshop opens on mobile (Marchesa)', async ({ page }) => {
   await page.waitForTimeout(800)
   await page.screenshot({ path: shot('workshop-mobile-marchesa'), fullPage: true })
 })
+
+// ── /compare/:o1/:d1/:o2/:d2 — head-to-head diff ─────────────────────────
+test('deck compare renders both heroes and head-to-head metrics', async ({ page }) => {
+  await page.goto('/decks/7174n1c/god_save_the_queen')
+  // Pick a second known-good deck (Toph 2.0, 100 cards) so both bundles resolve.
+  await page.goto('/compare/7174n1c/god_save_the_queen/belgarathrk/toph_20')
+  await expect(page.locator('text=/HEAD-TO-HEAD METRICS/i').first()).toBeVisible({ timeout: 15_000 })
+  // Both commander hero panels mount; loadDeckBundle resolves before the
+  // tape switches off "LOADING".
+  await page.waitForFunction(
+    () => !document.body.innerText.match(/\bLOADING\b/),
+    null,
+    { timeout: 20_000 }
+  ).catch(() => {})
+  await expect(page.locator('.cmp-hero--L')).toBeVisible()
+  await expect(page.locator('.cmp-hero--R')).toBeVisible()
+  await page.waitForTimeout(DATA_WAIT_MS)
+  await page.screenshot({ path: shot('compare'), fullPage: true })
+})
+
+// ── /report/:gameId — per-game report ────────────────────────────────────
+test('per-game report renders for a real game id', async ({ page, request }) => {
+  // Pull the most recent finished game from /api/games — game IDs rotate
+  // as the engine runs, so hardcoding gets stale fast.
+  let gameId: number | null = null
+  try {
+    const r = await request.get('/api/games?limit=1')
+    if (r.ok()) {
+      const games = await r.json()
+      gameId = games?.[0]?.game_id ?? null
+    }
+  } catch {}
+  test.skip(!gameId, 'no completed games available to report on')
+  await page.goto(`/report/${gameId}`)
+  await expect(page.locator(`text=/GAME[. #]${gameId}/i`).first()).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator('text=/RESULT BLOCK/i').first()).toBeVisible({ timeout: 10_000 })
+  await page.waitForTimeout(DATA_WAIT_MS)
+  await page.screenshot({ path: shot('report'), fullPage: true })
+})
+
+// ── /cards/:cardName — card detail page ──────────────────────────────────
+test('card page renders for Sol Ring', async ({ page }) => {
+  await page.goto('/cards/Sol%20Ring')
+  // h1 = upper-cased card name; wait for the local oracle / Scryfall fallback
+  // to finish so the hero title text is real (not blank).
+  await expect(page.locator('.card-page-hero-title')).toBeVisible({ timeout: 15_000 })
+  await page.waitForFunction(
+    () => !document.body.innerText.includes('FETCHING CARD RECORD'),
+    null,
+    { timeout: 15_000 }
+  ).catch(() => {})
+  await page.waitForTimeout(DATA_WAIT_MS)
+  await expect(page.locator('.card-page-hero-title')).toContainText(/SOL RING/i)
+  await page.screenshot({ path: shot('card-sol-ring'), fullPage: true })
+})
+
+// ── Console-error sweep across 5 sampled moxfield decks ──────────────────
+// Pulls /api/decks?owner=moxfield, picks 5 (deterministic — first 5 by API
+// order), navigates each. Any console error or uncaught page error fails
+// the test with the deck slug + message attached, so regressions in the
+// deck-page render pipeline (analysis bundle, gauntlet panel, ELO history)
+// surface in CI instead of in user reports.
+test('moxfield deck sample — 5 deep-page renders, fail on console error', async ({ page, request }) => {
+  const r = await request.get('/api/decks?owner=moxfield')
+  expect(r.ok(), 'fetch /api/decks?owner=moxfield').toBe(true)
+  const decks: Array<{ owner: string; id: string }> = await r.json()
+  expect(decks.length, 'at least 5 moxfield decks available').toBeGreaterThanOrEqual(5)
+  const sample = decks.slice(0, 5)
+
+  for (const d of sample) {
+    const errors: string[] = []
+    const onConsole = (msg: import('@playwright/test').ConsoleMessage) => {
+      if (msg.type() === 'error') errors.push(`console.error: ${msg.text()}`)
+    }
+    const onPageError = (err: Error) => {
+      errors.push(`pageerror: ${err.message}`)
+    }
+    page.on('console', onConsole)
+    page.on('pageerror', onPageError)
+
+    await page.goto(`/decks/${d.owner}/${d.id}`)
+    await expect(page.locator('h1')).toBeVisible({ timeout: 15_000 })
+    await page.waitForTimeout(DATA_WAIT_MS)
+    await page.screenshot({ path: shot(`sample-${d.id}`), fullPage: true })
+
+    page.off('console', onConsole)
+    page.off('pageerror', onPageError)
+
+    // Filter out third-party noise that doesn't indicate a real regression
+    // (Stripe pixel blocked by privacy ext, WebSocket disconnect retries,
+    // favicon 404s on first load, Sentry beacons in dev).
+    const meaningful = errors.filter(e => {
+      const s = e.toLowerCase()
+      if (s.includes('favicon')) return false
+      if (s.includes('websocket')) return false
+      if (s.includes('net::err_blocked')) return false
+      if (s.includes('failed to load resource')) return false
+      return true
+    })
+    expect(meaningful, `deck ${d.owner}/${d.id} produced console errors`).toEqual([])
+  }
+})
+
+// ── Mobile deep-analysis section audit ───────────────────────────────────
+// Walks every <Panel> below the vital signs strip on a known-good deck
+// (Queen Marchesa) and captures each one as its own element screenshot.
+// Vital signs themselves already have a dedicated test above — this one
+// is for the analysis tab content (DECK SPECS, FREYA, GAUNTLET REPORT,
+// MANA CURVE, COLOR BALANCE, WIN LINES, META POSITIONING, STAR CARDS,
+// WIN CONDITIONS, VALUE ENGINE, GAME CHANGERS, CARD PACKAGES,
+// TUTOR TARGETS, MATCHUP MATRIX, CARD STATS, ELO HISTORY, etc).
+test('deck page mobile — deep analysis section audit (Marchesa)', async ({ page }) => {
+  test.skip(test.info().project.name !== 'mobile', 'mobile-only audit test')
+  await page.goto('/decks/7174n1c/god_save_the_queen')
+  await expect(page.locator('h1')).toBeVisible({ timeout: 15_000 })
+  // Long initial wait — gauntlet, matchups, elo-history, card-stats all
+  // fan out in parallel and the deeper panels render only after they land.
+  await page.waitForTimeout(8000)
+
+  // Make sure the ANALYSIS tab is the active surface (it's the default,
+  // but click is cheap insurance against tab-default drift).
+  const analysisTab = page.locator('button.deck-tab:has-text("ANALYSIS")')
+  if (await analysisTab.count() > 0) {
+    await analysisTab.first().click({ trial: false }).catch(() => {})
+  }
+
+  // Expand any collapsed panels (CollapsiblePanel defaultOpen=false) so the
+  // body content is in the DOM for screenshotting.
+  const expandables = page.locator('.panel-hd:has-text("[+]"), .panel-hd:has-text("▶")')
+  const expandCount = await expandables.count()
+  for (let i = 0; i < expandCount; i++) {
+    await expandables.nth(i).click().catch(() => {})
+  }
+  await page.waitForTimeout(500)
+
+  // Iterate every .panel below the vital-signs strip. Snap each one as an
+  // element screenshot — fullPage on mobile can overflow Playwright's
+  // height cap on long decks.
+  const panels = page.locator('.panel:has(.panel-hd)')
+  const total = await panels.count()
+  let captured = 0
+  for (let i = 0; i < total; i++) {
+    const panel = panels.nth(i)
+    const head = panel.locator('.panel-hd').first()
+    const label = (await head.innerText().catch(() => '')).trim().replace(/[^A-Za-z0-9]+/g, '-').toLowerCase().slice(0, 48) || `panel-${i}`
+    await panel.scrollIntoViewIfNeeded().catch(() => {})
+    await page.waitForTimeout(200)
+    try {
+      await panel.screenshot({ path: shot(`mobile-section-${String(i).padStart(2, '0')}-${label}`) })
+      captured++
+    } catch {
+      // Element off-screen / zero-sized — skip and continue.
+    }
+  }
+  // Sanity: the analysis tab should expose at least a dozen panels on a
+  // fully-populated deck. If we captured fewer, the page is degraded.
+  expect(captured, 'deep-analysis panel count').toBeGreaterThanOrEqual(8)
+})
