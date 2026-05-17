@@ -137,24 +137,43 @@ func ReplicateCost(card *Card) int {
 	return keywordArgCost(card, "replicate")
 }
 
-// ApplyReplicate pays the replicate cost `copies` times and creates that
-// many copies of the spell on the stack. Per CR §702.56a, each copy is
-// put on the stack as a copy (not cast), similar to storm (§706.10).
-func ApplyReplicate(gs *GameState, item *StackItem, copies int) {
+// ApplyReplicate pays the replicate cost `copies` times and puts that
+// many copies of the spell onto the stack above the original. Per CR
+// §702.56a / §706.10b, each copy has the same characteristics as the
+// spell, the controller of each copy is the player who put it on the
+// stack, and the copies use the same targets as the original (the
+// controller may choose new targets via a separate retarget step).
+//
+// Returns the number of copies actually placed on the stack. Returns 0
+// (and logs a replicate_fail event) if the controller cannot pay the
+// total replicate cost — replicate is a one-shot decision made when the
+// spell is cast, so partial payment is not permitted.
+func ApplyReplicate(gs *GameState, item *StackItem, copies int) int {
 	if gs == nil || item == nil || item.Card == nil || copies <= 0 {
-		return
+		return 0
 	}
 	cost := ReplicateCost(item.Card)
 	seatIdx := item.Controller
 	if seatIdx < 0 || seatIdx >= len(gs.Seats) {
-		return
+		return 0
 	}
 	seat := gs.Seats[seatIdx]
 
-	// Pay replicate cost N times.
 	totalCost := cost * copies
 	if seat.ManaPool < totalCost {
-		return
+		gs.LogEvent(Event{
+			Kind:   "replicate_fail",
+			Seat:   seatIdx,
+			Source: item.Card.DisplayName(),
+			Amount: copies,
+			Details: map[string]interface{}{
+				"cost_each":  cost,
+				"total_cost": totalCost,
+				"available":  seat.ManaPool,
+				"rule":       "702.56",
+			},
+		})
+		return 0
 	}
 	seat.ManaPool -= totalCost
 	SyncManaAfterSpend(seat)
@@ -171,26 +190,26 @@ func ApplyReplicate(gs *GameState, item *StackItem, copies int) {
 		},
 	})
 
-	// Create N copies on the stack (CR §706.10 — copies, not cast).
-	baseName := item.Card.Name
+	// Per CR §706.10c, a copy of a spell has the same characteristics
+	// (name, mana cost, types, colors, P/T, text) as the spell being
+	// copied — only the controller and (optionally) targets can differ.
 	for i := 0; i < copies; i++ {
 		copyCard := &Card{
-			Name:          baseName + " (replicate " + itoaBatch(i+1) + ")",
+			Name:          item.Card.Name,
 			Owner:         item.Card.Owner,
 			BasePower:     item.Card.BasePower,
 			BaseToughness: item.Card.BaseToughness,
 			Types:         append([]string(nil), item.Card.Types...),
 			Colors:        append([]string(nil), item.Card.Colors...),
-			CMC:           0, // copies cost nothing
-		}
-		if item.Card.AST != nil {
-			copyCard.AST = item.Card.AST
+			CMC:           item.Card.CMC,
+			AST:           item.Card.AST,
 		}
 		copyItem := &StackItem{
-			Controller: seatIdx,
+			Controller: seatIdx, // CR §706.10b — controller is the player who put the copy on the stack.
 			Card:       copyCard,
 			Effect:     item.Effect,
-			Targets:    append([]Target(nil), item.Targets...),
+			Targets:    append([]Target(nil), item.Targets...), // §706.10f — same targets unless retargeted.
+			Kind:       item.Kind,
 			IsCopy:     true, // CR §706.10
 		}
 		copyItem.ID = nextStackID(gs)
@@ -199,7 +218,7 @@ func ApplyReplicate(gs *GameState, item *StackItem, copies int) {
 		gs.LogEvent(Event{
 			Kind:   "replicate_copy",
 			Seat:   seatIdx,
-			Source: copyCard.Name,
+			Source: copyCard.DisplayName(),
 			Details: map[string]interface{}{
 				"stack_id":   copyItem.ID,
 				"stack_size": len(gs.Stack),
@@ -208,6 +227,7 @@ func ApplyReplicate(gs *GameState, item *StackItem, copies int) {
 			},
 		})
 	}
+	return copies
 }
 
 // ---------------------------------------------------------------------------
