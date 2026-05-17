@@ -331,17 +331,20 @@ func main() {
 		log.Fatalf("tournament run: %v", err)
 	}
 
-	// Print the full dashboard.
-	result.PrintDashboard(*matchup)
-	if len(result.CrashLogs) > 0 {
-		fmt.Printf("\n=== CRASH LOGS (%d) ===\n", len(result.CrashLogs))
-		for i, cl := range result.CrashLogs {
-			fmt.Printf("\n--- Crash %d ---\n%s\n", i+1, cl)
+	// Pool / lazy-pool modes print their own dashboard, crash logs, and do
+	// not write a markdown report — skip the rotate-mode output to avoid
+	// emitting an empty "TOURNAMENT RESULTS" block with zeroed rankings.
+	if !*poolMode && !*lazyPool {
+		result.PrintDashboard(*matchup)
+		if len(result.CrashLogs) > 0 {
+			fmt.Printf("\n=== CRASH LOGS (%d) ===\n", len(result.CrashLogs))
+			for i, cl := range result.CrashLogs {
+				fmt.Printf("\n--- Crash %d ---\n%s\n", i+1, cl)
+			}
 		}
-	}
-
-	if *reportPath != "" {
-		fmt.Printf("\nReport written to %s\n", *reportPath)
+		if *reportPath != "" {
+			fmt.Printf("\nReport written to %s\n", *reportPath)
+		}
 	}
 	os.Exit(0)
 }
