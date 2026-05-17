@@ -311,6 +311,7 @@ func ScanExpiredDurations(gs *GameState, phase, step string) {
 		ExpireZoneCastGrants(gs)
 		ClearMayhemDiscards(gs)
 		ClearVisitFlags(gs)
+		EndStepClearStartYourEngines(gs)
 	}
 
 	// 3) Delayed triggers — we don't expire them here; they consume
