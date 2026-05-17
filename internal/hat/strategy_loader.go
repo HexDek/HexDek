@@ -199,16 +199,20 @@ func buildFromStrategyJSON(sj *strategyFileJSON) *StrategyProfile {
 	}
 
 	if sj.Weights != nil {
-		sp.Weights = &EvalWeights{
-			BoardPresence:     sj.Weights.BoardPresence,
-			CardAdvantage:     sj.Weights.CardAdvantage,
-			ManaAdvantage:     sj.Weights.ManaAdvantage,
-			LifeResource:      sj.Weights.LifeResource,
-			ComboProximity:    sj.Weights.ComboProximity,
-			ThreatExposure:    sj.Weights.ThreatExposure,
-			CommanderProgress: sj.Weights.CommanderProgress,
-			GraveyardValue:    sj.Weights.GraveyardValue,
-		}
+		// Freya serializes only the 8 core dimensions. Start from the
+		// archetype-appropriate full profile so the remaining 12 dims
+		// (StaxLockProgress, DrainEngine, ArtifactSynergy, ...) keep
+		// archetype-relevant values instead of being zeroed out.
+		base := DefaultWeightsForArchetype(sp.Archetype)
+		base.BoardPresence = sj.Weights.BoardPresence
+		base.CardAdvantage = sj.Weights.CardAdvantage
+		base.ManaAdvantage = sj.Weights.ManaAdvantage
+		base.LifeResource = sj.Weights.LifeResource
+		base.ComboProximity = sj.Weights.ComboProximity
+		base.ThreatExposure = sj.Weights.ThreatExposure
+		base.CommanderProgress = sj.Weights.CommanderProgress
+		base.GraveyardValue = sj.Weights.GraveyardValue
+		sp.Weights = &base
 	}
 
 	// Emergent synergies from Huginn — soft eval weight bumps.

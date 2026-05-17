@@ -100,6 +100,19 @@ const (
 	ArchetypeSelfmill     = "selfmill"
 	ArchetypeEnchantress  = "enchantress"
 	ArchetypeArtifacts    = "artifacts"
+	// Additional archetypes emitted by Freya. Without these the hat's
+	// `archetypeWeights` map missed roughly a quarter of the moxfield
+	// corpus (lifegain, voltron, lands matter, storm, ...) and fell back
+	// to midrange weights.
+	ArchetypeLifegain       = "lifegain"
+	ArchetypeVoltron        = "voltron"
+	ArchetypeLandsMatter    = "lands matter"
+	ArchetypeCountersMatter = "counters matter"
+	ArchetypeMill           = "mill"
+	ArchetypeStorm          = "storm"
+	ArchetypeSuperfriends   = "superfriends"
+	ArchetypeBlink          = "blink"
+	ArchetypeExtraCombats   = "extra combats"
 )
 
 // observation is a running tally of an OTHER seat's plays. A PokerHat
