@@ -1791,6 +1791,16 @@ func registerDefaults() {
 	registerSarcomancy(Global())
 	registerGoblinGoliath(Global())
 	registerKamiOfTransience(Global())
+
+	// dev/muninn-handlers-51-60-finish — closes the remaining top-50
+	// holdouts (#43 Transcendent Dragon, #47 River Song's Diary) and the
+	// remaining 51-60 band holdouts (#56 Eon Frolicker, #57 Tombstone
+	// Stairwell, #59 Frodo, Sauron's Bane) per snapshot 2.
+	registerTranscendentDragon(Global())
+	registerRiverSongsDiary(Global())
+	registerEonFrolicker(Global())
+	registerTombstoneStairwell(Global())
+	registerFrodoSauronsBane(Global())
 }
 
 func init() {
