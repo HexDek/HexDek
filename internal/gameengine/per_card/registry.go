@@ -1775,6 +1775,22 @@ func registerDefaults() {
 	registerLifegainEndStepFamily(Global())
 	registerEtbTribeGateFamily(Global())
 	registerLifegainCounterFamily(Global())
+
+	// dev/muninn-handlers-51-70 — 10 new snowflakes pulled from the top-80
+	// parser gaps. Skipped (already covered): Wistfulness (#21) +
+	// Deceit (#44) in evoke_color_gate family; Loyal Warhound (#46) in
+	// land_tax_family; Ghitu Journeymage / Dreamcaller Siren / Acclaimed
+	// Contender in etb_tribe_gate_family.
+	registerTiamat(Global())
+	registerTitaniaVoiceOfGaea(Global())
+	registerSmeagolHelpfulGuide(Global())
+	registerYathanRoadwatcher(Global())
+	registerBreachingLeviathan(Global())
+	registerWaryFarmer(Global())
+	registerCompySwarm(Global())
+	registerSarcomancy(Global())
+	registerGoblinGoliath(Global())
+	registerKamiOfTransience(Global())
 }
 
 func init() {

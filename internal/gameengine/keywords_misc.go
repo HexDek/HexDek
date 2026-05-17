@@ -1725,6 +1725,10 @@ func TheRingTemptsYou(gs *GameState, seatIdx int) {
 			"rule": "701.52",
 		},
 	})
+	FireCardTrigger(gs, "ring_tempt", map[string]interface{}{
+		"seat":  seatIdx,
+		"level": level,
+	})
 }
 
 // GetRingLevel returns the ring level for a seat (0-4).
