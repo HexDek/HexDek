@@ -528,9 +528,19 @@ var archetypeWeights = map[string]EvalWeights{
 	},
 }
 
+// LegacyMidrangeOnly, when true, makes DefaultWeightsForArchetype return
+// the midrange profile for every archetype — collapsing archetype-specific
+// dispatch. Set by the tournament CLI's --legacy-hat-weights flag to
+// produce a pre-archetype-tuning baseline for A/B winrate comparisons.
+// Set once before games start; not safe to flip concurrently.
+var LegacyMidrangeOnly bool
+
 // DefaultWeightsForArchetype returns the tuned weight profile for the
 // given archetype string. Unknown archetypes get the midrange profile.
 func DefaultWeightsForArchetype(archetype string) EvalWeights {
+	if LegacyMidrangeOnly {
+		return archetypeWeights[ArchetypeMidrange]
+	}
 	if w, ok := archetypeWeights[archetype]; ok {
 		return w
 	}
