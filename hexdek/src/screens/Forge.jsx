@@ -64,17 +64,24 @@ export default function Forge() {
     }).catch(() => {})
   }, [selectedDeck])
 
-  // Poll gauntlet progress while running
+  // Stream gauntlet progress via SSE while running.
   useEffect(() => {
     if (!gauntlet || gauntlet.status !== 'running' || !selectedDeck) return
     const deckId = `${selectedDeck.owner}/${selectedDeck.id}`
-    const interval = setInterval(() => {
-      api.getGauntlet(deckId).then(r => {
+    const es = new EventSource(api.tournamentEventsUrl(deckId))
+    const onSnapshot = (ev) => {
+      try {
+        const r = JSON.parse(ev.data)
         if (r && r.status && r.status !== 'none') setGauntlet(r)
-        if (r && r.status !== 'running') clearInterval(interval)
-      }).catch(() => {})
-    }, 2000)
-    return () => clearInterval(interval)
+        if (r && r.status !== 'running' && r.status !== 'none') es.close()
+      } catch {}
+    }
+    es.addEventListener('snapshot', onSnapshot)
+    es.onerror = () => { es.close() }
+    return () => {
+      es.removeEventListener('snapshot', onSnapshot)
+      es.close()
+    }
   }, [gauntlet?.status, selectedDeck])
 
   const handleStartGauntlet = async () => {
