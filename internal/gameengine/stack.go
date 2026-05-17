@@ -424,6 +424,12 @@ func CastSpell(gs *GameState, seatIdx int, card *Card, targets []Target) error {
 	// player pays {cost}." Check each target for ward and apply.
 	CheckWardOnTargeting(gs, item)
 
+	// CR §702.123 — Heroic. "Whenever you cast a spell that targets
+	// this creature, [effect]." Cast-time trigger; fires regardless of
+	// whether the spell ultimately resolves. Mirror cast-time placement
+	// of the ward check above so both targeting triggers converge here.
+	FireHeroicTriggers(gs, item)
+
 	// CR §702.40 — storm trigger. (Copies land ON TOP of the original
 	// storm spell. LIFO resolution gives the copies priority, which is
 	// gameplay-correct: triggered abilities go on the stack above the
