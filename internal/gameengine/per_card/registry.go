@@ -1757,9 +1757,6 @@ func registerDefaults() {
 	registerSandScout(Global())
 
 	// dev/muninn-handlers-41-50 — snowflakes from the 41-60 range.
-	// Skipped (already covered): Genesis Chamber (#41 — registered
-	// above), Loyal Warhound (#46 — land_tax_family above), Wistfulness
-	// (#21) and Deceit (#44) live in the evoke_color_gate family above.
 	registerCrownOfGondor(Global())
 	registerRoccoCabarettiCaterer(Global())
 	registerSepticRats(Global())
@@ -1770,6 +1767,14 @@ func registerDefaults() {
 	registerStarCharter(Global())
 	registerStarlitSoothsayer(Global())
 	registerElanorGardner(Global())
+
+	// dev/muninn-bulk-patterns-2 — three more bulk-pattern families.
+	// lifegain_endstep_family.go covers Markov Purifier, Tivash.
+	// etb_tribe_gate_family.go covers Ghitu Journeymage, Dreamcaller Siren, Acclaimed Contender.
+	// lifegain_counter_family.go covers Celestial Unicorn, Exemplar of Light, Archangel of Thune.
+	registerLifegainEndStepFamily(Global())
+	registerEtbTribeGateFamily(Global())
+	registerLifegainCounterFamily(Global())
 }
 
 func init() {
