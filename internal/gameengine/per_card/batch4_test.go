@@ -315,15 +315,70 @@ func TestRagavan_CombatDamageTrigger(t *testing.T) {
 func TestTheOneRing_ETB_GrantsProtection(t *testing.T) {
 	gs := newGame(t, 2)
 	ring := addPerm(gs, 0, "The One Ring", "artifact", "legendary")
+	// "If you cast it" — stack.go stamps was_cast on the cast path.
+	ring.Flags["was_cast"] = 1
 	gameengine.InvokeETBHook(gs, ring)
 
-	// Should have a prevention shield.
+	// Indestructible regardless of cast status.
+	if ring.Flags["indestructible"] != 1 {
+		t.Error("The One Ring should have indestructible flag")
+	}
+	// Seat-level protection-from-everything (matches Teferi's Protection).
+	if gs.Seats[0].Flags["protection_from_everything"] != 1 {
+		t.Errorf("expected protection_from_everything on seat 0, got %v", gs.Seats[0].Flags)
+	}
+	// Belt-and-suspenders prevention shield for the prevention pipeline.
 	if len(gs.PreventionShields) == 0 {
 		t.Error("The One Ring ETB should add a prevention shield")
 	}
-	// Indestructible flag.
+	// Delayed trigger registered to expire "until your next turn".
+	foundDelayed := false
+	for _, dt := range gs.DelayedTriggers {
+		if dt != nil && dt.SourceCardName == "The One Ring" && dt.TriggerAt == "your_next_turn" {
+			foundDelayed = true
+			break
+		}
+	}
+	if !foundDelayed {
+		t.Error("expected delayed trigger 'your_next_turn' for The One Ring protection")
+	}
+}
+
+func TestTheOneRing_ETB_BlinkedCopyDoesNotGrantProtection(t *testing.T) {
+	// "If you cast it" intervening-if (CR §603.6c): blink, reanimate, and
+	// token-copy paths leave was_cast unset, so the protection clause
+	// silently no-ops. Indestructible still applies.
+	gs := newGame(t, 2)
+	ring := addPerm(gs, 0, "The One Ring", "artifact", "legendary")
+	// was_cast intentionally not set.
+	gameengine.InvokeETBHook(gs, ring)
+
 	if ring.Flags["indestructible"] != 1 {
-		t.Error("The One Ring should have indestructible flag")
+		t.Error("indestructible should apply on any ETB path")
+	}
+	if gs.Seats[0].Flags["protection_from_everything"] != 0 {
+		t.Errorf("non-cast ETB should NOT grant protection, got %v", gs.Seats[0].Flags)
+	}
+	if len(gs.PreventionShields) != 0 {
+		t.Errorf("non-cast ETB should NOT add a prevention shield, got %d", len(gs.PreventionShields))
+	}
+}
+
+func TestTheOneRing_Upkeep_FiresViaFirePhaseTriggers(t *testing.T) {
+	// Regression: prior to wiring per-card phase dispatch in
+	// FirePhaseTriggers, the upkeep handler was registered but never
+	// invoked at runtime (only tests calling FireCardTrigger directly hit
+	// it). FirePhaseTriggers must now fan out to FireCardTrigger("upkeep").
+	gs := newGame(t, 2)
+	ring := addPerm(gs, 0, "The One Ring", "artifact", "legendary")
+	ring.Counters = map[string]int{"burden": 2}
+	gs.Seats[0].Life = 40
+	gs.Active = 0
+
+	gameengine.FirePhaseTriggers(gs, "beginning", "upkeep")
+
+	if gs.Seats[0].Life != 38 {
+		t.Errorf("expected life 38 after upkeep burden ping, got %d", gs.Seats[0].Life)
 	}
 }
 
