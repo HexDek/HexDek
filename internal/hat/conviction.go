@@ -139,6 +139,18 @@ func (h *YggdrasilHat) recordConvictionSample(gs *gameengine.GameState, seatIdx 
 			"any_triggered":    anyTriggered,
 		},
 	})
+
+	pushConvictionEvent(ConvictionEvent{
+		GameSeed:         gs.Seed,
+		Seat:             seatIdx,
+		Turn:             gs.Turn,
+		RelativePosition: relPos,
+		WindowSamples:    len(d.relPosWindow),
+		ScoreTriggered:   scoreTriggered,
+		WinLineExtinct:   winLineExtinct,
+		WinLineDetail:    winLineDetail,
+		AnyTriggered:     anyTriggered,
+	})
 }
 
 // checkWinLineExtinct returns true if every named win-line card from the

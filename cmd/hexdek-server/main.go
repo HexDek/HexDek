@@ -130,6 +130,7 @@ func main() {
 	hexAPI.LoadCardDB("data/rules/oracle-cards.json")
 	hexAPI.LoadOwnerAliases("data/owner-aliases.json")
 	hexAPI.Register(mux)
+	(&hexapi.AdminConvictionHandler{}).Register(mux)
 	log.Printf("showmatch: loading in background — live games at /api/live/game")
 
 	// pprof debug endpoints — localhost only, gated behind env var
