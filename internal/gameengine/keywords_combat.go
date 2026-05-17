@@ -809,6 +809,7 @@ func CheckCombatKeywordsCombat(gs *GameState, attackers []*Permanent, blockerMap
 func CheckAttackKeywordsCombat(gs *GameState, attackerSeat int, attackers []*Permanent) {
 	ApplyBattleCry(gs, attackerSeat, attackers)
 	FireMyriadTriggers(gs, attackerSeat, attackers)
+	FireMobilizeTriggers(gs, attackerSeat, attackers)
 	ApplyMelee(gs, attackerSeat, attackers)
 	FireAnnihilatorTriggers(gs, attackers)
 	FireProvokeTriggers(gs, attackers)
