@@ -1712,6 +1712,26 @@ func registerDefaults() {
 	registerKnightOfTheWhiteOrchid(Global())
 	registerVibrance(Global())
 	registerOversoldCemetery(Global())
+
+	// dev/muninn-handlers-21-30 — Muninn parser-gap snowflakes #21-#30
+	// plus three high-frequency stragglers from #38-#41. Already
+	// covered elsewhere in this file: Taii Wakeen (#24), Lathiel (#27),
+	// Zoyowa (#29). Wistfulness (#21) is covered by the parallel
+	// dev/muninn-bulk-patterns evoke_color_gate family handler.
+	// New here: Wedding Ring (#22, 58K), Kaito Shizuki (#23, 57K),
+	// Sunderflock (#25, 46K), Lux Artillery (#26, 43K), Smirking
+	// Spelljacker (#28, 38K), Crackling Spellslinger (#30, 34K),
+	// Witch of the Moors (#38, 24K), Lord Jyscal Guado (#39, 24K),
+	// Genesis Chamber (#41, 22K).
+	registerWeddingRing(Global())
+	registerKaitoShizuki(Global())
+	registerSunderflock(Global())
+	registerLuxArtillery(Global())
+	registerSmirkingSpelljacker(Global())
+	registerCracklingSpellslinger(Global())
+	registerWitchOfTheMoors(Global())
+	registerLordJyscalGuado(Global())
+	registerGenesisChamber(Global())
 }
 
 func init() {
