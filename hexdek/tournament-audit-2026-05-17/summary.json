@@ -1,0 +1,430 @@
+{
+  "date": "2026-05-17",
+  "deck_count": 100,
+  "main_run": {
+    "avg_turns": 45.842,
+    "bottom_10_winrate": [
+      {
+        "commander": "Vial Smasher the Fierce",
+        "games": 93,
+        "winrate": 0.03225806451612903,
+        "wins": 3
+      },
+      {
+        "commander": "Malcolm, Keen-Eyed Navigator",
+        "games": 88,
+        "winrate": 0.056818181818181816,
+        "wins": 5
+      },
+      {
+        "commander": "Glarb, Calamity's Augur",
+        "games": 230,
+        "winrate": 0.09130434782608696,
+        "wins": 21
+      },
+      {
+        "commander": "Norman Osborn // Green Goblin",
+        "games": 274,
+        "winrate": 0.09854014598540146,
+        "wins": 27
+      },
+      {
+        "commander": "Gorma, the Gullet",
+        "games": 82,
+        "winrate": 0.10975609756097561,
+        "wins": 9
+      },
+      {
+        "commander": "Rograkh, Son of Rohgahh",
+        "games": 687,
+        "winrate": 0.12809315866084425,
+        "wins": 88
+      },
+      {
+        "commander": "Shorikai, Genesis Engine",
+        "games": 83,
+        "winrate": 0.13253012048192772,
+        "wins": 11
+      },
+      {
+        "commander": "Flubs, the Fool",
+        "games": 83,
+        "winrate": 0.13253012048192772,
+        "wins": 11
+      },
+      {
+        "commander": "The Gitrog Monster",
+        "games": 81,
+        "winrate": 0.13580246913580246,
+        "wins": 11
+      },
+      {
+        "commander": "Thrasios, Triton Hero",
+        "games": 240,
+        "winrate": 0.1375,
+        "wins": 33
+      }
+    ],
+    "concession_blunders": {
+      "high_life": null,
+      "early": null,
+      "strong_board": null,
+      "total": 0
+    },
+    "crash_records": null,
+    "crashes": 0,
+    "draws": 2,
+    "duration_sec": 124.451088125,
+    "end_reasons": {
+      "draw": 2,
+      "last_seat_standing": 1920,
+      "turn_cap_leader": 77,
+      "turn_cap_tie": 1
+    },
+    "games": 2000,
+    "games_per_sec": 16.07057061639492,
+    "top_10_winrate": [
+      {
+        "commander": "Emiel the Blessed",
+        "games": 55,
+        "winrate": 0.7272727272727273,
+        "wins": 40
+      },
+      {
+        "commander": "Ureni of the Unwritten",
+        "games": 81,
+        "winrate": 0.6666666666666666,
+        "wins": 54
+      },
+      {
+        "commander": "Valgavoth, Harrower of Souls",
+        "games": 89,
+        "winrate": 0.5730337078651685,
+        "wins": 51
+      },
+      {
+        "commander": "Maelstrom Wanderer",
+        "games": 89,
+        "winrate": 0.5730337078651685,
+        "wins": 51
+      },
+      {
+        "commander": "Sisay, Weatherlight Captain",
+        "games": 212,
+        "winrate": 0.5518867924528302,
+        "wins": 117
+      },
+      {
+        "commander": "Yuriko, the Tiger's Shadow",
+        "games": 80,
+        "winrate": 0.525,
+        "wins": 42
+      },
+      {
+        "commander": "Lorehold, the Historian",
+        "games": 77,
+        "winrate": 0.5064935064935064,
+        "wins": 39
+      },
+      {
+        "commander": "Derevi, Empyrial Tactician",
+        "games": 88,
+        "winrate": 0.4772727272727273,
+        "wins": 42
+      },
+      {
+        "commander": "Edgar Markov",
+        "games": 269,
+        "winrate": 0.4758364312267658,
+        "wins": 128
+      },
+      {
+        "commander": "Shiko, Paragon of the Way",
+        "games": 81,
+        "winrate": 0.41975308641975306,
+        "wins": 34
+      }
+    ],
+    "total_concessions": 0,
+    "turn_distribution": {
+      "1-5": 0,
+      "11-20": 45,
+      "21-40": 735,
+      "41-60": 892,
+      "6-10": 0,
+      "61+": 328
+    },
+    "winrate_buckets": {
+      "0%": 0,
+      "0-10%": 4,
+      "10-20%": 20,
+      "20-30%": 13,
+      "30-40%": 16,
+      "40-50%": 3,
+      "50%+": 7
+    }
+  },
+  "sample_run": {
+    "avg_turns": 46.28,
+    "bottom_10_winrate": [
+      {
+        "commander": "Magus Lucea Kane",
+        "games": 3,
+        "winrate": 0,
+        "wins": 0
+      },
+      {
+        "commander": "Etali, Primal Conqueror // Etali, Primal Sickness",
+        "games": 1,
+        "winrate": 0,
+        "wins": 0
+      },
+      {
+        "commander": "Yasmin Khan",
+        "games": 3,
+        "winrate": 0,
+        "wins": 0
+      },
+      {
+        "commander": "Tayam, Luminous Enigma",
+        "games": 2,
+        "winrate": 0,
+        "wins": 0
+      },
+      {
+        "commander": "Kilo, Apogee Mind",
+        "games": 1,
+        "winrate": 0,
+        "wins": 0
+      },
+      {
+        "commander": "Zaffai and the Tempests",
+        "games": 1,
+        "winrate": 0,
+        "wins": 0
+      },
+      {
+        "commander": "Hearthhull, the Worldseed",
+        "games": 2,
+        "winrate": 0,
+        "wins": 0
+      },
+      {
+        "commander": "Flubs, the Fool",
+        "games": 1,
+        "winrate": 0,
+        "wins": 0
+      },
+      {
+        "commander": "Meria, Scholar of Antiquity",
+        "games": 2,
+        "winrate": 0,
+        "wins": 0
+      },
+      {
+        "commander": "Zur the Enchanter",
+        "games": 1,
+        "winrate": 0,
+        "wins": 0
+      }
+    ],
+    "concession_blunders": {
+      "high_life": null,
+      "early": null,
+      "strong_board": null,
+      "total": 0
+    },
+    "crash_records": null,
+    "crashes": 0,
+    "draws": 0,
+    "duration_sec": 3.965854,
+    "end_reasons": {
+      "last_seat_standing": 45,
+      "turn_cap_leader": 5
+    },
+    "games": 50,
+    "games_per_sec": 12.607624990733395,
+    "top_10_winrate": [
+      {
+        "commander": "Emiel the Blessed",
+        "games": 6,
+        "winrate": 1,
+        "wins": 6
+      },
+      {
+        "commander": "Yurlok of Scorch Thrash",
+        "games": 2,
+        "winrate": 1,
+        "wins": 2
+      },
+      {
+        "commander": "Lorehold, the Historian",
+        "games": 1,
+        "winrate": 1,
+        "wins": 1
+      },
+      {
+        "commander": "Selvala, Explorer Returned",
+        "games": 2,
+        "winrate": 1,
+        "wins": 2
+      },
+      {
+        "commander": "Raffine, Scheming Seer",
+        "games": 2,
+        "winrate": 1,
+        "wins": 2
+      },
+      {
+        "commander": "Tivit, Seller of Secrets",
+        "games": 3,
+        "winrate": 0.6666666666666666,
+        "wins": 2
+      },
+      {
+        "commander": "Gerrard, Weatherlight Hero",
+        "games": 7,
+        "winrate": 0.5714285714285714,
+        "wins": 4
+      },
+      {
+        "commander": "Prismari, the Inspiration",
+        "games": 4,
+        "winrate": 0.5,
+        "wins": 2
+      },
+      {
+        "commander": "Zurgo and Ojutai",
+        "games": 2,
+        "winrate": 0.5,
+        "wins": 1
+      },
+      {
+        "commander": "Yuriko, the Tiger's Shadow",
+        "games": 4,
+        "winrate": 0.5,
+        "wins": 2
+      }
+    ],
+    "total_concessions": 0,
+    "turn_distribution": {
+      "1-5": 0,
+      "11-20": 1,
+      "21-40": 19,
+      "41-60": 23,
+      "6-10": 0,
+      "61+": 7
+    },
+    "winrate_buckets": {
+      "0%": 32,
+      "0-10%": 1,
+      "10-20%": 2,
+      "20-30%": 4,
+      "30-40%": 4,
+      "40-50%": 3,
+      "50%+": 12
+    }
+  },
+  "top_decks": [
+    "sidar_kondo_of_jamuraa_b5_opal_wave_mtg_ZJ86NVcC.txt",
+    "sisay_weatherlight_captain_b4_lademir_Hd0a1mYP.txt",
+    "the_reality_chip_b4_chinoslice_BSVQ6H_z.txt",
+    "selvala_explorer_returned_b5_icarus_QZO8GrKw.txt",
+    "glarb_calamity_s_augur_b4_nard0_Igcvkewn.txt",
+    "kenrith_the_returned_king_b5_ckri987_8VfLNAX5.txt",
+    "valgavoth_harrower_of_souls_b4_itschewy_tre8519I.txt",
+    "shiko_paragon_of_the_way_b5_dragoshivan_Alf2Xwuw.txt",
+    "tymna_the_weaver_b5_kobeta_qtgye9OA.txt",
+    "norman_osborn_green_goblin_b4_greengobbles_TOG0YE_8.txt",
+    "elsha_of_the_infinite_b5_elysium_rob_4RSfwVup.txt",
+    "tivit_seller_of_secrets_b5_orimeows_LiGRjsqz.txt",
+    "sisay_weatherlight_captain_b4_dirrin_dYjjTLuQ.txt",
+    "rograkh_son_of_rohgahh_b4_kenku00_coHbbYN-.txt",
+    "rograkh_son_of_rohgahh_b4_potatok1ng_Imr6bP71.txt",
+    "tymna_the_weaver_b5_3akapn_2R0DMfNb.txt",
+    "golbez_crystal_collector_b4_jontheinjun_6hCEa4Tn.txt",
+    "arcum_dagsson_b4_blamx32_CyQxwGMh.txt",
+    "rograkh_son_of_rohgahh_b4_kuyass_dBw79mkH.txt",
+    "glarb_calamity_s_augur_b4_kinkajou65_aIs4O4ft.txt",
+    "etali_primal_conqueror_etali_primal_sickness_b4_valthazar_pJ1IoPgy.txt",
+    "kinnan_bonder_prodigy_b5_breadmaker207_u8josqIl.txt",
+    "dihada_binder_of_wills_b5_debungbung_5Q3Nbyzz.txt",
+    "y_shtola_night_s_blessed_b5_lappland312_jQVrni1X.txt",
+    "zur_the_enchanter_b4_7wrong_wifNGCXI.txt",
+    "meria_scholar_of_antiquity_b4_petercassetta_Km34oNlc.txt",
+    "malcolm_keen_eyed_navigator_b5_hdshadow_5re5qsZX.txt",
+    "francisco_fowl_marauder_b5_chungushumungous24_ORaRZs-S.txt",
+    "lumra_bellow_of_the_woods_b4_xlord1285_bU3JRZUq.txt",
+    "ivy_gleeful_spellthief_b4_syr_bean_ii_s0WgTYgf.txt",
+    "yasmin_khan_b4_rootofwallaevils_HWg1A4zP.txt",
+    "terra_magical_adept_esper_terra_b5_mtglover1991_T1wYi8Gf.txt",
+    "rograkh_son_of_rohgahh_b5_devastationhour0202_OJsgc3KK.txt",
+    "glarb_calamity_s_augur_b4_nomorefrenchtoast_f5PHtaaC.txt",
+    "kenrith_the_returned_king_b4_antonio_as_IGuakBLw.txt",
+    "jhoira_weatherlight_captain_b4_myster_e_rP9abLw0.txt",
+    "gorma_the_gullet_b5_aparkedcar_FS0HYhG7.txt",
+    "maelstrom_wanderer_b4_adog_-foEtZ4E.txt",
+    "niv_mizzet_reborn_b4_ethanburch_eF82dJvO.txt",
+    "rasputin_dreamweaver_b4_basicmatt_5ZaR1Z6z.txt",
+    "kilo_apogee_mind_b4_sleepeater007_-KSSGHLq.txt",
+    "sisay_weatherlight_captain_b4_prats4darwin_C_ZJTU8l.txt",
+    "thrasios_triton_hero_b4_firm_rPL1Xvk-.txt",
+    "queza_augur_of_agonies_b5_facilitygremlin_WGHbJGtj.txt",
+    "tymna_the_weaver_b4_ultrainstinctsol_eKsUeoe2.txt",
+    "kinnan_bonder_prodigy_b4_destrogiovanni_ZTccpHey.txt",
+    "raffine_scheming_seer_b5_boba_blasta_vrgKUMR5.txt",
+    "flubs_the_fool_b4_deadarmyman_YJdbM1M9.txt",
+    "etali_primal_conqueror_etali_primal_sickness_b4_edmerick_skpszY-o.txt",
+    "emiel_the_blessed_b5_astonc_GNkZ6Nsr.txt",
+    "meren_of_clan_nel_toth_b5_chuzowerewolf_KJY2Zgr-.txt",
+    "derevi_empyrial_tactician_b4_manamochi_vOX2K9hF.txt",
+    "magus_lucea_kane_b4_zephrize_ov-2ul5J.txt",
+    "kinnan_bonder_prodigy_b4_xbonds16_z7i7Y7eM.txt",
+    "meren_of_clan_nel_toth_b4_chuzowerewolf_XwTu_Ble.txt",
+    "rograkh_son_of_rohgahh_b5_emdee_ZBNCEpVb.txt",
+    "zurgo_and_ojutai_b5_darwingeronimo_Etdhj61S.txt",
+    "tymna_the_weaver_b5_ezinho_8S_CsZ0v.txt",
+    "fire_lord_azula_b4_davidnescobar_goePdank.txt",
+    "norman_osborn_green_goblin_b4_st33z_vZubioIi.txt",
+    "kinnan_bonder_prodigy_b4_squee1981_zXcokJ49.txt",
+    "tymna_the_weaver_b4_zampmtg_lUiadSsz.txt",
+    "tymna_the_weaver_b5_osseus_77Jlry-W.txt",
+    "rograkh_son_of_rohgahh_b5_ocellblau_eBPdeGog.txt",
+    "thrasios_triton_hero_b4_registerformoxfield_Ox89bZ0S.txt",
+    "esika_god_of_the_tree_the_prismatic_bridge_b4_kiteraiijiin_gSsjl2jX.txt",
+    "norman_osborn_green_goblin_b4_tomnfrank_I4p9v-ho.txt",
+    "tymna_the_weaver_b4_bengordon6_30UIBMMi.txt",
+    "yuna_grand_summoner_b4_inti_jedi_hVNMTm1V.txt",
+    "prismari_the_inspiration_b4_blazegriffan_oS0hhf4C.txt",
+    "rograkh_son_of_rohgahh_b4_devynapse_K5cofdYT.txt",
+    "vivi_ornitier_b4_katsuwoct_vrd4tIwd.txt",
+    "tymna_the_weaver_b4_thigglesworth_0azzWdQQ.txt",
+    "edgar_markov_b5_omniblightking_rFiDw6Yi.txt",
+    "gerrard_weatherlight_hero_b4_bingusblaster_ojWFGOXg.txt",
+    "thrasios_triton_hero_b4_cooldaemonx_MR-6W3GU.txt",
+    "rograkh_son_of_rohgahh_b5_valtchuz_EwioBriv.txt",
+    "rograkh_son_of_rohgahh_b4_lucasshaw_jMuKYw2U.txt",
+    "vial_smasher_the_fierce_b5_thespeeze_tiViVDsi.txt",
+    "kinnan_bonder_prodigy_b4_firedog1947_QngzBrZG.txt",
+    "tymna_the_weaver_b5_devastationhour0202_xr1ADXSl.txt",
+    "tayam_luminous_enigma_b5_zodiacrooster_1537g3fj.txt",
+    "tymna_the_weaver_b5_quincyhicks_6RMwNxDm.txt",
+    "shorikai_genesis_engine_b4_samuraichou_alQM008b.txt",
+    "the_master_of_keys_b4_uccelloparadisiaco97_m03UBFKt.txt",
+    "y_shtola_night_s_blessed_b4_realuzzi_MFIBrPs4.txt",
+    "prismari_the_inspiration_b4_darkritheretic_1oNNGazb.txt",
+    "ureni_of_the_unwritten_b4_jestme5_jOixGXcX.txt",
+    "iroh_grand_lotus_b4_d0xic_7VVKQhGK.txt",
+    "yuriko_the_tiger_s_shadow_b4_keyouc326_m5YCL3hN.txt",
+    "zaffai_and_the_tempests_b4_patientlui2_ED2O20sV.txt",
+    "the_gitrog_monster_b4_bigkat69_P-tTHi3V.txt",
+    "edgar_markov_b4_omgrofl_U2t53o0m.txt",
+    "edgar_markov_b4_mynamesjuno_ZG0ifj1m.txt",
+    "tymna_the_weaver_b4_naliacailan_n6UU97Ax.txt",
+    "lorehold_the_historian_b4_ericr21_YaQOLn9S.txt",
+    "kumena_tyrant_of_orazca_b4_padillaaandrew__QUsnhoM.txt",
+    "yurlok_of_scorch_thrash_b4_sethasaur_8s9-5-zb.txt",
+    "hearthhull_the_worldseed_b5_myrgoh_CsDH32se.txt",
+    "witherbloom_the_balancer_b4_diehardgg_8Vky2YyW.txt"
+  ]
+}
