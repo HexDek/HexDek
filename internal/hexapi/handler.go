@@ -141,6 +141,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// here for crawler User-Agents (or unconditionally) so Discord/Twitter unfurls
 	// pick up per-deck previews.
 	mux.HandleFunc("GET /decks/{owner}/{id}", h.handleDeckSharePage)
+	mux.HandleFunc("GET /share/{owner}/{id}", h.handleShareDeckPage)
 	mux.HandleFunc("GET /cards/{name}", h.handleCardSharePage)
 	mux.HandleFunc("GET /operator/{owner}", h.handleOperatorSharePage)
 	mux.HandleFunc("GET /spectate", h.handleSpectateSharePage)

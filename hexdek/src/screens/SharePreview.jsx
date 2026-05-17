@@ -175,6 +175,53 @@ export default function SharePreview() {
     document.title = `${deckName}${ownerLabel} — HEXDEK`
   }, [deckName, owner])
 
+  // Mirror the backend OG injection client-side. Crawlers parse static
+  // HTML so the Go /share/{owner}/{id} handler does the real work; this
+  // keeps the meta accurate during SPA navigation and for the small set
+  // of crawlers (LinkedIn, some Slackbot fallbacks) that do execute JS.
+  useEffect(() => {
+    if (!deck) return
+    const title = cmdrCardName && cmdrCardName.toUpperCase() !== deckName
+      ? `${deckName} · ${cmdrCardName}`
+      : deckName
+    const archetypeLabel = archetype && archetype !== 'UNKNOWN'
+      ? archetype.charAt(0) + archetype.slice(1).toLowerCase()
+      : ''
+    const summaryParts = []
+    if (archetypeLabel) summaryParts.push(archetypeLabel)
+    if (wbs) summaryParts.push(`Bracket B${wbs}`)
+    if (deckElo?.games > 0 && deckElo?.win_rate != null) {
+      summaryParts.push(`${Math.round(deckElo.win_rate)}% WR · ${deckElo.games} games`)
+    }
+    const summary = summaryParts.length
+      ? summaryParts.join(' · ')
+      : `${title} — Commander deck on HEXDEK.`
+    const pageURL = `https://hexdek.dev/share/${owner}/${id}`
+    const imageURL = cmdrCardName
+      ? `https://hexdek.dev/api/card-art/${encodeURIComponent(cmdrCardName.split('//')[0].trim())}`
+      : 'https://hexdek.dev/og-default.png'
+
+    const setMeta = (selector, attr, value) => {
+      let el = document.head.querySelector(selector)
+      if (!el) {
+        el = document.createElement('meta')
+        const [k, v] = selector.replace(/[\[\]"]/g, '').split('=')
+        el.setAttribute(k, v)
+        document.head.appendChild(el)
+      }
+      el.setAttribute(attr, value)
+    }
+    setMeta('meta[property="og:title"]', 'content', title)
+    setMeta('meta[property="og:description"]', 'content', summary)
+    setMeta('meta[property="og:url"]', 'content', pageURL)
+    setMeta('meta[property="og:image"]', 'content', imageURL)
+    setMeta('meta[property="og:type"]', 'content', 'article')
+    setMeta('meta[name="twitter:title"]', 'content', title)
+    setMeta('meta[name="twitter:description"]', 'content', summary)
+    setMeta('meta[name="twitter:image"]', 'content', imageURL)
+    setMeta('meta[name="twitter:card"]', 'content', 'summary_large_image')
+  }, [deck, deckName, cmdrCardName, archetype, wbs, deckElo, owner, id])
+
   if (loading) {
     return (
       <div style={{ padding: 36, textAlign: 'center' }}>
