@@ -1101,25 +1101,8 @@ func ApplyGift(gs *GameState, seatIdx int, perm *Permanent) bool {
 	return false
 }
 
-// ---------------------------------------------------------------------------
-// §702.173 — Space Sculptor (stub)
-// ---------------------------------------------------------------------------
-
-// ApplySpaceSculptor grants a target creature a basic land type until EOT.
-func ApplySpaceSculptor(gs *GameState, perm *Permanent, landType string) {
-	if gs == nil || perm == nil {
-		return
-	}
-	gs.LogEvent(Event{
-		Kind:   "space_sculptor",
-		Seat:   perm.Controller,
-		Source: perm.Card.DisplayName(),
-		Details: map[string]interface{}{
-			"land_type": landType,
-			"rule":      "702.173",
-		},
-	})
-}
+// §702.173 — Space Sculptor: real impl (sector partition + zone-control)
+// lives in keywords_stubs_tail.go.
 
 // ---------------------------------------------------------------------------
 // §702.177 — Visit (stub)
