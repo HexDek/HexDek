@@ -170,4 +170,15 @@ export const api = {
   // BOINC distributed-compute credits — see internal/hexapi/contrib.go.
   // Returns 0/null fields for owners who haven't contributed yet.
   getContribCredits: (owner) => request(`/api/contrib/credits/${encodeURIComponent(owner)}`),
+
+  // Live conviction-diagnostic ring buffer. Gated by HEXDEK_ADMIN_OWNER on
+  // the server; the X-HexDek-Owner header is what the gate checks.
+  getConvictionEvents: ({ since = 0, limit = 200, triggeredOnly = false } = {}) => {
+    const params = new URLSearchParams()
+    if (since) params.set('since', String(since))
+    if (limit) params.set('limit', String(limit))
+    if (triggeredOnly) params.set('triggered', '1')
+    const qs = params.toString()
+    return authedRequest(`/api/admin/conviction-events${qs ? `?${qs}` : ''}`)
+  },
 }
