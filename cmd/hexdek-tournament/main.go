@@ -69,6 +69,7 @@ func main() {
 		hatBudget     = flag.Int("hat-budget", 50, "yggdrasil budget: 0=heuristic, 1-199=evaluator-guided, 200+=rollout")
 		hatTurnBudget = flag.Int("turn-budget", 0, "per-turn eval budget (0=legacy per-action, 100=recommended). Hat allocates evals across decisions within a turn.")
 		hatNoise      = flag.Float64("hat-noise", 0.2, "gaussian σ on targeting scores (0=deterministic, 0.2=default human-scale fuzz)")
+		legacyWeights = flag.Bool("legacy-hat-weights", false, "force midrange eval weights for every archetype (pre-b0b6db4 baseline for A/B winrate comparisons)")
 		matchup     = flag.Bool("matchup", false, "show full matchup matrix in output")
 		audit       = flag.Bool("audit", false, "capture full event stream")
 		reportPath  = flag.String("report", "data/rules/go_tournament_report.md", "markdown report output path")
@@ -84,6 +85,11 @@ func main() {
 		progressEvery = flag.Int("progress-every", 0, "log progress every N games (0 = auto)")
 	)
 	flag.Parse()
+
+	if *legacyWeights {
+		hat.LegacyMidrangeOnly = true
+		log.Printf("  legacy-hat-weights: ON — all archetypes forced to midrange profile")
+	}
 
 	// Start pprof HTTP server if enabled.
 	var cpuProfFile *os.File
