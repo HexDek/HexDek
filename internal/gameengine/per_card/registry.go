@@ -1889,6 +1889,17 @@ func registerDefaults() {
 	registerWorldspineWurm(Global())
 	registerArchpriestOfShadows(Global())
 	registerVolatileStormdrake(Global())
+
+	// dev/muninn-handlers-161-180 — gap log saturation. After wave 141-160
+	// merged, the only top-170 parser_gaps entry without a bespoke or
+	// family-backed handler is Sam, Loyal Attendant (#159, single-game
+	// 2026-05-14 hit). Every other tail entry is either covered by an
+	// existing per_card file or wired through one of the family scaffolds
+	// (etb_tribe_gate, evoke_color_gate, gated_etb_effect,
+	// end_step_intervening_if, lifegain_counter, land_tax). Wave
+	// intentionally narrow — keeping the cadence going as fresh tournament
+	// runs surface new tail entries.
+	registerSamLoyalAttendant(Global())
 }
 
 func init() {
