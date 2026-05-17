@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { Btn } from './chrome'
+import { useModalKeyboard } from '../hooks/useModalKeyboard'
 
 // AuthPrompt — contextual sign-in modal triggered when an anon user
 // reaches for an auth-gated action (upload, import, save, etc.).
@@ -21,12 +22,25 @@ export default function AuthPrompt({ onClose, action = 'continue', inline = fals
       </div>
     )
   }
+  return <AuthPromptOverlay action={action} goLogin={goLogin} onClose={onClose} />
+}
+
+function AuthPromptOverlay({ action, goLogin, onClose }) {
+  const panelRef = useModalKeyboard({ onClose })
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
       background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center',
     }} onClick={onClose}>
-      <div className="panel" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, width: '100%' }}>
+      <div
+        ref={panelRef}
+        className="panel"
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Sign in to ${action}`}
+        style={{ maxWidth: 440, width: '100%' }}
+      >
         <AuthPromptBody action={action} goLogin={goLogin} onClose={onClose} showCancel />
       </div>
     </div>
@@ -38,7 +52,14 @@ function AuthPromptBody({ action, goLogin, onClose, showCancel = true }) {
     <>
       <div className="panel-hd">
         <span>SIGN IN / / {action.toUpperCase()}</span>
-        {showCancel && <span style={{ cursor: 'pointer' }} onClick={onClose}>X</span>}
+        {showCancel && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close sign-in"
+            style={{ background: 'transparent', border: 'none', color: 'inherit', font: 'inherit', cursor: 'pointer', padding: 0 }}
+          >X</button>
+        )}
       </div>
       <div className="panel-bd" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 22 }}>
         <div className="t-md" style={{ lineHeight: 1.6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { toast } from './Toast'
 import { trackEvent } from '../hooks/useAnalytics'
+import { useModalKeyboard } from '../hooks/useModalKeyboard'
 
 const FORMATS = [
   { id: 'mtgo', label: 'MTGO', sub: 'Magic Online .dec — commander in sideboard' },
@@ -72,6 +73,7 @@ function download(text, filename) {
 }
 
 export default function DeckExportModal({ deck, deckId, onClose }) {
+  const panelRef = useModalKeyboard({ onClose })
   const [format, setFormat] = useState('mtgo')
   const cards = deck?.cards || []
   const commanderName = deck?.commander_card || deck?.commander || ''
@@ -97,10 +99,23 @@ export default function DeckExportModal({ deck, deckId, onClose }) {
 
   return (
     <div className="export-modal" onMouseDown={onClose}>
-      <div className="export-modal__panel" onMouseDown={e => e.stopPropagation()}>
+      <div
+        ref={panelRef}
+        className="export-modal__panel"
+        onMouseDown={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Export deck ${deckId || ''}`}
+      >
         <div className="export-modal__hd">
           <span>EXPORT DECK / / {(deckId || '?').toUpperCase()}</span>
-          <span className="export-modal__close" onClick={onClose}>ESC</span>
+          <button
+            type="button"
+            className="export-modal__close"
+            onClick={onClose}
+            aria-label="Close export dialog"
+            style={{ background: 'transparent', border: 'none', color: 'inherit', font: 'inherit', cursor: 'pointer', padding: 0 }}
+          >ESC</button>
         </div>
 
         <div className="export-modal__formats">
