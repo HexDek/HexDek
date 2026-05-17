@@ -1701,6 +1701,17 @@ func registerDefaults() {
 	registerBirthingRitual(Global())
 	registerLastingTarfire(Global())
 	registerValakutExploration(Global())
+
+	// dev/muninn-handlers-8-12 — Muninn parser-gap snowflakes #8-#12:
+	// Great Hall of the Biblioplex (#8, 111K), Acererak the Archlich
+	// (#9, 95K — ETB venture half; attack trigger already covered by
+	// registerAcererakEra3 in era3_batch.go), Knight of the White Orchid
+	// (#10, 93K), Vibrance (#11, 91K), Oversold Cemetery (#12, 76K).
+	registerGreatHallOfTheBiblioplex(Global())
+	registerAcererakTheArchlichETB(Global())
+	registerKnightOfTheWhiteOrchid(Global())
+	registerVibrance(Global())
+	registerOversoldCemetery(Global())
 }
 
 func init() {
