@@ -32,6 +32,14 @@ import (
 // self → draw 1. Typecycling variant: search library for matching type
 // instead of drawing.
 
+// HasCycling returns true if the card has any cycling keyword (plain
+// or typecycling). Convenience wrapper around CyclingCost for callers
+// that only need a yes/no answer.
+func HasCycling(card *Card) bool {
+	_, ok := CyclingCost(card)
+	return ok
+}
+
 // CyclingCost extracts the cycling cost from a card's AST keywords.
 // Returns (cost, isCycling). If the keyword has args, args[0] is the
 // generic mana cost as a float64 (JSON number). Returns -1 cost if no

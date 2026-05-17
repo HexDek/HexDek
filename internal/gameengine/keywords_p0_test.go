@@ -238,6 +238,126 @@ func TestCycling_Typecycling(t *testing.T) {
 	}
 }
 
+func TestCycling_Plainscycling(t *testing.T) {
+	gs := newP0Game(t)
+	gs.Seats[0].ManaPool = 5
+
+	// Eternal Dragon — plainscycling {2}.
+	card := addP0HandCard(gs, 0, "Eternal Dragon", 2, "creature")
+	card.AST = &gameast.CardAST{
+		Name: "Eternal Dragon",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "plainscycling", Args: []interface{}{float64(2)}},
+		},
+	}
+
+	addP0LibraryTyped(gs, 0, "Bear", "creature")
+	addP0LibraryTyped(gs, 0, "Plains", "land", "plains")
+	addP0LibraryTyped(gs, 0, "Forest", "land", "forest")
+
+	err := ActivateCycling(gs, 0, card)
+	if err != nil {
+		t.Fatalf("plainscycling should succeed: %v", err)
+	}
+
+	foundPlains := false
+	for _, c := range gs.Seats[0].Hand {
+		if c.Name == "Plains" {
+			foundPlains = true
+		}
+	}
+	if !foundPlains {
+		t.Error("plainscycling should fetch Plains to hand")
+	}
+
+	for _, c := range gs.Seats[0].Library {
+		if c.Name == "Plains" {
+			t.Error("Plains should have left the library")
+		}
+	}
+
+	if p0CountEvents(gs, "typecycling_search") != 1 {
+		t.Error("expected typecycling_search event for plainscycling")
+	}
+	// Should NOT draw a card — typecycling replaces the draw.
+	if p0CountEvents(gs, "draw") != 0 {
+		t.Errorf("plainscycling should not draw a card, got %d draw events",
+			p0CountEvents(gs, "draw"))
+	}
+}
+
+func TestCycling_Slithercycling(t *testing.T) {
+	gs := newP0Game(t)
+	gs.Seats[0].ManaPool = 5
+
+	// Made-up "slithercycling {1}" — the engine resolves the type from
+	// the keyword suffix, so any subtype string works.
+	card := addP0HandCard(gs, 0, "Brood Slither", 1, "creature")
+	card.AST = &gameast.CardAST{
+		Name: "Brood Slither",
+		Abilities: []gameast.Ability{
+			&gameast.Keyword{Name: "slithercycling", Args: []interface{}{float64(1)}},
+		},
+	}
+
+	addP0LibraryTyped(gs, 0, "Goblin", "creature", "goblin")
+	addP0LibraryTyped(gs, 0, "Hive Slither", "creature", "slither")
+	addP0LibraryTyped(gs, 0, "Mountain", "land", "mountain")
+
+	if got := TypecyclingType(card); got != "slither" {
+		t.Fatalf("TypecyclingType should derive 'slither', got %q", got)
+	}
+
+	err := ActivateCycling(gs, 0, card)
+	if err != nil {
+		t.Fatalf("slithercycling should succeed: %v", err)
+	}
+
+	foundSlither := false
+	for _, c := range gs.Seats[0].Hand {
+		if c.Name == "Hive Slither" {
+			foundSlither = true
+		}
+	}
+	if !foundSlither {
+		t.Error("slithercycling should fetch the Slither creature to hand")
+	}
+	if p0CountEvents(gs, "typecycling_search") != 1 {
+		t.Error("expected typecycling_search event")
+	}
+}
+
+func TestHasCycling(t *testing.T) {
+	cycler := &Card{
+		Name: "Renewed Faith",
+		AST: &gameast.CardAST{
+			Abilities: []gameast.Ability{
+				&gameast.Keyword{Name: "cycling", Args: []interface{}{float64(2)}},
+			},
+		},
+	}
+	if !HasCycling(cycler) {
+		t.Error("HasCycling should return true for plain cycling")
+	}
+
+	typecycler := &Card{
+		Name: "Twisted Abomination",
+		AST: &gameast.CardAST{
+			Abilities: []gameast.Ability{
+				&gameast.Keyword{Name: "swampcycling", Args: []interface{}{float64(2)}},
+			},
+		},
+	}
+	if !HasCycling(typecycler) {
+		t.Error("HasCycling should return true for typecycling variants")
+	}
+
+	vanilla := &Card{Name: "Grizzly Bears"}
+	if HasCycling(vanilla) {
+		t.Error("HasCycling should return false for a vanilla card")
+	}
+}
+
 func TestCyclingCost_Extraction(t *testing.T) {
 	card := &Card{
 		Name: "Akroma's Vengeance",
