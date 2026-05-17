@@ -1864,6 +1864,37 @@ func registerDefaults() {
 	// their bespoke handlers.
 	registerGatedEtbEffectFamily(Global())
 	registerEndStepInterveningIfFamily(Global())
+
+	// dev/muninn-handlers-141-160 — 12 handlers for the tail of uncovered
+	// Muninn parser_gaps.json entries (gap rank ~133-170 + reanimator
+	// finisher Rune-Scarred Demon). Skipped (already covered by family
+	// handlers or per-card files): Karlov of the Ghost Council
+	// (gen_karlov_of_the_ghost_council.go), Archangel of Thune /
+	// Exemplar of Light (lifegain_counter_family), Aerial Surveyor /
+	// Loyal Warhound (land_tax_family), Wistfulness / Deceit
+	// (evoke_color_gate), Dreamcaller Siren / Ghitu Journeymage /
+	// Acclaimed Contender (etb_tribe_gate), Lighthouse Chronologist
+	// (end_step_intervening_if). Skipped (noise): "<source> Token"
+	// snippets where the engine already mints the token — the
+	// parser_gap is snippet attribution, not a missing handler.
+	// Snowflakes Quilled Greatwurm / Bloodthirsty Conqueror /
+	// Anticausal Vestige / It That Betrays / Rootwater Matriarch /
+	// Worldspine Wurm / Archpriest of Shadows / Volatile Stormdrake
+	// were each first-seen 2026-05-05 with single-digit hit counts but
+	// reflect real combos and finishers in the meta — closing them
+	// avoids future runaway gaps if their decks see more play.
+	registerRuneScarredDemon(Global())
+	registerRoilElemental(Global())
+	registerAbzanFalconer(Global())
+	registerArchangelOfTithes(Global())
+	registerQuilledGreatwurm(Global())
+	registerBloodthirstyConqueror(Global())
+	registerAnticausalVestige(Global())
+	registerItThatBetrays(Global())
+	registerRootwaterMatriarch(Global())
+	registerWorldspineWurm(Global())
+	registerArchpriestOfShadows(Global())
+	registerVolatileStormdrake(Global())
 }
 
 func init() {
