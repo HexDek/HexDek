@@ -20,6 +20,7 @@ import { MOCK_DECK_ANALYSIS } from '../services/mock'
 import { DeckPicker } from './DeckCompare'
 import DeckExportModal from '../components/DeckExportModal'
 import ContextBox from '../components/ContextBox'
+import EloSparkline from '../components/EloSparkline'
 
 // Brutalist stat-summary panel: mana curve, card-type breakdown, color
 // pips. Computed entirely from the in-memory deck card list — no extra
@@ -1123,6 +1124,9 @@ export default function DeckArchive() {
             <div className="deck-vital-signs__sub">{deckElo.games.toLocaleString()} GAMES</div>
           ) : (
             <div className="deck-vital-signs__sub" style={{ opacity: 0.55 }}>RUN GAUNTLET</div>
+          )}
+          {eloHistory && eloHistory.length >= 2 && (
+            <EloSparkline runs={eloHistory} />
           )}
         </div>
         <div className="deck-vital-signs__cell">

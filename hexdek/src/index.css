@@ -839,6 +839,11 @@ body {
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
+.elo-sparkline {
+  display: block;
+  margin-top: 6px;
+  overflow: visible;
+}
 @media (max-width: 700px) {
   .deck-vital-signs { grid-template-columns: 1fr; gap: 8px; padding: 10px 12px 0; }
   .deck-vital-signs__num { font-size: 32px; }
