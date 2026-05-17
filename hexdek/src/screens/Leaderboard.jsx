@@ -49,7 +49,16 @@ function shameTier(rating) {
   return null
 }
 
-function ShameBadge({ rating }) {
+// `rating` is the TrueSkill-style score (can swing very negative for
+// decks that lose to high-rated opponents). `hexRating` is the leaderboard
+// rank metric, normalized to stay close to 0+ for any deck with a
+// reasonable win rate. Showing a shame badge on a deck whose hex_rating
+// is positive contradicts the leaderboard's own ranking — only fire when
+// BOTH metrics agree the deck is underperforming.
+function ShameBadge({ rating, hexRating }) {
+  // Suppress badge when the hex_rating signal says the deck is fine.
+  // 600 is the rough "median deck" threshold (range usually 0-2500).
+  if (hexRating != null && hexRating > 600) return null
   const tier = shameTier(rating)
   if (!tier) return null
   return (
@@ -313,7 +322,7 @@ function LeaderboardContent() {
                   <td className="lb-td lb-td--cmdr" style={{ textDecoration: 'underline', textDecorationColor: 'var(--rule-2)' }}>
                     {entry.commander || '--'}
                     <BandTag band={entry.band} bracket={entry.bracket} />
-                    <ShameBadge rating={entry.rating} />
+                    <ShameBadge rating={entry.rating} hexRating={entry.hex_rating} />
                   </td>
                   <td className="lb-td lb-td--owner muted">
                     {entry.owner ? (
@@ -415,7 +424,7 @@ function LeaderboardContent() {
                     <span style={{ fontWeight: 700, color: 'var(--ink)' }}>
                       {entry.commander || '--'}
                     </span>
-                    <ShameBadge rating={entry.rating} />
+                    <ShameBadge rating={entry.rating} hexRating={entry.hex_rating} />
                     {entry.owner ? (
                       <a
                         onClick={(e) => { e.stopPropagation(); navigate(`/profile/${entry.owner}`) }}
@@ -475,7 +484,7 @@ function LeaderboardMobileCard({ entry, index, flagFor, countries, navigate, onC
             <span style={{ fontWeight: 700, color: 'var(--ink)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {entry.commander || '--'}
               <BandTag band={entry.band} bracket={entry.bracket} />
-              <ShameBadge rating={entry.rating} />
+              <ShameBadge rating={entry.rating} hexRating={entry.hex_rating} />
             </span>
             <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.1 }}>
               <span className="t-xs" style={{ fontWeight: 700 }}>

@@ -109,7 +109,7 @@ function DeckStatsSummary({ cards }) {
   const pipMax = Math.max(1, ...Object.values(pips))
 
   return (
-    <Panel code="04.S" title="DECK STATS" right={<span className="t-xs muted">{cards?.length || 0} CARDS</span>}>
+    <Panel code="04.S" title="DECK STATS" right={<span className="t-xs muted">{(cards || []).reduce((n, c) => n + (c.quantity || 1), 0)} CARDS</span>}>
       <div className="deck-stats-summary">
         {/* Mana curve histogram */}
         <div className="deck-stats-summary__col">
@@ -780,7 +780,11 @@ export default function DeckArchive() {
     document.title = `${deckName}${ownerLabel} — HEXDEK`
   }, [deckName, owner])
 
-  const cardCount = deck?.card_count || deck?.cards?.length || 99
+  // Sum quantities (Plains × 8 counts as 8, not 1); cards?.length would
+  // undercount basic-land stacks. Fall back to backend card_count when present.
+  const cardCount = deck?.card_count
+    || (deck?.cards || []).reduce((n, c) => n + (c.quantity || 1), 0)
+    || 99
   // Bracket can be unset on imported decks that haven't been analyzed yet.
   // Keep `wbs` null in that case so callers can pick their own placeholder
   // ("—", "PENDING", hide entirely) instead of every site rendering "B?".
