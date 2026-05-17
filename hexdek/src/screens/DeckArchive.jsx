@@ -484,6 +484,47 @@ export default function DeckArchive() {
       editPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }, [editing])
+
+  // Cmd/Ctrl+K or bare K opens the in-deck card search modal. Bare K is
+  // suppressed when the user is typing in an editable field so the
+  // letter still types normally there.
+  useEffect(() => {
+    const isEditable = (el) => {
+      if (!el) return false
+      const tag = el.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+    }
+    const onKey = (e) => {
+      if (e.key === 'Escape' && cardSearchOpen) {
+        setCardSearchOpen(false)
+        e.preventDefault()
+        return
+      }
+      const isK = e.key === 'k' || e.key === 'K'
+      if (!isK) return
+      if (e.metaKey || e.ctrlKey) {
+        // Cmd+K / Ctrl+K — always open, override browser default
+        e.preventDefault()
+        setActiveTab('decklist')
+        setCardSearchOpen(true)
+        return
+      }
+      if (e.altKey || e.shiftKey) return
+      if (isEditable(e.target)) return
+      e.preventDefault()
+      setActiveTab('decklist')
+      setCardSearchOpen(true)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [cardSearchOpen])
+
+  useEffect(() => {
+    if (cardSearchOpen && cardSearchInputRef.current) {
+      cardSearchInputRef.current.focus()
+      cardSearchInputRef.current.select()
+    }
+  }, [cardSearchOpen])
   // Snapshot the editText when the workshop opens, so the diff readout
   // ("SAVE UPDATE (+3 / -1)") has a stable baseline to compare against
   // even after the user starts typing.
@@ -531,6 +572,9 @@ export default function DeckArchive() {
   const [ownerFriendCount, setOwnerFriendCount] = useState(null)
   const [similarDecks, setSimilarDecks] = useState(null) // null=loading, []=resolved
   const [activeTab, setActiveTab] = useState('analysis')
+  const [cardSearch, setCardSearch] = useState('')
+  const [cardSearchOpen, setCardSearchOpen] = useState(false)
+  const cardSearchInputRef = useRef(null)
   const { elo } = useLiveSocket()
   const { user } = useAuth()
 
@@ -890,6 +934,22 @@ export default function DeckArchive() {
   const emergentSynergies = analysis?.emergent_synergies || []
   const metaMatchups = analysis?.meta_matchups || []
   const cardRoles = analysis?.card_roles || null
+
+  // In-deck name search. Applied only to the visible decklist panels
+  // (CardRolesGrid + FULL CARD LIST) — stats, curve, and analysis stay
+  // computed off the full list.
+  const cardSearchQuery = cardSearch.trim().toLowerCase()
+  const matchesSearch = (name) => {
+    if (!cardSearchQuery) return true
+    const n = (name || '').replace(/^COMMANDER:\s*/i, '').toLowerCase()
+    return n.includes(cardSearchQuery)
+  }
+  const filteredCards = cardSearchQuery
+    ? (deck?.cards || []).filter(c => matchesSearch(c.name))
+    : (deck?.cards || [])
+  const filteredCardRoles = cardSearchQuery && cardRoles
+    ? Object.fromEntries(Object.entries(cardRoles).filter(([n]) => matchesSearch(n)))
+    : cardRoles
 
   // Derive commander color identity for page theming. Prefer Freya's analysis
   // (authoritative), then commander mana cost, then any pip in the decklist.
@@ -2383,17 +2443,37 @@ export default function DeckArchive() {
 
           {/* === DECK LIST TAB === */}
           {activeTab === 'decklist' && <>
+          {cardSearchQuery && (
+            <div className="panel" style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+              padding: '6px 10px', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase',
+              borderStyle: 'solid', borderColor: 'var(--accent)',
+            }}>
+              <span>
+                FILTER: <strong>"{cardSearch}"</strong>
+                <span className="muted"> · {filteredCards.length} / {cards.length} CARDS</span>
+              </span>
+              <span style={{ display: 'inline-flex', gap: 6 }}>
+                <Tag solid style={{ cursor: 'pointer' }} onClick={() => setCardSearchOpen(true)}>EDIT</Tag>
+                <Tag style={{ cursor: 'pointer' }} onClick={() => setCardSearch('')}>CLEAR ✕</Tag>
+              </span>
+            </div>
+          )}
           {cards.length > 0 && (
-            <CardRolesGrid cards={cards} cardRoles={cardRoles} />
+            <CardRolesGrid cards={filteredCards} cardRoles={filteredCardRoles} />
           )}
 
           {cards.length > 0 && (
-            <Panel code="04.B" title={`FULL CARD LIST / / ${cards.length} ENTRIES`}>
+            <Panel code="04.B" title={`FULL CARD LIST / / ${cardSearchQuery ? `${filteredCards.length} / ${cards.length}` : cards.length} ENTRIES`}>
               <div>
-                {cards.map((c, i) => {
+                {filteredCards.length === 0 ? (
+                  <div className="t-xs muted" style={{ padding: '20px 0', textAlign: 'center' }}>
+                    &gt; NO CARDS MATCH "{cardSearch}"
+                  </div>
+                ) : filteredCards.map((c, i) => {
                   const linkName = (c.name || '').replace(/^COMMANDER:\s*/i, '').trim()
                   return (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '3px 0', borderBottom: i < cards.length - 1 ? '1px dotted var(--rule)' : 'none' }}>
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '3px 0', borderBottom: i < filteredCards.length - 1 ? '1px dotted var(--rule)' : 'none' }}>
                       <CardLink name={linkName} className="t-xs" style={{ borderBottom: 'none', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {c.name}
                       </CardLink>
@@ -2489,6 +2569,16 @@ export default function DeckArchive() {
           </>}
         </div>
       </div>
+      {cardSearchOpen && (
+        <CardSearchModal
+          value={cardSearch}
+          onChange={setCardSearch}
+          totalCards={cards.length}
+          matchCount={filteredCards.length}
+          inputRef={cardSearchInputRef}
+          onClose={() => setCardSearchOpen(false)}
+        />
+      )}
       {exportOpen && (
         <DeckExportModal
           deck={deck}
@@ -2506,6 +2596,80 @@ export default function DeckArchive() {
           }}
         />
       )}
+    </div>
+  )
+}
+
+function CardSearchModal({ value, onChange, totalCards, matchCount, inputRef, onClose }) {
+  return (
+    <div
+      onMouseDown={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(8, 9, 7, 0.55)',
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'center',
+        paddingTop: '14vh',
+        zIndex: 1000,
+      }}
+    >
+      <div
+        onMouseDown={e => e.stopPropagation()}
+        className="panel"
+        style={{
+          width: 'min(460px, 92vw)',
+          padding: 0,
+          background: 'var(--panel)',
+          borderColor: 'var(--accent)',
+          borderStyle: 'solid',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.55)',
+        }}
+      >
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '6px 10px', borderBottom: '1px solid var(--rule-2)',
+          fontSize: 9, letterSpacing: '0.12em', color: 'var(--ink-3)', fontWeight: 700,
+        }}>
+          <span>FIND CARD IN DECK</span>
+          <span onClick={onClose} style={{ cursor: 'pointer', letterSpacing: '0.08em' }}>ESC</span>
+        </div>
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') onClose() }}
+          placeholder="Type a card name..."
+          style={{
+            width: '100%',
+            padding: '12px 14px',
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--ink)',
+            fontFamily: 'inherit',
+            fontSize: 14,
+            letterSpacing: '0.04em',
+            outline: 'none',
+          }}
+        />
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '6px 10px', borderTop: '1px solid var(--rule-2)',
+          fontSize: 9, letterSpacing: '0.1em', color: 'var(--ink-3)',
+        }}>
+          <span>
+            {value.trim() ? `${matchCount} / ${totalCards} MATCH` : `${totalCards} CARDS TOTAL`}
+          </span>
+          <span style={{ display: 'inline-flex', gap: 8 }}>
+            {value && (
+              <span onClick={() => onChange('')} style={{ cursor: 'pointer' }}>CLEAR</span>
+            )}
+            <span className="muted">ENTER OR ESC TO CLOSE</span>
+          </span>
+        </div>
+      </div>
     </div>
   )
 }
