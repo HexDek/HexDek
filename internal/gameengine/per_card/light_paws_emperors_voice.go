@@ -6,21 +6,25 @@ import (
 
 // Light-Paws, Emperor's Voice
 //
-// Oracle text:
-//   Whenever an Aura is put onto the battlefield under your control, if
-//   you didn't put it onto the battlefield with this ability, you may
-//   search your library for an Aura card with mana value less than or
-//   equal to that Aura and with a different name, put it onto the
-//   battlefield attached to Light-Paws, Emperor's Voice, then shuffle.
+// Oracle text (Scryfall, verified 2026-05-16):
+//   Whenever an Aura you control enters, if you cast it, you may search
+//   your library for an Aura card with mana value less than or equal to
+//   that Aura and with a different name than each Aura you control, put
+//   that card onto the battlefield attached to Light-Paws, then shuffle.
 //
 // Implementation:
 //   - OnTrigger("permanent_etb"): fires whenever any permanent enters the
-//     battlefield. Gate: entering permanent is an Aura (cardHasType "aura"),
-//     controller matches Light-Paws' controller, and the
-//     "light_paws_searching" flag is NOT set on Light-Paws (prevents the
-//     Aura fetched by this ability from re-triggering it).
+//     battlefield. Gates:
+//       (a) entering permanent is an Aura (cardHasType "aura"),
+//       (b) entering Aura is controlled by Light-Paws' controller, and
+//       (c) entering.Flags["was_cast"] == 1 — the "if you cast it"
+//           intervening-if (CR §603.6c). stack.go stamps was_cast on the
+//           cast path only; blink, reanimate, and Light-Paws' own fetch
+//           leave it unset, which naturally prevents the fetched Aura's
+//           ETB from re-triggering this ability.
 //   - Search library for the highest-CMC Aura with CMC <= entering Aura's
-//     CMC and a different name than the entering Aura.
+//     CMC whose name does NOT match any Aura the controller already
+//     controls (including the entering Aura itself).
 //   - Put found Aura onto battlefield attached to Light-Paws, shuffle.
 
 func registerLightPawsEmperorsVoiceETB(r *Registry) {
@@ -55,9 +59,11 @@ func lightPawsAuraETBTrigger(gs *gameengine.GameState, perm *gameengine.Permanen
 		return
 	}
 
-	// Guard against re-trigger: if Light-Paws is currently searching,
-	// the entering Aura was put onto the battlefield by this ability.
-	if perm.Flags != nil && perm.Flags["light_paws_searching"] != 0 {
+	// "If you cast it" — CR §603.6c. stack.go sets was_cast on the cast
+	// path only. Blink / reanimate / Light-Paws' own fetch never set it,
+	// so the trigger correctly no-ops on those (and never recurses on
+	// the fetched Aura).
+	if entering.Flags == nil || entering.Flags["was_cast"] != 1 {
 		return
 	}
 
@@ -73,8 +79,23 @@ func lightPawsAuraETBTrigger(gs *gameengine.GameState, perm *gameengine.Permanen
 	enteringCMC := entering.Card.CMC
 	enteringName := entering.Card.DisplayName()
 
+	// "Different name than each Aura you control" — collect the names of
+	// every Aura currently on the controller's battlefield. The entering
+	// Aura is already on the battlefield by the time permanent_etb fires
+	// (see etb_dispatch.go), so this set already contains enteringName.
+	controlledAuraNames := map[string]bool{}
+	for _, p := range s.Battlefield {
+		if p == nil || p.Card == nil {
+			continue
+		}
+		if cardHasType(p.Card, "aura") {
+			controlledAuraNames[p.Card.DisplayName()] = true
+		}
+	}
+
 	// Search library for the best Aura: highest CMC that is still
-	// <= the entering Aura's CMC, with a different name.
+	// <= the entering Aura's CMC, whose name doesn't collide with any
+	// controlled Aura.
 	bestIdx := -1
 	bestCMC := -1
 	for i, c := range s.Library {
@@ -84,7 +105,7 @@ func lightPawsAuraETBTrigger(gs *gameengine.GameState, perm *gameengine.Permanen
 		if c.CMC > enteringCMC {
 			continue
 		}
-		if c.DisplayName() == enteringName {
+		if controlledAuraNames[c.DisplayName()] {
 			continue
 		}
 		if c.CMC > bestCMC {
@@ -100,13 +121,6 @@ func lightPawsAuraETBTrigger(gs *gameengine.GameState, perm *gameengine.Permanen
 		})
 		return
 	}
-
-	// Set the searching flag to prevent the fetched Aura's ETB from
-	// re-triggering this ability.
-	if perm.Flags == nil {
-		perm.Flags = map[string]int{}
-	}
-	perm.Flags["light_paws_searching"] = 1
 
 	card := s.Library[bestIdx]
 	gameengine.MoveCard(gs, card, seat, "library", "battlefield", "light_paws_emperors_voice")
@@ -124,9 +138,6 @@ func lightPawsAuraETBTrigger(gs *gameengine.GameState, perm *gameengine.Permanen
 	}
 
 	shuffleLibraryPerCard(gs, seat)
-
-	// Clear the searching flag.
-	delete(perm.Flags, "light_paws_searching")
 
 	emit(gs, slug, perm.Card.DisplayName(), map[string]interface{}{
 		"seat":          seat,
