@@ -669,6 +669,10 @@ func FireDrawTriggerObservers(gs *GameState, drawerSeat int, count int, fromRepl
 					tgt := gs.Seats[drawerSeat]
 					if tgt != nil {
 						DealDamage(gs, drawerSeat, 1, name)
+						// §702.179 — Bowmasters' controller dealt
+						// damage to a player; bump speed (once-per-
+						// turn gated).
+						SpeedDamageReporter(gs, perm.Controller)
 					}
 					gs.LogEvent(Event{
 						Kind:   "draw_trigger_observer",
