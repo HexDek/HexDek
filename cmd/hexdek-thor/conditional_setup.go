@@ -872,6 +872,35 @@ const (
 	condScaffoldSelfHasCounter            // source has named counter on it
 	condScaffoldDidntAttackThisTurn       // source / controller didn't attack this turn
 	condScaffoldDealtDamageOpponentTurn   // dealt damage to an opponent this turn
+
+	// Era 4 audit additions — bridge structured Kinds and raw-text fragments
+	// surfaced by scripts/era4_scaffold_audit.py for the 2023-2026 corpus
+	// (discover / descend / battles / prototype / craft / role tokens / the
+	// ring). Each maps to existing engine state; the highest-hit raw clusters
+	// are had-counters past-state, you-cast-from-hand, planeswalker/artifact
+	// ETB-this-turn, and the explore/scry-style land-or-hand reveal pattern.
+	condScaffoldItWasCreature             // structured: "it was a creature" post-death typecheck
+	condScaffoldNoCreaturesOnBattlefield  // structured: "no creatures are on the battlefield"
+	condScaffoldHadCountersOnIt           // raw: "it had (a/one or more/N) counter(s) on it"
+	condScaffoldYouCastFromHand           // raw: "you cast it [from your hand]"
+	condScaffoldPlaneswalkerETBThisTurn   // raw: "a planeswalker entered the battlefield under your control this turn"
+	condScaffoldArtifactETBThisTurn       // raw: "an artifact entered the battlefield under your control this turn"
+	condScaffoldStillOnBattlefield        // raw: "it's on the battlefield" / "if ~ is still on the battlefield"
+	condScaffoldRevealLandOtherwiseHand   // raw: "if it's a land card, put it onto the battlefield. otherwise put it into your hand"
+
+	// Era 2 audit additions — bridge raw-text fragments surfaced by
+	// scripts/era2_scaffold_audit.py for the 2015-2019 corpus (crew /
+	// vehicles / energy / amass / ascend / eminence / mutate). Each pattern
+	// has low per-card frequency but the underlying mechanic is pervasive
+	// across Kaladesh-era vehicles, Rivals of Ixalan ascend, Aetherdrift
+	// velocity counters, and Ikoria mutate subtype lookups.
+	condScaffoldVelocityCounters    // raw: "N or more velocity counters on it"
+	condScaffoldNotDeclaredAttacker // raw: "isn't being declared as an attacker"
+	condScaffoldManaValueLE         // raw: "its mana value is N or less"
+	condScaffoldCrewedBySubtype     // raw: "a(n) <subtype> crewed it this turn"
+	condScaffoldIsSubtype           // raw: "that creature is a(n) <subtype>"
+	condScaffoldAscendBlessing      // raw: "city's blessing" / "if you have the city's blessing"
+	condScaffoldEminenceCommandZone // raw: "in the command zone" eminence-style trigger
 )
 
 type conditionScaffold struct {
@@ -923,6 +952,14 @@ var (
 	manaSpentNumRe = regexp.MustCompile(`\{?(\d+)\}?\s+or\s+more\s+(?:[a-z]+\s+)?mana\s+(?:was\s+)?(?:spent|paid)`)
 	// "mana value of ~ is N or greater"
 	manaValueGtRe = regexp.MustCompile(`mana\s+value\s+of\s+\S+\s+is\s+(\d+)\s+or\s+(?:greater|more)`)
+
+	// Era 2 raw-text patterns. manaValueLERe captures N from "its mana
+	// value is N or less"; crewedBySubtypeRe captures the pilot subtype;
+	// isSubtypeRe captures the target subtype from "that creature is a
+	// <subtype>".
+	manaValueLERe     = regexp.MustCompile(`(?:its\s+)?mana\s+value\s+(?:of\s+\S+\s+)?is\s+(\d+)\s+or\s+(?:less|fewer)`)
+	crewedBySubtypeRe = regexp.MustCompile(`(?:an?\s+)([a-z]+)\s+crewed\s+(?:it|this\s+vehicle)\s+this\s+turn`)
+	isSubtypeRe       = regexp.MustCompile(`that\s+creature\s+is\s+(?:an?\s+)?([a-z]+)\b`)
 )
 
 func conditionRawText(cond *gameast.Condition) string {
@@ -1041,6 +1078,19 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 		return conditionScaffold{kind: condScaffoldDidntAttackThisTurn}
 	case "dealt_damage_to_opponent_this_turn":
 		return conditionScaffold{kind: condScaffoldDealtDamageOpponentTurn}
+
+	// Era 4 audit — structured Kinds the existing whitelist drops on the
+	// floor. landfall + you_descended_this_turn route to the existing
+	// flag-based scaffolds; it_was_a_creature / no_creatures_on_battlefield
+	// need new shapes (post-death typecheck / board-empty check).
+	case "landfall":
+		return conditionScaffold{kind: condScaffoldLandfallThisTurn}
+	case "you_descended_this_turn":
+		return conditionScaffold{kind: condScaffoldDescendedThisTurn}
+	case "it_was_a_creature":
+		return conditionScaffold{kind: condScaffoldItWasCreature}
+	case "no_creatures_on_battlefield":
+		return conditionScaffold{kind: condScaffoldNoCreaturesOnBattlefield}
 	}
 
 	switch kind {
@@ -1578,6 +1628,153 @@ func detectConditionScaffold(cond *gameast.Condition) conditionScaffold {
 				cs.count = n
 			}
 		}
+		return cs
+	}
+
+	// Era 4 raw-text matchers — placed before the catch-all "you control"
+	// tribal so the more specific clauses win. Order within this block:
+	// most specific phrase first.
+
+	// "a planeswalker entered the battlefield under your control this turn"
+	// Oath of Liliana / Oath of Chandra-style planeswalker-ETB conditions.
+	if (strings.Contains(txt, "planeswalker") &&
+		(strings.Contains(txt, "entered the battlefield") ||
+			strings.Contains(txt, "enters the battlefield")) &&
+		strings.Contains(txt, "this turn")) ||
+		(strings.Contains(txt, "planeswalker") && strings.Contains(txt, "you've cast") && strings.Contains(txt, "this turn")) {
+		cs.kind = condScaffoldPlaneswalkerETBThisTurn
+		return cs
+	}
+
+	// "as long as an artifact entered the battlefield under your control
+	// this turn" — Mechan Shieldmate, Shipwreck Sentry.
+	if strings.Contains(txt, "artifact") &&
+		(strings.Contains(txt, "entered the battlefield") || strings.Contains(txt, "enters the battlefield")) &&
+		strings.Contains(txt, "this turn") &&
+		(strings.Contains(txt, "under your control") || strings.Contains(txt, "you control")) {
+		cs.kind = condScaffoldArtifactETBThisTurn
+		return cs
+	}
+
+	// "if it's a land card, put it onto the battlefield. otherwise, …"
+	// Coiling Oracle / Skyward Eye Prophets / Nadu reveal-and-route. Anchor
+	// on the dual phrasing so we don't match generic land tutors.
+	if strings.Contains(txt, "if it's a land card") &&
+		(strings.Contains(txt, "onto the battlefield") || strings.Contains(txt, "put it onto")) &&
+		strings.Contains(txt, "otherwise") {
+		cs.kind = condScaffoldRevealLandOtherwiseHand
+		return cs
+	}
+
+	// "it had (a/one or more/N) counter(s) on it" — Ozolith, Angelic Sleuth,
+	// Resourceful Defense, Nikara, Leader's Talent. Past-state counter check
+	// fired on death/leaves-battlefield triggers.
+	if (strings.Contains(txt, "had counters on it") ||
+		strings.Contains(txt, "had a counter on it") ||
+		strings.Contains(txt, "had a +1/+1 counter") ||
+		strings.Contains(txt, "had one or more counters") ||
+		strings.Contains(txt, "had any counters on it") ||
+		strings.Contains(txt, "had a death counter")) &&
+		!strings.Contains(txt, "ki counter") {
+		cs.kind = condScaffoldHadCountersOnIt
+		return cs
+	}
+
+	// "you cast it from your hand" / "you cast it" (cast-from-hand check on
+	// the source itself — Wild Pair, Feasting Troll King, Yathan Roadwatcher,
+	// Bringer of the Last Gift). Distinguish from generic "you cast a spell
+	// this turn" which is already handled by CastSpellThisTurn.
+	if (strings.Contains(txt, "you cast it from your hand") ||
+		strings.Contains(txt, "you cast it from a graveyard") ||
+		(strings.Contains(txt, "you cast it") && !strings.Contains(txt, "you cast it from"))) &&
+		!strings.Contains(txt, "you cast a spell") {
+		cs.kind = condScaffoldYouCastFromHand
+		return cs
+	}
+
+	// "it's on the battlefield" / "is still on the battlefield" — Hex,
+	// Stalking Yeti, Auratouched Mage. Static still-on-bf precondition.
+	if (strings.Contains(txt, "it's on the battlefield") ||
+		strings.Contains(txt, "is still on the battlefield")) &&
+		!strings.Contains(txt, "isn't on the battlefield") &&
+		!strings.Contains(txt, "is not on the battlefield") {
+		cs.kind = condScaffoldStillOnBattlefield
+		return cs
+	}
+
+	// Era 2 raw-text matchers — anchored on Era 2-specific keywords so they
+	// don't false-match the broader corpus. Each clause is rare per card but
+	// the mechanic cluster matters for vehicle/crew/mutate/eminence
+	// regression coverage.
+
+	// "N or more velocity counters on it" — Aetherdrift racing vehicles.
+	if strings.Contains(txt, "velocity counter") {
+		cs.kind = condScaffoldVelocityCounters
+		cs.count = 2
+		return cs
+	}
+
+	// "isn't being declared as an attacker" — Rhoda, Geist Avenger and
+	// other anti-attack triggers. Distinct from didnt_attack_this_turn:
+	// this fires DURING declare-attackers, not at end-of-turn.
+	if strings.Contains(txt, "isn't being declared as an attacker") ||
+		strings.Contains(txt, "is not being declared as an attacker") ||
+		strings.Contains(txt, "not declared as an attacker") {
+		cs.kind = condScaffoldNotDeclaredAttacker
+		return cs
+	}
+
+	// "its mana value is N or less" — Amped Raptor, Thunderous Velocipede,
+	// cascade-style cost filters.
+	if m := manaValueLERe.FindStringSubmatch(txt); m != nil {
+		cs.kind = condScaffoldManaValueLE
+		if n, err := strconv.Atoi(m[1]); err == nil && n > 0 {
+			cs.count = n
+		} else {
+			cs.count = 4
+		}
+		return cs
+	}
+
+	// "a(n) <subtype> crewed it this turn" — Adrestia and other Kaladesh
+	// vehicles with subtype-gated crew triggers. Capture the subtype so
+	// the priming can place a matching pilot.
+	if m := crewedBySubtypeRe.FindStringSubmatch(txt); m != nil {
+		subtype := strings.TrimSpace(m[1])
+		if subtype != "" && !isGenericWord(subtype) {
+			cs.kind = condScaffoldCrewedBySubtype
+			cs.subtype = subtype
+			return cs
+		}
+	}
+
+	// "that creature is a(n) <subtype>" — Turtle Van / mutate creature-type
+	// gates. Anchor on the explicit copula so we don't match generic
+	// "creature with subtype" clauses.
+	if m := isSubtypeRe.FindStringSubmatch(txt); m != nil {
+		subtype := strings.TrimSpace(m[1])
+		if subtype != "" && !isGenericWord(subtype) {
+			cs.kind = condScaffoldIsSubtype
+			cs.subtype = subtype
+			return cs
+		}
+	}
+
+	// "city's blessing" — Rivals of Ixalan ascend. The existing primeAscend
+	// helper handles the engine side; the scaffold dispatch just routes the
+	// clause so it gets bucketed rather than dropped.
+	if strings.Contains(txt, "city's blessing") ||
+		strings.Contains(txt, "have ascended") {
+		cs.kind = condScaffoldAscendBlessing
+		return cs
+	}
+
+	// "in the command zone" / "from the command zone" — eminence triggers
+	// (Kynaios, Edgar Markov, Inalla, The Ur-Dragon). Static-zone check on
+	// the commander itself.
+	if strings.Contains(txt, "in the command zone") ||
+		strings.Contains(txt, "from the command zone") {
+		cs.kind = condScaffoldEminenceCommandZone
 		return cs
 	}
 
@@ -3021,6 +3218,314 @@ func applyConditionScaffolding(gs *gameengine.GameState, cond *gameast.Condition
 			Source: "thor_priming",
 		})
 		cs.description = "set dealt_damage_to_opponent_this_turn flag + logged damage event"
+
+	// Era 4 audit additions — apply implementations.
+
+	case condScaffoldItWasCreature:
+		// Post-death typecheck — "if it was a creature when it died /
+		// left the battlefield". Place a creature card in seat 0's
+		// graveyard and stamp a per-game flag so observers reading
+		// "was_creature_on_leave" succeed.
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Graveyard = append(gs.Seats[0].Graveyard, &gameengine.Card{
+				Name:          "Was-Creature Setup",
+				Owner:         0,
+				Types:         []string{"creature"},
+				BasePower:     1,
+				BaseToughness: 1,
+			})
+		}
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["last_left_was_creature"] = 1
+		if srcPerm != nil {
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["was_creature_on_leave"] = 1
+		}
+		cs.description = "placed creature in seat 0 graveyard + set last_left_was_creature flag"
+
+	case condScaffoldNoCreaturesOnBattlefield:
+		// "no creatures are on the battlefield" — Sothera, the Supervoid;
+		// Portcullis. Clear creature permanents from every seat so the
+		// condition resolves true.
+		for _, seat := range gs.Seats {
+			if seat == nil {
+				continue
+			}
+			filtered := seat.Battlefield[:0]
+			for _, p := range seat.Battlefield {
+				if p == nil || p.Card == nil {
+					filtered = append(filtered, p)
+					continue
+				}
+				isCreature := false
+				for _, t := range p.Card.Types {
+					if t == "creature" {
+						isCreature = true
+						break
+					}
+				}
+				if !isCreature {
+					filtered = append(filtered, p)
+				}
+			}
+			seat.Battlefield = filtered
+		}
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["no_creatures_on_battlefield"] = 1
+		cs.description = "removed all creature permanents from every seat"
+
+	case condScaffoldHadCountersOnIt:
+		// Past-state counter check on srcPerm (Ozolith, Nikara, Leader's
+		// Talent). Stamp +1/+1 counters now so any "had counters on it"
+		// post-leave snapshot the engine takes resolves true.
+		if srcPerm != nil {
+			if srcPerm.Counters == nil {
+				srcPerm.Counters = map[string]int{}
+			}
+			if srcPerm.Counters["+1/+1"] < 1 {
+				srcPerm.Counters["+1/+1"] = 1
+			}
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["had_counters"] = 1
+		}
+		cs.description = "stamped +1/+1 counter on srcPerm + had_counters flag"
+
+	case condScaffoldYouCastFromHand:
+		// "you cast it [from your hand]" condition on the source itself.
+		// Append a cast record naming the source (or a generic stand-in)
+		// so any "cast from hand" predicate finds it. Also stamp the
+		// permanent's cast-from-hand flag for direct lookups.
+		castName := "Cast-From-Hand Setup"
+		if srcPerm != nil && srcPerm.Card != nil && srcPerm.Card.Name != "" {
+			castName = srcPerm.Card.Name
+		}
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Turn.Casts = append(gs.Seats[0].Turn.Casts, gameengine.CastRecord{
+				CardName:  castName,
+				Types:     []string{"creature"},
+				ManaValue: 2,
+			})
+			gs.Seats[0].SpellsCastThisTurn++
+			gs.Seats[0].Turn.SpellsCast++
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["cast_spell_this_turn"] = 1
+		}
+		if srcPerm != nil {
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["cast_from_hand"] = 1
+		}
+		cs.description = "appended cast record + set cast_from_hand flag on srcPerm"
+
+	case condScaffoldPlaneswalkerETBThisTurn:
+		// "a planeswalker entered the battlefield under your control this
+		// turn" — Oath of Liliana, Oath of Chandra. Place a planeswalker
+		// on seat 0 + increment Turn.PlaneswalkersEntered if engine tracks
+		// it; fall back to a stamped game flag otherwise.
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, &gameengine.Permanent{
+				Card: &gameengine.Card{
+					Name:  "Planeswalker ETB Setup",
+					Owner: 0,
+					Types: []string{"planeswalker", "legendary"},
+				},
+				Controller: 0,
+				Owner:      0,
+				Flags:      map[string]int{"entered_this_turn": 1},
+				Counters:   map[string]int{"loyalty": 3},
+			})
+		}
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["planeswalker_etb_this_turn"] = 1
+		cs.description = "placed planeswalker on seat 0 + set planeswalker_etb_this_turn flag"
+
+	case condScaffoldArtifactETBThisTurn:
+		// "as long as an artifact entered the battlefield under your
+		// control this turn" — Mechan Shieldmate, Shipwreck Sentry. Seed
+		// one artifact on seat 0 and stamp the ETB-this-turn flag.
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			gs.Seats[0].Battlefield = append(gs.Seats[0].Battlefield, &gameengine.Permanent{
+				Card: &gameengine.Card{
+					Name:  "Artifact ETB Setup",
+					Owner: 0,
+					Types: []string{"artifact"},
+				},
+				Controller: 0,
+				Owner:      0,
+				Flags:      map[string]int{"entered_this_turn": 1},
+				Counters:   map[string]int{},
+			})
+		}
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["artifact_etb_this_turn"] = 1
+		cs.description = "placed artifact on seat 0 + set artifact_etb_this_turn flag"
+
+	case condScaffoldStillOnBattlefield:
+		// "if it's on the battlefield" / "is still on the battlefield" —
+		// static self-presence check. srcPerm being on the battlefield is
+		// the natural state inside applyConditionScaffolding; we just need
+		// to stamp a flag so downstream observers can read it.
+		if srcPerm != nil {
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["still_on_battlefield"] = 1
+		}
+		cs.description = "set still_on_battlefield flag on srcPerm"
+
+	case condScaffoldRevealLandOtherwiseHand:
+		// "if it's a land card, put it onto the battlefield. otherwise,
+		// put it into your hand" — Coiling Oracle / Nadu / Skyward Eye
+		// Prophets. Seed a land card on top of seat 0's library so the
+		// reveal hits the land branch.
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			landCard := &gameengine.Card{
+				Name:  "Top-of-Library Land",
+				Owner: 0,
+				Types: []string{"land", "forest"},
+			}
+			gs.Seats[0].Library = append([]*gameengine.Card{landCard}, gs.Seats[0].Library...)
+		}
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["top_of_library_is_land"] = 1
+		cs.description = "placed land on top of seat 0 library (reveal-and-route)"
+
+	// Era 2 audit additions — apply implementations.
+
+	case condScaffoldVelocityCounters:
+		// Aetherdrift racing vehicles — accumulate velocity counters as
+		// the race progresses. Stamp the threshold on srcPerm.
+		n := cs.count
+		if n < 1 {
+			n = 2
+		}
+		if srcPerm != nil {
+			if srcPerm.Counters == nil {
+				srcPerm.Counters = map[string]int{}
+			}
+			if srcPerm.Counters["velocity"] < n {
+				srcPerm.Counters["velocity"] = n
+			}
+		}
+		cs.description = fmt.Sprintf("placed %d velocity counters on srcPerm", n)
+
+	case condScaffoldNotDeclaredAttacker:
+		// "isn't being declared as an attacker" — fires during
+		// declare-attackers when the source is held back. Clear the
+		// attacker flag on srcPerm explicitly so observers reading
+		// "attacking" state see false.
+		if srcPerm != nil {
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["not_attacker"] = 1
+			delete(srcPerm.Flags, "attacking")
+			delete(srcPerm.Flags, "is_attacking")
+		}
+		gs.Phase, gs.Step = "combat", "declare_attackers"
+		cs.description = "marked srcPerm not_attacker + set Phase=combat Step=declare_attackers"
+
+	case condScaffoldManaValueLE:
+		// "its mana value is N or less" — cascade-style cost filters
+		// (Amped Raptor, Thunderous Velocipede). Lower srcPerm.Card.CMC
+		// below the threshold so the cost predicate resolves true.
+		threshold := cs.count
+		if threshold < 1 {
+			threshold = 4
+		}
+		if srcPerm != nil && srcPerm.Card != nil {
+			if srcPerm.Card.CMC > threshold {
+				srcPerm.Card.CMC = threshold
+			}
+		}
+		cs.description = fmt.Sprintf("set srcPerm.Card.CMC <= %d (mana_value_le)", threshold)
+
+	case condScaffoldCrewedBySubtype:
+		// Kaladesh vehicles with subtype-gated crew triggers (Adrestia).
+		// Place a matching pilot creature on seat 0 + mark srcPerm as
+		// crewed with the subtype recorded so observers see the pilot.
+		subtype := cs.subtype
+		if subtype == "" {
+			subtype = "pilot"
+		}
+		placeNamedFriendlyCreatureWithSubtype(gs, "Crew Pilot "+subtype, subtype)
+		if srcPerm != nil {
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["crewed_this_turn"] = 1
+			srcPerm.Flags["crewed_by_"+subtype] = 1
+		}
+		cs.description = fmt.Sprintf("placed %s pilot + flagged srcPerm crewed_by_%s", subtype, subtype)
+
+	case condScaffoldIsSubtype:
+		// "that creature is a(n) <subtype>" — Turtle Van / mutate
+		// subtype gates. Stamp the subtype on srcPerm.Card.Types so
+		// subtype predicates resolve true (subtypes live alongside
+		// supertypes in Types in this codebase — see
+		// placeNamedFriendlyCreatureWithSubtype).
+		subtype := cs.subtype
+		if subtype == "" {
+			subtype = "creature"
+		}
+		if srcPerm != nil && srcPerm.Card != nil {
+			has := false
+			for _, t := range srcPerm.Card.Types {
+				if t == subtype {
+					has = true
+					break
+				}
+			}
+			if !has {
+				srcPerm.Card.Types = append(srcPerm.Card.Types, subtype)
+			}
+			if srcPerm.Flags == nil {
+				srcPerm.Flags = map[string]int{}
+			}
+			srcPerm.Flags["is_"+subtype] = 1
+		}
+		cs.description = fmt.Sprintf("appended %q subtype to srcPerm.Types + is_%s flag", subtype, subtype)
+
+	case condScaffoldAscendBlessing:
+		// "if you have the city's blessing" / "ascend". Reuses the
+		// existing primeAscend helper which places 10 permanents and
+		// stamps the citys_blessing flag.
+		primeAscend(gs)
+		cs.description = "primeAscend: 10 permanents on seat 0 + citys_blessing flag"
+
+	case condScaffoldEminenceCommandZone:
+		// Eminence triggers fire while the commander is in the command
+		// zone or on the battlefield. Mark seat 0 as controlling its
+		// commander (so the on-battlefield branch passes) and stamp a
+		// commander-in-zone flag for the explicit-zone branch.
+		if len(gs.Seats) > 0 && gs.Seats[0] != nil {
+			if gs.Seats[0].Flags == nil {
+				gs.Seats[0].Flags = map[string]int{}
+			}
+			gs.Seats[0].Flags["commander_in_command_zone"] = 1
+		}
+		if gs.Flags == nil {
+			gs.Flags = map[string]int{}
+		}
+		gs.Flags["eminence_active"] = 1
+		cs.description = "set commander_in_command_zone + eminence_active flags"
 	}
 	return cs
 }
@@ -3165,6 +3670,36 @@ func traceConditionScaffolding(cond *gameast.Condition, tr *Tracer) {
 		desc = "cleared attacked_this_turn (didnt_attack_this_turn)"
 	case condScaffoldDealtDamageOpponentTurn:
 		desc = "set dealt_damage_to_opponent_this_turn + logged damage"
+	case condScaffoldItWasCreature:
+		desc = "placed creature in graveyard + set last_left_was_creature flag"
+	case condScaffoldNoCreaturesOnBattlefield:
+		desc = "removed all creature permanents (no_creatures_on_battlefield)"
+	case condScaffoldHadCountersOnIt:
+		desc = "stamped +1/+1 counter + had_counters flag on srcPerm"
+	case condScaffoldYouCastFromHand:
+		desc = "appended cast record + cast_from_hand flag on srcPerm"
+	case condScaffoldPlaneswalkerETBThisTurn:
+		desc = "placed planeswalker + planeswalker_etb_this_turn flag"
+	case condScaffoldArtifactETBThisTurn:
+		desc = "placed artifact + artifact_etb_this_turn flag"
+	case condScaffoldStillOnBattlefield:
+		desc = "stamped still_on_battlefield flag on srcPerm"
+	case condScaffoldRevealLandOtherwiseHand:
+		desc = "placed land on top of seat 0 library (reveal-and-route)"
+	case condScaffoldVelocityCounters:
+		desc = fmt.Sprintf("placed %d velocity counters on srcPerm", maxInt(cs.count, 2))
+	case condScaffoldNotDeclaredAttacker:
+		desc = "marked srcPerm not_attacker + Phase=combat declare_attackers"
+	case condScaffoldManaValueLE:
+		desc = fmt.Sprintf("set srcPerm.Card.CMC <= %d (mana_value_le)", maxInt(cs.count, 4))
+	case condScaffoldCrewedBySubtype:
+		desc = fmt.Sprintf("placed %s pilot + crewed_by_%s flag", nonEmpty(cs.subtype, "pilot"), nonEmpty(cs.subtype, "pilot"))
+	case condScaffoldIsSubtype:
+		desc = fmt.Sprintf("stamped %q subtype + is_%s flag on srcPerm", nonEmpty(cs.subtype, "creature"), nonEmpty(cs.subtype, "creature"))
+	case condScaffoldAscendBlessing:
+		desc = "primeAscend: 10 permanents + citys_blessing flag"
+	case condScaffoldEminenceCommandZone:
+		desc = "set commander_in_command_zone + eminence_active flags"
 	}
 	tr.Record("CONDITION_SETUP", "%q → %s", cs.rawText, desc)
 }
