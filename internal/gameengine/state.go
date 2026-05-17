@@ -1296,6 +1296,16 @@ type StackItem struct {
 	// resolution can reference it (Walking Ballista ETB, Fireball damage,
 	// etc.). Zero when the spell has no X in its cost.
 	ChosenX int
+
+	// CleaveActive is true when the spell was cast for its cleave cost
+	// (CR §702.158). Effect-resolution paths that need to distinguish
+	// "bracketed" vs "brackets-removed" semantics read this; the actual
+	// brackets-removed effect is already swapped onto Item.Effect at
+	// cast time by CastWithCleave (keywords_cleave.go), so most
+	// resolvers don't need to look at this — it's load-bearing for cards
+	// that key off "if this spell's cleave cost was paid" (rare; mostly
+	// for analytics + future per-card handlers).
+	CleaveActive bool
 }
 
 // -----------------------------------------------------------------------------
