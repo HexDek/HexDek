@@ -929,13 +929,28 @@ func DiscardCard(gs *GameState, card *Card, seat int) {
 	if NecropotenceSkipsDraw(gs, seat) {
 		dest = "exile"
 	}
-	MoveCard(gs, card, seat, "hand", dest, "discard")
+	// CR §702.34a — Madness replacement: if the card has madness and
+	// Necropotence isn't already rerouting, exile via OnDiscardMadness
+	// instead of going to the graveyard. OnDiscardMadness does the
+	// zone move + bookkeeping + ZoneCastPermission registration; the
+	// card_discarded trigger still fires below with exiled=true so
+	// Liliana's Caress / Waste Not / Tergrid see the discard.
+	madnessExiled := false
+	if dest == "graveyard" && HasMadness(card) {
+		if OnDiscardMadness(gs, seat, card) {
+			madnessExiled = true
+		}
+	}
+	if !madnessExiled {
+		MoveCard(gs, card, seat, "hand", dest, "discard")
+	}
 	FireCardTrigger(gs, "card_discarded", map[string]interface{}{
 		"card":           card,
 		"card_name":      card.DisplayName(),
 		"discarder_seat": seat,
 		"is_permanent":   cardIsPermanentType(card),
-		"exiled":         dest == "exile",
+		"exiled":         dest == "exile" || madnessExiled,
+		"madness_exile":  madnessExiled,
 	})
 }
 
