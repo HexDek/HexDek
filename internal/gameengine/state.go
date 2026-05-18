@@ -536,11 +536,29 @@ type TurnCounters struct {
 	SpeedAdvancedThisTurn bool
 	Attacked         bool // this seat declared attackers this turn
 	Casts            []CastRecord // ordered log of every spell cast this turn
+
+	// CombatDamageBy is the de-duplicated list of cards controlled by
+	// this seat that dealt combat damage to ANY player (any opponent)
+	// this turn. Populated by applyCombatDamageToPlayer in combat.go;
+	// read by Prowl (§702.74), Freerunning (§702.169), and any other
+	// "if you dealt combat damage to a player this turn with a [type]
+	// creature" gate. One card appears at most once per turn even if
+	// it dealt combat damage multiple times (e.g. double-strike,
+	// extra-combat-phase). Cards that left the battlefield after
+	// dealing damage still appear here — Prowl asks about historic
+	// combat damage, not current board state.
+	CombatDamageBy []*Card
 }
 
 // Reset zeroes all turn counters. Called once per turn at the untap step.
+// Casts and CombatDamageBy slices are zero-length-reused so the backing
+// arrays survive across turns (saves allocations in hot test loops + AI
+// rollouts).
 func (tc *TurnCounters) Reset() {
-	*tc = TurnCounters{Casts: tc.Casts[:0]}
+	*tc = TurnCounters{
+		Casts:          tc.Casts[:0],
+		CombatDamageBy: tc.CombatDamageBy[:0],
+	}
 }
 
 // NthCastOfType returns the count of spells cast this turn that match

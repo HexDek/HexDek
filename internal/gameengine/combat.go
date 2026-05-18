@@ -1449,6 +1449,26 @@ func applyCombatDamageToPlayer(gs *GameState, src *Permanent, amount, seatIdx in
 			gs.Seats[src.Controller].Flags = map[string]int{}
 		}
 		gs.Seats[src.Controller].Flags["creature_dealt_combat_damage_to_player"]++
+
+		// §702.74 — Prowl needs to know which specific cards dealt
+		// combat damage to a player this turn so it can compare
+		// creature subtypes at cast time. Append once per card per
+		// turn (dedupe on src.Card) so double-strike / extra-combat
+		// hits don't bloat the slice and so a small linear scan in
+		// CanPayProwl stays cheap.
+		if src.Card != nil {
+			ctrlTurn := &gs.Seats[src.Controller].Turn
+			already := false
+			for _, c := range ctrlTurn.CombatDamageBy {
+				if c == src.Card {
+					already = true
+					break
+				}
+			}
+			if !already {
+				ctrlTurn.CombatDamageBy = append(ctrlTurn.CombatDamageBy, src.Card)
+			}
+		}
 	}
 	// §721.4 — If a creature deals combat damage to the monarch, its
 	// controller becomes the monarch.
