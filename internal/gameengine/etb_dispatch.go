@@ -52,6 +52,13 @@ func FirePermanentETBTriggers(gs *GameState, perm *Permanent) {
 	// werewolf-class card.
 	OnDayboundOrNightboundETB(gs, perm)
 
+	// CR §205.3m Outlaw type-group ETB fan-out. Fires
+	// FireCardTrigger("outlaw_etb", ctx) to every battlefield permanent
+	// whose oracle text watches for outlaw ETBs, when `perm` itself
+	// qualifies as an Outlaw. Cheap fast-path: returns immediately if
+	// the entering permanent isn't an outlaw.
+	FireOutlawETBTriggers(gs, perm)
+
 	CheckAscend(gs, perm.Controller)
 
 	if !perm.IsLand() {
