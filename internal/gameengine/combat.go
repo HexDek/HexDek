@@ -412,6 +412,14 @@ func DeclareAttackers(gs *GameState, attackerSeat int) []*Permanent {
 		chosen = seat.Hat.ChooseAttackers(gs, attackerSeat, legal)
 	}
 
+	// CR §701.39 — Goad enforcement (must attack if able). Any legal
+	// goaded creature the Hat omitted is force-added. "If able" is
+	// satisfied by being in `legal` (canAttack passed). The Silent
+	// Arbiter cap below may still trim, but the engine no longer
+	// silently ignores the must-attack rider when a Hat returns an
+	// incomplete attacker set.
+	chosen = enforceGoadMustAttack(gs, chosen, legal)
+
 	// Silent Arbiter: max one attacker per combat.
 	if len(chosen) > 1 && silentArbiterOnBattlefield(gs) {
 		chosen = chosen[:1]
@@ -437,9 +445,15 @@ func DeclareAttackers(gs *GameState, attackerSeat int) []*Permanent {
 			continue
 		}
 		// Hat picks which opponent each attacker targets (§506.1).
-		def := pickAttackDefender(gs, p, livingOpps)
+		// CR §701.39 — Goad's "attacks a player other than you if able"
+		// rider: filter the goader out of the defender pool unless
+		// doing so empties it. Both the default heuristic and the Hat
+		// callback see the filtered list so the rule holds regardless
+		// of Hat compliance.
+		effectiveOpps := filterGoaderFromDefenders(gs, p, livingOpps)
+		def := pickAttackDefender(gs, p, effectiveOpps)
 		if seat.Hat != nil {
-			def = seat.Hat.ChooseAttackTarget(gs, attackerSeat, p, livingOpps)
+			def = seat.Hat.ChooseAttackTarget(gs, attackerSeat, p, effectiveOpps)
 		}
 		setAttackerDefender(p, def)
 
@@ -1082,22 +1096,49 @@ func incomingIsLethal(src, dst *Permanent) bool {
 	return dmg+dst.MarkedDamage >= dst.Toughness()
 }
 
-// attackerHasProtectionFrom returns true if defender (or attacker in the
-// blocker role) has protection from source's color. Simplified MVP —
-// color-based protection only.
+// attackerHasProtectionFrom returns true if the protected permanent has
+// protection from `source` per §702.16. Checks two axes:
+//
+//  1. Color-based protection (§702.16b) — "protection from red", etc.
+//  2. Type-based protection (§702.16) — "protection from creatures",
+//     "from artifacts", "from enchantments", "from planeswalkers",
+//     "from lands". Reads ProtectionTypes (keywords_combat.go) and
+//     checks whether the source has any of those types.
+//
+// Sentinel "*" in protectionColors means "protection from everything"
+// (Teferi's Protection, Progenitus) and short-circuits true.
 func attackerHasProtectionFrom(protected, source *Permanent) bool {
 	if protected == nil || source == nil {
 		return false
 	}
 	prot := protectionColors(protected)
-	if len(prot) == 0 {
-		return false
-	}
 	if _, any := prot["*"]; any {
 		return true
 	}
-	for c := range cardColors(source.Card) {
-		if _, hit := prot[c]; hit {
+	if len(prot) > 0 {
+		for c := range cardColors(source.Card) {
+			if _, hit := prot[c]; hit {
+				return true
+			}
+		}
+	}
+	// Type-based protection (§702.16): protection from creatures /
+	// artifacts / enchantments / planeswalkers / lands. Combat-relevant
+	// types only — instant/sorcery never appear as combat sources.
+	if types := ProtectionTypes(protected); len(types) > 0 {
+		if _, ok := types["creature"]; ok && source.IsCreature() {
+			return true
+		}
+		if _, ok := types["artifact"]; ok && source.IsArtifact() {
+			return true
+		}
+		if _, ok := types["enchantment"]; ok && source.IsEnchantment() {
+			return true
+		}
+		if _, ok := types["planeswalker"]; ok && source.IsPlaneswalker() {
+			return true
+		}
+		if _, ok := types["land"]; ok && source.IsLand() {
 			return true
 		}
 	}
@@ -1368,6 +1409,89 @@ func DealCombatDamageStep(gs *GameState, attackers []*Permanent, blockerMap map[
 			applyCombatDamageToCreature(gs, b, dmg, atk)
 		}
 	}
+
+	// §702.21k/l — Banding damage redistribution. With banded blockers,
+	// the *defending* player chooses how each attacker's damage divides
+	// among the band; with banded attackers, the *attacking* player
+	// chooses how blocker damage divides among the band. MVP grouping:
+	// same controller + same combat role (same defender for attackers,
+	// same blocked attacker for blockers) + 2+ with the banding keyword.
+	// Wither / infect paths route damage to -1/-1 counters instead of
+	// MarkedDamage, so they skip this pass cleanly.
+	applyBandingRedistribution(gs, attackers, blockerMap)
+}
+
+// applyBandingRedistribution finds bands of creatures that took damage
+// this step and reallocates their MarkedDamage to minimize kills.
+// Runs at the end of DealCombatDamageStep so the post-step SBA pass
+// (back in CombatPhase) sees the redistributed totals.
+//
+// Band detection (MVP, controller-favored):
+//
+//   - Banded attackers: group by (controller, defender_seat).
+//   - Banded blockers: per attacker, group by controller.
+//
+// A group qualifies as a band if it has 2+ members and at least one
+// has banding. Real Magic requires explicit band declaration at
+// attack-step, but for damage-redistribution purposes "all eligible
+// creatures form one band" is the controller-favored outcome — exactly
+// what the rules permit if the controller declared the band.
+func applyBandingRedistribution(gs *GameState, attackers []*Permanent, blockerMap map[*Permanent][]*Permanent) {
+	if gs == nil {
+		return
+	}
+	type bandKey struct {
+		controller int
+		defender   int
+	}
+	atkBands := map[bandKey][]*Permanent{}
+	for _, a := range attackers {
+		if !alive(gs, a) {
+			continue
+		}
+		def, ok := AttackerDefender(a)
+		if !ok {
+			continue
+		}
+		k := bandKey{controller: a.Controller, defender: def}
+		atkBands[k] = append(atkBands[k], a)
+	}
+	for _, band := range atkBands {
+		if !bandHasBanding(band) {
+			continue
+		}
+		ApplyBandingDamageRedistribution(gs, band)
+	}
+
+	for _, atk := range attackers {
+		blkGroups := map[int][]*Permanent{}
+		for _, b := range blockerMap[atk] {
+			if !alive(gs, b) {
+				continue
+			}
+			blkGroups[b.Controller] = append(blkGroups[b.Controller], b)
+		}
+		for _, band := range blkGroups {
+			if !bandHasBanding(band) {
+				continue
+			}
+			ApplyBandingDamageRedistribution(gs, band)
+		}
+	}
+}
+
+// bandHasBanding returns true if any creature in the group has banding.
+// Requires 2+ members to qualify as a band per §702.21j.
+func bandHasBanding(group []*Permanent) bool {
+	if len(group) < 2 {
+		return false
+	}
+	for _, p := range group {
+		if HasBanding(p) {
+			return true
+		}
+	}
+	return false
 }
 
 // dealsInStep decides if p deals damage in this step. First-strike step
@@ -1879,6 +2003,75 @@ func sidarKondoOnBattlefield(gs *GameState) bool {
 		}
 	}
 	return false
+}
+
+// enforceGoadMustAttack adds any goaded creatures from `legal` that the
+// Hat omitted from `chosen` back into the attacker set. CR §701.39
+// requires the goaded creature to attack each combat if able; "able"
+// here is satisfied by membership in `legal` (canAttack passed and the
+// combat restriction lets it through). Returns the augmented list.
+//
+// Preserves order: chosen attackers first, then force-added goaded
+// creatures in the order they appear in `legal`.
+func enforceGoadMustAttack(gs *GameState, chosen, legal []*Permanent) []*Permanent {
+	if gs == nil || len(legal) == 0 {
+		return chosen
+	}
+	inChosen := make(map[*Permanent]struct{}, len(chosen))
+	for _, p := range chosen {
+		inChosen[p] = struct{}{}
+	}
+	out := chosen
+	for _, p := range legal {
+		if _, ok := inChosen[p]; ok {
+			continue
+		}
+		if !MustAttackIfAble(gs, p) {
+			continue
+		}
+		gs.LogEvent(Event{
+			Kind:   "goad_force_attack",
+			Seat:   p.Controller,
+			Source: p.Card.DisplayName(),
+			Details: map[string]interface{}{
+				"rule":   "701.39",
+				"reason": "must_attack_if_able",
+			},
+		})
+		out = append(out, p)
+	}
+	return out
+}
+
+// filterGoaderFromDefenders applies the §701.39 "attacks a player other
+// than you if able" rider to a defender pool. Returns livingOpps minus
+// the goader, unless filtering would empty the slice (the "if able"
+// escape — if the goader is the only living opponent, the goaded
+// creature is allowed to attack them).
+//
+// Non-goaded creatures pass through unchanged.
+func filterGoaderFromDefenders(gs *GameState, perm *Permanent, livingOpps []int) []int {
+	if gs == nil || perm == nil || len(livingOpps) == 0 {
+		return livingOpps
+	}
+	if !IsGoaded(perm, gs.Turn) {
+		return livingOpps
+	}
+	goader, ok := GoadedBySeat(perm, gs.Turn)
+	if !ok {
+		return livingOpps
+	}
+	filtered := make([]int, 0, len(livingOpps))
+	for _, opp := range livingOpps {
+		if opp == goader {
+			continue
+		}
+		filtered = append(filtered, opp)
+	}
+	if len(filtered) == 0 {
+		return livingOpps
+	}
+	return filtered
 }
 
 // silentArbiterOnBattlefield returns true if any Silent Arbiter is on
