@@ -252,9 +252,22 @@ func resolveSequence(gs *GameState, src *Permanent, e *gameast.Sequence) {
 		gs.Flags["_gated_rider_depth"]--
 		gs.Flags["_devotion_rider_depth"]--
 		if outer {
+			// Keep the rider-depth counters POSITIVE while we invoke
+			// the riders. ApplyThresholdRider / ApplyMetalcraftRider /
+			// etc. call ResolveEffect on a Sequence rider body; that
+			// nested resolveSequence must NOT see depth==0 and treat
+			// itself as the outer call (which would re-fire the same
+			// riders against the same src and recurse forever — Loki
+			// r36 caught this as a stack overflow on threshold cards).
+			gs.Flags["_max_speed_rider_depth"]++
+			gs.Flags["_gated_rider_depth"]++
+			gs.Flags["_devotion_rider_depth"]++
 			ApplyMaxSpeedRider(gs, src)
 			resolveGatedRider(gs, src)
 			ApplyDevotionRidersAllColors(gs, src)
+			gs.Flags["_max_speed_rider_depth"]--
+			gs.Flags["_gated_rider_depth"]--
+			gs.Flags["_devotion_rider_depth"]--
 		}
 	}
 }
