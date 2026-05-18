@@ -21,11 +21,7 @@ package gameengine
 // post-storm reminder-text paragraphs that can stress-test the parser in
 // ways orthogonal to this work.
 
-import (
-	"fmt"
-
-	"github.com/hexdek/hexdek/internal/gameast"
-)
+import "github.com/hexdek/hexdek/internal/gameast"
 
 // stormCards is the canonical list of printed Storm-bearing instants and
 // sorceries. Membership is the primary check for whether a spell's cast
@@ -110,11 +106,13 @@ func equalFoldSimple(a, b string) bool {
 //   - Copies do NOT trigger observers (§706.10) and do NOT call
 //     IncrementCastCount.
 //
-// Each copy is a fresh StackItem pointing at a fresh Card whose CMC is 0
-// (free to resolve), whose Name is suffixed with "(storm copy N)" so logs
-// distinguish them, and whose AST is shared with the original.
+// Convenience wrapper around ApplyStormCopy (keywords_storm_rider.go):
+// derives "count = global SpellsCastThisTurn - 1" and delegates the
+// actual push logic. Use ApplyStormCopy directly when you've computed
+// the desired copy count via different rules (per-seat StormCount,
+// per_card snowflake scaling, etc.).
 func ApplyStormCopies(gs *GameState, original *StackItem, controller int) int {
-	if gs == nil || original == nil || original.Card == nil {
+	if gs == nil || original == nil {
 		return 0
 	}
 	if gs.SpellsCastThisTurn <= 1 {
@@ -122,58 +120,12 @@ func ApplyStormCopies(gs *GameState, original *StackItem, controller int) int {
 		// no prior casts, no copies.
 		return 0
 	}
-	copies := gs.SpellsCastThisTurn - 1
-	gs.LogEvent(Event{
-		Kind:   "storm_trigger",
-		Seat:   controller,
-		Source: original.Card.DisplayName(),
-		Amount: copies,
-		Details: map[string]interface{}{
-			"spells_cast_this_turn": gs.SpellsCastThisTurn,
-			"copies":                copies,
-			"rule":                  "702.40a",
-		},
-	})
-	for i := 0; i < copies; i++ {
-		baseName := original.Card.DisplayName()
-		copyCard := &Card{
-			// Share the AST — safe because CardAST is immutable.
-			AST:           original.Card.AST,
-			Name:          fmt.Sprintf("%s (storm copy %d)", baseName, i+1),
-			Owner:         original.Card.Owner,
-			BasePower:     original.Card.BasePower,
-			BaseToughness: original.Card.BaseToughness,
-			Types:         append([]string(nil), original.Card.Types...),
-			Colors:        append([]string(nil), original.Card.Colors...),
-			CMC:           0, // copies cost nothing
-			TypeLine:      original.Card.TypeLine,
-			IsCopy:        true, // CR §706.10 — ceases to exist outside stack
-		}
-		copyItem := &StackItem{
-			Controller: controller,
-			Card:       copyCard,
-			Effect:     original.Effect,
-			// Copies inherit the original's targets; real rules let the
-			// controller pick new targets. MVP: reuse. A future "pick new
-			// targets" policy hook lives on top of this without changing
-			// the storm primitive.
-			Targets: append([]Target(nil), original.Targets...),
-			IsCopy:  true, // CR §706.10 — ceases to exist on resolution
-		}
-		// Push directly (bypass PushStackItem's "cast" logging — copies
-		// aren't cast).
-		copyItem.ID = nextStackID(gs)
-		gs.Stack = append(gs.Stack, copyItem)
-		gs.LogEvent(Event{
-			Kind:   "stack_push_storm_copy",
-			Seat:   controller,
-			Source: copyCard.Name,
-			Details: map[string]interface{}{
-				"stack_id":   copyItem.ID,
-				"stack_size": len(gs.Stack),
-				"rule":       "702.40a+706.10",
-			},
-		})
+	if original.Controller != controller {
+		// Caller passed a mismatched controller — honor it by stamping
+		// the item before delegating. Real callers always pass
+		// original.Controller, but the older signature took an explicit
+		// controller arg so we keep the behavior compatible.
+		original.Controller = controller
 	}
-	return copies
+	return ApplyStormCopy(gs, original, gs.SpellsCastThisTurn-1)
 }
