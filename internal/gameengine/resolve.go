@@ -2650,19 +2650,78 @@ func resolveWinGame(gs *GameState, src *Permanent, e *gameast.WinGame) {
 	}
 }
 
+// resolveLoseGame handles the gameast.LoseGame effect node: an effect
+// that says "[target player] loses the game" (Phage the Untouchable's
+// ETB clause, Door to Nothingness, Lich's Mirror trigger, etc.).
+//
+// Two invariants this routes through:
+//
+//  1. CR §614 — fire would_lose_game first so Platinum Angel and
+//     similar replacement effects get a chance to cancel before
+//     Lost flips. Matches the sba.go life-loss path.
+//  2. TurnStructure invariant (invariants.go:918) — a seat with
+//     Lost=true AND Life>0 must carry a LossReason. The previous
+//     impl skipped this, which surfaced in the R36 goldilocks audit
+//     for Phage ("active seat 0 is Lost but life is 20 with no
+//     LossReason"). Now stamps LossReason BEFORE Lost so any
+//     invariant running mid-resolution sees a consistent state.
+//
+// LossReason format: "card_effect: <source-name>" if a source is
+// available, "card_effect" otherwise. For Phage this gives the
+// canonical "card_effect: Phage the Untouchable" tag the audit
+// suggested.
 func resolveLoseGame(gs *GameState, src *Permanent, e *gameast.LoseGame) {
+	if gs == nil {
+		return
+	}
 	targets := PickTarget(gs, src, e.Target)
+	srcName := sourceName(src)
+	reason := "card_effect"
+	if srcName != "" {
+		reason = "card_effect: " + srcName
+	}
 	for _, t := range targets {
 		seat, ok := seatFromTarget(t)
 		if !ok {
 			continue
 		}
-		gs.Seats[seat].Lost = true
+		if seat < 0 || seat >= len(gs.Seats) {
+			continue
+		}
+		s := gs.Seats[seat]
+		if s == nil {
+			continue
+		}
+		// CR §614: would_lose_game replacement. Platinum Angel and
+		// kin cancel the loss outright.
+		if FireLoseGameEvent(gs, seat) {
+			gs.LogEvent(Event{
+				Kind:   "lose_game_replaced",
+				Seat:   seat,
+				Target: seat,
+				Source: srcName,
+				Details: map[string]interface{}{
+					"reason": "would_lose_game_replaced",
+					"rule":   "614",
+				},
+			})
+			continue
+		}
+		// Stamp LossReason BEFORE Lost — invariants.go's TurnStructure
+		// check flags Lost+Life>0 with empty LossReason. Ordering
+		// matters defensively even though Go memory model makes the
+		// pair appear atomic to single-goroutine readers.
+		s.LossReason = reason
+		s.Lost = true
 		gs.LogEvent(Event{
 			Kind:   "lose_game",
 			Seat:   seat,
 			Target: seat,
-			Source: sourceName(src),
+			Source: srcName,
+			Details: map[string]interface{}{
+				"reason": reason,
+				"rule":   "card_effect",
+			},
 		})
 	}
 }
