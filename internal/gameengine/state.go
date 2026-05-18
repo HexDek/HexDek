@@ -524,6 +524,7 @@ type TurnCounters struct {
 	Sacrificed       int  // permanents sacrificed this turn
 	PermanentsLeft   int  // permanents that left the battlefield this turn (dies + exile + bounce + sac)
 	Discarded        int  // cards discarded this turn
+	CommittedCrimes  int  // crimes committed this turn (CR §701.71 OTJ/MKM)
 	Milled           int  // cards milled this turn
 	LandsPlayed      int  // lands played this turn
 	CreaturesDied    int  // creatures that died (went to GY from battlefield) this turn

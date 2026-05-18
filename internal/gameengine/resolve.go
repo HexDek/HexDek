@@ -576,40 +576,17 @@ func CountControlledByTypeExported(gs *GameState, seat int, filter string) int {
 // Crime detection (OTJ §702.159)
 // -----------------------------------------------------------------------------
 
-// maybeFireCrime checks if any of the given targets belong to an opponent of
-// the source's controller. If so, it fires a "crime" trigger event. In MTG,
-// "committing a crime" means targeting an opponent, a permanent an opponent
-// controls, a spell an opponent controls, or a card in an opponent's graveyard.
+// maybeFireCrime checks if any of the given targets belong to an opponent
+// of the source's controller. If so, it commits a §701.71a crime once per
+// resolution (§701.71b — at most one crime fires regardless of how many
+// targets qualify). Delegates to FireCrimeIfTargetingOpponent in
+// keywords_crime.go, which centralizes the per-turn counter bookkeeping,
+// the "first crime each turn" gate, and the structured trigger fan-out.
 func maybeFireCrime(gs *GameState, src *Permanent, targets []Target) {
 	if gs == nil || src == nil || len(targets) == 0 {
 		return
 	}
-	caster := src.Controller
-	for _, t := range targets {
-		isOpponentTarget := false
-		switch t.Kind {
-		case TargetKindSeat:
-			isOpponentTarget = t.Seat != caster
-		case TargetKindPermanent:
-			if t.Permanent != nil {
-				isOpponentTarget = t.Permanent.Controller != caster
-			}
-		case TargetKindCard:
-			// Card in an opponent's graveyard/exile counts.
-			isOpponentTarget = t.Seat != caster && t.Seat >= 0
-		case TargetKindStackItem:
-			if t.Stack != nil {
-				isOpponentTarget = t.Stack.Controller != caster
-			}
-		}
-		if isOpponentTarget {
-			FireCardTrigger(gs, "crime", map[string]interface{}{
-				"seat":   caster,
-				"source": sourceName(src),
-			})
-			return // Only fire once per resolution.
-		}
-	}
+	FireCrimeIfTargetingOpponent(gs, src.Controller, sourceName(src), targets)
 }
 
 // -----------------------------------------------------------------------------
@@ -2403,11 +2380,11 @@ func resolveCounterSpell(gs *GameState, src *Permanent, e *gameast.CounterSpell)
 	// runs for counterspells that DON'T have a per-card handler.
 	casterSeat := controllerSeat(src)
 
-	// Countering a spell always targets an opponent's spell — commit a crime.
-	FireCardTrigger(gs, "crime", map[string]interface{}{
-		"seat":   casterSeat,
-		"source": sourceName(src),
-	})
+	// Countering a spell always targets an opponent's spell — commit a
+	// crime (§701.71a). FireCommitsCrimeTriggers bumps the per-turn
+	// counter and runs the "first crime each turn" gate alongside the
+	// regular "crime" trigger fan-out.
+	FireCommitsCrimeTriggers(gs, casterSeat, sourceName(src), "countered_spell")
 
 	ResolveCounterSpellGeneric(gs, casterSeat, e)
 }
