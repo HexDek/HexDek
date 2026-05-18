@@ -2441,6 +2441,10 @@ func resolveCopySpell(gs *GameState, src *Permanent, e *gameast.CopySpell) {
 			"rule":    "707.2",
 		},
 	})
+	// CR §702.137a — magecraft fires on COPY of an instant/sorcery just
+	// as it does on cast. FireMagecraftTriggers filters by spell type so
+	// copies of non-instant/sorcery spells are ignored automatically.
+	FireMagecraftTriggers(gs, controller, copyCard, true)
 }
 
 func resolveCopyPermanent(gs *GameState, src *Permanent, e *gameast.CopyPermanent) {

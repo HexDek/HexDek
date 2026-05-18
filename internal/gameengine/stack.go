@@ -1614,6 +1614,9 @@ func fireCastTriggersFromZone(gs *GameState, casterSeat int, card *Card, fromZon
 	}
 	if cardHasType(card, "instant") || cardHasType(card, "sorcery") {
 		FireCardTrigger(gs, "instant_or_sorcery_cast", ctx)
+		// CR §702.137a — magecraft triggers on cast of an instant/sorcery
+		// spell. The copy branch is fired from resolveCopySpell.
+		FireMagecraftTriggers(gs, casterSeat, card, false)
 	}
 
 	// Observer cast triggers — scan all permanents for AST-driven "whenever
