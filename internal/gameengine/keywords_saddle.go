@@ -168,6 +168,10 @@ func SaddleMount(gs *GameState, seatIdx int, mount *Permanent, tappers []*Perman
 			"rule":             "702.171a",
 		},
 	})
+	// "Whenever a Mount you control becomes saddled" — gated on the
+	// Mount subtype inside FireMountSaddledTriggers, so non-Mount
+	// permanents that somehow carry the Saddle ability don't publish.
+	FireMountSaddledTriggers(gs, mount)
 	return true
 }
 
