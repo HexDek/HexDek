@@ -218,25 +218,28 @@ func ResolveEffect(gs *GameState, src *Permanent, effect gameast.Effect) {
 // -----------------------------------------------------------------------------
 
 func resolveSequence(gs *GameState, src *Permanent, e *gameast.Sequence) {
-	// §702.178 max-speed rider hook + §702.72 threshold rider hook.
-	// Each rider fires at most once per spell resolution. Both share
-	// the same outer-sequence gating discipline so nested Sequence
-	// nodes can't re-fire either rider for the same source; we use
-	// per-rider depth counters on gs.Flags to keep the gates
-	// independent (so removing one rider in the future doesn't
-	// silently break the other).
+	// Resolve-time gated-rider hooks. Two independent depth counters:
+	//   _max_speed_rider_depth — §702.178 (round 25)
+	//   _gated_rider_depth     — §702.74 Threshold + §702.97 Metalcraft
+	//                            + §702.45 Hellbent, batched via
+	//                            resolveGatedRider in keywords_gated_riders.go
+	// Each fires at most once per spell resolution; nested Sequence
+	// nodes increment + decrement so the rider only fires when the
+	// outer call unwinds. Keeping max-speed's counter separate avoids
+	// touching the round-25 wiring while still letting future rider
+	// keywords slot into _gated_rider_depth.
 	outer := false
 	if gs != nil {
 		if gs.Flags == nil {
 			gs.Flags = map[string]int{}
 		}
 		if gs.Flags["_max_speed_rider_depth"] == 0 &&
-			gs.Flags["_threshold_rider_depth"] == 0 &&
+			gs.Flags["_gated_rider_depth"] == 0 &&
 			gs.Flags["_devotion_rider_depth"] == 0 {
 			outer = true
 		}
 		gs.Flags["_max_speed_rider_depth"]++
-		gs.Flags["_threshold_rider_depth"]++
+		gs.Flags["_gated_rider_depth"]++
 		gs.Flags["_devotion_rider_depth"]++
 	}
 
@@ -246,11 +249,11 @@ func resolveSequence(gs *GameState, src *Permanent, e *gameast.Sequence) {
 
 	if gs != nil {
 		gs.Flags["_max_speed_rider_depth"]--
-		gs.Flags["_threshold_rider_depth"]--
+		gs.Flags["_gated_rider_depth"]--
 		gs.Flags["_devotion_rider_depth"]--
 		if outer {
 			ApplyMaxSpeedRider(gs, src)
-			ApplyThresholdRider(gs, src)
+			resolveGatedRider(gs, src)
 			ApplyDevotionRidersAllColors(gs, src)
 		}
 	}

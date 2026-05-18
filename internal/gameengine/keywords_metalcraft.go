@@ -146,3 +146,94 @@ func ArtifactCount(gs *GameState, seatIdx int) int {
 	}
 	return n
 }
+
+// ---------------------------------------------------------------------------
+// Rider executor (sibling of ApplyThresholdRider / ApplyMaxSpeedRider)
+// ---------------------------------------------------------------------------
+
+// findMetalcraftRiderEffect walks the card's AST looking for the tagged
+// "metalcraft" rider payload, returning the Activated.Effect when one
+// is present. Tagging convention mirrors threshold/max-speed: either
+// Cost.Extra contains "metalcraft_rider", or Activated.Raw begins with
+// "metalcraft" (case-insensitive fallback for corpus dumps that preserve
+// the printed rider line without an extra-cost marker).
+func findMetalcraftRiderEffect(card *Card) gameast.Effect {
+	if card == nil || card.AST == nil {
+		return nil
+	}
+	for _, ab := range card.AST.Abilities {
+		a, ok := ab.(*gameast.Activated)
+		if !ok || a == nil || a.Effect == nil {
+			continue
+		}
+		if abilityIsTaggedMetalcraftRider(a) {
+			return a.Effect
+		}
+	}
+	return nil
+}
+
+func abilityIsTaggedMetalcraftRider(a *gameast.Activated) bool {
+	if a == nil {
+		return false
+	}
+	for _, extra := range a.Cost.Extra {
+		if strings.EqualFold(extra, "metalcraft_rider") {
+			return true
+		}
+	}
+	raw := strings.ToLower(strings.TrimSpace(a.Raw))
+	return strings.HasPrefix(raw, "metalcraft")
+}
+
+// ApplyMetalcraftRider executes the metalcraft rider for `src`, if any.
+// Returns true if the rider actually fired.
+//
+// Conditions to fire:
+//   - src is non-nil and has a Card.
+//   - HasMetalcraft(src.Card).
+//   - MetalcraftActive(gs, src.Controller) — recomputed live so the
+//     artifact count is current at resolve time (an artifact that died
+//     mid-resolution correctly turns the rider off).
+//
+// Logs metalcraft_rider on fire. If the AST carries a tagged rider
+// effect, ResolveEffect runs it with `src` as the source; otherwise we
+// log metalcraft_rider_pending so per_card handlers and corpus-backfill
+// jobs can find affected spells.
+func ApplyMetalcraftRider(gs *GameState, src *Permanent) bool {
+	if gs == nil || src == nil || src.Card == nil {
+		return false
+	}
+	if !HasMetalcraft(src.Card) {
+		return false
+	}
+	if !MetalcraftActive(gs, src.Controller) {
+		return false
+	}
+
+	gs.LogEvent(Event{
+		Kind:   "metalcraft_rider",
+		Seat:   src.Controller,
+		Source: src.Card.DisplayName(),
+		Details: map[string]interface{}{
+			"rule":           "702.97",
+			"artifact_count": ArtifactCount(gs, src.Controller),
+		},
+	})
+
+	if eff := findMetalcraftRiderEffect(src.Card); eff != nil {
+		ResolveEffect(gs, src, eff)
+		return true
+	}
+
+	gs.LogEvent(Event{
+		Kind:   "metalcraft_rider_pending",
+		Seat:   src.Controller,
+		Source: src.Card.DisplayName(),
+		Details: map[string]interface{}{
+			"rule":   "702.97",
+			"reason": "rider_payload_not_in_ast",
+		},
+	})
+	return true
+}
