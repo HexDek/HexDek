@@ -858,3 +858,155 @@ func TestParseCounterLimit(t *testing.T) {
 		}
 	}
 }
+
+// -----------------------------------------------------------------------------
+// R38 — §704.5s / §704.5v pending-trigger guard.
+// -----------------------------------------------------------------------------
+//
+// CR §704.5s: a saga isn't sacrificed while it is the source of a chapter
+// ability that has triggered but not yet left the stack. We model "still
+// on the stack" as gs.Stack containing an item whose Source == saga.
+
+func TestSBA_704_5s_DefersWhileChapterOnStack(t *testing.T) {
+	gs := newFixtureGame(t)
+	saga := addBattlefield(gs, 0, "History of Benalia", 0, 0, "enchantment", "saga")
+	saga.Counters = map[string]int{
+		"saga_final_chapter": 3,
+		"lore":               3,
+	}
+	// Simulate a chapter ability still on the stack with the saga as source.
+	gs.Stack = append(gs.Stack, &StackItem{
+		Kind:       "triggered",
+		Source:     saga,
+		Controller: 0,
+		Card:       saga.Card,
+	})
+	StateBasedActions(gs)
+	if len(gs.Seats[0].Battlefield) != 1 {
+		t.Fatal("saga should NOT be sacrificed while its chapter ability is on the stack")
+	}
+	if countEvents(gs, "sba_704_5s_saga") != 0 {
+		t.Fatal("unexpected sba_704_5s_saga event while chapter on stack")
+	}
+	// Resolve / clear the stack — now SBA must sacrifice on the next pass.
+	gs.Stack = gs.Stack[:0]
+	StateBasedActions(gs)
+	if len(gs.Seats[0].Battlefield) != 0 {
+		t.Fatal("saga should be sacrificed once chapter has left the stack")
+	}
+}
+
+func TestSBA_704_5v_DefersWhileAbilityOnStack(t *testing.T) {
+	gs := newFixtureGame(t)
+	battle := addBattlefield(gs, 0, "Invasion of Ravnica", 0, 0, "battle", "siege")
+	battle.Counters = map[string]int{"defense": 0}
+	gs.Stack = append(gs.Stack, &StackItem{
+		Kind:       "triggered",
+		Source:     battle,
+		Controller: 0,
+		Card:       battle.Card,
+	})
+	StateBasedActions(gs)
+	if len(gs.Seats[0].Battlefield) != 1 {
+		t.Fatal("battle should NOT be destroyed while its ability is on the stack")
+	}
+	gs.Stack = gs.Stack[:0]
+	StateBasedActions(gs)
+	if len(gs.Seats[0].Battlefield) != 0 {
+		t.Fatal("battle should be destroyed once ability has left the stack")
+	}
+}
+
+// -----------------------------------------------------------------------------
+// R38 — §704.5m aura enchant-restriction check.
+// -----------------------------------------------------------------------------
+//
+// An aura whose target no longer matches its "Enchant <type>" clause must
+// go to the graveyard. Constructs an aura that "Enchant creature" but is
+// attached to a land — should die.
+
+func TestSBA_704_5m_EnchantClauseViolation(t *testing.T) {
+	gs := newFixtureGame(t)
+	land := addBattlefield(gs, 0, "Forest", 0, 0, "land")
+	aura := addBattlefield(gs, 0, "Pacifism", 0, 0, "enchantment", "aura")
+	aura.AttachedTo = land
+	aura.Card.AST = &gameast.CardAST{
+		Name: "Pacifism",
+		Abilities: []gameast.Ability{
+			&gameast.Static{Raw: "Enchant creature. Enchanted creature can't attack or block."},
+		},
+	}
+	StateBasedActions(gs)
+	// The aura should die; the land should survive.
+	if len(gs.Seats[0].Battlefield) != 1 {
+		t.Fatalf("expected only the land to survive; battlefield=%d", len(gs.Seats[0].Battlefield))
+	}
+	if gs.Seats[0].Battlefield[0] != land {
+		t.Fatal("land should be the surviving permanent")
+	}
+}
+
+func TestSBA_704_5m_EnchantClauseMatch(t *testing.T) {
+	gs := newFixtureGame(t)
+	host := addBattlefield(gs, 0, "Grizzly Bears", 2, 2, "creature")
+	aura := addBattlefield(gs, 0, "Pacifism", 0, 0, "enchantment", "aura")
+	aura.AttachedTo = host
+	aura.Card.AST = &gameast.CardAST{
+		Name: "Pacifism",
+		Abilities: []gameast.Ability{
+			&gameast.Static{Raw: "Enchant creature. Enchanted creature can't attack or block."},
+		},
+	}
+	StateBasedActions(gs)
+	if len(gs.Seats[0].Battlefield) != 2 {
+		t.Fatal("legally-attached aura must NOT die under §704.5m")
+	}
+}
+
+func TestParseEnchantKind(t *testing.T) {
+	mkCard := func(raw string) *Card {
+		c := &Card{
+			AST: &gameast.CardAST{
+				Abilities: []gameast.Ability{&gameast.Static{Raw: raw}},
+			},
+		}
+		return c
+	}
+	tests := []struct {
+		raw  string
+		want string
+	}{
+		{"Enchant creature. It gets +1/+1.", "creature"},
+		{"Enchant land. Tap: add G.", "land"},
+		{"Enchant artifact.", "artifact"},
+		{"Enchant permanent.", "permanent"},
+		{"Enchant nonblack creature.", "creature"},
+		{"Flying", ""},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		got := parseEnchantKind(mkCard(tt.raw))
+		if got != tt.want {
+			t.Errorf("parseEnchantKind(%q) = %q, want %q", tt.raw, got, tt.want)
+		}
+	}
+}
+
+// -----------------------------------------------------------------------------
+// R38 — uniform phased-out skip across §704.5n / p / q / r / y.
+// Legend-rule and toughness-death coverage already lives in the
+// "Phased-out permanents skip SBAs" section above. Adding counter
+// annihilation coverage that was missing.
+// -----------------------------------------------------------------------------
+
+func TestSBA_PhasedOutSkipsCounterAnnihilation(t *testing.T) {
+	gs := newFixtureGame(t)
+	p := addBattlefield(gs, 0, "Walking Ballista", 0, 0, "creature", "artifact")
+	p.Counters = map[string]int{"+1/+1": 3, "-1/-1": 2}
+	p.PhasedOut = true
+	StateBasedActions(gs)
+	if p.Counters["+1/+1"] != 3 || p.Counters["-1/-1"] != 2 {
+		t.Fatalf("phased-out counters should not annihilate; got +1/+1=%d -1/-1=%d",
+			p.Counters["+1/+1"], p.Counters["-1/-1"])
+	}
+}

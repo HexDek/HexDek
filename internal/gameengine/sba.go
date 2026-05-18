@@ -833,10 +833,83 @@ func sba704_5m(gs *GameState) bool {
 			if p.AttachedTo == nil || !permanentOnBattlefield(gs, p.AttachedTo) {
 				destroyPermSBA(gs, p, "aura_illegal_attach", "704.5m")
 				changed = true
+				continue
+			}
+			// R38: enchant-restriction check — verify the aura's
+			// "Enchant <type>" clause still matches the target's current
+			// types. Detached type-changing effects (target lost the
+			// relevant subtype) make the aura illegal per CR §303.4f.
+			if !auraTargetMatchesEnchantClause(p, p.AttachedTo) {
+				destroyPermSBA(gs, p, "aura_enchant_clause_violated", "704.5m")
+				changed = true
 			}
 		}
 	}
 	return changed
+}
+
+// auraTargetMatchesEnchantClause returns true iff `target` currently
+// satisfies `aura`'s "Enchant <kind>" clause. Unknown aura (no parseable
+// enchant clause) returns true — the engine treats absent restriction as
+// "any attachment was legal at attach time, leave it alone." This keeps
+// behavior conservative: we only fire §704.5m when we can prove the
+// restriction is violated.
+//
+// Recognised kinds (single-word noun after "enchant "):
+//
+//	creature, artifact, enchantment, land, planeswalker, battle,
+//	permanent, player
+//
+// Restrictions with multi-word qualifiers ("enchant nonblack creature",
+// "enchant creature you control") are treated as the bare noun match —
+// complex restriction checks belong to a future AST pass.
+func auraTargetMatchesEnchantClause(aura, target *Permanent) bool {
+	if aura == nil || aura.Card == nil || target == nil || target.Card == nil {
+		return true
+	}
+	kind := parseEnchantKind(aura.Card)
+	if kind == "" {
+		return true
+	}
+	if kind == "player" || kind == "permanent" {
+		return true
+	}
+	for _, t := range target.Card.Types {
+		if strings.EqualFold(t, kind) {
+			return true
+		}
+	}
+	return false
+}
+
+// parseEnchantKind reads the lowercased oracle text and extracts the noun
+// that follows the first "enchant " phrase. Returns "" when no enchant
+// clause is found.
+func parseEnchantKind(card *Card) string {
+	text := OracleTextLower(card)
+	if text == "" {
+		return ""
+	}
+	idx := strings.Index(text, "enchant ")
+	if idx < 0 {
+		return ""
+	}
+	rest := text[idx+len("enchant "):]
+	known := map[string]bool{
+		"creature": true, "artifact": true, "enchantment": true,
+		"land": true, "planeswalker": true, "battle": true,
+		"permanent": true, "player": true,
+	}
+	for _, word := range strings.Fields(rest) {
+		w := strings.TrimRight(word, ".,);:")
+		if known[w] {
+			return w
+		}
+		if len(w) > 1 && w[len(w)-1] == 's' && known[w[:len(w)-1]] {
+			return w[:len(w)-1]
+		}
+	}
+	return ""
 }
 
 // -----------------------------------------------------------------------------
@@ -853,6 +926,9 @@ func sba704_5n(gs *GameState) bool {
 			continue
 		}
 		for _, p := range s.Battlefield {
+			if p.PhasedOut {
+				continue // §702.26
+			}
 			if !(p.IsEquipment() || p.IsFortification()) {
 				continue
 			}
@@ -908,6 +984,9 @@ func sba704_5p(gs *GameState) bool {
 			continue
 		}
 		for _, p := range s.Battlefield {
+			if p.PhasedOut {
+				continue // §702.26
+			}
 			if p.AttachedTo == nil {
 				continue
 			}
@@ -948,6 +1027,9 @@ func sba704_5q(gs *GameState) bool {
 			continue
 		}
 		for _, p := range s.Battlefield {
+			if p.PhasedOut {
+				continue // §702.26
+			}
 			if p.Counters == nil {
 				continue
 			}
@@ -1001,6 +1083,9 @@ func sba704_5r(gs *GameState) bool {
 			continue
 		}
 		for _, p := range s.Battlefield {
+			if p.PhasedOut {
+				continue // §702.26
+			}
 			if p.Counters == nil || p.Card == nil || p.Card.AST == nil {
 				continue
 			}
@@ -1098,6 +1183,9 @@ func sba704_5s(gs *GameState) bool {
 			if !p.IsSaga() {
 				continue
 			}
+			if p.PhasedOut {
+				continue // §702.26
+			}
 			if p.Counters == nil {
 				continue
 			}
@@ -1106,14 +1194,20 @@ func sba704_5s(gs *GameState) bool {
 				continue // no tracked final-chapter; skip.
 			}
 			lore := p.Counters["lore"]
-			if lore >= final {
-				sacrificePermSBA(gs, p, "saga_final_chapter", "704.5s",
-					map[string]interface{}{
-						"lore":          lore,
-						"final_chapter": final,
-					})
-				changed = true
+			if lore < final {
+				continue
 			}
+			// R38: CR §704.5s clause "isn't the source of a chapter ability
+			// that has triggered but not yet left the stack."
+			if isSourceOfStackAbility(gs, p) {
+				continue
+			}
+			sacrificePermSBA(gs, p, "saga_final_chapter", "704.5s",
+				map[string]interface{}{
+					"lore":          lore,
+					"final_chapter": final,
+				})
+			changed = true
 		}
 	}
 	return changed
@@ -1216,14 +1310,23 @@ func sba704_5v(gs *GameState) bool {
 			if !p.IsBattle() {
 				continue
 			}
+			if p.PhasedOut {
+				continue // §702.26
+			}
 			def := 0
 			if p.Counters != nil {
 				def = p.Counters["defense"]
 			}
-			if def <= 0 {
-				destroyPermSBA(gs, p, "battle_defense_zero", "704.5v")
-				changed = true
+			if def > 0 {
+				continue
 			}
+			// R38: CR §704.5v clause "isn't the source of an ability that
+			// has triggered but not yet left the stack."
+			if isSourceOfStackAbility(gs, p) {
+				continue
+			}
+			destroyPermSBA(gs, p, "battle_defense_zero", "704.5v")
+			changed = true
 		}
 	}
 	return changed
@@ -1685,6 +1788,25 @@ func snapshotBattlefield(s *Seat) []*Permanent {
 	}
 	copy(s.sbaSnapBuf, s.Battlefield)
 	return s.sbaSnapBuf
+}
+
+// isSourceOfStackAbility returns true iff any item currently on the stack
+// has p as its Source (i.e. a triggered or activated ability from p that
+// hasn't yet resolved or been countered).
+//
+// Used by §704.5s (saga chapter still on stack) and §704.5v (battle
+// ability still on stack) to defer sacrifice/destruction until the
+// ability resolves.
+func isSourceOfStackAbility(gs *GameState, p *Permanent) bool {
+	if gs == nil || p == nil {
+		return false
+	}
+	for _, si := range gs.Stack {
+		if si != nil && si.Source == p {
+			return true
+		}
+	}
+	return false
 }
 
 // permanentOnBattlefield returns true iff p is currently on its controller's
