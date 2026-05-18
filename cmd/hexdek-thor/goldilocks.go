@@ -1306,6 +1306,77 @@ func setupForTrigger(gs *gameengine.GameState, info *effectInfo) {
 	}
 }
 
+// isControllerKeyedTrigger reports whether `t` fires in a way that
+// gates on the source's controller being the active player. Used by
+// the trigger-firing scaffolder in fireTriggerEvent to decide
+// whether to align gs.Active = srcPerm.Controller before resolving
+// the trigger body.
+//
+// The AST encodes controller-keyed phase triggers as a 3-tuple:
+//
+//   Event:      "phase"
+//   Phase:      "upkeep" / "end_step" / "draw_step" / ...
+//   Controller: "you" / "active_player"
+//
+// (see internal/gameast/trigger.go). Looking at Event alone misses
+// the controller dimension; this detector looks at all three fields.
+//
+// Detection layers (any one fires):
+//
+//   1. Controller is explicitly "you" or "active_player" — the
+//      canonical §603.x controller-gated marker. Any trigger so
+//      marked needs gs.Active aligned regardless of event/phase.
+//
+//   2. Phase field equals a controller-keyed step (upkeep, end_step,
+//      draw_step) — these uniformly fire on the controller's turn in
+//      actual play, so the verifier should mirror that even when the
+//      AST omits the Controller field (some older corpus dumps do).
+//
+//   3. Event string contains an explicit "your_*" / "you_*" form
+//      (for normalized events that bypass the phase field entirely,
+//      e.g. "your_upkeep") OR a bare upkeep/end-step/draw-step
+//      normalized name. Belt-and-suspenders fallback for AST shapes
+//      we haven't enumerated explicitly.
+//
+// Round-37 fix path — see docs/goldilocks-r36-report.md §"Triggered
+// effects on 'your upkeep' / 'your end step' / 'this player'" for
+// the failure-class targeted.
+func isControllerKeyedTrigger(t *gameast.Trigger) bool {
+	if t == nil {
+		return false
+	}
+	// Layer 1: explicit controller marker.
+	switch strings.ToLower(strings.TrimSpace(t.Controller)) {
+	case "you", "active_player":
+		return true
+	}
+	// Layer 2: controller-keyed phase steps.
+	phase := strings.ToLower(strings.TrimSpace(t.Phase))
+	switch phase {
+	case "upkeep", "end_step", "end step", "draw_step", "draw step":
+		return true
+	}
+	// Layer 3: event-string fallback.
+	event := strings.ToLower(t.Event)
+	if event == "" {
+		return false
+	}
+	for _, needle := range []string{
+		"your_upkeep", "your upkeep",
+		"your_end_step", "your end step",
+		"your_turn", "your turn",
+		"you_draw", "you draw",
+		"you_cast", "you cast",
+		"upkeep", "end_step", "end step",
+		"draw_step", "draw step",
+	} {
+		if strings.Contains(event, needle) {
+			return true
+		}
+	}
+	return false
+}
+
 func hasFriendlyCreature(gs *gameengine.GameState) bool {
 	for _, p := range gs.Seats[0].Battlefield {
 		if p != nil && p.IsCreature() && p.Card != nil && !strings.HasPrefix(p.Card.Name, "Filler") {
@@ -2999,6 +3070,40 @@ func fireTriggerEvent(gs *gameengine.GameState, srcPerm *gameengine.Permanent, i
 	}
 
 	event := strings.ToLower(info.trigger.Event)
+
+	// Round-37 fix: controller-keyed triggers need gs.Active set to the
+	// source's controller so "your upkeep" / "your end step" / "when
+	// you cast" / "when you draw" gates inside the trigger handler see
+	// the right active seat. Pre-round-37 the scaffold left gs.Active
+	// at its default (0), so cards like Pestilence, Pyrohemia,
+	// Withering Wisps, Lord of Tresserhorn, Scourge of Numai, Trynn,
+	// etc. (controller-keyed upkeep / EOT / cast triggers) silently
+	// short-circuited inside their handlers — see
+	// docs/goldilocks-r36-report.md §"Triggered effects on 'your
+	// upkeep' / 'your end step' / 'this player'" for the root-cause
+	// trail. Detector consults the full Trigger struct (event +
+	// phase + controller fields) rather than just the event string,
+	// because the AST encodes most controller-keyed upkeep / EOT
+	// triggers as Event="phase" + Phase="upkeep" + Controller="you"
+	// (see internal/gameast/trigger.go) — the bare event string
+	// alone says nothing about controller-gating.
+	if srcPerm != nil && isControllerKeyedTrigger(info.trigger) {
+		gs.Active = srcPerm.Controller
+	}
+
+	// Round-37 fix (part 2): the AST encodes phase-keyed triggers
+	// ("at the beginning of your upkeep / end step / draw step") as
+	// Event="phase" with the actual phase name in Trigger.Phase.
+	// The downstream switch matches on the event string, so an
+	// unnormalized "phase" event falls through every case and the
+	// trigger silently no-ops — that was the dominant failure shape
+	// for Pestilence / Pyrohemia / Withering Wisps / Task Mage
+	// Assembly / Lord of Tresserhorn / Scourge of Numai / Trynn etc.
+	// in r36. Normalize "phase" → Trigger.Phase here so the existing
+	// upkeep / end_step / draw_step cases naturally pick it up.
+	if event == "phase" && info.trigger.Phase != "" {
+		event = strings.ToLower(strings.TrimSpace(info.trigger.Phase))
+	}
 
 	switch {
 	case event == "etb" || strings.Contains(event, "enters"):
