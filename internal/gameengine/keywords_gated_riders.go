@@ -43,5 +43,24 @@ func resolveGatedRider(gs *GameState, src *Permanent) int {
 	if ApplyHellbentRider(gs, src) {
 		fired++
 	}
+	// Round-33 batch — same shape as the three above. Ordering within
+	// this batch is §-section ascending: Raid (§702.128), Ferocious
+	// (§702.135), Revolt (§702.146), Delirium (§702.151), Coven
+	// (§702.152). All are nil/no-card safe.
+	if ApplyRaidRider(gs, src) {
+		fired++
+	}
+	if ApplyFerociousRider(gs, src) {
+		fired++
+	}
+	if ApplyRevoltRider(gs, src) {
+		fired++
+	}
+	if ApplyDeliriumRider(gs, src) {
+		fired++
+	}
+	if ApplyCovenRider(gs, src) {
+		fired++
+	}
 	return fired
 }
