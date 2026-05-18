@@ -2,10 +2,10 @@ package gameengine
 
 // keywords_gated_riders.go — unifying dispatch for the resolve-time
 // gated riders (Threshold §702.74, Metalcraft §702.97, Hellbent
-// §702.45). Each rider has its own ApplyXxxRider executor that
-// independently checks HasXxx + XxxActive and resolves the tagged
-// payload; this file batches the three so the resolver only needs to
-// know one entry point.
+// §702.45, Spell Mastery §702.106). Each rider has its own
+// ApplyXxxRider executor that independently checks HasXxx + XxxActive
+// and resolves the tagged payload; this file batches them so the
+// resolver only needs to know one entry point.
 //
 // MaxSpeed (§702.178) is intentionally NOT included here. Max speed
 // uses the same shape but is wired separately in resolveSequence
@@ -24,14 +24,22 @@ package gameengine
 // order across riders, the per_card layer can short-circuit by
 // resolving only one rider's effect.
 
-// resolveGatedRider dispatches Threshold + Metalcraft + Hellbent rider
-// executors for `src`. Returns the number of riders that actually
-// fired. Safe to call with nil gs / nil src — each ApplyXxxRider is
-// itself nil-safe and no-ops when its preconditions aren't met.
+// resolveGatedRider dispatches Threshold + Metalcraft + Hellbent +
+// Spell Mastery rider executors for `src`. Returns the number of
+// riders that actually fired. Safe to call with nil gs / nil src —
+// each ApplyXxxRider is itself nil-safe and no-ops when its
+// preconditions aren't met.
 //
 // Called from resolveSequence at the END of the outer Sequence
 // resolution (guarded by gs.Flags["_gated_rider_depth"] so nested
 // Sequence nodes can't re-fire).
+//
+// Constellation (§702.131) is NOT included here despite the round-33
+// task spec asking for it; constellation is a triggered ability on
+// enchantment ETB, wired via OnConstellationETB in
+// keywords_spell_mastery_riders.go and called from
+// FirePermanentETBTriggers (etb_dispatch.go) — the timing-correct
+// hook point.
 func resolveGatedRider(gs *GameState, src *Permanent) int {
 	fired := 0
 	if ApplyThresholdRider(gs, src) {
@@ -41,6 +49,9 @@ func resolveGatedRider(gs *GameState, src *Permanent) int {
 		fired++
 	}
 	if ApplyHellbentRider(gs, src) {
+		fired++
+	}
+	if ApplySpellMasteryRider(gs, src) {
 		fired++
 	}
 	return fired
