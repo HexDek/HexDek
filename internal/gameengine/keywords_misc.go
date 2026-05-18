@@ -1884,13 +1884,16 @@ func CheckDelirium(gs *GameState, seatIdx int) bool {
 // ---------------------------------------------------------------------------
 // Metalcraft — 3+ artifacts you control
 // ---------------------------------------------------------------------------
+//
+// Canonical implementation (HasMetalcraft + MetalcraftActive +
+// ArtifactCount) lives in keywords_metalcraft.go. CheckMetalcraft is
+// kept here as a thin alias so existing call sites in per_card/ and
+// resolve-time rider lookup continue to work without an import rename.
 
-// CheckMetalcraft returns true if the seat controls 3 or more artifacts.
+// CheckMetalcraft is the legacy alias for MetalcraftActive. New code
+// should call MetalcraftActive directly.
 func CheckMetalcraft(gs *GameState, seatIdx int) bool {
-	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
-		return false
-	}
-	return CountArtifacts(gs, seatIdx) >= 3
+	return MetalcraftActive(gs, seatIdx)
 }
 
 // ---------------------------------------------------------------------------
