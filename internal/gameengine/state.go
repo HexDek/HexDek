@@ -835,6 +835,13 @@ type Card struct {
 	// 0 if unset; the cast path gracefully treats 0 as free.
 	CMC int
 
+	// ManaCostString is the raw printed mana cost ("{2}{W}{W}{U}"). The
+	// corpus loader populates this when available. Consumed by validators
+	// that need pip-level inspection (CR §702.139 Jegantha's
+	// "no card has more than one of the same mana symbol" check).
+	// Empty for lands, tokens, and cards without a printed cost.
+	ManaCostString string
+
 	// TypeLine — the Scryfall-style printed type line ("Legendary
 	// Creature — Human Wizard", "Instant", "Sorcery", "Artifact Token").
 	// Used alongside Types for cast-trigger observers that filter on
