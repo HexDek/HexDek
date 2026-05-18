@@ -1063,25 +1063,13 @@ func CanCastForFreerunning(gs *GameState, seatIdx int) bool {
 }
 
 // ---------------------------------------------------------------------------
-// §702.174 — Gift
+// §702.192 — Gift
 // ---------------------------------------------------------------------------
-
-// ApplyGift offers a gift to an opponent. If accepted, you get a bonus effect.
-// Simplified: opponent always declines (greedy AI). Returns false.
-func ApplyGift(gs *GameState, seatIdx int, perm *Permanent) bool {
-	if gs == nil || perm == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
-		return false
-	}
-	gs.LogEvent(Event{
-		Kind:   "gift_declined",
-		Seat:   seatIdx,
-		Source: perm.Card.DisplayName(),
-		Details: map[string]interface{}{
-			"rule": "702.174",
-		},
-	})
-	return false
-}
+// HasGift / GiftType / CastWithGift / ResolveGift live in
+// keywords_gift.go where the cast-time promise + resolution-time
+// token-creation pipeline is implemented in full. The previous
+// always-declines ApplyGift stub here was removed (it had no
+// callers).
 
 // §702.173 — Space Sculptor: real impl (sector partition + zone-control)
 // lives in keywords_stubs_tail.go.
