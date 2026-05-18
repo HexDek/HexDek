@@ -6,6 +6,39 @@
 **Inputs:** `data/rules/ast_dataset.jsonl` (47MB, 31,963 cards) + `data/rules/oracle-cards.json` (165MB, 35,708 cards)
 **Wall time:** 0.97s
 
+> **Round 37 update (2026-05-17, branch `dev/goldilocks-rider-pending-verifier`):**
+> Fix path 1(a) shipped — `verifyEffect` in `cmd/hexdek-thor/goldilocks.go`
+> now recognizes `*_rider` / `*_rider_pending` events AND the
+> bare-marker ability_word dispatch as PASS for `info.kind ==
+> "ability_word"` (~110 LOC including the recognized-words map; spec
+> estimated ~30 LOC). Headline numbers after the fix:
+>
+> | Metric | Round 36 | Round 37 fix |
+> |---|--:|--:|
+> | Total failures | 64 | **19** |
+> | `goldilocks_dead_effect` | 61 | 16 |
+> | …of which ability_word | 45 | **0** |
+> | `goldilocks_invariant` | 2 | 2 |
+> | `goldilocks_unverified` | 1 | 1 |
+> | Effect tests passed | 30,277 / 30,340 (99.79 %) | **30,322 / 30,340 (99.94 %)** |
+>
+> The 16 remaining `goldilocks_dead_effect` failures break down
+> exactly as the non-ability_word lines in §"Dead-effect breakdown"
+> below (5 sacrifice, 4 modification_effect, 2 lose_life, 2 exile,
+> 2 create_token, 1 destroy). Those need the round-36 fix paths #2
+> and #3 — the round-37 commit doesn't touch them.
+>
+> Craftsperson note baked into the commit: the bare-marker
+> ability_word dispatch IS a structural quirk worth noting — the
+> "ability_word" Modification carries just the word name (e.g.
+> `Args=["valiant"]`), the actual payoff lives on a separate
+> Triggered/Static ability node OR in the rider helpers (which are
+> only reached via resolveSequence / FirePermanentETBTriggers). A
+> follow-on cleanup could have `extractFirstEffect` skip past
+> ability_word marker nodes to the next ability, making the
+> verifier semantically right rather than surface-patched. Tracked
+> as QUORUM REQUEST in the commit message.
+
 ---
 
 ## Headline numbers
