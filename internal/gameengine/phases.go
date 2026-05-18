@@ -49,6 +49,11 @@ func FirePhaseTriggers(gs *GameState, phase, step string) {
 	if step == "" && phase == "" {
 		return
 	}
+	// CR §603.3b: all phase/step triggers across all seats fire from the same
+	// boundary event and must be batched, ordered APNAP + controller-choice,
+	// then drained. Per-card OnTrigger handlers fired further down also need
+	// to land in the same batch.
+	defer EndTriggerBatch(gs, BeginTriggerBatch(gs))
 	// Collect first so firing doesn't invalidate our iteration when the
 	// trigger mutates the battlefield (e.g. a saga advancing its counter).
 	type pending struct {

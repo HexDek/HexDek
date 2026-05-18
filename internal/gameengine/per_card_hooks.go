@@ -73,6 +73,14 @@ func FireCardTrigger(gs *GameState, event string, ctx map[string]interface{}) {
 	if TriggerHook == nil || gs == nil {
 		return
 	}
+	// CR §603.3b: per-card triggers fired off a single game event must be
+	// batched with their AST siblings rather than push-and-resolve one at a
+	// time. Open a batch frame around the dispatch so any PushTriggeredAbility
+	// calls made by per-card handlers append to the pending slice and get
+	// ordered with the rest of the event's triggers at the outermost End.
+	// Re-entrant: if the caller already opened a batch, this is a no-op
+	// pass-through and the pending triggers flush at the outer End.
+	defer EndTriggerBatch(gs, BeginTriggerBatch(gs))
 	TriggerHook(gs, event, ctx)
 }
 

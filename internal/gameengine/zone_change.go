@@ -417,6 +417,14 @@ func FireZoneChangeTriggers(gs *GameState, perm *Permanent, card *Card, fromZone
 		return
 	}
 
+	// CR §603.3b: a single zone change fans out to many simultaneous
+	// triggers — self-trigger + observer triggers across all seats + per-card
+	// "creature_dies"/"permanent_ltb"/"card_exiled"/"zone_change"/
+	// "land_to_graveyard". They must be batched and ordered APNAP + controller-
+	// choice rather than each push-and-resolving inline before the next is
+	// placed.
+	defer EndTriggerBatch(gs, BeginTriggerBatch(gs))
+
 	// 1. Fire self-triggers: scan the dying/leaving permanent's own abilities
 	//    for matching triggers. Per CR §603.10 we look at the state just before
 	//    the zone change (i.e. the permanent's abilities as they were).

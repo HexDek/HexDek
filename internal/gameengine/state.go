@@ -250,6 +250,17 @@ type GameState struct {
 	// the analytics layer can answer "Sol Ring is played turn 1 in N%
 	// of games it appears in" queries.
 	CardFirstPlayed map[string]int
+
+	// triggerBatchDepth and pendingTriggers implement CR §603.3b batched
+	// trigger placement. When BeginTriggerBatch opens a batch (depth 0→1),
+	// subsequent PushTriggeredAbility calls append to pendingTriggers
+	// instead of push+resolve. EndTriggerBatch on the outermost frame
+	// orders the batch APNAP + controller-choice via OrderTriggersAPNAP,
+	// pushes via PushSimultaneousTriggers, then drains the stack through
+	// priority/resolve until those items are gone. Re-entrant: nested
+	// fire sites observe an open batch and just append. See trigger_batch.go.
+	triggerBatchDepth int
+	pendingTriggers   []*StackItem
 }
 
 // Day/Night state constants (CR §726).

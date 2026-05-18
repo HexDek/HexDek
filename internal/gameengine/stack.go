@@ -195,12 +195,21 @@ func PushTriggeredAbility(gs *GameState, src *Permanent, effect gameast.Effect) 
 		Controller: src.Controller,
 		Source:     src,
 		Effect:     effect,
+		Kind:       "triggered",
 	}
 	if src.Card != nil {
 		// StackItem.Card is usually for spells, not triggers, but we point it
 		// at the source card so logs show the right name.
 		item.Card = src.Card
 	}
+
+	// CR §603.3b: if a batch is open, defer the push so siblings can be
+	// ordered together at EndTriggerBatch. See trigger_batch.go.
+	if gs.triggerBatchDepth > 0 {
+		collectTrigger(gs, item)
+		return item
+	}
+
 	// Stack trace: log triggered ability push for CR audit.
 	trigName := ""
 	if src.Card != nil {
@@ -1326,55 +1335,62 @@ func resolvePermanentSpellETB(gs *GameState, item *StackItem) *Permanent {
 		},
 	})
 
-	// Fire ETB triggered abilities (§603.6). Walk the card's abilities and
-	// push Triggered entries whose Trigger.Event == "etb".
-	if card.AST != nil {
-		for _, ab := range card.AST.Abilities {
-			trig, ok := ab.(*gameast.Triggered)
-			if !ok || trig.Effect == nil {
-				continue
-			}
-			if !EventEquals(trig.Trigger.Event, "etb") {
-				continue
-			}
-			// §603.3 — the engine is responsible for putting the trigger
-			// on the stack. PushTriggeredAbility handles that + priority.
-			PushTriggeredAbility(gs, perm, trig.Effect)
-			if gs.CheckEnd() {
-				return perm
+	// CR §603.3b: the ETB cascade fans out to (a) the entering card's own
+	// AST ETB triggers, (b) the per-card snowflake handler, (c) per-card
+	// "nonland_permanent_etb" / "permanent_etb" event listeners, and
+	// (d) observer ETB triggers from every other permanent on the battlefield.
+	// All fire from the same single game event (this ETB) and must be batched,
+	// ordered APNAP + controller-choice, then drained. Closure scope so an
+	// early end-of-game return still runs the deferred End.
+	func() {
+		opened := BeginTriggerBatch(gs)
+		defer EndTriggerBatch(gs, opened)
+
+		// Fire ETB triggered abilities (§603.6).
+		if card.AST != nil {
+			for _, ab := range card.AST.Abilities {
+				trig, ok := ab.(*gameast.Triggered)
+				if !ok || trig.Effect == nil {
+					continue
+				}
+				if !EventEquals(trig.Trigger.Event, "etb") {
+					continue
+				}
+				PushTriggeredAbility(gs, perm, trig.Effect)
+				if gs.CheckEnd() {
+					return
+				}
 			}
 		}
-	}
 
-	// Per-card ETB snowflake dispatch. This fires AFTER stock AST ETB
-	// triggers so the snowflake runs as the "bottom" of the cascade —
-	// the order matters for Thassa's Oracle which reads the library
-	// AFTER any ETB scrys/tutors resolve.
-	InvokeETBHook(gs, perm)
+		// Per-card ETB snowflake dispatch. Fires AFTER stock AST ETB triggers
+		// so the snowflake runs as the "bottom" of the cascade — order matters
+		// for Thassa's Oracle which reads the library AFTER any ETB scrys/
+		// tutors resolve. The hook itself isn't a trigger but its effects may
+		// FireCardTrigger, which appends into this same batch.
+		InvokeETBHook(gs, perm)
 
-	// §702.131 Ascend — check if controller now has 10+ permanents
-	CheckAscend(gs, perm.Controller)
+		// §702.131 Ascend.
+		CheckAscend(gs, perm.Controller)
 
-	// Generic "nonland permanent etb" event for Cloudstone Curio et al.
-	// Fires regardless of whether the permanent itself has a snowflake.
-	if !cardHasType(card, "land") {
-		FireCardTrigger(gs, "nonland_permanent_etb", map[string]interface{}{
+		if !cardHasType(card, "land") {
+			FireCardTrigger(gs, "nonland_permanent_etb", map[string]interface{}{
+				"perm":            perm,
+				"controller_seat": perm.Controller,
+				"card":            card,
+			})
+		}
+		FireCardTrigger(gs, "permanent_etb", map[string]interface{}{
 			"perm":            perm,
 			"controller_seat": perm.Controller,
 			"card":            card,
 		})
-	}
-	FireCardTrigger(gs, "permanent_etb", map[string]interface{}{
-		"perm":            perm,
-		"controller_seat": perm.Controller,
-		"card":            card,
-	})
 
-	// Observer ETB triggers — scan all OTHER permanents for triggered
-	// abilities that fire when a permanent enters (e.g. "whenever another
-	// creature enters the battlefield", "whenever a creature you control
-	// enters"). Mirrors fireObserverZoneChangeTriggers but for ETB events.
-	fireObserverETBTriggers(gs, perm)
+		// Observer ETB triggers — scan all OTHER permanents for triggered
+		// abilities that fire when a permanent enters. Mirrors
+		// fireObserverZoneChangeTriggers but for ETB events.
+		fireObserverETBTriggers(gs, perm)
+	}()
 
 	return perm
 }
@@ -1641,6 +1657,13 @@ func fireCastTriggersFromZone(gs *GameState, casterSeat int, card *Card, fromZon
 		"is_creature": cardHasType(card, "creature"),
 		"cast_zone":   fromZone,
 	}
+	// CR §603.3b: all of the "spell was cast" family events fan out from a
+	// single cast — wrap them in one batch so per-card triggers from spell_cast
+	// don't resolve before noncreature_spell_cast / creature_spell_cast /
+	// instant_or_sorcery_cast even fire. Without this, Rhystic Study would
+	// resolve and draw before Mystic Remora's noncreature_spell_cast got the
+	// chance to be batched with it, violating §603.3b ordering.
+	defer EndTriggerBatch(gs, BeginTriggerBatch(gs))
 	FireCardTrigger(gs, "spell_cast", ctx)
 	// Opponent scoping — fire this event unconditionally; handlers check
 	// ctx["caster_seat"] against their own controller to decide.
