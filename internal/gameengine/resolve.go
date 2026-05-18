@@ -736,11 +736,30 @@ func applyDamage(gs *GameState, src *Permanent, t Target, amount int) {
 		if t.Seat < 0 || t.Seat >= len(gs.Seats) {
 			return
 		}
-		// §614: fire would_be_dealt_damage replacement chain.
-		modified, cancelled := FireDamageEvent(gs, src, t.Seat, nil, amount)
-		if cancelled || modified <= 0 {
+		// §614: fire would_be_dealt_damage replacement chain. Build the
+		// event in-place so we can re-read mutated target fields after
+		// FireEvent — redirect handlers (Stuffy Doll, Maze of Ith) rewrite
+		// ev.TargetSeat / ev.TargetPerm.
+		ev := NewReplEvent("would_be_dealt_damage")
+		ev.Source = src
+		ev.TargetSeat = t.Seat
+		ev.SetCount(amount)
+		FireEvent(gs, ev)
+		if ev.Cancelled || ev.Count() <= 0 {
 			return
 		}
+		// §614 redirection: if the chain rerouted the damage, recurse with
+		// the new target so prevention (§615) applies to the redirected
+		// target, not the original.
+		if ev.TargetPerm != nil {
+			applyDamage(gs, src, Target{Kind: TargetKindPermanent, Permanent: ev.TargetPerm}, ev.Count())
+			return
+		}
+		if ev.TargetSeat != t.Seat {
+			applyDamage(gs, src, Target{Kind: TargetKindSeat, Seat: ev.TargetSeat}, ev.Count())
+			return
+		}
+		modified := ev.Count()
 		// §615: apply prevention shields before dealing damage.
 		modified = PreventDamageToPlayer(gs, t.Seat, modified, src)
 		if modified <= 0 {

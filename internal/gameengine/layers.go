@@ -2361,3 +2361,70 @@ func itoaLayers(n int) string {
 	}
 	return string(buf[i:])
 }
+
+// -----------------------------------------------------------------------------
+// Layer 7a — characteristic-defining P/T abilities (§613.4a). R38.
+// -----------------------------------------------------------------------------
+
+// RegisterCDA registers a layer-7a continuous effect whose ApplyFn computes
+// power/toughness from current game state (Tarmogoyf, Lhurgoyf, Mortivore).
+// Per CR §613.4a, char-defining P/T applies BEFORE 7b "set base P/T" effects.
+func RegisterCDA(gs *GameState, src *Permanent, disc string,
+	predicate func(*GameState, *Permanent) bool,
+	computeFn func(*GameState, *Permanent) (int, int)) {
+	if gs == nil || src == nil || computeFn == nil {
+		return
+	}
+	if predicate == nil {
+		predicate = func(_ *GameState, t *Permanent) bool { return t == src }
+	}
+	ts := gs.NextTimestamp()
+	applyFn := func(g *GameState, p *Permanent, chars *Characteristics) {
+		if !charsHaveType(chars.Types, "creature") {
+			return
+		}
+		pow, tough := computeFn(g, p)
+		chars.Power = pow
+		chars.Toughness = tough
+		chars.BasePower = pow
+		chars.BaseToughness = tough
+	}
+	gs.RegisterContinuousEffect(&ContinuousEffect{
+		Layer: LayerPT, Sublayer: "a",
+		Timestamp:      ts,
+		SourcePerm:     src,
+		SourceCardName: src.Card.DisplayName(),
+		ControllerSeat: src.Controller,
+		HandlerID:      layerHandlerKey(disc, src),
+		Predicate:      predicate,
+		ApplyFn:        applyFn,
+	})
+}
+
+// RegisterTarmogoyf wires Tarmogoyf's CDA: power = distinct card types in
+// all graveyards; toughness = power + 1.
+func RegisterTarmogoyf(gs *GameState, p *Permanent) {
+	if gs == nil || p == nil {
+		return
+	}
+	RegisterCDA(gs, p, "tarmogoyf_cda",
+		func(_ *GameState, t *Permanent) bool { return t == p },
+		func(g *GameState, _ *Permanent) (int, int) {
+			seen := map[string]bool{}
+			for _, seat := range g.Seats {
+				if seat == nil {
+					continue
+				}
+				for _, c := range seat.Graveyard {
+					if c == nil {
+						continue
+					}
+					for _, ty := range c.Types {
+						seen[strings.ToLower(ty)] = true
+					}
+				}
+			}
+			pow := len(seen)
+			return pow, pow + 1
+		})
+}

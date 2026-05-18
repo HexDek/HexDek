@@ -1292,3 +1292,45 @@ func itoaRepl(n int) string {
 	}
 	return string(buf[i:])
 }
+
+// -----------------------------------------------------------------------------
+// Damage redirection — §614 replacement on would_be_dealt_damage. R38.
+// -----------------------------------------------------------------------------
+
+// RegisterDamageRedirectPlayer registers a replacement effect that redirects
+// damage from `fromSeat` to `toSeat`. The redirect mutates ev.TargetSeat;
+// applyDamage re-reads it after FireEvent and routes damage to the new
+// target. Per CR §614, redirection runs BEFORE §615 prevention — shields on
+// the original target do NOT apply.
+func RegisterDamageRedirectPlayer(gs *GameState, src *Permanent,
+	fromSeat, toSeat int, disc string) {
+	if gs == nil {
+		return
+	}
+	hid := "redirect_player:" + disc + ":" + itoaRepl(fromSeat) + "->" + itoaRepl(toSeat)
+	gs.RegisterReplacement(&ReplacementEffect{
+		EventType:      "would_be_dealt_damage",
+		HandlerID:      hid,
+		SourcePerm:     src,
+		ControllerSeat: 0,
+		Timestamp:      0,
+		Category:       CategoryOther,
+		Applies: func(_ *GameState, ev *ReplEvent) bool {
+			return ev.TargetPerm == nil && ev.TargetSeat == fromSeat && ev.Count() > 0
+		},
+		ApplyFn: func(g *GameState, ev *ReplEvent) {
+			ev.TargetSeat = toSeat
+			g.LogEvent(Event{
+				Kind:   "damage_redirect",
+				Seat:   toSeat,
+				Source: permanentName(src),
+				Amount: ev.Count(),
+				Details: map[string]interface{}{
+					"from": fromSeat,
+					"to":   toSeat,
+					"rule": "614",
+				},
+			})
+		},
+	})
+}
