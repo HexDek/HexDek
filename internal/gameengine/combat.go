@@ -1220,6 +1220,73 @@ func DealCombatDamageStep(gs *GameState, attackers []*Permanent, blockerMap map[
 		if dmg <= 0 {
 			continue
 		}
+		// §310.5b — Battle defender path: if this attacker was
+		// declared against a battle, route damage to the battle's
+		// defense counters via ApplyCombatDamageToBattle. We honor
+		// blockers (if any) by falling back to the standard
+		// player-target path; in real games blockers can still
+		// intercept attackers pointed at a battle. The blocker
+		// branch below handles that case.
+		if battleTS, ok := AttackerDefenderBattle(atk); ok {
+			declaredBlockers := blockerMap[atk]
+			liveBlockers := make([]*Permanent, 0, len(declaredBlockers))
+			for _, b := range declaredBlockers {
+				if alive(gs, b) {
+					liveBlockers = append(liveBlockers, b)
+				}
+			}
+			if len(declaredBlockers) == 0 {
+				// Unblocked battle-attacker — all damage to the battle.
+				if battle, ok := LookupBattleByTimestamp(gs, battleTS); ok {
+					ApplyCombatDamageToBattle(gs, atk, dmg, battle)
+				}
+				continue
+			}
+			if len(liveBlockers) == 0 {
+				// All declared blockers removed before damage. Trample
+				// spills to the battle.
+				if atk.HasKeyword("trample") {
+					if battle, ok := LookupBattleByTimestamp(gs, battleTS); ok {
+						ApplyCombatDamageToBattle(gs, atk, dmg, battle)
+					}
+				}
+				continue
+			}
+			// Blocked battle-attacker: damage flows through blockers
+			// like a normal attack. Trample remainder goes to the
+			// battle. Fall through to the blocker-handling code below,
+			// using a synthetic "battle defender" sentinel that the
+			// post-blocker trample branch checks.
+			ordered := append([]*Permanent{}, liveBlockers...)
+			for i := 0; i < len(ordered)-1; i++ {
+				for j := i + 1; j < len(ordered); j++ {
+					if gs.ToughnessOf(ordered[j])-ordered[j].MarkedDamage <
+						gs.ToughnessOf(ordered[i])-ordered[i].MarkedDamage {
+						ordered[i], ordered[j] = ordered[j], ordered[i]
+					}
+				}
+			}
+			remaining := dmg
+			for _, b := range ordered {
+				if remaining <= 0 {
+					break
+				}
+				need := lethalAmountGS(gs, atk, b)
+				give := remaining
+				if give > need {
+					give = need
+				}
+				applyCombatDamageToCreature(gs, atk, give, b)
+				remaining -= give
+			}
+			if remaining > 0 && atk.HasKeyword("trample") {
+				if battle, ok := LookupBattleByTimestamp(gs, battleTS); ok {
+					ApplyCombatDamageToBattle(gs, atk, remaining, battle)
+				}
+			}
+			continue
+		}
+
 		// Per-attacker defender (CR §506.1). Multiplayer generalization.
 		defenderSeat, ok := AttackerDefender(atk)
 		if !ok || defenderSeat < 0 || defenderSeat >= len(gs.Seats) {
