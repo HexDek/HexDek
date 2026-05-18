@@ -2071,9 +2071,26 @@ func CountConverge(gs *GameState, seatIdx int) int {
 // Devotion — count mana pips in costs of permanents you control
 // ---------------------------------------------------------------------------
 
-// CountDevotion counts mana symbols of a specific color in the mana costs
-// of permanents controlled by seatIdx. Color is "W", "U", "B", "R", or "G".
-// Simplified: uses CMC as a proxy (1 pip per CMC for matching-color permanents).
+// CountDevotion counts mana symbols of `color` in the mana costs of
+// permanents `seatIdx` controls. CR §700.5.
+//
+// Color is one of "W", "U", "B", "R", "G" (case-insensitive). The real
+// rule counts MANA SYMBOLS in the mana COST of each permanent — not
+// the color identity. We delegate per-card pip parsing to
+// DevotionPipsFromManaCost(card.ManaCostString, color) when the card
+// has a printed cost recorded; otherwise we fall back to the legacy
+// "1 per color-matching permanent" heuristic so older fixtures /
+// tokens (which never populate ManaCostString) still produce a
+// reasonable count.
+//
+// Hybrid pips: per §700.5b a hybrid symbol counts toward the
+// permanent's controller's devotion for BOTH halves' colors. E.g.,
+// {B/R} on a permanent contributes +1 to devotion to black AND +1 to
+// devotion to red. Twobrid {2/B} and Phyrexian {B/P} count as +1
+// to the relevant color. Pure generic / X / snow / colorless never
+// contribute.
+//
+// Returns 0 for invalid args.
 func CountDevotion(gs *GameState, seatIdx int, color string) int {
 	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) || color == "" {
 		return 0
@@ -2084,12 +2101,14 @@ func CountDevotion(gs *GameState, seatIdx int, color string) int {
 		if p == nil || p.Card == nil {
 			continue
 		}
-		// Count color matches in the card's colors.
+		if p.Card.ManaCostString != "" {
+			total += DevotionPipsFromManaCost(p.Card.ManaCostString, wantColor)
+			continue
+		}
+		// Legacy fallback: count 1 per color-matching permanent (used by
+		// fixtures / tokens that don't carry a printed mana cost).
 		for _, c := range p.Card.Colors {
 			if strings.ToUpper(c) == wantColor {
-				// Each color pip roughly = CMC contribution. Simplified to 1 per
-				// color-matching permanent for MVP. Real devotion counts actual
-				// mana symbols which requires parsing mana costs.
 				total++
 			}
 		}
