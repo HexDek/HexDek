@@ -98,7 +98,13 @@ func TestCombat_R38_ProtectionFromCreatures_BlockerCantBlock(t *testing.T) {
 	}
 }
 
-func TestCombat_R38_ProtectionFromArtifacts_PreventsBlockAndDamage(t *testing.T) {
+func TestCombat_R38_ProtectionFromArtifacts_PreventsDamage(t *testing.T) {
+	// CR §702.16 DEBT: "can't be blocked by" only applies on the
+	// ATTACKING side; a blocker with protection from artifacts CAN
+	// legally block an artifact attacker — it just doesn't take
+	// damage from it. Verify the damage-prevention branch fires on
+	// the type-protection axis (the part the audit flagged as missing
+	// from the combat path).
 	gs := newCombatGame(t)
 
 	atk := addCreature(gs, 0, "Steel Hekkaton", 4, 4)
@@ -107,14 +113,27 @@ func TestCombat_R38_ProtectionFromArtifacts_PreventsBlockAndDamage(t *testing.T)
 	def := addCreature(gs, 1, "Mirran Crusader", 2, 2)
 	def.Flags["prot_type:artifact"] = 1
 
-	if CanBlockGS(gs, atk, def) {
-		t.Errorf("prot-from-artifacts creature should not be a legal blocker for an artifact attacker")
-	}
-
 	applyCombatDamageToCreature(gs, atk, 4, def)
 	if def.MarkedDamage != 0 {
 		t.Errorf("prot-from-artifacts creature should take 0 damage from artifact source, got marked=%d",
 			def.MarkedDamage)
+	}
+}
+
+func TestCombat_R38_ProtectionFromArtifactsAttacker_BlockerCantBlock(t *testing.T) {
+	// CR §702.16: an ATTACKER with protection from artifacts can't be
+	// blocked by artifact creatures. Mirror of the prot-from-creatures
+	// case but on the artifact-type axis.
+	gs := newCombatGame(t)
+
+	atk := addCreature(gs, 0, "Pristine Knight", 2, 2)
+	atk.Flags["prot_type:artifact"] = 1
+
+	blk := addCreature(gs, 1, "Steel Mauler", 5, 5)
+	blk.Card.Types = append(blk.Card.Types, "artifact")
+
+	if CanBlockGS(gs, atk, blk) {
+		t.Fatalf("artifact blocker should not be a legal blocker for prot-from-artifacts attacker")
 	}
 }
 
