@@ -1262,6 +1262,32 @@ func resolvePermanentSpellETB(gs *GameState, item *StackItem) *Permanent {
 
 	seat.Battlefield = append(seat.Battlefield, perm)
 
+	// §702.146b — Disturb cast: a card cast for its disturb cost enters
+	// transformed (back face up) with the §702.146c dies→exile
+	// replacement registered. The transform happens BEFORE aura
+	// attachment + RegisterContinuousEffectsForPermanent so the back
+	// face's printed type / abilities are what the layers see. If
+	// the casting helper forwarded a back-face AST hint (via
+	// CostMeta["disturb_back_face_ast"]; tests + the corpus loader
+	// stash this), wire it onto the Permanent's face cache so
+	// ApplyDisturbETB's transform branch actually has something to
+	// flip to.
+	if item.CostMeta != nil {
+		if v, ok := item.CostMeta["disturb_cast"]; ok {
+			if b, _ := v.(bool); b {
+				if v, ok := item.CostMeta["disturb_back_face_ast"]; ok && v != nil {
+					if backAST, ok := v.(*gameast.CardAST); ok && backAST != nil {
+						perm.FrontFaceAST = perm.Card.AST
+						perm.BackFaceAST = backAST
+						perm.FrontFaceName = perm.Card.Name
+						perm.BackFaceName = perm.Card.BackFaceName
+					}
+				}
+				ApplyDisturbETB(gs, perm)
+			}
+		}
+	}
+
 	// §303.4f — Aura attachment on ETB. When an Aura enters the battlefield
 	// as a permanent spell, it must be attached to a legal object. Infer the
 	// target type from the card's oracle text / TypeLine and attach to a
