@@ -85,6 +85,10 @@ func ActivateSaddle(gs *GameState, mount *Permanent, saddlePower int) bool {
 			"rule":             "702.171",
 		},
 	})
+	// Sibling of the SaddleMount path — fire the Mount-saddled fan-out
+	// for per_card observers. Gated on the Mount subtype inside the
+	// helper.
+	FireMountSaddledTriggers(gs, mount)
 	return true
 }
 
