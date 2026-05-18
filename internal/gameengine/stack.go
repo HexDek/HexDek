@@ -305,6 +305,18 @@ func CastSpell(gs *GameState, seatIdx int, card *Card, targets []Target) error {
 		return &CastError{Reason: "grand_abolisher"}
 	}
 
+	// CR §601.2c: targets are declared at announcement; illegal targets
+	// (hexproof, shroud, protection, off-battlefield) must abort the cast
+	// per §601.2e ("the game returns to the moment before the casting was
+	// proposed"). PickTarget enforces this for AI-driven callers, but
+	// CastSpell is the central trust boundary — validate again here so
+	// fuzz-generated or fixture-built target lists can't bypass §115.2.
+	if len(targets) > 0 {
+		if err := ValidateTargetsAtAnnouncement(gs, seatIdx, card, targets, nil); err != nil {
+			return err
+		}
+	}
+
 	// Remove from hand. CR §601.2a places the card on the stack (it leaves
 	// its origin zone) as the first step of casting.
 	if !removeFromHand(seat, card) {
@@ -1701,7 +1713,18 @@ func CheckWardOnTargeting(gs *GameState, item *StackItem) {
 		if casterSeat == nil {
 			continue
 		}
-		if casterSeat.ManaPool >= wardCost {
+		// CR §702.21c is a "may" — give the controller's Hat the chance
+		// to decline payment even when the mana is available (e.g. to
+		// save mana for a counterspell, or to deliberately fizzle into
+		// a graveyard recursion line). Hats that don't implement
+		// WardPayer fall back to the historical "pay if affordable" policy.
+		willPay := casterSeat.ManaPool >= wardCost
+		if willPay && casterSeat.Hat != nil {
+			if wp, ok := casterSeat.Hat.(WardPayer); ok {
+				willPay = wp.ShouldPayWard(gs, item.Controller, item, perm, wardCost)
+			}
+		}
+		if willPay {
 			// Pay the ward cost.
 			casterSeat.ManaPool -= wardCost
 			SyncManaAfterSpend(casterSeat)

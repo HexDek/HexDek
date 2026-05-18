@@ -49,6 +49,24 @@ func PickTarget(gs *GameState, src *Permanent, f gameast.Filter) []Target {
 			return allPlayerTargets(gs, f, srcSeat)
 		}
 		return allPermanentTargets(gs, f, srcSeat)
+	case "n", "up_to_n":
+		// CR §115.3 multi-target pick. "Choose two target creatures",
+		// "up to three target permanents", "any number of target X".
+		// Filter.Count carries the upper bound; "up_to_n" allows fewer
+		// (including zero, which also satisfies CR §115.6 "may target
+		// none"). Distinctness per §115.3 is enforced by pointer identity
+		// on the candidate.
+		n := 1
+		if f.Count != nil {
+			if v, ok := f.Count.IntVal(); ok && v > 0 {
+				n = v
+			}
+		}
+		allowFewer := f.Quantifier == "up_to_n"
+		if isPlayerFilter(f) {
+			return pickNPlayerTargets(gs, f, srcSeat, n, allowFewer)
+		}
+		return pickNPermanentTargets(gs, f, srcSeat, src, n, allowFewer)
 	}
 
 	// Equipped/enchanted creature — resolve to the attached-to permanent,
@@ -279,6 +297,160 @@ func pickPermanentTarget(gs *GameState, f gameast.Filter, srcSeat int, src *Perm
 		})
 	}
 	return result
+}
+
+// pickNPermanentTargets picks up to n distinct battlefield targets (§115.3).
+// When allowFewer is false and zero candidates exist, returns nil so the
+// caller treats it as "no legal target" (§608.2b fizzle). When allowFewer
+// is true, the caller may receive an empty slice — that's CR §115.6
+// ("may target none"). Distinctness per §115.3 is enforced by pointer
+// identity on the candidate permanent.
+func pickNPermanentTargets(gs *GameState, f gameast.Filter, srcSeat int, src *Permanent, n int, allowFewer bool) []Target {
+	if n <= 0 {
+		if allowFewer {
+			return []Target{}
+		}
+		return nil
+	}
+	nb := normalizeBase(f.Base)
+	excludeSrc := nb == "another" || nb == "other"
+
+	type candidate struct {
+		p     *Permanent
+		score int
+	}
+	candidates := []candidate{}
+	var srcCard *Card
+	if src != nil {
+		srcCard = src.Card
+	}
+	for i, s := range gs.Seats {
+		if !matchesControl(f, i, srcSeat) {
+			continue
+		}
+		for _, p := range s.Battlefield {
+			if excludeSrc && p == src {
+				continue
+			}
+			if !matchesPermanent(f, p) {
+				continue
+			}
+			if f.Targeted && !CanBeTargetedByCombat(p, srcSeat, srcCard) {
+				continue
+			}
+			score := p.Power()
+			if i == srcSeat {
+				score = -p.Toughness()
+			}
+			candidates = append(candidates, candidate{p, score})
+		}
+	}
+	if len(candidates) == 0 {
+		if allowFewer {
+			return []Target{}
+		}
+		return nil
+	}
+	// Sort descending by score (insertion sort — candidate count is small).
+	for i := 1; i < len(candidates); i++ {
+		j := i
+		for j > 0 && candidates[j].score > candidates[j-1].score {
+			candidates[j], candidates[j-1] = candidates[j-1], candidates[j]
+			j--
+		}
+	}
+	pick := n
+	if pick > len(candidates) {
+		pick = len(candidates)
+	}
+	out := make([]Target, 0, pick)
+	seen := make(map[*Permanent]bool, pick)
+	for _, c := range candidates {
+		if len(out) >= pick {
+			break
+		}
+		if seen[c.p] {
+			continue
+		}
+		seen[c.p] = true
+		out = append(out, Target{Kind: TargetKindPermanent, Permanent: c.p, Seat: c.p.Controller})
+		if f.Targeted && c.p.Card != nil {
+			FireCardTrigger(gs, "targeted", map[string]interface{}{
+				"seat":   c.p.Controller,
+				"card":   c.p.Card.DisplayName(),
+				"source": srcSeat,
+			})
+		}
+	}
+	return out
+}
+
+// pickNPlayerTargets picks up to n distinct player targets. Every Seat
+// index is unique by construction so §115.3 distinctness is automatic.
+func pickNPlayerTargets(gs *GameState, f gameast.Filter, srcSeat int, n int, allowFewer bool) []Target {
+	if n <= 0 {
+		if allowFewer {
+			return []Target{}
+		}
+		return nil
+	}
+	isOpp := isOpponentBase(f.Base)
+	candidates := []int{}
+	for i, s := range gs.Seats {
+		if s == nil || s.Lost || s.LeftGame {
+			continue
+		}
+		if isOpp && i == srcSeat {
+			continue
+		}
+		candidates = append(candidates, i)
+	}
+	if len(candidates) == 0 {
+		if allowFewer {
+			return []Target{}
+		}
+		return nil
+	}
+	// Most-pressurable-first: lower life ranks higher; own seat ranks last
+	// (when it survived the isOpp filter, e.g. unconstrained "player").
+	for i := 1; i < len(candidates); i++ {
+		j := i
+		for j > 0 {
+			ka := scorePlayerForTarget(gs, candidates[j], srcSeat)
+			kb := scorePlayerForTarget(gs, candidates[j-1], srcSeat)
+			if ka <= kb {
+				break
+			}
+			candidates[j], candidates[j-1] = candidates[j-1], candidates[j]
+			j--
+		}
+	}
+	pick := n
+	if pick > len(candidates) {
+		pick = len(candidates)
+	}
+	out := make([]Target, 0, pick)
+	for i := 0; i < pick; i++ {
+		out = append(out, Target{Kind: TargetKindSeat, Seat: candidates[i]})
+	}
+	return out
+}
+
+// scorePlayerForTarget returns a "more pressurable = higher" score. Lower
+// life ranks higher; the source seat (when included) is penalised so the
+// heuristic prefers opponents when the filter allows either.
+func scorePlayerForTarget(gs *GameState, seat, srcSeat int) int {
+	if seat == srcSeat {
+		return -1_000_000
+	}
+	s := gs.Seats[seat]
+	if s == nil {
+		return -1_000_000
+	}
+	if s.Life <= 0 {
+		return 1_000
+	}
+	return 1_000 - s.Life
 }
 
 // matchesControl returns true if seat i is valid given f's control flags.

@@ -794,3 +794,69 @@ func isTargetStillLegal(gs *GameState, t Target) bool {
 	}
 }
 
+// ValidateTargetsAtAnnouncement enforces CR §115.2 / §601.2c / §602.2b /
+// §603.3d at the moment a spell or ability is put on the stack. It is the
+// defense-in-depth gate behind PickTarget — every CastSpell and
+// ActivateAbility entry point routes through this so a buggy or
+// fuzz-generated caller cannot smuggle a hexproof/shroud/protection
+// target past announcement.
+//
+// Checks performed per target:
+//   - TargetKindSeat: seat exists, not Lost, not LeftGame.
+//   - TargetKindPermanent: permanent on battlefield AND passes
+//     CanBeTargetedByCombat (shroud, hexproof, hexproof-from-color,
+//     protection-from-color).
+//   - TargetKindStackItem: item still on the stack and is NOT itself
+//     (CR §115.5: "A spell or ability on the stack is an illegal target
+//     for itself.")
+//
+// Returns nil if every supplied target is legal; otherwise returns a
+// *CastError. CR §601.2e: "If the proposed spell is illegal, the game
+// returns to the moment before the casting of that spell was proposed."
+//
+// `selfStackItem` is the StackItem for the announcement-in-progress
+// (or nil for casts that haven't constructed their item yet) so the
+// §115.5 self-target check can fire.
+func ValidateTargetsAtAnnouncement(gs *GameState, controller int, sourceCard *Card, targets []Target, selfStackItem *StackItem) error {
+	if gs == nil || len(targets) == 0 {
+		return nil
+	}
+	for _, t := range targets {
+		switch t.Kind {
+		case TargetKindSeat:
+			if t.Seat < 0 || t.Seat >= len(gs.Seats) {
+				return &CastError{Reason: "target_illegal_seat"}
+			}
+			s := gs.Seats[t.Seat]
+			if s == nil || s.Lost || s.LeftGame {
+				return &CastError{Reason: "target_illegal_seat"}
+			}
+		case TargetKindPermanent:
+			if t.Permanent == nil || !permanentOnBattlefield(gs, t.Permanent) {
+				return &CastError{Reason: "target_illegal_permanent"}
+			}
+			if !CanBeTargetedByCombat(t.Permanent, controller, sourceCard) {
+				return &CastError{Reason: "target_protected"}
+			}
+		case TargetKindStackItem:
+			if t.Stack == nil {
+				return &CastError{Reason: "target_illegal_stack"}
+			}
+			if selfStackItem != nil && t.Stack == selfStackItem {
+				return &CastError{Reason: "target_self_illegal"}
+			}
+			found := false
+			for _, si := range gs.Stack {
+				if si == t.Stack {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return &CastError{Reason: "target_illegal_stack"}
+			}
+		}
+	}
+	return nil
+}
+

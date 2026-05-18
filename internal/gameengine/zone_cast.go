@@ -228,6 +228,15 @@ func CastFromZone(
 		return nil, &CastError{Reason: "sorcery_speed_restriction"}
 	}
 
+	// CR §601.2c target legality at announcement (mirrors CastSpell). See
+	// ValidateTargetsAtAnnouncement for the §115.2 / §702.11 / §702.16 /
+	// §702.18 contract this enforces.
+	if len(targets) > 0 {
+		if err := ValidateTargetsAtAnnouncement(gs, seatIdx, card, targets, nil); err != nil {
+			return nil, err
+		}
+	}
+
 	// Wave 3b: Drannith Magistrate — opponents can't cast spells from
 	// anywhere other than their hands. This applies to ALL non-hand zone
 	// casts (graveyard, exile, library, command zone). Check by scanning

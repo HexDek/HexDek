@@ -278,6 +278,23 @@ func ActivateAbility(gs *GameState, seatIdx int, perm *Permanent, abilityIdx int
 		return &CastError{Reason: "exhaust_already_used"}
 	}
 
+	// 0.7. Announcement-time target legality. CR §602.2b: targets for an
+	// activated ability are chosen as the ability is activated. §115.2 +
+	// the keyword targeting rules (§702.11 hexproof, §702.18 shroud,
+	// §702.16 protection) gate them at this point. PickTarget already
+	// enforces this when the AI builds the target list; ActivateAbility
+	// is the central trust boundary — validate again so per-card / fuzz /
+	// fixture callers can't bypass.
+	if len(targets) > 0 {
+		var srcCard *Card
+		if perm != nil {
+			srcCard = perm.Card
+		}
+		if err := ValidateTargetsAtAnnouncement(gs, seatIdx, srcCard, targets, nil); err != nil {
+			return err
+		}
+	}
+
 	// 1. Stax check.
 	supp := StaxCheck(gs, seatIdx, perm, abilityIdx)
 	if supp.Suppressed {

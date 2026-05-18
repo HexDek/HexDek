@@ -365,6 +365,26 @@ type SacrificeChooser interface {
 	ChooseSacrifice(gs *GameState, seatIdx int, source *Permanent, reason string, candidates []*Permanent) *Permanent
 }
 
+// WardPayer is an optional Hat interface that controls whether the caster
+// pays the ward cost (CR §702.21) when their spell or ability targets a
+// permanent with ward. The default if a Hat does not implement this is
+// "pay if affordable, else fail-and-counter" — the historical engine
+// behavior.
+//
+// CR §702.21c is a "may" — the caster is allowed to decline payment even
+// when they could afford it, which the engine should respect (e.g. to save
+// mana for a counterspell, or to deliberately fizzle into a recursion line).
+//
+// Implementations MUST NOT mutate gs.
+type WardPayer interface {
+	// ShouldPayWard returns true if the caster wants to pay the ward cost
+	// on `target` for the spell/ability represented by `item`. `wardCost`
+	// is the generic mana amount the engine currently models (Ward {N});
+	// non-generic ward (Ward—Pay life, Ward—Sacrifice) is not yet wired
+	// at the engine level so wardCost is always >= 0 here.
+	ShouldPayWard(gs *GameState, seatIdx int, item *StackItem, target *Permanent, wardCost int) bool
+}
+
 // ConcedeGame marks a seat as having conceded. CR §104.3a.
 func ConcedeGame(gs *GameState, seatIdx int) {
 	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
