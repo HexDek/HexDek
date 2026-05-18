@@ -128,3 +128,75 @@ go build -o /tmp/hexdek-thor-r36 ./cmd/hexdek-thor/
 ```
 
 The CSV is the canonical artifact for follow-up sweeps. The summary in this report cites it directly via `awk` / `grep` counts; nothing else was sampled.
+
+---
+
+## Round-37 follow-up footnote (2026-05-17)
+
+The Round-37 fix path prescribed under §"Triggered effects on 'your upkeep' /
+'your end step' / 'this player'" (`set gs.Active = source.Controller before
+firing controller-keyed triggers`) was applied in
+`cmd/hexdek-thor/goldilocks.go` (commit on `dev/goldilocks-active-seat-fix`):
+
+  1. New `isControllerKeyedTrigger(*gameast.Trigger)` predicate that consults
+     `Trigger.Controller`, `Trigger.Phase`, and `Trigger.Event` (not just the
+     event string — the AST encodes most controller-keyed phase triggers as
+     `Event="phase"` + `Phase="upkeep"` + `Controller="you"`, so a
+     string-only check misses them).
+  2. `fireTriggerEvent` now aligns `gs.Active = srcPerm.Controller` when the
+     predicate fires.
+  3. `fireTriggerEvent` also now normalizes `Event="phase"` → `Trigger.Phase`
+     so the downstream `event == "upkeep" | "end_step" | ...` switch cases
+     pick up phase-keyed triggers that previously fell through silently.
+
+**Result: failure count unchanged at 64.** The fix is correct but does not
+move the needle for the 8 cards r36 attributed to this class (Pestilence,
+Pyrohemia, Withering Wisps, Task Mage Assembly, Planar Engineering, Lord of
+Tresserhorn, Scourge of Numai, Trynn). Tracing Pestilence through the
+post-fix path revealed the actual root cause is one layer deeper, in the
+engine — not in the verifier scaffold:
+
+  - Pestilence's trigger AST is `Event="phase"` + `Phase="end_step"` +
+    `Controller=null` (NOT controller-keyed — fires at the beginning of
+    THE end step, not YOUR end step). The phase-normalization fix above
+    correctly routes it to the `end_step` case.
+  - The effect is `Conditional{Condition: no_creatures_on_battlefield,
+    Body: Sacrifice{Query: Filter{Base: "self"}}}`.
+  - The scaffold removes all creatures (priming the condition true), and
+    `evalCondition` treats `no_creatures_on_battlefield` as an unknown
+    kind that defaults to true (`internal/gameengine/resolve.go` line
+    ~320), so the Body fires.
+  - `resolveSacrifice` then calls `matchesPermanent(Filter{Base:"self"},
+    p)` for each battlefield permanent. **`matchesPermanent` has no
+    `"self"` case** (`internal/gameengine/targets.go` line ~409 switch
+    only handles "creature"/"land"/"artifact"/etc.). Base="self" falls
+    through to the default branch which tries `hasType(p, "self")` —
+    always false. So `resolveSacrifice` never picks a victim and emits
+    no events. The verifier's state-delta check sees no change → dead
+    effect.
+
+The Pestilence-class failures all share this shape: a triggered
+`Sacrifice{Query: Filter{Base: "self"}}` that the engine silently
+fizzles because `matchesPermanent` doesn't recognize the self-filter.
+The 4 modification_effect rows (Lord of Tresserhorn, Scourge of Numai,
+Reaver Drone, Fathom Fleet Boarder) likely have an analogous shape
+with the modification target keyed off "self".
+
+**Suggested fix path (engine-side, beyond r37 scope):** Add an early-
+return to `matchesPermanent` (`internal/gameengine/targets.go`) for
+base in {"self", "it", "this"} — matches only when `p == src`. This
+requires plumbing `src` through `matchesPermanent`'s signature OR
+special-casing self-filter resolution in `resolveSacrifice` /
+`resolveDestroy` / `resolveModification` at the call site. The
+caller-side patch is the smaller blast radius.
+
+Also surfaced during the trace dive: `evalCondition` doesn't handle
+`no_creatures_on_battlefield`, `had_counters_on_it`, and several other
+Conditional kinds the parser emits. The current "unknown kinds default
+to true" behavior is a footgun — a future Conditional whose actual
+correct evaluation matters (e.g. "if X had counters on it") will
+silently always-true. Worth a sweep to enumerate and explicitly
+implement the parser's emitted Condition.Kind values.
+
+These engine-side findings are tracked separately (see commit body on
+`dev/goldilocks-active-seat-fix` and Quorum thread).
