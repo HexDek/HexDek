@@ -1736,6 +1736,17 @@ func EndOfCombatStep(gs *GameState) {
 		"phase": "combat", "step": "end_of_combat",
 	}})
 
+	// Per-card hook fan-out so handlers registered via
+	// r.OnTrigger("...", "end_of_combat", ...) receive the
+	// notification alongside the AST trigger pass below. Carries the
+	// active seat so Raid-style "on your turn" gates can filter.
+	// Wired in round 37 to support Lara Croft, Tomb Raider's Raid
+	// Treasure trigger; any future per_card end-of-combat hook reads
+	// the same event.
+	FireCardTrigger(gs, "end_of_combat", map[string]interface{}{
+		"active_seat": gs.Active,
+	})
+
 	// Fire "at end of combat" triggers on any seat's battlefield.
 	for seatIdx, seat := range gs.Seats {
 		_ = seatIdx
