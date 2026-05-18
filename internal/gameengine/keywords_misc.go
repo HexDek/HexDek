@@ -2270,32 +2270,11 @@ func FireAllianceTriggers(gs *GameState, seatIdx int, newCreature *Permanent) {
 }
 
 // ---------------------------------------------------------------------------
-// Magecraft — triggers when you cast or copy an instant or sorcery
+// Magecraft (CR §702.137) — HasMagecraft + FireMagecraftTriggers live in
+// keywords_magecraft.go where the mechanic is implemented with proper
+// instant/sorcery filtering, own-spells-only scoping, isCopy parameter,
+// and FireCardTrigger fan-out for per_card payoffs.
 // ---------------------------------------------------------------------------
-
-// FireMagecraftTriggers fires magecraft triggers when seatIdx casts or
-// copies an instant or sorcery.
-func FireMagecraftTriggers(gs *GameState, seatIdx int, spell *Card) {
-	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
-		return
-	}
-	for _, p := range gs.Seats[seatIdx].Battlefield {
-		if p == nil || p.Card == nil {
-			continue
-		}
-		if p.HasKeyword("magecraft") || permHasTriggerEvent(p, "magecraft") {
-			gs.LogEvent(Event{
-				Kind:   "magecraft_trigger",
-				Seat:   seatIdx,
-				Source: p.Card.DisplayName(),
-				Details: map[string]interface{}{
-					"spell": spellName(spell),
-					"rule":  "MGC",
-				},
-			})
-		}
-	}
-}
 
 // ===========================================================================
 // NEW MECHANICS — Blight / Exhaust

@@ -1654,7 +1654,7 @@ func TestMagecraft_FiresTrigger(t *testing.T) {
 	addMiscBattlefieldWithKeyword(gs, 0, "Archmage Emeritus", 2, 2, "magecraft", "creature")
 	spell := &Card{Name: "Lightning Bolt", Types: []string{"instant"}}
 
-	FireMagecraftTriggers(gs, 0, spell)
+	FireMagecraftTriggers(gs, 0, spell, false)
 
 	if miscCountEvents(gs, "magecraft_trigger") != 1 {
 		t.Error("expected 1 magecraft trigger event")
