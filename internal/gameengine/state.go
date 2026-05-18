@@ -909,6 +909,16 @@ type Card struct {
 	// and repeated strings.Contains across colors.
 	ProducedColorsMask  uint8
 	ProducedColorsReady bool
+
+	// Meta — open-ended per-card runtime metadata. Used by mechanics
+	// that need to mark a card object with provenance state that doesn't
+	// fit a dedicated field. Currently populated by:
+	//   - ConjureCard (keywords_conjure.go): Meta["conjured"] = true
+	//     marks Alchemy-conjured cards so cards / effects keyed on
+	//     "you cast a conjured spell" (or "you have a conjured card in
+	//     your library") can identify them.
+	// nil for cards built outside of any tagged provenance.
+	Meta map[string]any
 }
 
 func (c *Card) DeepCopy() *Card {
@@ -919,6 +929,12 @@ func (c *Card) DeepCopy() *Card {
 	cp.Types = append([]string(nil), c.Types...)
 	cp.Colors = append([]string(nil), c.Colors...)
 	cp.BackFaceTypes = append([]string(nil), c.BackFaceTypes...)
+	if c.Meta != nil {
+		cp.Meta = make(map[string]any, len(c.Meta))
+		for k, v := range c.Meta {
+			cp.Meta[k] = v
+		}
+	}
 	return &cp
 }
 
