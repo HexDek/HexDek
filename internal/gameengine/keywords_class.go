@@ -14,7 +14,7 @@ package gameengine
 // CR §716.4: Levels must be gained in order — a class at level 1
 //            can only activate the level-2 ability, not skip to
 //            level 3.
-// CR §716.5: Static abilities printed in a level band are active
+// CR §716.2a: Static abilities printed in a level band are active
 //            only while the class's level is within that band.
 //
 // Engine model
@@ -281,7 +281,7 @@ func LevelUpClass(gs *GameState, perm *Permanent, levelUpCost int) bool {
 // ---------------------------------------------------------------------------
 
 // ClassLevelStaticActive reports whether a band starting at
-// `bandLo` is currently functional on `perm` per §716.5. A band is
+// `bandLo` is currently functional on `perm` per §716.2a. A band is
 // active when the perm's current ClassLevel is at or above the
 // band's MinLevel. Layers and per-card handlers that grant
 // keywords / P/T from a specific band gate on this predicate.

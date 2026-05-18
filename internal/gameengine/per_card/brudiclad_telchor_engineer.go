@@ -28,7 +28,7 @@ import (
 //        toughness (tiebreak: earliest Timestamp).
 //     3. For each OTHER token the controller controls, deep-copy the
 //        chosen token's Card so Name / Types / BasePower / BaseToughness /
-//        Colors / TypeLine all match (CR §706.10: token copies are not
+//        Colors / TypeLine all match (CR §707.10: token copies are not
 //        card objects in any zone, but their characteristics mirror the
 //        copied permanent). Modifications and counters are not copied —
 //        the existing token's Modifications/Counters/Flags are wiped to

@@ -8,7 +8,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Replicate — CR §702.56 / §706.10 integration tests
+// Replicate — CR §702.56 / §707.10 integration tests
 // ---------------------------------------------------------------------------
 
 // newReplicateGame builds a deterministic 2-seat game suitable for spell-cast
@@ -139,7 +139,7 @@ func TestApplyReplicate_PaysCostNTimesAndCopiesShareCharacteristics(t *testing.T
 	}
 
 	// (3) Each copy: IsCopy=true, same controller, same name + CMC + types
-	//     + AST + targets per CR §706.10c. Distinct stack IDs.
+	//     + AST + targets per CR §707.10. Distinct stack IDs.
 	seenIDs := map[int]bool{item.ID: true}
 	for i := 1; i <= 2; i++ {
 		c := gs.Stack[i]
@@ -147,22 +147,22 @@ func TestApplyReplicate_PaysCostNTimesAndCopiesShareCharacteristics(t *testing.T
 			t.Fatalf("copy %d: nil stack item or nil Card", i)
 		}
 		if !c.IsCopy {
-			t.Fatalf("copy %d: IsCopy=false, want true (CR §706.10)", i)
+			t.Fatalf("copy %d: IsCopy=false, want true (CR §707.10)", i)
 		}
 		if c.Controller != 0 {
-			t.Fatalf("copy %d: Controller=%d, want 0 (CR §706.10b)", i, c.Controller)
+			t.Fatalf("copy %d: Controller=%d, want 0 (CR §707.10)", i, c.Controller)
 		}
 		if c.Card.Name != "Cackling Counterpart" {
-			t.Fatalf("copy %d: Name=%q, want %q (CR §706.10c — same characteristics)", i, c.Card.Name, "Cackling Counterpart")
+			t.Fatalf("copy %d: Name=%q, want %q (CR §707.10 — same characteristics)", i, c.Card.Name, "Cackling Counterpart")
 		}
 		if c.Card.CMC != card.CMC {
-			t.Fatalf("copy %d: CMC=%d, want %d (CR §706.10c)", i, c.Card.CMC, card.CMC)
+			t.Fatalf("copy %d: CMC=%d, want %d (CR §707.10)", i, c.Card.CMC, card.CMC)
 		}
 		if c.Card.AST != card.AST {
 			t.Fatalf("copy %d: AST not shared with original", i)
 		}
 		if len(c.Targets) != 1 || c.Targets[0] != target {
-			t.Fatalf("copy %d: Targets=%v, want %v (CR §706.10f)", i, c.Targets, []Target{target})
+			t.Fatalf("copy %d: Targets=%v, want %v (CR §707.10c)", i, c.Targets, []Target{target})
 		}
 		if seenIDs[c.ID] {
 			t.Fatalf("copy %d: duplicate stack ID %d", i, c.ID)
@@ -205,7 +205,7 @@ func TestApplyReplicate_InsufficientManaPlacesNoCopies(t *testing.T) {
 // TestApplyReplicate_CacklingCounterpartTwoCopiesResolve is the canonical
 // end-to-end check: the original spell plus two replicate copies must each
 // resolve their effect, and the two copies must "cease to exist" rather
-// than route to graveyard (CR §706.10 — they are not cards in any deck).
+// than route to graveyard (CR §707.10 — they are not cards in any deck).
 //
 // We attach a Draw-1 effect so resolutions are observable: 1 cast + 2
 // replicate copies = 3 cards drawn from the controller's library.
@@ -260,7 +260,7 @@ func TestApplyReplicate_CacklingCounterpartTwoCopiesResolve(t *testing.T) {
 	}
 
 	// The copies must NOT appear in graveyard, library, hand, or exile —
-	// they cease to exist per CR §706.10. Scan all zones for any card whose
+	// they cease to exist per CR §707.10. Scan all zones for any card whose
 	// Name matches the original but is not the original instance.
 	check := func(zone string, cards []*Card) {
 		for _, c := range cards {

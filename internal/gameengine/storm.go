@@ -103,7 +103,7 @@ func equalFoldSimple(a, b string) bool {
 //     We don't re-verify storm here — the caller already gated on
 //     HasStormKeyword.
 //   - Returns the number of copies made (for logging + tests).
-//   - Copies do NOT trigger observers (§706.10) and do NOT call
+//   - Copies do NOT trigger observers (§707.10) and do NOT call
 //     IncrementCastCount.
 //
 // Convenience wrapper around ApplyStormCopy (keywords_storm_rider.go):

@@ -1679,7 +1679,7 @@ func resolveCreateToken(gs *GameState, src *Permanent, e *gameast.CreateToken) {
 		controller = src.Controller
 	}
 
-	// §706.10a: "create a token that's a copy of [target]"
+	// §707.10f: "create a token that's a copy of [target]"
 	if e.IsCopyOf != nil {
 		resolveCreateTokenCopy(gs, src, e, controller, count)
 		return
@@ -1773,7 +1773,7 @@ func resolveCreateToken(gs *GameState, src *Permanent, e *gameast.CreateToken) {
 	})
 }
 
-// resolveCreateTokenCopy handles CreateToken with IsCopyOf set (§706.10a).
+// resolveCreateTokenCopy handles CreateToken with IsCopyOf set (§707.10f).
 // Finds the copy source via PickTarget, deep-copies its card, adds token
 // type, and fires the full ETB cascade.
 func resolveCreateTokenCopy(gs *GameState, src *Permanent, e *gameast.CreateToken, controller, count int) {
@@ -2445,7 +2445,7 @@ func resolveCopySpell(gs *GameState, src *Permanent, e *gameast.CopySpell) {
 		return
 	}
 	// §707.2: create a copy of the spell on the stack. The copy is not
-	// "cast" — it was "created" directly on the stack (CR §706.10).
+	// "cast" — it was "created" directly on the stack (CR §707.10).
 	copyCard := target.Card.DeepCopy()
 	copyCard.IsCopy = true // CR §704.5e — ceases to exist outside stack/battlefield
 	copyItem := &StackItem{
@@ -2502,7 +2502,7 @@ func resolveCopyPermanent(gs *GameState, src *Permanent, e *gameast.CopyPermanen
 		return
 	}
 	if e.AsToken {
-		// §706.10a — create a token that's a copy of the target.
+		// §707.10f — create a token that's a copy of the target.
 		// The token enters as a new permanent; src is NOT modified.
 		controller := src.Controller
 		card := copySource.Card.DeepCopy()

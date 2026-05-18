@@ -11,7 +11,7 @@ package gameengine
 //   - MaybeBecomeDay(gs, reason) → §726.2 state-initial transition
 //   - SetDayNight(gs, new, reason, rule) → shared transition primitive
 //   - ApplyDayboundNightboundTransforms(gs) → §702.144/145 sweep
-//   - EvaluateDayNightAtTurnStart(gs) → §726.3a transition at turn start
+//   - EvaluateDayNightAtTurnStart(gs) → §730.2a transition at turn start
 //
 // Contracts:
 //
@@ -36,7 +36,7 @@ package gameengine
 //   §726.2   The game begins "neither day nor night." It becomes day
 //            the first time a permanent with daybound or nightbound
 //            enters the battlefield.
-//   §726.3a  Day + previous active cast 0 spells → night.
+//   §730.2a  Day + previous active cast 0 spells → night.
 //            Night + previous active cast 2+ spells → day.
 //   §702.144 Daybound — while night, daybound creatures transform.
 //   §702.145 Nightbound — while day, nightbound creatures transform.
@@ -314,7 +314,7 @@ func ApplyDayboundNightboundTransforms(gs *GameState) {
 	}
 }
 
-// EvaluateDayNightAtTurnStart applies CR §726.3a at the start of each
+// EvaluateDayNightAtTurnStart applies CR §730.2a at the start of each
 // turn BEFORE the untap step. Reads gs.SpellsCastByActiveLastTurn
 // (populated by the turn loop before rotating active).
 //

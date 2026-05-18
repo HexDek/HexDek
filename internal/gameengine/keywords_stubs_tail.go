@@ -48,7 +48,7 @@ import (
 //     pushes that many copies onto the stack so resolution doesn't need
 //     to know about Tiered at all — it just sees N+1 stack items with
 //     the same modes pre-selected.
-//   - Each copy inherits the original's modes and targets. Per §706.10f
+//   - Each copy inherits the original's modes and targets. Per §707.10c
 //     the controller may retarget; this engine's retarget pass runs
 //     separately, so ApplyTiered itself does not solicit new targets.
 //   - Failure modes: insufficient mana for the requested tier count is
@@ -238,12 +238,12 @@ func ApplyTiered(gs *GameState, item *StackItem, modes []int, tiers int) int {
 			IsCopy:        true,
 		}
 		copyItem := &StackItem{
-			Controller: seatIdx, // §706.10b
+			Controller: seatIdx, // §707.10
 			Card:       copyCard,
 			Effect:     item.Effect,
-			Targets:    append([]Target(nil), item.Targets...), // §706.10f
+			Targets:    append([]Target(nil), item.Targets...), // §707.10c
 			Kind:       item.Kind,
-			IsCopy:     true, // §706.10
+			IsCopy:     true, // §707.10
 			CostMeta: map[string]interface{}{
 				"tiered_modes":    append([]int(nil), normalized...),
 				"tiered_tiers":    0, // copies don't carry forward the tier count

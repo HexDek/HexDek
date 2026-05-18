@@ -7,7 +7,7 @@ package gameengine
 //
 //   - SetDayNight(gs, new, reason, rule)        — shared transition primitive
 //   - MaybeBecomeDay(gs, reason)                — §726.2 "first daybound ETB"
-//   - EvaluateDayNightAtTurnStart(gs)           — §726.3a turn-start transition
+//   - EvaluateDayNightAtTurnStart(gs)           — §730.2a turn-start transition
 //   - ApplyDayboundNightboundTransforms(gs)     — §702.149/150 face sweep
 //   - HasDayboundOrNightboundPermanent(gs)      — predicate for §726.2
 //
@@ -31,7 +31,7 @@ package gameengine
 //   §726.2   If a permanent with daybound or nightbound enters the
 //            battlefield while the game has no day/night designation,
 //            the game becomes day.
-//   §726.3a  At the beginning of each turn, if the game is day and the
+//   §730.2a  At the beginning of each turn, if the game is day and the
 //            previous active player cast no spells during their last
 //            turn, it becomes night. If the game is night and the
 //            previous active player cast two or more spells last turn,

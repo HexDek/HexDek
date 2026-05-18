@@ -159,7 +159,7 @@ type GameState struct {
 	// §702.40) — the number of spells cast this turn across ALL seats.
 	// Incremented by CastSpell (and commander-zone casts) after the spell
 	// successfully lands on the stack. Storm copies do NOT increment per
-	// §706.10 (a copy isn't cast). Resets to 0 at each untap step.
+	// §707.10 (a copy isn't cast). Resets to 0 at each untap step.
 	//
 	// Why GLOBAL: Storm's oracle text says "each other spell cast before
 	// it this turn" — all players' spells count, not just the caster's.
@@ -174,7 +174,7 @@ type GameState struct {
 	DayNight string
 
 	// Snapshot of spells cast by the active player during the turn that
-	// is about to end — used by §726.3a (day↔night transition, which
+	// is about to end — used by §730.2a (day↔night transition, which
 	// runs at the START of the next turn so compares against "last
 	// turn"). Captured by the tournament turn loop BEFORE rotating
 	// active and consumed by EvaluateDayNightAtTurnStart().
@@ -896,7 +896,7 @@ type Card struct {
 	CastingBackFace  bool // transient: set by casting logic when back face chosen
 
 	// IsCopy is true for card objects that were created as copies of other
-	// cards (Fork, Twinflame, storm copies). CR §706.10: a copy of a spell
+	// cards (Fork, Twinflame, storm copies). CR §707.10: a copy of a spell
 	// ceases to exist in any zone other than the stack. CR §704.5e: a copy
 	// of a card in any zone other than the stack or battlefield ceases to
 	// exist. SBA sba704_5e sweeps these from hand/graveyard/exile/library.
@@ -1339,11 +1339,11 @@ type StackItem struct {
 	AbilityIdx int
 
 	// IsCopy is true for spells that were put on the stack as COPIES
-	// rather than CAST (CR §706.10). Storm copies, Twinflame copies,
+	// rather than CAST (CR §707.10). Storm copies, Twinflame copies,
 	// Dualcaster Mage copies all set this. The distinction matters at
 	// resolution time: a copy "ceases to exist" rather than going to
 	// its owner's graveyard, because it isn't in any deck. A copy of a
-	// permanent spell becomes a TOKEN copy of that permanent (§706.10a).
+	// permanent spell becomes a TOKEN copy of that permanent (§707.10f).
 	IsCopy bool
 
 	// CastZone is the zone the spell was cast from. Empty string (or

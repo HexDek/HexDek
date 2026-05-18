@@ -114,7 +114,7 @@ func isochronScepterActivate(gs *gameengine.GameState, src *gameengine.Permanent
 	seat := src.Controller
 	// Copy-and-cast-for-free: build a StackItem with the imprinted
 	// card AS-IF cast for free. IsCopy=true ensures the card doesn't
-	// move zones to the graveyard afterward (CR §706.10 — a copy
+	// move zones to the graveyard afterward (CR §707.10 — a copy
 	// ceases to exist).
 	item := &gameengine.StackItem{
 		Controller: seat,

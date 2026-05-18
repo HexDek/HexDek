@@ -96,7 +96,7 @@ func TestDayNight_3a_day_to_night(t *testing.T) {
 	gs.SpellsCastByActiveLastTurn = 0
 	EvaluateDayNightAtTurnStart(gs)
 	if gs.DayNight != DayNightNight {
-		t.Fatalf("§726.3a day+0casts expected night, got %q",
+		t.Fatalf("§730.2a day+0casts expected night, got %q",
 			gs.DayNight)
 	}
 	if !p.Transformed {
@@ -123,7 +123,7 @@ func TestDayNight_3a_night_to_day(t *testing.T) {
 	gs.SpellsCastByActiveLastTurn = 2
 	EvaluateDayNightAtTurnStart(gs)
 	if gs.DayNight != DayNightDay {
-		t.Fatalf("§726.3a night+2casts expected day, got %q", gs.DayNight)
+		t.Fatalf("§730.2a night+2casts expected day, got %q", gs.DayNight)
 	}
 	if p.Transformed {
 		t.Fatalf("§702.145 nightbound werewolf should transform back")

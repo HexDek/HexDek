@@ -139,7 +139,7 @@ func ReplicateCost(card *Card) int {
 
 // ApplyReplicate pays the replicate cost `copies` times and puts that
 // many copies of the spell onto the stack above the original. Per CR
-// §702.56a / §706.10b, each copy has the same characteristics as the
+// §702.56a / §707.10, each copy has the same characteristics as the
 // spell, the controller of each copy is the player who put it on the
 // stack, and the copies use the same targets as the original (the
 // controller may choose new targets via a separate retarget step).
@@ -190,7 +190,7 @@ func ApplyReplicate(gs *GameState, item *StackItem, copies int) int {
 		},
 	})
 
-	// Per CR §706.10c, a copy of a spell has the same characteristics
+	// Per CR §707.10, a copy of a spell has the same characteristics
 	// (name, mana cost, types, colors, P/T, text) as the spell being
 	// copied — only the controller and (optionally) targets can differ.
 	for i := 0; i < copies; i++ {
@@ -205,12 +205,12 @@ func ApplyReplicate(gs *GameState, item *StackItem, copies int) int {
 			AST:           item.Card.AST,
 		}
 		copyItem := &StackItem{
-			Controller: seatIdx, // CR §706.10b — controller is the player who put the copy on the stack.
+			Controller: seatIdx, // CR §707.10 — controller is the player who put the copy on the stack.
 			Card:       copyCard,
 			Effect:     item.Effect,
-			Targets:    append([]Target(nil), item.Targets...), // §706.10f — same targets unless retargeted.
+			Targets:    append([]Target(nil), item.Targets...), // §707.10c — same targets unless retargeted.
 			Kind:       item.Kind,
-			IsCopy:     true, // CR §706.10
+			IsCopy:     true, // CR §707.10
 		}
 		copyItem.ID = nextStackID(gs)
 		gs.Stack = append(gs.Stack, copyItem)

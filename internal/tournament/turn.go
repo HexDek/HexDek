@@ -134,7 +134,7 @@ func takeTurnImpl(gs *gameengine.GameState, hook func(*gameengine.GameState)) {
 		gs.Snapshot()
 	}
 
-	// CR §726.3a — day/night transition BEFORE untap.
+	// CR §730.2a — day/night transition BEFORE untap.
 	gameengine.EvaluateDayNightAtTurnStart(gs)
 
 	// =========================================================

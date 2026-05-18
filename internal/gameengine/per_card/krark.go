@@ -93,7 +93,7 @@ func krarkTrigger(gs *gameengine.GameState, perm *gameengine.Permanent, ctx map[
 	}
 
 	// Win: copy the spell. CR §707.2 — the copy is created on the
-	// stack; per CR §706.10 it ceases to exist on resolution rather
+	// stack; per CR §707.10 it ceases to exist on resolution rather
 	// than going to a graveyard.
 	if stackItem == nil {
 		emitFail(gs, slug, perm.Card.DisplayName(), "spell_not_on_stack", map[string]interface{}{

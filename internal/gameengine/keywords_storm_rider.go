@@ -122,7 +122,7 @@ func StormCount(gs *GameState, seatIdx int) int {
 //
 // Copy semantics match ApplyStormCopies: each copy is a fresh
 // StackItem pointing at a fresh Card with CMC=0, IsCopy=true (per CR
-// §706.10 so SBAs sweep it from non-stack zones), Name suffixed with
+// §707.10 so SBAs sweep it from non-stack zones), Name suffixed with
 // "(storm copy N)" for log distinguishability. Copies inherit the
 // original's Effect, Targets, Controller, and AST pointer. Pushes
 // land ABOVE the original on the stack so LIFO resolution gives
@@ -133,7 +133,7 @@ func StormCount(gs *GameState, seatIdx int) int {
 // else 0).
 //
 // Does NOT trigger cast observers (storm copies aren't cast per
-// §706.10), does NOT call IncrementCastCount, does NOT recursively
+// §707.10), does NOT call IncrementCastCount, does NOT recursively
 // re-fire storm.
 func ApplyStormCopy(gs *GameState, original *StackItem, count int) int {
 	if gs == nil || original == nil || original.Card == nil || count <= 0 {

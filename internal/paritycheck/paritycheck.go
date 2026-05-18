@@ -313,7 +313,7 @@ func RecordGoGame(nSeats int, decks []*deckparser.TournamentDeck, seed int64, ga
 		if gs.CheckEnd() {
 			break
 		}
-		// CR §726.3a — snapshot the ending seat's per-turn spell cast
+		// CR §730.2a — snapshot the ending seat's per-turn spell cast
 		// count BEFORE rotating. Next turn's
 		// EvaluateDayNightAtTurnStart consumes this.
 		if ending := gs.Seats[gs.Active]; ending != nil {

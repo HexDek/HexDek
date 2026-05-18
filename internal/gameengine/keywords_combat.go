@@ -1138,7 +1138,7 @@ func SpliceCost(card *Card) int {
 //
 // Behavior:
 //   - Returns the count of splices applied (0 when none).
-//   - No-op when item.IsCopy is true: copies aren't "cast" (CR §706.10)
+//   - No-op when item.IsCopy is true: copies aren't "cast" (CR §707.10)
 //     and §702.47b explicitly gates splice on "as you cast." This is
 //     what prevents splice from double-applying to a storm/Twinflame
 //     copy that inherited the already-merged item.Effect.
@@ -1161,7 +1161,7 @@ func ApplySplice(gs *GameState, seatIdx int, item *StackItem) int {
 	if seatIdx < 0 || seatIdx >= len(gs.Seats) {
 		return 0
 	}
-	// §706.10 / §702.47b: copies aren't cast → no splice.
+	// §707.10 / §702.47b: copies aren't cast → no splice.
 	if item.IsCopy {
 		return 0
 	}

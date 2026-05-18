@@ -8,7 +8,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Daybound / Nightbound tests — CR §702.149 / §702.150 + §726.2 / §726.3a
+// Daybound / Nightbound tests — CR §702.149 / §702.150 + §726.2 / §730.2a
 // ---------------------------------------------------------------------------
 
 func newDayNightGame(t *testing.T) *GameState {
@@ -162,7 +162,7 @@ func TestDayNight_DayToNight_OnZeroSpellTurn(t *testing.T) {
 	EvaluateDayNightAtTurnStart(gs)
 
 	if !IsNight(gs) {
-		t.Fatalf("§726.3a day+0casts expected night, got %q", gs.DayNight)
+		t.Fatalf("§730.2a day+0casts expected night, got %q", gs.DayNight)
 	}
 	// Daybound creature should have transformed to its nightbound back face.
 	if !w.Transformed {
@@ -197,7 +197,7 @@ func TestDayNight_NightToDay_OnTwoPlusSpellTurn(t *testing.T) {
 	EvaluateDayNightAtTurnStart(gs)
 
 	if !IsDay(gs) {
-		t.Fatalf("§726.3a night+2casts expected day, got %q", gs.DayNight)
+		t.Fatalf("§730.2a night+2casts expected day, got %q", gs.DayNight)
 	}
 	// Nightbound active face should have transformed back to its daybound
 	// front face.
@@ -222,7 +222,7 @@ func TestDayNight_NightHoldsOnOneSpell(t *testing.T) {
 	gs.SpellsCastByActiveLastTurn = 1
 	EvaluateDayNightAtTurnStart(gs)
 	if !IsNight(gs) {
-		t.Fatalf("§726.3a night+1cast must stay night, got %q", gs.DayNight)
+		t.Fatalf("§730.2a night+1cast must stay night, got %q", gs.DayNight)
 	}
 	if !w.Transformed {
 		t.Fatal("werewolf should remain on its back face while state stays night")
@@ -237,7 +237,7 @@ func TestDayNight_DayHoldsOnAnySpellCast(t *testing.T) {
 	gs.SpellsCastByActiveLastTurn = 1
 	EvaluateDayNightAtTurnStart(gs)
 	if !IsDay(gs) {
-		t.Fatalf("§726.3a day+1cast must stay day, got %q", gs.DayNight)
+		t.Fatalf("§730.2a day+1cast must stay day, got %q", gs.DayNight)
 	}
 	if w.Transformed {
 		t.Fatal("werewolf should stay on its front face while state stays day")
@@ -272,7 +272,7 @@ func TestDayNight_AllWerewolvesTransformOnFlip(t *testing.T) {
 	gs.SpellsCastByActiveLastTurn = 0
 	EvaluateDayNightAtTurnStart(gs)
 	if !IsNight(gs) {
-		t.Fatalf("§726.3a expected night, got %q", gs.DayNight)
+		t.Fatalf("§730.2a expected night, got %q", gs.DayNight)
 	}
 	for _, w := range []*Permanent{a, b, c} {
 		if !w.Transformed {
@@ -285,7 +285,7 @@ func TestDayNight_AllWerewolvesTransformOnFlip(t *testing.T) {
 	gs.SpellsCastByActiveLastTurn = 2
 	EvaluateDayNightAtTurnStart(gs)
 	if !IsDay(gs) {
-		t.Fatalf("§726.3a expected day, got %q", gs.DayNight)
+		t.Fatalf("§730.2a expected day, got %q", gs.DayNight)
 	}
 	for _, w := range []*Permanent{a, b, c} {
 		if w.Transformed {

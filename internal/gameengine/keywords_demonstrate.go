@@ -6,7 +6,7 @@ package gameengine
 //               "When you cast this spell, you may copy it. If you do,
 //               choose an opponent to also copy it."
 // CR §702.144b: A copy made via demonstrate is created on the stack
-//               above the original spell. Per CR §706.10, the copy is
+//               above the original spell. Per CR §707.10, the copy is
 //               not "cast" — it's created directly on the stack. A
 //               copy of a permanent spell becomes a token when it
 //               resolves; a copy of an instant or sorcery resolves and
@@ -41,7 +41,7 @@ package gameengine
 //
 // Returns the number of copies actually placed on the stack (0, 1, or
 // 2). Each copy carries StackItem.IsCopy=true and Card.IsCopy=true
-// per CR §706.10. Same Effect pointer and same Targets slice (cloned
+// per CR §707.10. Same Effect pointer and same Targets slice (cloned
 // to avoid aliasing) as the original spell.
 
 import (
@@ -176,7 +176,7 @@ func ApplyDemonstrate(
 // pushDemonstrateCopy builds and pushes one copy of `spell` controlled
 // by `seat`. Returns the pushed StackItem, or nil on failure.
 //
-// Per CR §706.10c, the copy has the same characteristics as the
+// Per CR §707.10, the copy has the same characteristics as the
 // original (name, mana cost, types, colors, P/T, text — modeled by
 // sharing the AST pointer and snapshotting the runtime Card scalar
 // fields). The copy's controller is `seat`. Targets are copied from
@@ -202,7 +202,7 @@ func pushDemonstrateCopy(gs *GameState, spell *StackItem, seat int, role string)
 	// exist outside the stack (CR §704.5e).
 	copyCard := &Card{
 		Name:          spell.Card.Name,
-		Owner:         seat, // CR §706.10b — copies have no "real" owner; we record the copy's controller so any owner-conditioned logic routes to them
+		Owner:         seat, // CR §707.10 — copies have no "real" owner; we record the copy's controller so any owner-conditioned logic routes to them
 		BasePower:     spell.Card.BasePower,
 		BaseToughness: spell.Card.BaseToughness,
 		Types:         append([]string(nil), spell.Card.Types...),
@@ -258,7 +258,7 @@ func isLivingOpponent(opps []int, candidate int) bool {
 
 // IsDemonstrateCopy reports whether a StackItem is a demonstrate-minted
 // copy. Useful for resolve-path branches that need to skip cast-only
-// triggers (since CR §706.10 says copies are "created on the stack,"
+// triggers (since CR §707.10 says copies are "created on the stack,"
 // not "cast").
 func IsDemonstrateCopy(item *StackItem) bool {
 	if item == nil || item.CostMeta == nil {

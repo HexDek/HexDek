@@ -5,7 +5,7 @@ package gameengine
 // Comp-rules citations:
 //   - §700.4      — cast-count bookkeeping (implicit; "this turn" scoping)
 //   - §702.40     — Storm keyword (see storm.go)
-//   - §706.10     — copies of spells are not cast
+//   - §707.10     — copies of spells are not cast
 //   - §601        — casting a spell (the event cast-triggers observe)
 //   - §603.2/.3   — triggered abilities on-stack placement
 //
@@ -35,7 +35,7 @@ import (
 // IncrementCastCount bumps the global + per-seat cast counters. Called by
 // CastSpell AFTER cost has been paid and the card is en route to the stack,
 // BEFORE the storm trigger is evaluated. Must NOT be called for copies
-// (CR §706.10).
+// (CR §707.10).
 func IncrementCastCount(gs *GameState, seatIdx int) {
 	if gs == nil || seatIdx < 0 || seatIdx >= len(gs.Seats) {
 		return
@@ -75,7 +75,7 @@ func RecordCast(gs *GameState, seatIdx int, card *Card, xPaid int) {
 
 // FireCastTriggerObservers fires every "whenever a spell is cast" style
 // observer permanent for the cast of `cast`. `fromCopy` MUST be true when
-// called from Storm copy propagation — copies are not cast (§706.10) and
+// called from Storm copy propagation — copies are not cast (§707.10) and
 // do not trigger observers.
 //
 // Mirror for scripts/playloop.py _fire_cast_trigger_observers.

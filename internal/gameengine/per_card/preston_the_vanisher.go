@@ -60,7 +60,7 @@ func prestonVanisherETBTrigger(gs *gameengine.GameState, perm *gameengine.Perman
 		return
 	}
 	// Token-copy overlay: 0/1 white Illusion, otherwise copyable values
-	// (name, types, keywords) carried from the entering card. CR §706.10a:
+	// (name, types, keywords) carried from the entering card. CR §707.10f:
 	// the copy effect changes the new token's P/T, color, and creature type
 	// to 0/1 white Illusion, but other copyable characteristics stay.
 	src := entering.Card

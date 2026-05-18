@@ -383,7 +383,7 @@ func CastSpell(gs *GameState, seatIdx int, card *Card, targets []Target) error {
 	// CR §700.4 / §702.40 cast-count bookkeeping. Increment BEFORE storm
 	// + cast-trigger observers so the storm spell itself counts toward
 	// its own storm tally (copies = spells_cast_this_turn - 1). Copies
-	// do NOT call IncrementCastCount (§706.10).
+	// do NOT call IncrementCastCount (§707.10).
 	IncrementCastCount(gs, seatIdx)
 	RecordCast(gs, seatIdx, card, 0)
 
@@ -1039,7 +1039,7 @@ func ResolveStackTop(gs *GameState) {
 			// CR §608.3a: the permanent spell becomes a permanent under
 			// its controller's control on the battlefield. Mirrors Python
 			// _resolve_stack_top's is_permanent_spell branch. If this was
-			// a COPY (§706.10a), the resolving permanent is a TOKEN copy.
+			// a COPY (§707.10f), the resolving permanent is a TOKEN copy.
 			etbPerm := resolvePermanentSpellETB(gs, item)
 
 			// §702.185 — warp: if the spell was cast for its warp cost,
@@ -1079,7 +1079,7 @@ func ResolveStackTop(gs *GameState) {
 				}
 			}
 		} else if item.IsCopy {
-			// CR §706.10 — a copy of a non-permanent spell ceases to
+			// CR §707.10 — a copy of a non-permanent spell ceases to
 			// exist on resolution. Do NOT route to graveyard: the copy
 			// is a transient game object, not a card in any deck, and
 			// appending it to a zone would violate zone conservation.
@@ -1228,7 +1228,7 @@ func resolvePermanentSpellETB(gs *GameState, item *StackItem) *Permanent {
 	}
 	// Cast-tracking for "if you cast it" / "if it was cast" intervening-if
 	// conditions (CR §603.6c). A permanent reaching this stack-resolution
-	// path was cast unless it's a copy (§706.10a token copies). CastZone
+	// path was cast unless it's a copy (§707.10f token copies). CastZone
 	// captures the origin zone for "if you cast it from your hand" gates
 	// (Cyclone Summoner, Breaching Leviathan, Wild Pair).
 	if !item.IsCopy {

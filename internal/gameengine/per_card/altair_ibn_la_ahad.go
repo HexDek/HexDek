@@ -33,7 +33,7 @@ import (
 //     copy on our battlefield, tapped and attacking the same defender
 //     as Altaïr.
 //   - Register an "end_of_combat" delayed trigger to exile those tokens
-//     (CR §706.10 and the printed clause).
+//     (CR §707.10 and the printed clause).
 //
 // Caveats (emitPartial):
 //   - "memory counter" is approximated via a Card.Types tag; the
