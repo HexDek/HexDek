@@ -557,6 +557,14 @@ type TurnCounters struct {
 	// dealing damage still appear here — Prowl asks about historic
 	// combat damage, not current board state.
 	CombatDamageBy []*Card
+
+	// ManaSpent counts the total mana paid by this seat this turn. CR
+	// §702.190 (Expend) uses this counter — "Expend N — Triggered when
+	// you've spent N or more mana of any color this turn." Bumped by
+	// TrackManaSpentThisTurn in keywords_expend.go, which fires expend
+	// triggers when the running total crosses each watcher's threshold.
+	// Reset to 0 alongside the rest of TurnCounters at untap.
+	ManaSpent int
 }
 
 // Reset zeroes all turn counters. Called once per turn at the untap step.
