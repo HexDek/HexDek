@@ -79,6 +79,10 @@ func FirePermanentETBTriggers(gs *GameState, perm *Permanent) {
 	// the entering permanent isn't an enchantment.
 	OnEnchantmentETB(gs, perm)
 
+	// CR §702.131 — Constellation fires on enchantment ETBs the same
+	// way Eerie does. The hook returns early for non-enchantments.
+	OnConstellationETB(gs, perm)
+
 	fireObserverETBTriggers(gs, perm)
 }
 
