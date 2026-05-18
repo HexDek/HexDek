@@ -972,6 +972,13 @@ func canBlockGS(gs *GameState, attacker, blocker *Permanent) bool {
 	if blocker.Tapped {
 		return false
 	}
+	// CR §701.62a: a suspected creature can't block. The designation
+	// persists across turns until UnsuspectCreature (investigate) clears
+	// it, so this gate fires every block-declaration check independent
+	// of the until-EOT cleanup pass.
+	if IsSuspected(blocker) {
+		return false
+	}
 	// §702.26: phased-out permanents don't exist.
 	if blocker.PhasedOut || attacker.PhasedOut {
 		return false
