@@ -231,11 +231,13 @@ func resolveSequence(gs *GameState, src *Permanent, e *gameast.Sequence) {
 			gs.Flags = map[string]int{}
 		}
 		if gs.Flags["_max_speed_rider_depth"] == 0 &&
-			gs.Flags["_threshold_rider_depth"] == 0 {
+			gs.Flags["_threshold_rider_depth"] == 0 &&
+			gs.Flags["_devotion_rider_depth"] == 0 {
 			outer = true
 		}
 		gs.Flags["_max_speed_rider_depth"]++
 		gs.Flags["_threshold_rider_depth"]++
+		gs.Flags["_devotion_rider_depth"]++
 	}
 
 	for _, item := range e.Items {
@@ -245,9 +247,11 @@ func resolveSequence(gs *GameState, src *Permanent, e *gameast.Sequence) {
 	if gs != nil {
 		gs.Flags["_max_speed_rider_depth"]--
 		gs.Flags["_threshold_rider_depth"]--
+		gs.Flags["_devotion_rider_depth"]--
 		if outer {
 			ApplyMaxSpeedRider(gs, src)
 			ApplyThresholdRider(gs, src)
+			ApplyDevotionRidersAllColors(gs, src)
 		}
 	}
 }
