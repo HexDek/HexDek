@@ -101,16 +101,11 @@ func TestModificationEffect_Suspect(t *testing.T) {
 	if src.Flags["suspected"] != 1 {
 		t.Errorf("expected suspected flag=1, got %d", src.Flags["suspected"])
 	}
-	// Should also grant menace.
-	hasMenace := false
-	for _, a := range src.GrantedAbilities {
-		if a == "menace" {
-			hasMenace = true
-			break
-		}
-	}
-	if !hasMenace {
-		t.Errorf("expected menace to be granted")
+	// Suspect grants menace; the new SuspectCreature impl uses the
+	// runtime-flag channel (Flags["kw:menace"]) which HasKeyword reads
+	// alongside AST and GrantedAbilities.
+	if !src.HasKeyword("menace") {
+		t.Errorf("expected menace to be granted (HasKeyword)")
 	}
 	if countEvents(gs, "suspect") != 1 {
 		t.Errorf("expected 1 suspect event, got %d", countEvents(gs, "suspect"))

@@ -118,21 +118,15 @@ func resolveModificationEffect(gs *GameState, src *Permanent, e *gameast.Modific
 		})
 
 	// -----------------------------------------------------------------
-	// Suspect (CR §701.56). "suspect it" — the creature gains menace
-	// and can't block. MVP: grant menace + set "suspected" flag.
+	// Suspect (CR §701.62). Delegated to SuspectCreature
+	// (keywords_suspect.go) so the designation is stamped via the
+	// persistent Flags channel (kw:menace + suspected) rather than
+	// the until-EOT GrantedAbilities slice — §701.62 the designation
+	// persists across turns until investigated.
 	// -----------------------------------------------------------------
 	case "suspect":
 		if src != nil {
-			src.GrantedAbilities = append(src.GrantedAbilities, "menace")
-			if src.Flags == nil {
-				src.Flags = map[string]int{}
-			}
-			src.Flags["suspected"] = 1
-			gs.LogEvent(Event{
-				Kind:   "suspect",
-				Seat:   controllerSeat(src),
-				Source: sourceName(src),
-			})
+			SuspectCreature(gs, src)
 		}
 
 	// -----------------------------------------------------------------
