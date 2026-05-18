@@ -360,6 +360,16 @@ func evalCondition(gs *GameState, src *Permanent, c *gameast.Condition) bool {
 		}
 		return kickCount >= needed
 
+	case "hellbent":
+		// CR §702.45 — controller has no cards in hand. Routes through
+		// the card-facing HellbentActive predicate so the gating logic
+		// stays single-sourced for both parsed AST conditionals and
+		// direct per_card handlers.
+		if src == nil {
+			return false
+		}
+		return HellbentActive(gs, src.Controller)
+
 	case "descended_this_turn":
 		if src == nil {
 			return false
