@@ -202,6 +202,14 @@ type GameState struct {
 	// so the map doesn't grow unbounded.
 	MayhemDiscards map[*Card]int
 
+	// MadnessExile tracks cards exiled via the Madness §702.34a
+	// discard replacement. Keyed by the exiled *Card pointer; value
+	// captures the seat that discarded and the turn it happened on.
+	// Written by OnDiscardMadness, read by CastWithMadness +
+	// ResolveMadnessWindow, cleared when the window is consumed
+	// (cast taken) or routed to graveyard (window declined).
+	MadnessExile map[*Card]*MadnessWindow
+
 	// PlotExile tracks cards exiled via the Plot activated ability (CR
 	// §702.172 / Outlaws of Thunder Junction). Keyed by the exiled card
 	// pointer; value is a *PlotMeta capturing the seat that activated
