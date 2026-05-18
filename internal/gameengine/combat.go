@@ -550,6 +550,13 @@ func DeclareAttackers(gs *GameState, attackerSeat int) []*Permanent {
 	// count toward the threshold.
 	FireBattalionTriggers(gs, attackerSeat, attackers)
 
+	// §702.149 — Pack Tactics: total-power sibling of Battalion. Fires
+	// for each attacking pack-tactics source when the controller's
+	// total attacking power is >= PackTacticsPowerThreshold (6). Power
+	// reflects current Permanent.Power() so already-resolved buffs
+	// (Glorious Anthem, etc.) count.
+	FirePackTacticsForAttackers(gs, attackers)
+
 	// Combat-file attack keywords: battle cry, myriad, melee, annihilator,
 	// provoke. Fires after exalted so that buffs layer correctly.
 	CheckAttackKeywordsCombat(gs, attackerSeat, attackers)
